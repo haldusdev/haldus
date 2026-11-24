@@ -221,7 +221,7 @@ public sealed class TaxonomyTests
             """
             var entries = app.MapCrud<JournalEntry>()
                 .Workflow<JournalStatus>().EditableIn(JournalStatus.Draft).DeletableIn(JournalStatus.Draft)
-                .Numbered("JE-{yyyy}-{seq:6}", assignOn: JournalStatus.Posted).Reversible();
+                .Numbered("JE-{yyyy}-{seq:6}", assignOn: JournalStatus.Posted).Reversible(JournalStatus.Posted);
             entries.MapDetail<JournalLine>();
             entries.MapTransition("post", JournalStatus.Draft, JournalStatus.Posted, entry =>
             {
@@ -384,7 +384,8 @@ public sealed class TaxonomyTests
             public partial class Booking { public DateTimeOffset StartsAt { get; set; } }
             """,
             """
-            var bookings = app.MapCrud<Booking>().Workflow<BookingStatus>().Idempotent().ConcurrencyChecked().Supersedes();
+            var bookings = app.MapCrud<Booking>().Workflow<BookingStatus>().Idempotent().ConcurrencyChecked()
+                .Supersedes(BookingStatus.Pending, BookingStatus.Confirmed);
             bookings.MapTransition("confirm", BookingStatus.Pending, BookingStatus.Confirmed);
             bookings.MapTransition("cancel", [BookingStatus.Pending, BookingStatus.Confirmed], BookingStatus.Cancelled);
             """),

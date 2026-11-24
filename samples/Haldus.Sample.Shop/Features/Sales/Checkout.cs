@@ -104,7 +104,14 @@ public enum RefundStatus
     Cancelled,
 }
 
-/// <summary>Müşteriye verilen fiyat teklifi. Değişiklik, eskisinin yerine geçen yeni bir teklifle yapılır.</summary>
+public enum QuoteStatus
+{
+    Draft,
+    Sent,
+    Withdrawn,
+}
+
+/// <summary>Müşteriye verilen fiyat teklifi. Gönderilen teklif değişmez; değişiklik, yerine geçen yeni bir teklifle yapılır.</summary>
 public partial class Quote
 {
     [Required]

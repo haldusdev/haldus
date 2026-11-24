@@ -111,6 +111,20 @@ public static class HaldusProblems
             statusCode: StatusCodes.Status409Conflict);
     }
 
+    /// <summary>
+    /// İstekte token yok ya da hiçbir kayda ait değil. İkisi aynı yanıtı alır; böylece yanıt, bir token'ın
+    /// var olup olmadığını ele vermez.
+    /// </summary>
+    public static ProblemHttpResult TokenInvalid(IHaldusMessages messages)
+    {
+        ArgumentNullException.ThrowIfNull(messages);
+
+        return TypedResults.Problem(
+            title: messages.Format(HaldusMessageKeys.TokenInvalidTitle),
+            detail: messages.Format(HaldusMessageKeys.TokenInvalidDetail, HaldusTokenAccess.Header),
+            statusCode: StatusCodes.Status404NotFound);
+    }
+
     /// <summary>Kayıt, başka kayıtlar ona referans verdiği için silinemiyor.</summary>
     public static ProblemHttpResult InUse(IHaldusMessages messages, string resourceName, object id)
     {

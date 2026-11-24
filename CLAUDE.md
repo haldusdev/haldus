@@ -111,6 +111,16 @@ Bunlar kullanıcıyla kararlaştırıldı; yeniden sorma.
     değiştirilemez (409) ve listede görünmeye devam eder.
   - `.DerivedFrom<TSource>()`: her kaynak kayıt oluşturulduğunda, aynı transaction'da kullanıcının
     `IDerivation<TSource, TTarget>` sınıfı çağrılır; hedef salt-okunurdur. Baştan yeniden kurma üretilmez.
+- Sırlar (15. aşama). Kullanıcı sormamamı istedi; yazılan, önerdiğim seçeneklerdir ve ayrıca onaylanmadı:
+  - `.SecretOnce(prefix: "sk")`: sır sunucuda üretilir (256 bit, `önek_…`), yalnızca oluşturma ve döndürme yanıtında
+    görünür, listede son dört karakteri (`SecretHint`) gösterilir. Varsayılan saklama SHA-256 özetidir;
+    `recoverable: true` ile sır ayrıca ASP.NET Data Protection ile şifrelenir (webhook imza sırrı gibi, sunucunun
+    kendisinin kullanması gereken sırlar için).
+  - `.Rotatable()`: `POST /{id}/rotate` yeni sır üretir; eski sır hemen geçersiz olur. `overlap:` verilirse eski sır
+    o süre boyunca geçerli kalır.
+  - `.TokenAccess(prefix: "inv", "accept")`: kayıt, oturumu olmayan biri tarafından gizli bir token ile okunur
+    (`GET /by-token`) ve yalnızca sayılan geçişler/aksiyonlar çalıştırılır (`POST /by-token/accept`). Token adreste
+    değil `X-Access-Token` başlığında taşınır.
 - Eşzamanlılık trait'inin adı `ConcurrencyChecked` (eski adı `Versioned`). Sürüm yanıt gövdesinde değil
   `ETag` başlığında taşınır; güncelleme ve silme `If-Match` ister (eksikse 428, uyuşmazlıkta 412).
 - Güncelleme için hem `PUT` (tam değiştirme) hem `PATCH` (kısmi) üretilir.
@@ -219,12 +229,17 @@ birlikte ayrı commit olur; 11–14. aşamalar bitti, sıradaki 15.
 20. Özel alanlar ve aktarma: kiracının tanımladığı `CustomFields`, `MapJob` üzerinde içe/dışa aktarma
 21. Sınamanın yinelenmesi: 59 satırlık tablo, rapor ve README
 
-Her aşamanın başında kullanıcıya sorulacak kararlar (yanıtlandıkça "Tasarım kararları"na taşınır):
+**Kullanıcı 2026-11-24'te kalan aşamalar için soru sorulmamasını istedi** ("projenin tamamen bitmesini istiyorum,
+bana soru sorma"). Aşağıdaki kararlar artık sorulmaz: önerilen seçenek uygulanır ve "Tasarım kararları"na, kullanıcı
+ayrıca onaylamadı notuyla yazılır. Yeni bağımlılık gerektiren yollar seçilmez (o onay hâlâ gerekir); depolama ve
+aktarma, yeni paket eklemeden yazılır.
+
+Aşama başına açık kararlar (uygulandıkça "Tasarım kararları"na taşınır):
 
 
 
 
-- 15: Sırrın saklanma biçimi (hash algoritması, önek).
+
 - 17: Onay tek adım mı, zincir mi.
 - 18: Taslak/yayın için çift kopya mı, sürüm tablosu mu; geçmiş anlık görüntü mü, fark günlüğü mü.
 - 19: Depolama sağlayıcıları (paketlere ayrılması önerildi; S3 gibi sağlayıcılar yeni bağımlılıktır).
@@ -523,14 +538,21 @@ netleştirilecek.
     tipidir; bu yüzden anahtar belli olunca eklenir. Yeni kaydın anahtarı kaydetmeden önce bilinmelidir, bu
     yüzden veritabanının ürettiği anahtarla (`int`, `long`) birleşmez. "Bir kaydın yalnızca bir karşı kaydı olur"
     kuralını ileri işaret alanındaki benzersiz indeks sağlar; ön kontrolü birlikte geçen iki istekten ikincisi
-    ona takılır ve 409 alır. Kapanmış kayıt `PUT`/`PATCH` ile değiştirilemez (`ChainGuard`), bir çiftin parçası
-    olan kayıt silinemez (`ChainDeleteGuard`); hiçbir çifte girmemiş kayıt silinebilir. Geçişler ve entity
-    aksiyonları kapanmış kayıtta da çalışır (iş mantığı açıkça yazıldığı için); engellemek geliştiricinin işidir.
-    Ters kayıt zincirin sonudur (yeniden ters çevrilemez), yerine geçen kaydın ise yerine geçilebilir.
+    ona takılır ve 409 alır. Ters kayıt zincirin sonudur (yeniden ters çevrilemez), yerine geçen kaydın ise yerine
+    geçilebilir. Korumalar (güvenlik incelemesinden sonra sıkılaştırıldı):
+    - Kapanmış kayıtta (ters çevrilmiş veya yerine geçilmiş) hiçbir yazma çalışmaz: `PUT`/`PATCH` (`ChainGuard`)
+      ve geçişler ile entity aksiyonları (`ChainClosedGuard`).
+    - Ters kaydın alanları asıl kayıttan türemiştir, o da `PUT`/`PATCH` ile değiştirilemez; ama geçişlerden
+      geçebilir (yeni bir kayıt olarak başlangıç durumunda doğar ve ilerletilmesi gerekir).
+    - Bir çiftin parçası olan kayıt silinemez (`ChainDeleteGuard`); hiçbir çifte girmemiş kayıt silinebilir.
+    - Zincir işlemi, kaydın düzenlenemediği durumlarda da çalışan bir yazmadır. Kaynağın durum makinesi varsa
+      işlemin yapılabildiği durumlar açıkça sayılmalıdır (`.Reversible(Status.Posted)`); sayılmazsa `HALDUS010`
+      olur. Durum makinesi yoksa işlem her zaman yapılabilir.
   - **Üretme** (`ReferenceKind.Source`, `OriginModel`). Kaynağa işaret eden alan istekle yazılamaz; yalnızca üretme
     yolu doldurur. Kurma işi hedefin uç sınıfındaki herkese açık `From{Kaynak}Async` metodundadır
     (`HaldusBuilt<T>`: ya kayıt ya hata); `from-…` ucu da kaynağın geçişi de onu çağırır. `on:` verildiyse açık uç
-    üretilmez, çünkü geçişin koşullarını atlamanın yolu olurdu. İki kaynağı da ilgilendiren her şey
+    üretilmez, çünkü geçişin koşullarını atlamanın yolu olurdu. `from-…` ucu bir oluşturmadır: `Create` işlemi
+    kaldırılmış bir kaynakta `on:` verilmeden bildirilemez (`HALDUS007`). İki kaynağı da ilgilendiren her şey
     `ResourceLinker.AttachOrigins` içinde, geçişler bağlandıktan sonra çözülür. Sınırlar: kaynak aynı projede
     eşlenmiş olmalıdır; geçişle doğan kayıt bir ebeveynin altında olamaz, oluştururken numara veya sıra alamaz ve
     kendisinden başka kaynak türeyemez; aynı kaynaktan birden çok kayıt üretilebilir (tekilliği zorlayan bir

@@ -29,6 +29,12 @@ internal static class LifecycleReader
 
         public BatchModel? Batch { get; set; }
 
+        /// <summary>Kaydın ters çevrilebildiği durumlar; durum makinesi yoksa <c>null</c>.</summary>
+        public EquatableArray<string>? ReversibleIn { get; set; }
+
+        /// <summary>Kaydın yerine geçilebildiği durumlar; durum makinesi yoksa <c>null</c>.</summary>
+        public EquatableArray<string>? SupersedableIn { get; set; }
+
         /// <summary>Bildirimlerin entity'ye eklediği, istek gövdesinden yazılamayan alanlar.</summary>
         public List<TraitMember> Members { get; } = [];
     }
@@ -46,6 +52,8 @@ internal static class LifecycleReader
         StateReference? assignOn = null;
         LocationInfo? ruleLocation = null;
         LocationInfo? numberingLocation = null;
+        (SimpleNameSyntax Name, SeparatedSyntaxList<ArgumentSyntax> Arguments)? reversible = null;
+        (SimpleNameSyntax Name, SeparatedSyntaxList<ArgumentSyntax> Arguments)? supersedes = null;
 
         void Invalid(SyntaxNode node, string message) => diagnostics.Add(new DiagnosticInfo(
             "HALDUS010", LocationInfo.From(node.GetLocation()), new EquatableArray<string>([message])));
@@ -82,8 +90,21 @@ internal static class LifecycleReader
                 case "Batch":
                     result.Batch = ReadBatch(semanticModel, name, arguments, Invalid, cancellationToken);
                     break;
+
+                // Durumları, durum makinesi zincirin neresinde bildirilmiş olursa olsun doğrulanabilsin diye
+                // döngüden sonra okunur.
+                case "Reversible":
+                    reversible = (name, arguments);
+                    break;
+
+                case "Supersedes":
+                    supersedes = (name, arguments);
+                    break;
             }
         }
+
+        result.ReversibleIn = ReadChainStates(semanticModel, reversible, result.Workflow, "reversed", Invalid, cancellationToken);
+        result.SupersedableIn = ReadChainStates(semanticModel, supersedes, result.Workflow, "superseded", Invalid, cancellationToken);
 
         if (result.Workflow is { } workflow)
         {
@@ -271,6 +292,47 @@ internal static class LifecycleReader
         }
 
         return states.ToEquatableArray();
+    }
+
+    /// <summary>
+    /// Ters çevirme ve yerine geçme, kaydın düzenlenemediği durumlarda da çalışan yazmalardır. Kaynağın bir durum
+    /// makinesi varsa hangi durumlarda yapılabilecekleri açıkça sayılmalıdır; sayılmazsa bildirim reddedilir, çünkü
+    /// "her durumda" varsayımı durum kurallarını sessizce atlamak olurdu.
+    /// </summary>
+    private static EquatableArray<string>? ReadChainStates(
+        SemanticModel semanticModel,
+        (SimpleNameSyntax Name, SeparatedSyntaxList<ArgumentSyntax> Arguments)? call,
+        WorkflowModel? workflow,
+        string verb,
+        Action<SyntaxNode, string> invalid,
+        CancellationToken cancellationToken)
+    {
+        if (call is not { } declaration)
+        {
+            return null;
+        }
+
+        var name = declaration.Name.Identifier.ValueText;
+
+        if (workflow is null)
+        {
+            if (declaration.Arguments.Count > 0)
+            {
+                invalid(declaration.Name, $"{name} can list states only on a resource with a state machine; declare Workflow<TStatus>() or remove the states");
+            }
+
+            return null;
+        }
+
+        if (declaration.Arguments.Count == 0)
+        {
+            invalid(
+                declaration.Name,
+                $"The resource has a state machine, so {name} must list the states in which a record may be {verb}, for example {name}(Status.Posted)");
+            return null;
+        }
+
+        return ReadStates(semanticModel, declaration.Name, declaration.Arguments, workflow, invalid, cancellationToken);
     }
 
     private static NumberingModel? ReadNumbering(

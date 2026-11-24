@@ -97,8 +97,7 @@ public sealed class ChainEndpointTests(ShopFixture fixture)
     [Fact]
     public async Task Supersedes_ReplacesTheRecordWithANewOneThatPointsBack()
     {
-        var quote = await ReadAsync<QuoteResponse>(
-            await SendAsync(HttpMethod.Post, "/quotes", new { customerName = "Ada", amount = 1000m, terms = "30 days" }));
+        var quote = await SentQuoteAsync("Ada", 1000m, "30 days");
 
         var response = await SendAsync(HttpMethod.Post, $"/quotes/{quote.Id}/supersede", new { amount = 900m });
         var revised = await ReadAsync<QuoteResponse>(response);
@@ -106,49 +105,65 @@ public sealed class ChainEndpointTests(ShopFixture fixture)
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
         Assert.Equal($"/quotes/{revised.Id}", response.Headers.Location!.OriginalString);
 
-        // Yeni kayıt eskisinin kopyasıdır; istekte gönderilen alan onun yerine geçti.
+        // Yeni kayıt eskisinin kopyasıdır; istekte gönderilen alan onun yerine geçti. Durumu baştan başlar.
         Assert.Equal(("Ada", 900m, "30 days"), (revised.CustomerName, revised.Amount, revised.Terms));
-        Assert.Equal(quote.Id, revised.SupersedesId);
+        Assert.Equal((quote.Id, QuoteStatus.Draft), (revised.SupersedesId, revised.Status));
 
         var old = await ReadAsync<QuoteResponse>(await SendAsync(HttpMethod.Get, $"/quotes/{quote.Id}"));
-        Assert.Equal(revised.Id, old.SupersededById);
-        Assert.Equal(1000m, old.Amount);
+        Assert.Equal((revised.Id, 1000m, QuoteStatus.Sent), (old.SupersededById, old.Amount, old.Status));
     }
 
     [Fact]
-    public async Task Supersedes_TheOldRecordStaysButCanNoLongerBeChanged()
+    public async Task Supersedes_IsAllowedOnlyInTheDeclaredStates()
     {
-        var quote = await ReadAsync<QuoteResponse>(await SendAsync(HttpMethod.Post, "/quotes", new { customerName = "Ada", amount = 1000m }));
+        var draft = await ReadAsync<QuoteResponse>(await SendAsync(HttpMethod.Post, "/quotes", new { customerName = "Ada", amount = 1000m }));
+
+        // Yerine geçme, kaydın düzenlenemediği durumlarda da çalışan bir yazmadır; hangi durumlarda yapılabileceği
+        // açıkça bildirilir ve başka bir durumda reddedilir.
+        var early = await SendAsync(HttpMethod.Post, $"/quotes/{draft.Id}/supersede", new { amount = 1m });
+        Assert.Equal(HttpStatusCode.Conflict, early.StatusCode);
+
+        await ReadAsync<QuoteResponse>(await SendAsync(HttpMethod.Post, $"/quotes/{draft.Id}/send"));
+        await ReadAsync<QuoteResponse>(await SendAsync(HttpMethod.Post, $"/quotes/{draft.Id}/withdraw"));
+
+        var late = await SendAsync(HttpMethod.Post, $"/quotes/{draft.Id}/supersede", new { amount = 1m });
+        Assert.Equal(HttpStatusCode.Conflict, late.StatusCode);
+    }
+
+    [Fact]
+    public async Task Supersedes_TheOldRecordIsClosedForEveryWrite()
+    {
+        var quote = await SentQuoteAsync("Ada", 1000m, null);
         var revised = await ReadAsync<QuoteResponse>(await SendAsync(HttpMethod.Post, $"/quotes/{quote.Id}/supersede", new { amount = 900m }));
 
-        var replaced = await SendAsync(HttpMethod.Put, $"/quotes/{quote.Id}", new { customerName = "Ada", amount = 1m });
         var patched = await SendAsync(HttpMethod.Patch, $"/quotes/{quote.Id}", new { amount = 1m });
         var again = await SendAsync(HttpMethod.Post, $"/quotes/{quote.Id}/supersede", new { amount = 1m });
 
-        Assert.Equal(HttpStatusCode.Conflict, replaced.StatusCode);
+        // Geçişler de bir yazmadır; kapanmış kayıtta çalışmazlar.
+        var withdrawn = await SendAsync(HttpMethod.Post, $"/quotes/{quote.Id}/withdraw");
+
         Assert.Equal(HttpStatusCode.Conflict, patched.StatusCode);
         Assert.Equal(HttpStatusCode.Conflict, again.StatusCode);
+        Assert.Equal(HttpStatusCode.Conflict, withdrawn.StatusCode);
         Assert.Equal(
             $"Quote '{quote.Id}' has been superseded and can no longer be changed or superseded again.",
-            (await patched.Content.ReadFromJsonAsync<ProblemDetails>(CancellationToken))!.Detail);
+            (await withdrawn.Content.ReadFromJsonAsync<ProblemDetails>(CancellationToken))!.Detail);
+        Assert.Equal(QuoteStatus.Sent, (await ReadAsync<QuoteResponse>(await SendAsync(HttpMethod.Get, $"/quotes/{quote.Id}"))).Status);
 
-        // Geçerli kayıt düzenlenebilir ve onun da yerine geçilebilir; zincir uzar.
+        // Geçerli kayıt yeni bir taslaktır: düzenlenir, gönderilir ve onun da yerine geçilebilir; zincir uzar.
         var edited = await SendAsync(HttpMethod.Patch, $"/quotes/{revised.Id}", new { terms = "Net 15" });
+        await ReadAsync<QuoteResponse>(await SendAsync(HttpMethod.Post, $"/quotes/{revised.Id}/send"));
         var third = await ReadAsync<QuoteResponse>(await SendAsync(HttpMethod.Post, $"/quotes/{revised.Id}/supersede", new { amount = 800m }));
 
         Assert.Equal(HttpStatusCode.OK, edited.StatusCode);
         Assert.Equal((revised.Id, "Net 15"), (third.SupersedesId, third.Terms));
-
-        // Eski kayıtlar listede görünmeye devam eder.
-        var read = await ReadAsync<QuoteResponse>(await SendAsync(HttpMethod.Get, $"/quotes/{quote.Id}"));
-        Assert.Equal(1000m, read.Amount);
     }
 
     [Fact]
     public async Task Supersedes_ARecordThatIsPartOfAPairCannotBeDeleted()
     {
         var standalone = await ReadAsync<QuoteResponse>(await SendAsync(HttpMethod.Post, "/quotes", new { customerName = "Bob", amount = 5m }));
-        var quote = await ReadAsync<QuoteResponse>(await SendAsync(HttpMethod.Post, "/quotes", new { customerName = "Ada", amount = 1000m }));
+        var quote = await SentQuoteAsync("Ada", 1000m, null);
         var revised = await ReadAsync<QuoteResponse>(await SendAsync(HttpMethod.Post, $"/quotes/{quote.Id}/supersede", new { amount = 900m }));
 
         // Silinseydi öteki uç hiçbir şeye işaret etmez ya da sonsuza dek kapalı kalırdı.
@@ -162,6 +177,11 @@ public sealed class ChainEndpointTests(ShopFixture fixture)
         Assert.Equal(quote.Id, (await ReadAsync<QuoteResponse>(await SendAsync(HttpMethod.Get, $"/quotes/{revised.Id}"))).SupersedesId);
     }
 
+    private async Task<QuoteResponse> SentQuoteAsync(string customerName, decimal amount, string? terms)
+    {
+        var quote = await ReadAsync<QuoteResponse>(await SendAsync(HttpMethod.Post, "/quotes", new { customerName, amount, terms }));
+        return await ReadAsync<QuoteResponse>(await SendAsync(HttpMethod.Post, $"/quotes/{quote.Id}/send"));
+    }
     // ── Başka bir kayıttan üretme ──────────────────────────────────────────────────────────────────────
 
     [Fact]

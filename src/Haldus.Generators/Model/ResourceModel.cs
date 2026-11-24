@@ -102,6 +102,12 @@ internal sealed record ResourceModel(
     /// <summary><c>.Expiring(...)</c> ile bildirilen son kullanma kuralı.</summary>
     public ExpiryModel? Expiry { get; init; }
 
+    /// <summary>Kaydın ters çevrilebildiği durumlar; durum makinesi yoksa <c>null</c> (her zaman).</summary>
+    public EquatableArray<string>? ReversibleIn { get; init; }
+
+    /// <summary>Kaydın yerine geçilebildiği durumlar; durum makinesi yoksa <c>null</c> (her zaman).</summary>
+    public EquatableArray<string>? SupersedableIn { get; init; }
+
     /// <summary>
     /// Durum modeli ve numaralama gibi bildirimlerin entity'ye eklediği, istek gövdesinden yazılamayan
     /// alanlar (<c>Status</c>, <c>Number</c>, <c>ExpiresAt</c>). Trait alanları gibi davranırlar.
@@ -314,6 +320,10 @@ internal sealed record ChainOperation(
 
     public static IEnumerable<ChainOperation> For(ResourceModel resource) =>
         new[] { Reverse, Supersede }.Where(chain => resource.Has(chain.Trait));
+
+    /// <summary>İşlemin yapılabildiği durumlar; kaynağın durum makinesi yoksa <c>null</c>.</summary>
+    public EquatableArray<string>? AllowedIn(ResourceModel resource) =>
+        Trait == Traits.Reversible ? resource.ReversibleIn : resource.SupersedableIn;
 
     public string IndexName(ResourceModel resource)
     {

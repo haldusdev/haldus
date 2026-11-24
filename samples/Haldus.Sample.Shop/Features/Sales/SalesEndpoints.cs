@@ -133,10 +133,17 @@ public static class SalesEndpoints
             return Task.CompletedTask;
         });
 
-        // Teklif düzeltilmez; yenisi eskisinin yerine geçer: POST /quotes/{id}/supersede  { "amount": 900 }
-        // Yerine geçilmiş ya da başka bir teklifin yerine geçmiş teklif silinemez; diğerleri silinebilir.
-        app.MapCrud<Quote>()
-            .Supersedes();
+        // Teklif taslakken düzenlenir; gönderildikten sonra düzeltilmez, yenisi eskisinin yerine geçer:
+        // POST /quotes/{id}/supersede  { "amount": 900 }
+        // Yerine geçme yalnızca sayılan durumda yapılır. Yerine geçilmiş teklif kapanır: düzenlenemez, geçişleri
+        // çalışmaz ve (bir çiftin parçası olduğu için) silinemez.
+        var quotes = app.MapCrud<Quote>()
+            .Workflow<QuoteStatus>(initial: QuoteStatus.Draft)
+            .EditableIn(QuoteStatus.Draft)
+            .Supersedes(QuoteStatus.Sent);
+
+        quotes.MapTransition("send", from: QuoteStatus.Draft, to: QuoteStatus.Sent);
+        quotes.MapTransition("withdraw", from: QuoteStatus.Sent, to: QuoteStatus.Withdrawn);
 
         // Uzun süren iş: POST 202 döner, iş arka planda çalışır. Mantığı ReportExportHandler sınıfındadır.
         app.MapJob<ReportExport>()

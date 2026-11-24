@@ -233,6 +233,10 @@ public sealed class ChainTests
         foreach (var handler in new[] { "UpdateAsync", "PatchAsync" })
         {
             Assert.Contains("if (entity.ReversedById is not null)", Handler(endpoints, handler));
+
+            // Ters kaydın içeriği asıl kayıttan türemiştir; o da düzenlenemez.
+            Assert.Contains("if (entity.ReversesId is not null)", Handler(endpoints, handler));
+            Assert.Contains("global::Haldus.HaldusMessageKeys.ReversalLockedDetail", Handler(endpoints, handler));
         }
 
         // Bir çiftin parçası olan kayıt silinemez; hiçbir çifte girmemiş kayıt silinebilir.
@@ -245,6 +249,48 @@ public sealed class ChainTests
         Assert.Contains("context.Entry(original).Property(item => item.Version).OriginalValue = expectedVersion;", reverse);
         Assert.Contains("DbUpdateConcurrencyException", reverse);
     }
+
+    /// <summary>
+    /// Ters çevirme ve yerine geçme, kaydın düzenlenemediği durumlarda da çalışan yazmalardır. Durum makinesi olan
+    /// bir kaynakta hangi durumlarda yapılabilecekleri açıkça sayılır; sayılmazsa durum kuralları atlanmış olurdu.
+    /// </summary>
+    [Fact]
+    public void Chains_OnAResourceWithAStateMachine_AreLimitedToTheDeclaredStates()
+    {
+        var run = Run("""
+            var payments = app.MapCrud<Payment>()
+                .Workflow<PaymentStatus>(initial: PaymentStatus.Pending)
+                .EditableIn(PaymentStatus.Pending)
+                .Reversible(PaymentStatus.Captured);
+            payments.MapTransition("capture", PaymentStatus.Pending, PaymentStatus.Captured);
+            payments.MapAction("flag", payment => { });
+            """).AssertCompiles();
+
+        var endpoints = run.Sources["Shop.Payment.Endpoints.g.cs"];
+
+        var reverse = Handler(endpoints, "ReverseAsync");
+        Assert.Contains("if (original.Status is not (global::Shop.PaymentStatus.Captured))", reverse);
+        Assert.Contains("""StateConflict(messages, "reverse", original.Status)""", reverse);
+
+        // Kapanmış kayıtta geçişler ve aksiyonlar da çalışmaz. Ters kaydın kendisi ise geçişlerden geçebilir:
+        // başlangıç durumunda doğar ve ilerletilmesi gerekir.
+        foreach (var handler in new[] { "TransitionCaptureAsync", "ActionFlagAsync" })
+        {
+            Assert.Contains("if (entity.ReversedById is not null)", Handler(endpoints, handler));
+            Assert.DoesNotContain("entity.ReversesId is not null", Handler(endpoints, handler));
+        }
+    }
+
+    [Theory]
+    [InlineData(
+        "app.MapCrud<Payment>().Workflow<PaymentStatus>(initial: PaymentStatus.Pending).Reversible();",
+        "Reversible must list the states in which a record may be reversed")]
+    [InlineData(
+        "app.MapCrud<Payment>().Supersedes().Workflow<PaymentStatus>(initial: PaymentStatus.Pending);",
+        "Supersedes must list the states in which a record may be superseded")]
+    [InlineData("app.MapCrud<Plain>().Reversible(PaymentStatus.Captured);", "Reversible can list states only on a resource with a state machine")]
+    public void Chains_StateListsMustMatchTheStateMachine(string body, string message) =>
+        AssertSingle(Run(body), "HALDUS010", message);
 
     [Theory]
     [InlineData("app.MapAppendOnly<Counted>().Reversible();", "needs a key that Haldus assigns before saving")]
@@ -376,6 +422,10 @@ public sealed class ChainTests
     [InlineData("app.MapCrud<Cart>(); app.MapCrud<Receipt>().Under<Cart>().CreatedFrom<Cart>();", "HALDUS007", "it cannot also be created from it")]
     [InlineData("app.MapCrud<Cart>(); app.MapCrud<Receipt>().References<Cart>().CreatedFrom<Cart>();", "HALDUS007", "it cannot also be created from it")]
     [InlineData("app.MapCrud<Payment>(); app.MapCrud<Receipt>().CreatedFrom<Payment>(on: \"capture\");", "HALDUS007", "has no transition or action named 'capture'")]
+    [InlineData(
+        "app.MapCrud<Cart>(); app.MapCrud<Receipt>().Without(CrudOperation.Create).CreatedFrom<Cart>();",
+        "HALDUS007",
+        "CreatedFrom adds an endpoint that creates records, but the Create operation has been removed")]
     [InlineData(
         "var name = \"capture\"; app.MapCrud<Payment>(); app.MapCrud<Receipt>().CreatedFrom<Payment>(on: name);",
         "HALDUS010",

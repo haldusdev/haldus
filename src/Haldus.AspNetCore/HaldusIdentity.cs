@@ -46,12 +46,17 @@ internal sealed class ClaimsCurrentUser(IHttpContextAccessor accessor, IOptions<
 public sealed class HaldusTenantRequiredFilter(ITenantProvider tenants, IHaldusMessages messages) : IEndpointFilter
 {
     public async ValueTask<object?> InvokeAsync(EndpointFilterInvocationContext context, EndpointFilterDelegate next) =>
-        tenants.TenantId is null ? HaldusProblems.TenantRequired(messages) : await next(context);
+        // Token ile erişilen uca gelen kişinin kiracısı yoktur; onu kayıt tanıtır.
+        tenants.TenantId is null && !HaldusTokenAccess.Applies(context.HttpContext)
+            ? HaldusProblems.TenantRequired(messages)
+            : await next(context);
 }
 
 /// <summary>Kullanıcıya ait kaynakların endpoint'lerinde, kullanıcısı çözülemeyen isteği reddeder.</summary>
 public sealed class HaldusUserRequiredFilter(ICurrentUser user, IHaldusMessages messages) : IEndpointFilter
 {
     public async ValueTask<object?> InvokeAsync(EndpointFilterInvocationContext context, EndpointFilterDelegate next) =>
-        string.IsNullOrEmpty(user.UserId) ? HaldusProblems.UserRequired(messages) : await next(context);
+        string.IsNullOrEmpty(user.UserId) && !HaldusTokenAccess.Applies(context.HttpContext)
+            ? HaldusProblems.UserRequired(messages)
+            : await next(context);
 }

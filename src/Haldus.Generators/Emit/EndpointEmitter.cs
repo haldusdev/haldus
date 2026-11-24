@@ -1573,7 +1573,7 @@ internal sealed partial class EndpointEmitter
                         return {{NotFound}};
                     }
 
-            {{StateGuard(transition.IsAction ? null : transition.From, transition.Route)}}{{ExpectVersion()}}{{declareResult}}        try
+            {{ChainClosedGuard()}}{{StateGuard(transition.IsAction ? null : transition.From, transition.Route)}}{{ExpectVersion()}}{{declareResult}}        try
                     {
             {{logic}}        }
                     catch (global::Haldus.TransitionRejectedException rejection)
@@ -2258,7 +2258,21 @@ internal sealed partial class EndpointEmitter
     /// Kapanmış bir halka (ters çevrilmiş veya yerine geçilmiş kayıt) değiştirilemez: karşı kaydı onun o anki
     /// halinden üretilmiştir.
     /// </summary>
-    private string ChainGuard() => string.Concat(ChainOperation.For(_resource).Select(chain => $$"""
+    private string ChainGuard() => ChainClosedGuard() + string.Concat(ChainOperation.For(_resource).Where(chain => chain.Terminal).Select(chain => $$"""
+                if (entity.{{chain.Forward}} is not null)
+                {
+                    return {{Problems}}.ChainLocked(messages, global::Haldus.HaldusMessageKeys.ReversalLockedDetail, "{{_entity}}", {{_keyParameter}});
+                }
+
+
+        """));
+
+    /// <summary>
+    /// Kapanmış bir kayıtta (ters çevrilmiş veya yerine geçilmiş) hiçbir yazma çalışmaz; geçişler ve aksiyonlar da.
+    /// Ters kaydın kendisi ise düzenlenemez (<see cref="ChainGuard"/>) ama geçişlerden geçebilir: yeni bir kayıt
+    /// olarak başlangıç durumunda doğar ve örneğin kesinleştirilmesi gerekir.
+    /// </summary>
+    private string ChainClosedGuard() => string.Concat(ChainOperation.For(_resource).Select(chain => $$"""
                 if (entity.{{chain.Back}} is not null)
                 {
                     return {{Problems}}.ChainLocked(messages, global::Haldus.HaldusMessageKeys.{{chain.LockedDetail}}, "{{_entity}}", {{_keyParameter}});
@@ -2365,7 +2379,7 @@ internal sealed partial class EndpointEmitter
                         return {{locked}};
                     }
 
-            {{terminal}}{{ExpectVersion().Replace("Entry(entity)", "Entry(original)")}}        var entity = new {{_entity}} { {{CreateInitializer(source: "original")}}, {{chain.Forward}} = original.{{_key}} };
+            {{terminal}}{{StateGuard(chain.AllowedIn(_resource), chain.Route).Replace("entity.Status", "original.Status")}}{{ExpectVersion().Replace("Entry(entity)", "Entry(original)")}}        var entity = new {{_entity}} { {{CreateInitializer(source: "original")}}, {{chain.Forward}} = original.{{_key}} };
             {{CopyRows("original")}}
             {{contract}}{{PatchAssignments(_writable)}}{{(implemented ? NormalizeRows() : string.Empty)}}{{ReferenceChecks(patch: false, source: "entity")}}{{Compute()}}{{duplicate}}        original.{{chain.Back}} = entity.{{_key}};
             {{SaveCreated(concurrency + taken)}}

@@ -410,6 +410,8 @@ internal static class MapCallParser
             Workflow = lifecycle.Workflow,
             Numbering = lifecycle.Numbering,
             Expiry = lifecycle.Expiry,
+            ReversibleIn = lifecycle.ReversibleIn,
+            SupersedableIn = lifecycle.SupersedableIn,
             Batch = lifecycle.Batch,
             ExtraMembers = lifecycle.Members.ToEquatableArray(),
             IsComputed = entity?.AllInterfaces.Any(candidate => candidate.ToDisplayString() == "Haldus.IComputed") == true,
@@ -594,6 +596,15 @@ internal static class MapCallParser
             && ((operations & Operations.Create) == 0 || (operations & (Operations.Update | Operations.Patch)) == 0))
         {
             yield return "CreateOnly has no effect: the resource needs the Create operation and at least one of Update and Patch";
+        }
+
+        // Geçişle doğan kayıt için açık bir uç üretilmez; üretilen uç ise bir oluşturmadır.
+        if (chain.Any(call => call.Name == "CreatedFrom" && !call.Arguments.Any(argument => argument.StartsWith("\"", StringComparison.Ordinal)))
+            && (crudLike || archetype == Archetype.AppendOnly)
+            && (operations & Operations.Create) == 0)
+        {
+            yield return "CreatedFrom adds an endpoint that creates records, but the Create operation has been removed from this resource; "
+                + "keep Create, or pass on: \"...\" so that the record is created only by a transition of its source";
         }
 
         foreach (var declaration in new[] { "Reversible", "Supersedes" })

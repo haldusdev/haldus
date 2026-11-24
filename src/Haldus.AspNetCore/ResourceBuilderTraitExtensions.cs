@@ -139,7 +139,11 @@ public static class ResourceBuilderTraitExtensions
     /// işaret eder (<c>ReversesId</c>); entity <see cref="IReversal{TEntity}"/> uygularsa farkı (ör. tutarın
     /// işaretini) o yazar. Bir kayıt yalnızca bir kez ters çevrilir ve ters çevrildikten sonra değiştirilemez.
     /// </summary>
-    public static ResourceBuilder<TEntity> Reversible<TEntity>(this ResourceBuilder<TEntity> builder)
+    /// <param name="states">
+    /// Kaydın ters çevrilebildiği durumlar. Kaynağın bir durum makinesi varsa zorunludur: ters çevirme, kaydın
+    /// düzenlenemediği durumlarda da çalışan bir yazmadır ve hangi durumlarda yapılabileceği açıkça söylenmelidir.
+    /// </param>
+    public static ResourceBuilder<TEntity> Reversible<TEntity>(this ResourceBuilder<TEntity> builder, params Enum[] states)
         where TEntity : class => builder;
 
     /// <summary>
@@ -147,7 +151,45 @@ public static class ResourceBuilderTraitExtensions
     /// kayıt eskisinin kopyası olarak doğar, istekte gönderilen alanlar onun yerine geçer ve eskisine işaret eder
     /// (<c>SupersedesId</c>). Eski kayıt kalır ama artık değiştirilemez.
     /// </summary>
-    public static ResourceBuilder<TEntity> Supersedes<TEntity>(this ResourceBuilder<TEntity> builder)
+    /// <param name="states">
+    /// Kaydın yerine geçilebildiği durumlar. Kaynağın bir durum makinesi varsa zorunludur: yerine geçme, kaydın
+    /// düzenlenemediği durumlarda da çalışan bir yazmadır ve hangi durumlarda yapılabileceği açıkça söylenmelidir.
+    /// </param>
+    public static ResourceBuilder<TEntity> Supersedes<TEntity>(this ResourceBuilder<TEntity> builder, params Enum[] states)
+        where TEntity : class => builder;
+
+    /// <summary>
+    /// Kayda, yalnızca bir kez gösterilen bir sır verir (API anahtarı, webhook imza sırrı). Sır sunucuda üretilir
+    /// (<c>önek_…</c>), yalnızca oluşturma yanıtında (<c>secret</c>) görünür ve veritabanında özeti saklanır; listede
+    /// son dört karakteri (<c>SecretHint</c>) gösterilir. Sunulan bir sırrın kaydı
+    /// <see cref="HaldusSecretQueries.FindBySecretAsync"/> ile bulunur.
+    /// </summary>
+    /// <param name="prefix">Sırrın öneki: küçük harfle başlar, küçük harf ve rakamdan oluşur, en çok 12 karakterdir.</param>
+    /// <param name="recoverable">
+    /// Sır ayrıca şifrelenerek saklansın mı; sunucunun onu kendisinin kullanması gerekiyorsa (ör. gönderileri
+    /// imzalamak). <see cref="HaldusSecretProtection.Reveal"/> ile açılır.
+    /// </param>
+    public static ResourceBuilder<TEntity> SecretOnce<TEntity>(this ResourceBuilder<TEntity> builder, string prefix, bool recoverable = false)
+        where TEntity : class => builder;
+
+    /// <summary>Sırrın döndürülmesini sağlar: <c>POST /{id}/rotate</c> yeni bir sır üretir ve onu bir kez gösterir.</summary>
+    /// <param name="overlap">
+    /// Eski sırrın geçerli kalacağı süre; verilmezse eski sır hemen geçersiz olur. Derleme zamanında okunabilmesi
+    /// için <c>TimeSpan.FromHours(24)</c> gibi sabit bir ifade olmalıdır.
+    /// </param>
+    public static ResourceBuilder<TEntity> Rotatable<TEntity>(this ResourceBuilder<TEntity> builder, TimeSpan? overlap = null)
+        where TEntity : class => builder;
+
+    /// <summary>
+    /// Kaydın, oturumu olmayan biri tarafından gizli bir token ile okunmasını sağlar (davet bağlantısı gibi):
+    /// <c>GET /by-token</c>. Token oluşturma yanıtında bir kez gösterilir (<c>token</c>) ve isteklerde
+    /// <c>X-Access-Token</c> başlığında taşınır. Token ile yalnızca burada sayılan geçişler ve aksiyonlar
+    /// çalıştırılabilir (<c>POST /by-token/accept</c>); başka hiçbir yazma yapılamaz. Bu uçlar kimlik doğrulama
+    /// istemez.
+    /// </summary>
+    /// <param name="prefix">Token'ın öneki; kuralları sır önekiyle aynıdır.</param>
+    /// <param name="operations">Token ile çalıştırılabilen geçişlerin ve aksiyonların adları.</param>
+    public static ResourceBuilder<TEntity> TokenAccess<TEntity>(this ResourceBuilder<TEntity> builder, string prefix, params string[] operations)
         where TEntity : class => builder;
 
     /// <summary>Sunucunun ürettiği anahtarın biçimini seçer; varsayılanı zamana göre sıralı GUID'dir.</summary>
