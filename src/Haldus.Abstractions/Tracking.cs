@@ -14,6 +14,12 @@ public interface IReadTracked
 /// <param name="ReadAt">Kaydın okunduğu an; okunmadıysa boştur.</param>
 public sealed record ReadState(bool Read, DateTimeOffset? ReadAt);
 
+/// <summary>Taslağın yayına alınacağı an (<c>POST /{id}/schedule</c>).</summary>
+public sealed record PublicationSchedule
+{
+    public required DateTimeOffset PublishAt { get; init; }
+}
+
 /// <summary>Okunmamış kayıtların sayısı.</summary>
 public sealed record UnreadCount(long Count);
 

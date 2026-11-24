@@ -1171,7 +1171,17 @@ denenmesi, yük ölçümü. Raporun "Bilinen sınırlar" tablosundaki kalemler d
   Sınırlar: kopya yalnızca yazılabilir alanları ve gömülü satırları taşır (Haldus'un yönettiği alanları değil),
   bu yüzden `Workflow`, `Document`, `Numbered`, `Expiring`, sırlar, zincir işlemleri, `Approvable` ve
   `EffectiveDated` ile birleşmez; yayındaki kayıtlar `Filterable` filtresiyle süzülür ama aranamaz (`/search`) ve
-  sıralanamaz; ayrı uçlu detaylar kopyaya girmez; zamanlanmış yayın yoktur.
+  sıralanamaz; ayrı uçlu detaylar kopyaya girmez.
+  - **Zamanlanmış yayın** (planlardan sonra; `ResourceModel.ScheduledPublishing`, zincirde `.ScheduledPublishing()`).
+    `ScheduledAt` `ExtraMembers`'tadır; yalnızca `schedule` uçları ve yayının kendisi yazar. Kopyayı kuran parça
+    (`EmitPublishing` içindeki `copy`) elle yayın ile bakımın çağırdığı `PublishDueAsync` arasında paylaşılır; **yayına
+    yeni bir kural eklenirse o parçaya konmalıdır.** Üretilen modül kaynağı
+    `HaldusMaintenanceRegistry.RegisterScheduledPublishing` ile kaydeder; bakım zamanı gelen taslakları bütün
+    filtreleri kaldırarak bulur (`HaldusScheduledPublishing.DueAsync`; tur başına kaynak başına 100), sonra her
+    taslağı kendi kiracısı ve sahibi adına (`HaldusAmbient`), filtrelerden geçirerek yeniden okur ve yayınlar.
+    Zamanlamak taslağın bir yazmasıdır (`If-Match`, `Save`). Sınırlar: yayın zamanından en çok bir bakım aralığı
+    (`MaintenanceInterval`) sonra gerçekleşir; zamanlanmış yayından kaldırma yoktur; bakım sırasında çakışan
+    taslak bir sonraki turda yeniden denenir.
 - **Onay.** `Traits.Approvable` (`IApprovable`; alanları `TraitCatalog`'dadır), kuralları `ResourceModel.Approval`
   (`LifecycleReader.ReadApproval`). Kimin karar verebileceği ve kararın kayda nasıl yazıldığı çalışma zamanındadır
   (`HaldusApprovals.DecideAsync`); üretilen uç kaydı bulur, yazma kurallarından geçirir (`If-Match`, kapanmış kayıt

@@ -20,5 +20,7 @@ export interface ArticleResponse {
   translations: ArticleResponseTranslations;
   /** @nullable */
   publishedAt: string | null;
+  /** @nullable */
+  scheduledAt: string | null;
   articleSections: ArticleSectionResponse[];
 }

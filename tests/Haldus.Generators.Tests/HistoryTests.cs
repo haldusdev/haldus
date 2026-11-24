@@ -331,6 +331,60 @@ public sealed class HistoryTests
     }
 
     [Fact]
+    public void ScheduledPublishing_LetsMaintenancePublishTheDraftWithTheSameCode()
+    {
+        var run = Run("app.MapCrud<Post>().Publishable().ScheduledPublishing().ConcurrencyChecked().MultiTenant();").AssertCompiles();
+        var endpoints = run.Sources["Shop.Post.Endpoints.g.cs"];
+
+        // Zaman taslağın bir alanıdır; yalnızca zamanlama uçları yazar.
+        Assert.Contains("public global::System.DateTimeOffset? ScheduledAt { get; set; }", run.Sources["Shop.Post.Entity.g.cs"]);
+        var dtos = run.Sources["Shop.Post.Dtos.g.cs"];
+        Assert.Contains("ScheduledAt", dtos.Substring(0, dtos.IndexOf("record CreatePostRequest", StringComparison.Ordinal)));
+        Assert.DoesNotContain("ScheduledAt", dtos.Substring(dtos.IndexOf("record CreatePostRequest", StringComparison.Ordinal)));
+
+        Assert.Contains("""MapPost("/{id:guid}/schedule", ScheduleAsync)""", endpoints);
+        Assert.Contains("""MapDelete("/{id:guid}/schedule", UnscheduleAsync)""", endpoints);
+
+        // Zamanlamak taslağın bir yazmasıdır: sürümü sorulur.
+        foreach (var name in new[] { "ScheduleAsync", "UnscheduleAsync" })
+        {
+            var handler = Handler(endpoints, name);
+            Assert.Contains("global::Haldus.HaldusETag.ReadIfMatch(httpContext)", handler);
+            Assert.Contains("entity.ScheduledAt = ", handler);
+        }
+
+        // Elle yayın bekleyen zamanlamayı düşürür.
+        Assert.Contains("source.ScheduledAt = null;", Handler(endpoints, "PublishAsync"));
+
+        // Bakımın çağırdığı yol kopyayı elle yayınla aynı parçadan kurar ve taslağı kendi kiracısı adına yayınlar.
+        var due = Handler(endpoints, "PublishDueAsync");
+        Assert.Contains("global::Haldus.HaldusScheduledPublishing.DueAsync<Post>(", due);
+        Assert.Contains("global::Haldus.HaldusAmbient.Use(", due);
+        Assert.Contains("Title = source.Title, Slug = source.Slug, PublishedOfId = source.Id, PublishedAt = now", due);
+        Assert.Contains("context.Set<Post>().Remove(previous);", due);
+        Assert.Contains("source.ScheduledAt = null;", due);
+        Assert.DoesNotContain("IgnoreQueryFilters()", endpoints);
+
+        Assert.Contains(
+            "global::Haldus.HaldusMaintenanceRegistry.RegisterScheduledPublishing<global::Shop.Post>(global::Shop.PostEndpoints.PublishDueAsync);",
+            run.Sources["HaldusModule.g.cs"]);
+
+        // Zamanlama istenmediyse hiçbiri üretilmez.
+        var plain = Run("app.MapCrud<Post>().Publishable();").AssertCompiles();
+        Assert.DoesNotContain("Schedule", plain.Sources["Shop.Post.Endpoints.g.cs"]);
+        Assert.DoesNotContain("RegisterScheduledPublishing", plain.Sources["HaldusModule.g.cs"]);
+    }
+
+    [Theory]
+    [InlineData("app.MapCrud<Post>().ScheduledPublishing();", "declare Publishable() as well")]
+    [InlineData("var posts = app.MapCrud<Post>().Publishable().ScheduledPublishing(); posts.MapAction(\"schedule\", post => { });", "schedule")]
+    public void ScheduledPublishing_RejectsDeclarationsThatCannotWork(string body, string message)
+    {
+        var run = Run(body);
+        Assert.Contains(run.GeneratorDiagnostics, candidate => candidate.Id == "HALDUS007" && candidate.GetMessage().Contains(message, StringComparison.Ordinal));
+    }
+
+    [Fact]
     public void Publishable_CopiesRowsAndThePrefixedKeyOfTheDraft()
     {
         var run = Run(

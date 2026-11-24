@@ -121,6 +121,9 @@ internal sealed record ResourceModel(
     /// <summary><c>.Sensitive(...)</c> ile sayılan alanlar; henüz doğrulanmamıştır.</summary>
     public EquatableArray<SearchFieldRequest> SensitiveRequests { get; init; } = EquatableArray<SearchFieldRequest>.Empty;
 
+    /// <summary><c>.ScheduledPublishing()</c>: taslağa bir yayın zamanı konabilir; zamanı gelince bakım yayınlar.</summary>
+    public bool ScheduledPublishing { get; init; }
+
     /// <summary><c>.Encrypted(...)</c> ile sayılan alanlar; henüz doğrulanmamıştır.</summary>
     public EquatableArray<SearchFieldRequest> EncryptedRequests { get; init; } = EquatableArray<SearchFieldRequest>.Empty;
 

@@ -248,6 +248,15 @@ public static class ResourceBuilderTraitExtensions
         where TEntity : class => builder;
 
     /// <summary>
+    /// Taslağın yayını ileri bir zamana kurulabilir: <c>POST /{id}/schedule</c> (<c>{ "publishAt": "…" }</c>) zamanı
+    /// yazar, <c>DELETE /{id}/schedule</c> kaldırır. Zamanı gelen taslağı bakım (<c>HaldusOptions.MaintenanceInterval</c>
+    /// aralığıyla) o andaki haliyle yayına alır; yayın bu yüzden zamanından en çok bir bakım aralığı kadar sonra
+    /// gerçekleşir. Elle yayın bekleyen zamanlamayı düşürür. <c>Publishable</c> ile birlikte yazılır.
+    /// </summary>
+    public static ResourceBuilder<TEntity> ScheduledPublishing<TEntity>(this ResourceBuilder<TEntity> builder)
+        where TEntity : class => builder;
+
+    /// <summary>
     /// Kayıtları, oluşturulduktan verilen süre sonra kendiliğinden siler (olay günlüğü, bildirim gibi biriken
     /// kayıtlar için). Silme arka plandaki bakım sırasında yapılır ve geri alınamaz; <c>CreatedAt</c> alanı
     /// kendiliğinden eklenir.

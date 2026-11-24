@@ -422,6 +422,7 @@ export * from './productSearchField';
 export * from './productSearchRequest';
 export * from './productSort';
 export * from './productWhere';
+export * from './publicationSchedule';
 export * from './purchaseRequestLineResponse';
 export * from './purchaseRequestResponse';
 export * from './purchaseRequestStatus';

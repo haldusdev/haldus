@@ -70,6 +70,7 @@ internal static class ChainReader
         "Retention",
         "ReadTracking",
         "ReadReceipts",
+        "ScheduledPublishing",
         "Translatable",
         "Counts",
         "Sums",

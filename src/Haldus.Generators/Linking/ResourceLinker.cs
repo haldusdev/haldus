@@ -880,6 +880,7 @@ internal static class ResourceLinker
         "revisions" when resource.Has(Traits.Revisioned) => nameof(Traits.Revisioned),
         "content" when resource.File is not null => "MapFile",
         "publish" or "unpublish" when resource.Has(Traits.Publishable) => nameof(Traits.Publishable),
+        "schedule" when resource.ScheduledPublishing => "ScheduledPublishing",
         "approve" or "reject" or "approvals" when resource.Has(Traits.Approvable) => nameof(Traits.Approvable),
         "rotate" when resource.Secret is { Rotatable: true } => "Rotatable",
         _ when resource.Details.Any(detail => detail.IsCommandWritten && Naming.ToKebabCase(detail.CollectionName) == route) => "MapDetail",

@@ -420,6 +420,7 @@ public static partial class ArticleEndpoints
             return global::Haldus.HaldusProblems.NotFound(messages, "Article", id);
         }
 
+        var now = global::Haldus.HaldusTime.UtcNow(timeProvider);
         var previous = await context.Set<Article>()
             .IgnoreQueryFilters(new[] { global::Haldus.HaldusFilters.Publication })
             .FirstOrDefaultAsync(item => item.PublishedOfId == source.Id, cancellationToken);
@@ -430,7 +431,6 @@ public static partial class ArticleEndpoints
             context.Set<Article>().Remove(previous);
         }
 
-        var now = global::Haldus.HaldusTime.UtcNow(timeProvider);
         var entity = new Article { Id = global::System.Guid.CreateVersion7(), Title = source.Title, PublishedOfId = source.Id, PublishedAt = now };
 
         var sectionsPosition = 0;

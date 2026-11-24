@@ -326,6 +326,16 @@ internal static class MapCallParser
                 "global::System.DateTimeOffset?",
                 InResponse: true,
                 new SearchField("PublishedAt", SearchKind.Range, "global::System.DateTimeOffset", IsNullable: true)));
+
+            if (chain.Any(call => call.Name == "ScheduledPublishing"))
+            {
+                // Taslağın yayına alınacağı an; yalnızca zamanlama uçları yazar.
+                lifecycle.Members.Add(new TraitMember(
+                    "ScheduledAt",
+                    "global::System.DateTimeOffset?",
+                    InResponse: true,
+                    new SearchField("ScheduledAt", SearchKind.Range, "global::System.DateTimeOffset", IsNullable: true)));
+            }
         }
 
         foreach (var (trait, declaration) in new[] { (Traits.Revisioned, "Revisioned"), (Traits.ChangeFeed, "ChangeFeed"), (Traits.Publishable, "Publishable") })
@@ -716,6 +726,7 @@ internal static class MapCallParser
             BaseDeclaration = baseDeclaration,
             SensitiveRequests = sensitiveRequests.ToEquatableArray(),
             EncryptedRequests = encryptedRequests.ToEquatableArray(),
+            ScheduledPublishing = (traits & Traits.Publishable) != 0 && chain.Any(call => call.Name == "ScheduledPublishing"),
             NaturalKeyRequest = naturalKeyRequest,
             EffectiveKeyRequests = effectiveKeyRequests.ToEquatableArray(),
             ReverseAttachments = reverseAttachments.ToEquatableArray(),
@@ -1029,6 +1040,11 @@ internal static class MapCallParser
         {
             // Okundu bilgisi kaydın kendisinde durur; kayıt tek bir kullanıcıya ait olmalıdır.
             yield return "ReadTracking needs OwnedByCurrentUser: whether a record has been read is kept on the record, so it must belong to one user; use ReadReceipts for shared records";
+        }
+
+        if (chain.Any(call => call.Name == "ScheduledPublishing") && (traits & Traits.Publishable) == 0)
+        {
+            yield return "ScheduledPublishing schedules the publication of a draft; declare Publishable() as well";
         }
 
         if ((traits & Traits.ReadReceipts) != 0 && (traits & Traits.ReadTracking) != 0)

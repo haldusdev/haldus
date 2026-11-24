@@ -43,6 +43,7 @@ import type {
   PagedResultOfRevisionInfo,
   PatchArticleRequest,
   ProblemDetails,
+  PublicationSchedule,
   TranslateArticleRequest,
   UpdateArticleRequest
 } from '../model';
@@ -1523,7 +1524,199 @@ export function useListArticleChanges<TData = Awaited<ReturnType<typeof listArti
 
 
 
-export type listPublishedArticlesResponse200 = {
+export type scheduleArticleResponse200 = {
+  data: ArticleResponse
+  status: 200
+}
+
+export type scheduleArticleResponse400 = {
+  data: HttpValidationProblemDetails
+  status: 400
+}
+
+export type scheduleArticleResponse404 = {
+  data: ProblemDetails
+  status: 404
+}
+
+export type scheduleArticleResponseSuccess = (scheduleArticleResponse200) & {
+  headers: Headers;
+};
+export type scheduleArticleResponseError = (scheduleArticleResponse400 | scheduleArticleResponse404) & {
+  headers: Headers;
+};
+
+export type scheduleArticleResponse = (scheduleArticleResponseSuccess | scheduleArticleResponseError)
+
+export const getScheduleArticleUrl = (id: string,) => {
+
+
+
+
+  return `/articles/${id}/schedule`
+}
+
+export const scheduleArticle = async (id: string,
+    publicationSchedule: PublicationSchedule, options?: RequestInit): Promise<scheduleArticleResponse> => {
+
+  const res = await fetch(getScheduleArticleUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(publicationSchedule)
+  }
+)
+
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+
+  const data: scheduleArticleResponse['data'] = body ? JSON.parse(body) : {}
+  return { data, status: res.status, headers: res.headers } as scheduleArticleResponse
+}
+
+
+
+
+
+export const getScheduleArticleMutationKey = () => ['scheduleArticle'] as const;
+
+export const getScheduleArticleMutationOptions = <TError = HttpValidationProblemDetails | ProblemDetails,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof scheduleArticle>>, TError,ScheduleArticleMutationVariables, TContext>, fetch?: RequestInit}
+): UseMutationOptions<Awaited<ReturnType<typeof scheduleArticle>>, TError,ScheduleArticleMutationVariables, TContext> => {
+
+const mutationKey = getScheduleArticleMutationKey();
+const {mutation: mutationOptions, fetch: fetchOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, fetch: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof scheduleArticle>>, ScheduleArticleMutationVariables> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  scheduleArticle(id,data,fetchOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ScheduleArticleMutationResult = NonNullable<Awaited<ReturnType<typeof scheduleArticle>>>
+    export type ScheduleArticleMutationBody = PublicationSchedule
+    export type ScheduleArticleMutationError = HttpValidationProblemDetails | ProblemDetails
+    export type ScheduleArticleMutationVariables = {id: string;data: PublicationSchedule}
+
+    export const useScheduleArticle = <TError = HttpValidationProblemDetails | ProblemDetails,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof scheduleArticle>>, TError,ScheduleArticleMutationVariables, TContext>, fetch?: RequestInit}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof scheduleArticle>>,
+        TError,
+        ScheduleArticleMutationVariables,
+        TContext
+      > => {
+      return useMutation(getScheduleArticleMutationOptions(options), queryClient);
+    }
+    export type unscheduleArticleResponse200 = {
+  data: ArticleResponse
+  status: 200
+}
+
+export type unscheduleArticleResponse404 = {
+  data: ProblemDetails
+  status: 404
+}
+
+export type unscheduleArticleResponseSuccess = (unscheduleArticleResponse200) & {
+  headers: Headers;
+};
+export type unscheduleArticleResponseError = (unscheduleArticleResponse404) & {
+  headers: Headers;
+};
+
+export type unscheduleArticleResponse = (unscheduleArticleResponseSuccess | unscheduleArticleResponseError)
+
+export const getUnscheduleArticleUrl = (id: string,) => {
+
+
+
+
+  return `/articles/${id}/schedule`
+}
+
+export const unscheduleArticle = async (id: string, options?: RequestInit): Promise<unscheduleArticleResponse> => {
+
+  const res = await fetch(getUnscheduleArticleUrl(id),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+)
+
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+
+  const data: unscheduleArticleResponse['data'] = body ? JSON.parse(body) : {}
+  return { data, status: res.status, headers: res.headers } as unscheduleArticleResponse
+}
+
+
+
+
+
+export const getUnscheduleArticleMutationKey = () => ['unscheduleArticle'] as const;
+
+export const getUnscheduleArticleMutationOptions = <TError = ProblemDetails,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof unscheduleArticle>>, TError,UnscheduleArticleMutationVariables, TContext>, fetch?: RequestInit}
+): UseMutationOptions<Awaited<ReturnType<typeof unscheduleArticle>>, TError,UnscheduleArticleMutationVariables, TContext> => {
+
+const mutationKey = getUnscheduleArticleMutationKey();
+const {mutation: mutationOptions, fetch: fetchOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, fetch: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof unscheduleArticle>>, UnscheduleArticleMutationVariables> = (props) => {
+          const {id} = props ?? {};
+
+          return  unscheduleArticle(id,fetchOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UnscheduleArticleMutationResult = NonNullable<Awaited<ReturnType<typeof unscheduleArticle>>>
+
+    export type UnscheduleArticleMutationError = ProblemDetails
+    export type UnscheduleArticleMutationVariables = {id: string}
+
+    export const useUnscheduleArticle = <TError = ProblemDetails,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof unscheduleArticle>>, TError,UnscheduleArticleMutationVariables, TContext>, fetch?: RequestInit}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof unscheduleArticle>>,
+        TError,
+        UnscheduleArticleMutationVariables,
+        TContext
+      > => {
+      return useMutation(getUnscheduleArticleMutationOptions(options), queryClient);
+    }
+    export type listPublishedArticlesResponse200 = {
   data: PagedResultOfArticleResponse
   status: 200
 }

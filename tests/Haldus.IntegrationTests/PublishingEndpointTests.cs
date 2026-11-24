@@ -62,6 +62,65 @@ public sealed class PublishingEndpointTests(ShopFixture fixture)
     }
 
     [Fact]
+    public async Task ScheduledDraft_IsPublishedByMaintenanceWhenItsTimeComes()
+    {
+        async Task<ArticleResponse> DraftAsync(string title) => await ReadAsync<ArticleResponse>(await SendAsync(HttpMethod.Post, "/articles", new
+        {
+            title,
+            slug = $"article-{Guid.NewGuid():N}",
+            body = "v1",
+            articleSections = new[] { new { heading = "Intro" } },
+        }));
+
+        var due = await DraftAsync("Due");
+        var later = await DraftAsync("Later");
+        var cancelled = await DraftAsync("Cancelled");
+
+        // Zamanlamak taslağı yayınlamaz; yalnızca zamanı yazar.
+        var past = DateTimeOffset.UtcNow.AddMinutes(-5);
+        var scheduled = await ReadAsync<ArticleResponse>(await SendAsync(HttpMethod.Post, $"/articles/{due.Id}/schedule", new { publishAt = past }));
+        Assert.NotNull(scheduled.ScheduledAt);
+        Assert.Null(scheduled.PublishedAt);
+        Assert.Equal(HttpStatusCode.NotFound, (await SendAsync(HttpMethod.Get, $"/articles/published/{due.Id}")).StatusCode);
+
+        await ReadAsync<ArticleResponse>(await SendAsync(HttpMethod.Post, $"/articles/{later.Id}/schedule", new { publishAt = DateTimeOffset.UtcNow.AddDays(7) }));
+        await ReadAsync<ArticleResponse>(await SendAsync(HttpMethod.Post, $"/articles/{cancelled.Id}/schedule", new { publishAt = past }));
+
+        // Zamanlama kaldırılabilir.
+        var unscheduled = await ReadAsync<ArticleResponse>(await SendAsync(HttpMethod.Delete, $"/articles/{cancelled.Id}/schedule"));
+        Assert.Null(unscheduled.ScheduledAt);
+
+        // Zamanlandıktan sonra yapılan düzenleme de yayına girer: yayınlanan, taslağın o andaki halidir.
+        await ReadAsync<ArticleResponse>(await SendAsync(HttpMethod.Patch, $"/articles/{due.Id}", new { body = "v2" }));
+
+        await HaldusMaintenance.RunAsync(fixture.Services, CancellationToken);
+
+        var live = await ReadAsync<ArticleResponse>(await SendAsync(HttpMethod.Get, $"/articles/published/{due.Id}"));
+        Assert.Equal(("Due", "v2", 1), (live.Title, live.Body, live.SectionCount));
+
+        // Yayınlanan taslağın zamanlaması düşer; zamanı gelmeyen ve zamanlaması kaldırılan taslaklar yayınlanmaz.
+        var after = await ReadAsync<ArticleResponse>(await SendAsync(HttpMethod.Get, $"/articles/{due.Id}"));
+        Assert.Null(after.ScheduledAt);
+        Assert.NotNull(after.PublishedAt);
+
+        Assert.Equal(HttpStatusCode.NotFound, (await SendAsync(HttpMethod.Get, $"/articles/published/{later.Id}")).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await SendAsync(HttpMethod.Get, $"/articles/published/{cancelled.Id}")).StatusCode);
+        Assert.NotNull((await ReadAsync<ArticleResponse>(await SendAsync(HttpMethod.Get, $"/articles/{later.Id}"))).ScheduledAt);
+
+        // İkinci tur aynı taslağı yeniden yayınlamaz.
+        await HaldusMaintenance.RunAsync(fixture.Services, CancellationToken);
+        Assert.Equal(after.PublishedAt, (await ReadAsync<ArticleResponse>(await SendAsync(HttpMethod.Get, $"/articles/{due.Id}"))).PublishedAt);
+
+        // Elle yayın bekleyen zamanlamayı düşürür.
+        var manual = await ReadAsync<ArticleResponse>(await SendAsync(HttpMethod.Post, $"/articles/{later.Id}/publish"));
+        Assert.Null(manual.ScheduledAt);
+
+        // İstek doğrulanır; olmayan taslak zamanlanamaz.
+        Assert.Equal(HttpStatusCode.BadRequest, (await SendAsync(HttpMethod.Post, $"/articles/{due.Id}/schedule", new { })).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await SendAsync(HttpMethod.Post, $"/articles/{Guid.NewGuid()}/schedule", new { publishAt = past })).StatusCode);
+    }
+
+    [Fact]
     public async Task PublishedCopy_IsInvisibleToEverythingButThePublishedEndpoints()
     {
         var slug = $"article-{Guid.NewGuid():N}";

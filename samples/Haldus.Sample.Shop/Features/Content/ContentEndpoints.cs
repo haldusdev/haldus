@@ -16,6 +16,10 @@ public static class ContentEndpoints
             .Revisioned()
             .ChangeFeed()
             .Publishable()
+
+            // Yayın ileri bir zamana kurulabilir: POST /articles/{id}/schedule  { "publishAt": "…" }
+            // Zamanı gelen taslağı bakım servisi yayınlar; DELETE /articles/{id}/schedule zamanlamayı kaldırır.
+            .ScheduledPublishing()
             .NaturalKey(article => article.Slug)
 
             // Başlık ve gövde başka dillere çevrilebilir: PUT /articles/{id}/translations/tr  { "title": "…" }

@@ -46,6 +46,22 @@ public static class HaldusMaintenanceRegistry
 
     internal static IEnumerable<KeyValuePair<Type, (TimeSpan Period, Func<IServiceProvider, DateTimeOffset, CancellationToken, Task<int>> Purge)>> RetainedResources =>
         Retained;
+
+    private static readonly ConcurrentDictionary<Type, Func<IServiceProvider, DateTimeOffset, CancellationToken, Task<int>>> Scheduled = new();
+
+    /// <summary>
+    /// <c>.ScheduledPublishing()</c> taşıyan bir kaynağı kaydeder: yayın zamanı gelen taslakları bakım sırasında,
+    /// kaynağın üretilen koduyla yayına alınır.
+    /// </summary>
+    public static void RegisterScheduledPublishing<TEntity>(Func<IServiceProvider, DateTimeOffset, CancellationToken, Task<int>> publish)
+        where TEntity : class
+    {
+        ArgumentNullException.ThrowIfNull(publish);
+        Scheduled[typeof(TEntity)] = publish;
+    }
+
+    internal static IEnumerable<KeyValuePair<Type, Func<IServiceProvider, DateTimeOffset, CancellationToken, Task<int>>>> ScheduledResources =>
+        Scheduled;
 }
 
 /// <summary>
@@ -105,6 +121,25 @@ public static class HaldusMaintenance
             {
                 // Başka kayıtlar hâlâ referans veriyor olabilir; o kayıtlar bir sonraki turda yeniden denenir.
                 logger.LogWarning(exception, "'{Resource}' records past their retention period could not be removed.", resource.Key.Name);
+            }
+        }
+
+        foreach (var resource in HaldusMaintenanceRegistry.ScheduledResources)
+        {
+            // Kayıt süreç genelindedir; bu uygulamanın parçası olmayan bir modülün kaynağı atlanır.
+            if (contexts.ContextOf(resource.Key.Assembly) is null)
+            {
+                continue;
+            }
+
+            try
+            {
+                var published = await resource.Value(provider, now, cancellationToken);
+                logger.LogDebug("Published {Count} scheduled '{Resource}' drafts.", published, resource.Key.Name);
+            }
+            catch (DbException exception)
+            {
+                logger.LogWarning(exception, "Scheduled '{Resource}' drafts could not be published.", resource.Key.Name);
             }
         }
 

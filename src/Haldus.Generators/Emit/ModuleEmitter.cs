@@ -131,6 +131,12 @@ internal static class ModuleEmitter
                 blocks.Add($"        global::Haldus.HaldusMaintenanceRegistry.RegisterExpiring<{entity}>();\n");
             }
 
+            if (resource.ScheduledPublishing)
+            {
+                // Zamanı gelen taslakları bakım yayınlar; yayının kendisi kaynağın üretilen kodundadır.
+                blocks.Add($"        global::Haldus.HaldusMaintenanceRegistry.RegisterScheduledPublishing<{entity}>({entity}Endpoints.PublishDueAsync);\n");
+            }
+
             if (resource.Has(Traits.PublishesEvents))
             {
                 // Olayın verisi kaydın yanıt biçimidir; böylece yanıtta olmayan hiçbir alan dışarı çıkmaz.

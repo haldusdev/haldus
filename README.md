@@ -419,6 +419,7 @@ app.MapCrud<Rate>().Under<Supplier>().EffectiveDated(rate => rate.Currency);
 |---|---|
 | `.Revisioned()` | Kaydın her yazmadan sonraki hali saklanır: `GET /{id}/revisions`, `GET /{id}/revisions/{revisionId}` (kaydın o andaki hali, kendi yanıt biçiminde), `POST /{id}/revisions/{revisionId}/rollback` (alanlar ve gömülü satırlar geri yüklenir; bu da yeni bir sürümdür) |
 | `.Publishable()` | Sıradan uçlar taslağı yazar; `POST /{id}/publish` o andaki hali yayına alır, `POST /{id}/unpublish` kaldırır. Yayındaki hal `GET /published` ve `GET /published/{id}` ile okunur. Yayındaki kayıt silinemez |
+| `.ScheduledPublishing()` | `Publishable` ile birlikte: `POST /{id}/schedule` (`{ "publishAt": "…" }`) taslağa bir yayın zamanı yazar, `DELETE /{id}/schedule` kaldırır. Zamanı gelen taslağı bakım servisi o andaki haliyle yayına alır; yayın bu yüzden zamanından en çok bir bakım aralığı (`HaldusOptions.MaintenanceInterval`) kadar sonra gerçekleşir. Elle yayın bekleyen zamanlamayı düşürür |
 | `.EffectiveDated(...)` | `EffectiveFrom` / `EffectiveTo` alanları; bir kapsamda (kiracı, sahip, ebeveyn, sayılan alanlar) dönemler çakışamaz (409). Açık uçlu dönemin içinde başlayan yeni kayıt öncekini kapatır. `?asOf=2026-06-01` o gün geçerli olanı döndürür |
 | `.ChangeFeed()` | `GET /changes?since={imleç}` imleçten sonra değişen kayıtların şimdiki halini ve silinenlerin kimliklerini döndürür; yanıttaki `next` bir sonraki isteğin imlecidir |
 

@@ -19800,6 +19800,106 @@
         }
       }
     },
+    "/articles/{id}/schedule": {
+      "post": {
+        "tags": [
+          "Articles"
+        ],
+        "operationId": "ScheduleArticle",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PublicationSchedule"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ArticleResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpValidationProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Articles"
+        ],
+        "operationId": "UnscheduleArticle",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ArticleResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/articles/published": {
       "get": {
         "tags": [
@@ -28588,6 +28688,7 @@
           "updatedAt",
           "translations",
           "publishedAt",
+          "scheduledAt",
           "articleSections"
         ],
         "type": "object",
@@ -28633,6 +28734,13 @@
             }
           },
           "publishedAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "scheduledAt": {
             "type": [
               "null",
               "string"
@@ -36358,6 +36466,18 @@
           }
         },
         "additionalProperties": false
+      },
+      "PublicationSchedule": {
+        "required": [
+          "publishAt"
+        ],
+        "type": "object",
+        "properties": {
+          "publishAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
       },
       "PurchaseRequestLineResponse": {
         "required": [

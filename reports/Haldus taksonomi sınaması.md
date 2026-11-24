@@ -230,7 +230,7 @@ sınırları ayrıca [README](../README.md) ve `CLAUDE.md` dosyalarında, özell
 | Çok düzeyli kalıtım ve tek tablo dışındaki eşlemeler | — | `SubtypeOf` tek düzeydir ve tek tablo (TPH) kullanır |
 | İmzalı adres, çok parçalı ve devam ettirilebilir yükleme; nesne deposu paketleri | 32, 49 | Yeni bağımlılık gerektirirdi; `IHaldusFileStorage` uygulanarak eklenir |
 | Mesaj kuyruğu paketi | — | `PublishesEvents` olayı uygulamanın yayıncısına teslim eder; taşımak onun işidir |
-| Zamanlanmış yayın | 27 | Araştırma not etmiş, eşlemeye koymamıştı |
+| Zamanlanmış yayından kaldırma | 27 | Zamanlanmış yayın sonradan yazıldı (`ScheduledPublishing`); yayın, zamanından en çok bir bakım aralığı sonra gerçekleşir |
 | "İş tanımı + çalıştırmalar" modeli (AIP-152) | — | İş kaydı zaten bir çalıştırmadır; yeniden çalıştırma yeni bir iş kaydıdır |
 | ULID ve istemcinin verdiği kimlik | — | `KeyStrategy` için tercih belirtilmedi; önekli kimlik ve GUID yazıldı |
 | "Uzatma kancaları" | — | Araştırmanın ilk sürüm listesinde adı geçiyor, tanımı yok |

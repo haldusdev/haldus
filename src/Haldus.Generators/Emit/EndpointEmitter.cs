@@ -3584,6 +3584,30 @@ internal sealed partial class EndpointEmitter
         var paged = $"global::Haldus.PagedResult<{_entity}Response>";
         var position = Orderable ? ", Position = source.Position" : string.Empty;
 
+        // Taslağın şimdiki halinden yayın kopyasını kuran parça; elle yayın da zamanlanmış yayın da bunu kullanır.
+        var copy = $$"""
+                    var previous = await context.Set<{{_entity}}>()
+                        .IgnoreQueryFilters(new[] { {{Publication}} })
+                        .FirstOrDefaultAsync(item => item.PublishedOfId == source.{{_key}}, cancellationToken);
+
+                    if (previous is not null)
+                    {
+                        // Satırları veritabanı onunla birlikte siler.
+                        context.Set<{{_entity}}>().Remove(previous);
+                    }
+
+                    var entity = new {{_entity}} { {{CreateInitializer(source: "source")}}{{position}}, PublishedOfId = source.{{_key}}, PublishedAt = now };
+            {{CopyRows("source")}}{{Compute()}}
+                    source.PublishedAt = now;
+                    context.Set<{{_entity}}>().Add(entity);
+
+            """;
+
+        if (_resource.ScheduledPublishing)
+        {
+            EmitScheduledPublishing(copy);
+        }
+
         _map.Append($$"""
                     group.MapGet("/published", ListPublishedAsync)
                         .WithName("ListPublished{{_plural}}");
@@ -3652,22 +3676,8 @@ internal sealed partial class EndpointEmitter
                         return {{NotFound}};
                     }
 
-            {{ExpectVersion().Replace("Entry(entity)", "Entry(source)")}}        var previous = await context.Set<{{_entity}}>()
-                        .IgnoreQueryFilters(new[] { {{Publication}} })
-                        .FirstOrDefaultAsync(item => item.PublishedOfId == source.{{_key}}, cancellationToken);
-
-                    if (previous is not null)
-                    {
-                        // Satırları veritabanı onunla birlikte siler.
-                        context.Set<{{_entity}}>().Remove(previous);
-                    }
-
-                    var now = global::Haldus.HaldusTime.UtcNow(timeProvider);
-                    var entity = new {{_entity}} { {{CreateInitializer(source: "source")}}{{position}}, PublishedOfId = source.{{_key}}, PublishedAt = now };
-            {{CopyRows("source")}}{{Compute()}}
-                    source.PublishedAt = now;
-                    context.Set<{{_entity}}>().Add(entity);
-
+            {{ExpectVersion().Replace("Entry(entity)", "Entry(source)")}}        var now = global::Haldus.HaldusTime.UtcNow(timeProvider);
+            {{copy}}{{(_resource.ScheduledPublishing ? "\n        // Elle yayınlanan taslağın bekleyen zamanlaması düşer.\n        source.ScheduledAt = null;\n" : string.Empty)}}
                     try
                     {
                         await context.SaveChangesAsync(cancellationToken);
