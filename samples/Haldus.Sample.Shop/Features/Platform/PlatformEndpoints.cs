@@ -14,6 +14,10 @@ public static class PlatformEndpoints
         app.MapStore<Preference>()
             .MultiTenant();
 
+        // Fiyat gömülü bir değer nesnesidir: { "price": { "amount": 99, "currency": "TRY" } }
+        app.MapCrud<Plan>()
+            .Embeds<Money>();
+
         // Uygulama genelinde tek kayıt.
         app.MapSingleton<MaintenanceNotice>();
 

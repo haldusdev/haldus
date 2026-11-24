@@ -111,6 +111,19 @@ internal static class MapCallParser
             TraitCatalog.For(traits).SelectMany(definition => definition.Members).Select(member => member.Name));
         IPropertySymbol? id = null;
 
+        // .Embeds<T>() ile bildirilen tipler: bu tipteki alanlar skaler olmadıkları halde DTO'lara girer.
+        var embeddedTypes = new Dictionary<string, string>();
+        foreach (var (callName, _) in ChainReader.Nodes(invocation))
+        {
+            if (callName is GenericNameSyntax { Identifier.ValueText: "Embeds", TypeArgumentList.Arguments: { Count: 1 } values }
+                && context.SemanticModel.GetTypeInfo(values[0], cancellationToken).Type is INamedTypeSymbol { TypeKind: not TypeKind.Error } value)
+            {
+                embeddedTypes[value.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)] = value.Name;
+            }
+        }
+
+        var usedEmbeddedTypes = new HashSet<string>();
+
         foreach (var property in entity is null ? [] : PublicInstanceProperties(entity))
         {
             if (keyName.Length > 0 && property.Name == keyName)
@@ -126,6 +139,30 @@ internal static class MapCallParser
             {
                 properties.Add(ToModel(property, kind, valueType));
             }
+            else if (EmbeddedTypeOf(property.Type) is { } embeddedType && embeddedTypes.ContainsKey(embeddedType))
+            {
+                usedEmbeddedTypes.Add(embeddedType);
+                var embedded = ToModel(property, SearchKind.Equality, embeddedType) with { IsEmbedded = true };
+
+                if (!embedded.IsNonNullable)
+                {
+                    diagnostics.Add(new DiagnosticInfo(
+                        "HALDUS007",
+                        location,
+                        new EquatableArray<string>([$"'{entityName}.{property.Name}' is an embedded value and cannot be nullable"])));
+                }
+
+                properties.Add(embedded);
+            }
+        }
+
+        foreach (var unused in embeddedTypes.Where(pair => !usedEmbeddedTypes.Contains(pair.Key)))
+        {
+            // Etkisiz bir bildirim sessizce geçmesin: alanın adı yanlış yazılmış veya tipi farklı olabilir.
+            diagnostics.Add(new DiagnosticInfo(
+                "HALDUS007",
+                location,
+                new EquatableArray<string>([$"Embeds<{unused.Value}> has no effect: '{entityName}' has no property of type '{unused.Value}'"])));
         }
 
         // Anahtarı istemcinin verdiği archetype'larda varsayılan tip metindir; diğerlerinde sunucu Guid üretir.
@@ -464,6 +501,17 @@ internal static class MapCallParser
             searchKind,
             valueType,
             attributes.ToEquatableArray());
+    }
+
+    /// <summary>Alanın tipinin, nullable sarmalayıcısı ve işareti çıkarılmış tam adı.</summary>
+    private static string EmbeddedTypeOf(ITypeSymbol type)
+    {
+        if (type is INamedTypeSymbol { OriginalDefinition.SpecialType: SpecialType.System_Nullable_T } nullable)
+        {
+            type = nullable.TypeArguments[0];
+        }
+
+        return type.WithNullableAnnotation(NullableAnnotation.None).ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
     }
 
     internal static string AsNullable(string type) => type.EndsWith("?", StringComparison.Ordinal) ? type : type + "?";

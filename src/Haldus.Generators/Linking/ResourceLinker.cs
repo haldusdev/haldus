@@ -203,7 +203,8 @@ internal static class ResourceLinker
             candidates[resource.KeyName] = new SearchField(resource.KeyName, keyKind, resource.IdType, IsNullable: false);
         }
 
-        foreach (var property in properties)
+        // Gömülü değer nesneleri tek bir koşul tipine oturmaz; aranamazlar.
+        foreach (var property in properties.Where(property => !property.IsEmbedded))
         {
             candidates[property.Name] = new SearchField(
                 property.Name, property.SearchKind, property.ValueType, IsNullable: !property.IsNonNullable);

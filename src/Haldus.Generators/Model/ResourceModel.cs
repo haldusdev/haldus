@@ -139,7 +139,8 @@ internal sealed record PropertyModel(
     SearchKind SearchKind,
     string ValueType,
     EquatableArray<AttributeModel> ValidationAttributes,
-    bool IsGenerated = false)
+    bool IsGenerated = false,
+    bool IsEmbedded = false)
 {
     public bool IsNonNullable => IsNonNullableReference || IsNonNullableValue;
 }

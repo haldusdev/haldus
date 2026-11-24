@@ -166,6 +166,12 @@ internal static class ModuleEmitter
             statements.Add("entity.HasQueryFilter(global::Haldus.HaldusFilters.SoftDelete, item => item.DeletedAt == null);");
         }
 
+        foreach (var embedded in resource.Properties.Where(property => property.IsEmbedded))
+        {
+            // Değer nesnesinin kendi tablosu olmaz; alanları sahibinin kolonlarında saklanır.
+            statements.Add($"entity.ComplexProperty(item => item.{embedded.Name});");
+        }
+
         if (resource.Parent is { } parent)
         {
             // Ebeveyn altındaki kayıt, ancak ebeveyni görünürse görünür. Alt sorgu ebeveynin kendi
