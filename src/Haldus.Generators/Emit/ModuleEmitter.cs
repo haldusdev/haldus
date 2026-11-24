@@ -14,6 +14,8 @@ internal static class ModuleEmitter
     {
         var builder = new StringBuilder();
         builder.Append(ResourceEmitter.Header).Append('\n');
+        // Üretilen kod, tüketen projede örtük using'ler kapalıyken de derlenmelidir.
+        builder.Append("using System.Linq;\n");
         builder.Append("using Microsoft.EntityFrameworkCore;\n\n");
         builder.Append("namespace Haldus.Generated;\n\n");
         builder.Append("internal static class HaldusModule\n");
@@ -162,6 +164,16 @@ internal static class ModuleEmitter
         if (resource.Has(Traits.SoftDeletable))
         {
             statements.Add("entity.HasQueryFilter(global::Haldus.HaldusFilters.SoftDelete, item => item.DeletedAt == null);");
+        }
+
+        if (resource.Parent is { } parent)
+        {
+            // Ebeveyn altındaki kayıt, ancak ebeveyni görünürse görünür. Alt sorgu ebeveynin kendi
+            // filtrelerinden (kiracı, silinmişlik, onun da ebeveyni) geçer. Koşul tek tek sorgulara değil
+            // modele konur ki bu kaynağa referans veren veya onun altına yerleşen kaynaklar da korunsun.
+            statements.Add(
+                $"entity.HasQueryFilter(global::Haldus.HaldusFilters.Parent, item => context.Set<{parent.TargetType}>()"
+                + $".Any(parent => parent.{parent.TargetKeyName} == item.{parent.PropertyName}));");
         }
 
         foreach (var reference in resource.References)

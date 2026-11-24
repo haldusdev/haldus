@@ -261,14 +261,85 @@ public sealed class RelationEndpointTests(ShopFixture fixture)
 
         await SendAsync(HttpMethod.Delete, $"/customers/{customer.Id}", tenant, ifMatch: "*");
         var hidden = await SendAsync(HttpMethod.Get, $"{url}/{address.Id}", tenant);
-        await SendAsync(HttpMethod.Post, $"/customers/{customer.Id}/purge", tenant, ifMatch: "*");
 
-        var remaining = -1;
-        await fixture.WithDbContextAsync(async db =>
-            remaining = await db.Addresses.CountAsync(item => item.CustomerId == customer.Id, CancellationToken));
+        // Sayım filtreler olmadan yapılır; aksi halde ebeveyni görünmeyen adresler zaten sayılmazdı.
+        var beforePurge = await CountAddressRowsAsync(customer.Id);
+        await SendAsync(HttpMethod.Post, $"/customers/{customer.Id}/purge", tenant, ifMatch: "*");
+        var afterPurge = await CountAddressRowsAsync(customer.Id);
 
         Assert.Equal(HttpStatusCode.NotFound, hidden.StatusCode);
-        Assert.Equal(0, remaining);
+        Assert.Equal(1, beforePurge);
+        Assert.Equal(0, afterPurge);
+    }
+
+    [Fact]
+    public async Task Under_VisibilityCarriesThroughToResourcesNestedBelowTheChild()
+    {
+        var tenant = Guid.NewGuid();
+        var intruder = Guid.NewGuid();
+        var customer = await CreateCustomerAsync(tenant, "Ada");
+        var address = await ReadAsync<AddressResponse>(await SendAsync(
+            HttpMethod.Post, $"/customers/{customer.Id}/addresses", tenant,
+            new CreateAddressRequest { Line = "1 Main St", City = "Izmir" }));
+        var url = $"/addresses/{address.Id}/address-notes";
+
+        var note = await ReadAsync<AddressNoteResponse>(
+            await SendAsync(HttpMethod.Post, url, tenant, new CreateAddressNoteRequest { Text = "Ring twice" }));
+
+        // Not ne kiracıya ne müşteriye doğrudan bağlıdır; yine de yalnızca adresin sahibi kiracı ulaşabilir.
+        var planted = await SendAsync(HttpMethod.Post, url, intruder, new CreateAddressNoteRequest { Text = "Planted" });
+        var list = await ReadAsync<PagedResult<AddressNoteResponse>>(await SendAsync(HttpMethod.Get, url, intruder));
+        var read = await SendAsync(HttpMethod.Get, $"{url}/{note.Id}", intruder);
+        var delete = await SendAsync(HttpMethod.Delete, $"{url}/{note.Id}", intruder);
+
+        Assert.Equal(HttpStatusCode.NotFound, planted.StatusCode);
+        Assert.Empty(list.Items);
+        Assert.Equal(HttpStatusCode.NotFound, read.StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, delete.StatusCode);
+
+        var own = await ReadAsync<PagedResult<AddressNoteResponse>>(await SendAsync(HttpMethod.Get, url, tenant));
+        Assert.Equal("Ring twice", Assert.Single(own.Items).Text);
+
+        // Müşteri silinince zincirin altındaki her şey gizlenir.
+        await SendAsync(HttpMethod.Delete, $"/customers/{customer.Id}", tenant, ifMatch: "*");
+        var afterDelete = await ReadAsync<PagedResult<AddressNoteResponse>>(await SendAsync(HttpMethod.Get, url, tenant));
+        Assert.Empty(afterDelete.Items);
+    }
+
+    [Fact]
+    public async Task References_CannotPointAtARecordWhoseParentIsNotVisible()
+    {
+        var tenant = Guid.NewGuid();
+        var intruder = Guid.NewGuid();
+        var customer = await CreateCustomerAsync(tenant, "Ada");
+        var address = await ReadAsync<AddressResponse>(await SendAsync(
+            HttpMethod.Post, $"/customers/{customer.Id}/addresses", tenant,
+            new CreateAddressRequest { Line = "1 Main St", City = "Izmir" }));
+
+        var own = await SendAsync(
+            HttpMethod.Post, "/deliveries", tenant, new CreateDeliveryRequest { Carrier = "Fast", AddressId = address.Id });
+        var foreign = await SendAsync(
+            HttpMethod.Post, "/deliveries", intruder, new CreateDeliveryRequest { Carrier = "Sneaky", AddressId = address.Id });
+        var delivery = await ReadAsync<DeliveryResponse>(own);
+        var redirected = await SendAsync(
+            HttpMethod.Patch, $"/deliveries/{delivery.Id}", intruder, new { addressId = address.Id });
+
+        Assert.Equal(HttpStatusCode.Created, own.StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, foreign.StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, redirected.StatusCode);
+
+        var problem = await foreign.Content.ReadFromJsonAsync<ValidationProblemDetails>(CancellationToken);
+        Assert.NotNull(problem);
+        Assert.Equal(["addressId"], problem.Errors.Keys);
+    }
+
+    private async Task<int> CountAddressRowsAsync(Guid customerId)
+    {
+        var count = -1;
+        await fixture.WithDbContextAsync(async db =>
+            count = await db.Addresses.IgnoreQueryFilters().CountAsync(item => item.CustomerId == customerId, CancellationToken));
+
+        return count;
     }
 
     [Fact]

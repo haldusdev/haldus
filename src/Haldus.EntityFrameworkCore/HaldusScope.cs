@@ -8,6 +8,9 @@ public static class HaldusFilters
 {
     public const string Tenant = "Haldus.Tenant";
     public const string SoftDelete = "Haldus.SoftDelete";
+
+    /// <summary>Ebeveyn altındaki kaydı, ebeveyni isteği yapana görünür değilse gizleyen filtre.</summary>
+    public const string Parent = "Haldus.Parent";
 }
 
 /// <summary>Üretilen model yapılandırmasının kullandığı sabitler.</summary>

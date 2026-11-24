@@ -10,3 +10,15 @@ public partial class Address
     [MaxLength(100)]
     public string City { get; set; } = "";
 }
+
+public partial class AddressNote
+{
+    [MaxLength(500)]
+    public string Text { get; set; } = "";
+}
+
+public partial class Delivery
+{
+    [MaxLength(100)]
+    public string Carrier { get; set; } = "";
+}

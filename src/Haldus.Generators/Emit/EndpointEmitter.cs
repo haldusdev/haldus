@@ -79,15 +79,12 @@ internal sealed class EndpointEmitter
     private bool ChecksReferences => _resource.References.Length > 0;
 
     /// <summary>
-    /// Kaydın verilen ebeveyne ait olduğunu ve ebeveynin isteği yapana görünür olduğunu şart koşar. İkinci
-    /// koşul ebeveynin kendi filtrelerinden (kiracı, silinmişlik) geçer; o olmasaydı başka bir kiracı,
-    /// ebeveynin kimliğini bilerek onun altındaki kayıtlara ulaşabilirdi.
+    /// Kaydın adresteki ebeveyne ait olduğunu şart koşar. Ebeveynin isteği yapana görünür olması ayrıca
+    /// burada kontrol edilmez: onu, kaynağın modeldeki sorgu filtresi (<c>HaldusFilters.Parent</c>) her
+    /// sorguda zaten sağlar.
     /// </summary>
-    private string ScopeCondition(string variable) => Parent is null
-        ? string.Empty
-        : $" && {variable}.{Parent.PropertyName} == {ParentParameter}"
-            + $" && contexts.For<{Parent.TargetType}>().Set<{Parent.TargetType}>()"
-            + $".Any(parent => parent.{Parent.TargetKeyName} == {ParentParameter})";
+    private string ScopeCondition(string variable) =>
+        Parent is null ? string.Empty : $" && {variable}.{Parent.PropertyName} == {ParentParameter}";
 
     private static string RouteConstraint(string keyType) => keyType switch
     {

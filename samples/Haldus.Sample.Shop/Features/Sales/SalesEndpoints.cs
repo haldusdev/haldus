@@ -22,5 +22,13 @@ public static class SalesEndpoints
         // Müşteri kiracıya bağlı olduğu için adreslere de yalnızca o kiracı ulaşabilir.
         app.MapCrud<Address>()
             .Under<Customer>();
+
+        // Aşağıdaki ikisi adresin kendisi gibi korunur: adres görünmüyorsa ona not eklenemez ve
+        // bir teslimat ona bağlanamaz.
+        app.MapCrud<AddressNote>()
+            .Under<Address>();
+
+        app.MapCrud<Delivery>()
+            .References<Address>();
     }
 }

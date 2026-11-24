@@ -54,9 +54,23 @@ internal static class HaldusValidator
 {
     private static readonly ConcurrentDictionary<Type, PropertyRules[]> Cache = new();
 
+    /// <summary>İç içe değer nesnelerinde en fazla kaç düzey inileceği; kendine referans veren tiplere karşı.</summary>
+    private const int MaxDepth = 8;
+
     public static Dictionary<string, string[]> Validate(object instance, IHaldusMessages messages)
     {
         var errors = new Dictionary<string, string[]>();
+        Validate(instance, messages, prefix: string.Empty, depth: 0, errors);
+        return errors;
+    }
+
+    private static void Validate(
+        object instance,
+        IHaldusMessages messages,
+        string prefix,
+        int depth,
+        Dictionary<string, string[]> errors)
+    {
         var patch = instance as IHaldusPatch;
 
         foreach (var rules in Cache.GetOrAdd(instance.GetType(), BuildRules))
@@ -81,22 +95,54 @@ internal static class HaldusValidator
 
             if (propertyErrors is not null)
             {
-                errors[rules.JsonName] = [.. propertyErrors];
+                errors[prefix + rules.JsonName] = [.. propertyErrors];
+            }
+
+            // Gömülü değer nesnesinin kendi kuralları da çalışır; hataları "price.amount" gibi adreslenir.
+            if (rules.IsNested && value is not null && depth < MaxDepth)
+            {
+                Validate(value, messages, $"{prefix}{rules.JsonName}.", depth + 1, errors);
             }
         }
-
-        return errors;
     }
 
-    private static PropertyRules[] BuildRules(Type type) =>
-    [
-        .. type.GetProperties(BindingFlags.Public | BindingFlags.Instance)
-            .Select(property => new PropertyRules(
-                property,
-                JsonNamingPolicy.CamelCase.ConvertName(property.Name),
-                [.. property.GetCustomAttributes<ValidationAttribute>(inherit: true)]))
-            .Where(rules => rules.Attributes.Length > 0),
-    ];
+    private static PropertyRules[] BuildRules(Type type)
+    {
+        // Konumsal bir record'da attribute'lar özelliğe değil constructor parametresine yazılır;
+        // onlar da kural sayılır.
+        var parameters = type.GetConstructors() is [var constructor]
+            ? constructor.GetParameters().ToDictionary(parameter => parameter.Name ?? string.Empty, StringComparer.Ordinal)
+            : [];
+
+        return
+        [
+            .. type.GetProperties(BindingFlags.Public | BindingFlags.Instance)
+                .Where(property => property.GetIndexParameters().Length == 0 && property.GetMethod is not null)
+                .Select(property => new PropertyRules(
+                    property,
+                    JsonNamingPolicy.CamelCase.ConvertName(property.Name),
+                    [
+                        .. property.GetCustomAttributes<ValidationAttribute>(inherit: true),
+                        .. parameters.TryGetValue(property.Name, out var parameter)
+                            ? parameter.GetCustomAttributes<ValidationAttribute>()
+                            : [],
+                    ],
+                    IsNested: IsValueObject(property.PropertyType)))
+                .Where(rules => rules.Attributes.Length > 0 || rules.IsNested),
+        ];
+    }
+
+    /// <summary>Kendi alanları olan, kullanıcı tanımlı bir tip mi (skaler, koleksiyon veya çerçeve tipi değil).</summary>
+    private static bool IsValueObject(Type type)
+    {
+        type = Nullable.GetUnderlyingType(type) ?? type;
+
+        return !type.IsPrimitive
+            && !type.IsEnum
+            && type != typeof(string)
+            && type.Namespace?.StartsWith("System", StringComparison.Ordinal) != true
+            && !typeof(System.Collections.IEnumerable).IsAssignableFrom(type);
+    }
 
     private static string Describe(ValidationAttribute attribute, string name, IHaldusMessages messages)
     {
@@ -122,5 +168,5 @@ internal static class HaldusValidator
         };
     }
 
-    private sealed record PropertyRules(PropertyInfo Property, string JsonName, ValidationAttribute[] Attributes);
+    private sealed record PropertyRules(PropertyInfo Property, string JsonName, ValidationAttribute[] Attributes, bool IsNested);
 }

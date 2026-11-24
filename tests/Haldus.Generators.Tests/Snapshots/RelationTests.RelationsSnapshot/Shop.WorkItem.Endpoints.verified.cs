@@ -54,7 +54,7 @@ public static partial class WorkItemEndpoints
         global::Haldus.IHaldusDbContextProvider contexts,
         global::System.Threading.CancellationToken cancellationToken)
     {
-        var query = contexts.For<WorkItem>().Set<WorkItem>().AsNoTracking().Where(item => item.ProjectId == projectId && contexts.For<global::Shop.Project>().Set<global::Shop.Project>().Any(parent => parent.Id == projectId));
+        var query = contexts.For<WorkItem>().Set<WorkItem>().AsNoTracking().Where(item => item.ProjectId == projectId);
 
         var totalCount = await query.LongCountAsync(cancellationToken);
         var items = await query
@@ -77,7 +77,7 @@ public static partial class WorkItemEndpoints
     {
         var entity = await contexts.For<WorkItem>().Set<WorkItem>()
             .AsNoTracking()
-            .FirstOrDefaultAsync(item => item.Id == id && item.ProjectId == projectId && contexts.For<global::Shop.Project>().Set<global::Shop.Project>().Any(parent => parent.Id == projectId), cancellationToken);
+            .FirstOrDefaultAsync(item => item.Id == id && item.ProjectId == projectId, cancellationToken);
 
         if (entity is null)
         {
@@ -120,7 +120,7 @@ public static partial class WorkItemEndpoints
         global::System.Threading.CancellationToken cancellationToken)
     {
         var context = contexts.For<WorkItem>();
-        var entity = await context.Set<WorkItem>().FirstOrDefaultAsync(item => item.Id == id && item.ProjectId == projectId && contexts.For<global::Shop.Project>().Set<global::Shop.Project>().Any(parent => parent.Id == projectId), cancellationToken);
+        var entity = await context.Set<WorkItem>().FirstOrDefaultAsync(item => item.Id == id && item.ProjectId == projectId, cancellationToken);
 
         if (entity is null)
         {
@@ -143,7 +143,7 @@ public static partial class WorkItemEndpoints
         global::System.Threading.CancellationToken cancellationToken)
     {
         var context = contexts.For<WorkItem>();
-        var entity = await context.Set<WorkItem>().FirstOrDefaultAsync(item => item.Id == id && item.ProjectId == projectId && contexts.For<global::Shop.Project>().Set<global::Shop.Project>().Any(parent => parent.Id == projectId), cancellationToken);
+        var entity = await context.Set<WorkItem>().FirstOrDefaultAsync(item => item.Id == id && item.ProjectId == projectId, cancellationToken);
 
         if (entity is null)
         {
@@ -169,7 +169,7 @@ public static partial class WorkItemEndpoints
         global::System.Threading.CancellationToken cancellationToken)
     {
         var context = contexts.For<WorkItem>();
-        var entity = await context.Set<WorkItem>().FirstOrDefaultAsync(item => item.Id == id && item.ProjectId == projectId && contexts.For<global::Shop.Project>().Set<global::Shop.Project>().Any(parent => parent.Id == projectId), cancellationToken);
+        var entity = await context.Set<WorkItem>().FirstOrDefaultAsync(item => item.Id == id && item.ProjectId == projectId, cancellationToken);
 
         if (entity is null)
         {

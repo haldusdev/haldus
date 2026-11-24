@@ -235,20 +235,42 @@ public sealed class RelationTests
     }
 
     [Fact]
-    public void Under_EveryQueryRequiresTheParentToBeVisible()
+    public void Under_HidesTheResourceWheneverItsParentIsNotVisible()
     {
         var run = Run("""
             app.MapCrud<Project>().MultiTenant();
             app.MapCrud<WorkItem>().Under<Project>().SoftDeletable().Archivable().Searchable(item => item.Title);
             """).AssertCompiles();
 
-        var endpoints = run.Sources["Shop.WorkItem.Endpoints.g.cs"];
-        const string Visible =
-            "contexts.For<global::Shop.Project>().Set<global::Shop.Project>().Any(parent => parent.Id == projectId)";
+        // Görünürlük tek tek sorgulara değil modele konur; böylece bu kaynağa referans veren veya onun
+        // altına yerleşen kaynaklar da aynı korumadan geçer.
+        Assert.Contains(
+            "entity.HasQueryFilter(global::Haldus.HaldusFilters.Parent, item => context.Set<global::Shop.Project>()"
+            + ".Any(parent => parent.Id == item.ProjectId));",
+            run.Sources["HaldusModule.g.cs"]);
 
-        // Liste, arama, tekil okuma, PUT, PATCH, silme, geri yükleme, kalıcı silme, arşivleme ve arşivden çıkarma.
-        Assert.Equal(10, CountOccurrences(endpoints, Visible));
+        var endpoints = run.Sources["Shop.WorkItem.Endpoints.g.cs"];
+
+        // Her handler ebeveyni adresten alır ve kaydı onunla eşleştirir: liste, arama, tekil okuma,
+        // oluşturma, PUT, PATCH, silme, geri yükleme, kalıcı silme, arşivleme ve arşivden çıkarma.
         Assert.Equal(11, CountOccurrences(endpoints, "global::System.Guid projectId,"));
+        Assert.Equal(10, CountOccurrences(endpoints, "item.ProjectId == projectId"));
+    }
+
+    [Fact]
+    public void Under_ParentFilterIsKeptWhenOnlyTheSoftDeleteFilterIsIgnored()
+    {
+        var run = Run("""
+            app.MapCrud<Project>();
+            app.MapCrud<WorkItem>().Under<Project>().SoftDeletable();
+            """).AssertCompiles();
+
+        var endpoints = run.Sources["Shop.WorkItem.Endpoints.g.cs"];
+
+        // Silinmişleri gösteren uçlar yalnızca kendi filtrelerini kaldırır; hepsini kaldırsalardı ebeveyn
+        // görünürlüğü de devre dışı kalırdı.
+        Assert.Contains("IgnoreQueryFilters(new[] { global::Haldus.HaldusFilters.SoftDelete })", endpoints);
+        Assert.DoesNotContain("IgnoreQueryFilters()", endpoints);
     }
 
     [Theory]

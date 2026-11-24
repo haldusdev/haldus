@@ -62,6 +62,12 @@ public sealed class ResourceBuilder<TEntity>(RouteGroupBuilder group) : IEndpoin
     /// </summary>
     public ResourceBuilder<TEntity> Hierarchical() => this;
 
+    /// <summary>
+    /// <typeparamref name="TValue"/> tipindeki alanları gömülü değer nesnesi sayar (para, adres gibi):
+    /// kendi tablosu ve kimliği olmaz, sahibinin kolonlarında saklanır ve DTO'larda iç içe nesne olarak görünür.
+    /// </summary>
+    public ResourceBuilder<TEntity> Embeds<TValue>() => this;
+
     IApplicationBuilder IEndpointRouteBuilder.CreateApplicationBuilder() =>
         ((IEndpointRouteBuilder)Group).CreateApplicationBuilder();
 
