@@ -39,6 +39,11 @@ internal static class LifecycleReader
 
         public List<AxisModel> Axes { get; } = [];
 
+        /// <summary><c>Buckets(...)</c> ile sayılan kova adları.</summary>
+        public List<string> Buckets { get; } = [];
+
+        public bool AllowNegative { get; set; }
+
         /// <summary>Kaydın ters çevrilebildiği durumlar; durum makinesi yoksa <c>null</c>.</summary>
         public EquatableArray<string>? ReversibleIn { get; set; }
 
@@ -162,6 +167,32 @@ internal static class LifecycleReader
 
                 case "Approvable":
                     result.Approval = ReadApproval(semanticModel, arguments, Invalid, cancellationToken);
+                    break;
+
+                case "AllowNegative":
+                    result.AllowNegative = true;
+                    break;
+
+                case "Buckets":
+                    foreach (var argument in arguments)
+                    {
+                        // Kova adı isteklerde ve defterde geçer, alan adına da çevrilir; sabit ve sade olmalıdır.
+                        if (semanticModel.GetConstantValue(argument.Expression, cancellationToken) is { HasValue: true, Value: string bucket }
+                            && bucket.Length is > 0 and <= 40
+                            && bucket[0] is >= 'a' and <= 'z'
+                            && bucket[bucket.Length - 1] != '-'
+                            && bucket.IndexOf("--", StringComparison.Ordinal) < 0
+                            && bucket.All(character => character is (>= 'a' and <= 'z') or (>= '0' and <= '9') or '-')
+                            && !result.Buckets.Contains(bucket))
+                        {
+                            result.Buckets.Add(bucket);
+                        }
+                        else
+                        {
+                            Invalid(argument, "A bucket is named with a constant made of lowercase words separated by '-', for example Buckets(\"available\", \"on-hold\"), and each name is used once");
+                        }
+                    }
+
                     break;
 
                 case "Retention":

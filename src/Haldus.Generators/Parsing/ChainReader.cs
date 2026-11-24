@@ -53,6 +53,8 @@ internal static class ChainReader
         "Publishable",
         "EffectiveDated",
         "CustomFields",
+        "Buckets",
+        "AllowNegative",
         "Retention",
         "ReadTracking",
         "Translatable",

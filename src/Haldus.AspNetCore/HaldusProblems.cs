@@ -144,6 +144,51 @@ public static class HaldusProblems
         return FieldProblem(messages, "sort", messages.Format(HaldusMessageKeys.SortInvalid, requested, sortable));
     }
 
+    /// <summary>Bakiye, istenen düşüşü karşılamıyor.</summary>
+    public static ProblemHttpResult BalanceInsufficient(IHaldusMessages messages, string bucket, decimal balance)
+    {
+        ArgumentNullException.ThrowIfNull(messages);
+
+        return TypedResults.Problem(
+            title: messages.Format(HaldusMessageKeys.BalanceInsufficientTitle),
+            detail: messages.Format(HaldusMessageKeys.BalanceInsufficientDetail, bucket, balance),
+            statusCode: StatusCodes.Status409Conflict);
+    }
+
+    /// <summary>Bakiye, istemcinin gördüğü değerde değil; mutlak yazma uygulanmadı.</summary>
+    public static ProblemHttpResult BalanceChanged(IHaldusMessages messages, string bucket, decimal balance)
+    {
+        ArgumentNullException.ThrowIfNull(messages);
+
+        return TypedResults.Problem(
+            title: messages.Format(HaldusMessageKeys.StateConflictTitle),
+            detail: messages.Format(HaldusMessageKeys.BalanceChangedDetail, bucket, balance),
+            statusCode: StatusCodes.Status409Conflict);
+    }
+
+    /// <summary>İstekte adı geçen kova bu bakiyede yok.</summary>
+    /// <param name="field">Kovayı taşıyan alanın adı.</param>
+    /// <param name="known">Bakiyenin kovaları.</param>
+    public static ProblemHttpResult BalanceBucketUnknown(IHaldusMessages messages, string field, string? requested, string known)
+    {
+        ArgumentNullException.ThrowIfNull(messages);
+        return FieldProblem(messages, field, messages.Format(HaldusMessageKeys.BalanceBucketUnknown, requested, known));
+    }
+
+    /// <summary>Miktar bu işlem için geçersiz: düzeltme sıfır olamaz, taşınan miktar sıfırdan büyük olmalıdır.</summary>
+    public static ProblemHttpResult BalanceAmountInvalid(IHaldusMessages messages, string field)
+    {
+        ArgumentNullException.ThrowIfNull(messages);
+        return FieldProblem(messages, field, messages.Format(HaldusMessageKeys.BalanceAmountInvalid));
+    }
+
+    /// <summary>Taşımanın kaynağı ve hedefi aynı kova.</summary>
+    public static ProblemHttpResult BalanceMoveSame(IHaldusMessages messages)
+    {
+        ArgumentNullException.ThrowIfNull(messages);
+        return FieldProblem(messages, "to", messages.Format(HaldusMessageKeys.BalanceMoveSame));
+    }
+
     /// <summary>Dil etiketi (<c>tr</c>, <c>pt-BR</c>) biçimine uymuyor.</summary>
     public static ProblemHttpResult LocaleInvalid(IHaldusMessages messages, string? locale)
     {

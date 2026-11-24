@@ -79,8 +79,22 @@ public static class ResourceBuilderTraitExtensions
         where TEntity : class => builder;
 
     /// <summary>
+    /// Bakiyeyi adlandırılmış kovalara böler (stokta "available", "reserved", "damaged" gibi). Her kova ayrı bir alan
+    /// olur ve ayrı düzeltilir; <c>POST /{key}/move</c> bir miktarı bir kovadan ötekine tek işlemde taşır. Verilmezse
+    /// bakiyenin tek bir kovası vardır: <c>quantity</c>.
+    /// </summary>
+    /// <param name="names">Kovaların adları; küçük harfli sözcükler, '-' ile ayrılır. İlki varsayılan kovadır.</param>
+    public static ResourceBuilder<TEntity> Buckets<TEntity>(this ResourceBuilder<TEntity> builder, params string[] names)
+        where TEntity : class => builder;
+
+    /// <summary>Bakiyenin sıfırın altına düşmesine izin verir (açık hesap, eksi stok).</summary>
+    public static ResourceBuilder<TEntity> AllowNegative<TEntity>(this ResourceBuilder<TEntity> builder)
+        where TEntity : class => builder;
+
+    /// <summary>
     /// Oluşturma ve geçiş uçlarını <c>Idempotency-Key</c> başlığıyla tekrara karşı korur: aynı anahtarla
-    /// yeniden gönderilen istek işlemi tekrarlamaz, ilk isteğin yanıtını döndürür.
+    /// yeniden gönderilen istek işlemi tekrarlamaz, ilk isteğin yanıtını döndürür. Bakiyede (<c>MapBalance</c>)
+    /// düzeltme, mutlak yazma ve taşıma uçlarını korur.
     /// </summary>
     /// <param name="required">Başlık zorunlu mu; zorunluysa eksik olduğunda 400 döner.</param>
     public static ResourceBuilder<TEntity> Idempotent<TEntity>(this ResourceBuilder<TEntity> builder, bool required = false)

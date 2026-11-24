@@ -46,7 +46,8 @@ Bunlar kullanıcıyla kararlaştırıldı; yeniden sorma.
 - Zincir derleme zamanında okunur; statik olmalıdır (koşullu veya değişken üzerinden sonradan yapılan
   zincir çağrıları desteklenmez ve analyzer hatası olmalıdır).
 - İlk sürüm archetype'ları: `MapCrud`, `MapReadOnly`, `MapAppendOnly`, `MapStore`, `MapSingleton`,
-  `MapLookup`, `MapDetail`, `MapAssociation`, `MapAction`, `MapQuery`, `MapJob`.
+  `MapLookup`, `MapDetail`, `MapAssociation`, `MapAction`, `MapQuery`, `MapJob`. Sonradan eklenenler: `MapFile`
+  (19. aşama), `MapBalance` (25. aşama).
 - Anahtar özelliğinin adı archetype'a göre değişir: `Id` (Crud, ReadOnly, AppendOnly; sunucu üretir),
   `Key` (Store; istemci verir), `Code` (Lookup; istemci verir). Singleton'ın anahtarı entity'de görünmez.
 - `MapStore` ve `MapLookup`'ta `PUT /{key}` ekle-veya-güncelledir. `MapLookup` yazma uçlarını da üretir
@@ -210,6 +211,14 @@ Bunlar kullanıcıyla kararlaştırıldı; yeniden sorma.
   - Geçişin ekseni ayrıca yazılmaz: durumlarının enum tipinden bulunur. `EditableIn`, `DeletableIn`,
     `Numbered(assignOn:)` ve zincir işlemlerinin durum listeleri yalnızca asıl duruma bakar.
   - Başka kayıtlardan türeyen durum bir eksen değildir; 22. aşamadaki toplanan alan + `Compute()` ile yazılır.
+- Bakiye (25. aşama). Kullanıcı sormamamı istedi; yazılan, önerdiğim seçeneklerdir ve ayrıca onaylanmadı:
+  - `MapBalance<T>()` raporun uçlarını üretir (`adjust`, `set`, `entries`) ve raporda eksik sayılan iki şeyi ekler:
+    adlandırılmış kovalar (`.Buckets("available", "reserved")`, her biri ayrı bir `decimal` alan) ve kovalar arası
+    `move`.
+  - Anahtarı istemci verir (`Key`, metin); hiç yazılmamış anahtarın bakiyesi sıfırdır ve ilk yazma kaydı oluşturur,
+    ama okuması 404'tür.
+  - Bakiye varsayılan olarak sıfırın altına düşemez (409); `.AllowNegative()` kuralı kaldırır.
+  - Defter kaynak başına ayrı tablo değil, tek bir `HaldusBalanceEntries` tablosudur.
 - Eşzamanlılık trait'inin adı `ConcurrencyChecked` (eski adı `Versioned`). Sürüm yanıt gövdesinde değil
   `ETag` başlığında taşınır; güncelleme ve silme `If-Match` ister (eksikse 428, uyuşmazlıkta 412).
 - Güncelleme için hem `PUT` (tam değiştirme) hem `PATCH` (kısmi) üretilir.
@@ -280,7 +289,7 @@ Bunlar kullanıcıyla kararlaştırıldı; yeniden sorma.
 
 İlk iki plan bitti: ilk sürümün on aşaması (3. aşamaya `.Searchable()`, 8. aşamaya fiziksel temizlik de eklendi) ve
 ikinci planın on bir aşaması. Üçüncü plan sürüyor (aşağıda). Sınamanın sonucu `reports/Haldus taksonomi sınaması.md`
-dosyasındadır: araştırmadaki 59 varlığın 53'ü temiz, 5'i kısmen ifade ediliyor, 1'i için gereken özellik yok (ilk
+dosyasındadır: araştırmadaki 59 varlığın 55'i temiz, 3'ü kısmen ifade ediliyor, 1'i için gereken özellik yok (ilk
 sınamada 19 / 29 / 11). Aynı veri `tests/Haldus.Generators.Tests/TaxonomyTests.cs` içinde derlenir; yeni bir archetype
 veya trait bir satırı kapatıyorsa ikisini birlikte güncelle. Kalan eksikler raporun "Kalan eksikler" tablosundadır.
 
@@ -690,6 +699,25 @@ içeriyor (ilişki bildirimleri, `Sensitive`, `PublishesEvents`, `Purgeable`, ye
     listede olmayan geçişin token adresi yoktur. Token ebeveyn altındaki ve kullanıcıya ait kaynaklarla
     birleşmez (görünürlükleri, token'ı taşıyanın sahip olmadığı bir kimliğe bağlıdır). Bilinen sınır: token
     kullanılınca kendiliğinden geçersiz olmaz; ömrünü `Expiring` ve durum makinesi belirler. Oran sınırlama yoktur.
+- **Bakiye.** `Archetype.Balance` ana hattan geçer (ayrı bir üretici hattı değildir): anahtarı `MapStore` gibi istemci
+  verir (`HasClientKey`), temel işlemleri liste ve tekil okumadır, kova alanları `ExtraMembers`'tadır (aranabilir,
+  sıralanabilir) ve `Auditable` kendiliğinden eklenir. Komutları `EndpointEmitter.Balance.cs` üretir; kilit ve defter
+  çalışma zamanındadır (`HaldusBalances`).
+  - Her komut aynı sırayı izler: istek doğrulanır, bakiye kilitlenir (`HaldusBalances.BeginAsync`: kaynak + kiracı +
+    anahtar; `HaldusOrdering` üzerinden, açık transaction varsa ona katılır), kayıt okunur veya izlenmeye başlanır
+    (`FindOrStartAsync`), taban kontrolü yapılır, kova yazılır, defter kaydı eklenir (`Record`), tek kaydetme, commit.
+    Reddedilen komut kaydetmeden döner; bu yüzden hiç yazılmamış anahtara gelen reddedilmiş istek kayıt oluşturmaz.
+    **Bakiyeyi yazan yeni bir komut bu sırayı bozmamalı ve kovayı kilit dışında okumamalıdır.**
+  - Taban kontrolü yalnızca bakiyeyi azaltan değişimde yapılır (eksideki bir bakiye artırılabilir); `AllowNegative`
+    bildirildiyse kontrol hiç üretilmez. Taşıma tek kaydetmedir ve iki defter kaydı yazar.
+  - Defterin kiracısı istekten değil bağlamdan okunur; kiracısı çözülemeyen okuma hiçbir kayıt göremez.
+  - Zincirde yalnızca `MultiTenant`, `Idempotent`, `Sortable`, `Searchable`, `Filterable`, `Buckets`, `AllowNegative`,
+    `Without` ve `Only` yazılabilir; gerisi `HALDUS007`'dir (bakiyeyi başka yoldan yazan veya gizleyen bildirimler
+    onu bozardı). `Buckets` ve `AllowNegative` başka bir archetype'ta `HALDUS007`'dir.
+  - Sınırlar: bakiye silinemez; kullanıcının partial sınıfa eklediği alanları hiçbir uç yazmaz; bakiyeye karşı tutma
+    (rezervasyonun süresi dolunca kendiliğinden geri dönmesi) üretilmez, kovalar arası `move` ile elle yazılır;
+    defter kendiliğinden temizlenmez; miktarın ölçeği ve birimi yoktur (`decimal`); anahtar en çok 200 karakterdir;
+    uygulamanın kendi kodu bakiyeyi doğrudan yazarsa deftere kayıt düşmez.
 - **Durum eksenleri.** `ResourceModel.Axes` (`LifecycleReader`; `ReadWorkflow` ile okunur, alanı `ExtraMembers`'a
   durum alanı gibi girer). `ResourceLinker.AttachTransitions` geçişin eksenini durumlarının tipinden bulur
   (`TransitionModel.Axis`; asıl durumdaysa `null`); iki ayrı tipten durum taşıyan geçiş `HALDUS010`'dur. Üretilen

@@ -41,6 +41,17 @@ public static class HaldusEndpointRouteBuilderExtensions
         new(HaldusEndpointRegistry.Map<TEntity>(endpoints, nameof(MapAppendOnly)), endpoints);
 
     /// <summary>
+    /// Yalnızca komutlarla değişen ve her yazması deftere geçen bir nicelik (stok seviyesi, izin bakiyesi):
+    /// <c>POST /{key}/adjust</c> bakiyeyi bir miktar artırır veya azaltır, <c>POST /{key}/set</c> mutlak bir değere
+    /// çeker, <c>GET /{key}/entries</c> defteri verir. Bakiye sıfırın altına düşemez
+    /// (<see cref="ResourceBuilderTraitExtensions.AllowNegative{TEntity}"/> ile düşebilir). Anahtarı istemci verir;
+    /// hiç yazılmamış bir anahtarın ilk düzeltmesi kaydı oluşturur.
+    /// </summary>
+    public static ResourceBuilder<TEntity> MapBalance<TEntity>(this IEndpointRouteBuilder endpoints)
+        where TEntity : class =>
+        new(HaldusEndpointRegistry.Map<TEntity>(endpoints, nameof(MapBalance)), endpoints);
+
+    /// <summary>
     /// Anahtarını istemcinin verdiği kayıtlar: <c>PUT /{key}</c> kayıt yoksa oluşturur, varsa tam değiştirir.
     /// </summary>
     public static ResourceBuilder<TEntity> MapStore<TEntity>(this IEndpointRouteBuilder endpoints)

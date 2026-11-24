@@ -48,6 +48,24 @@
   <data name="Sort.Invalid" xml:space="preserve">
     <value>'{0}' alanına göre sıralanamaz. Sıralanabilir alanlar: {1}.</value>
   </data>
+  <data name="Balance.Insufficient.Title" xml:space="preserve">
+    <value>Yetersiz bakiye</value>
+  </data>
+  <data name="Balance.Insufficient.Detail" xml:space="preserve">
+    <value>'{0}' bakiyesi {1}; bu değişikliği karşılamıyor.</value>
+  </data>
+  <data name="Balance.Changed.Detail" xml:space="preserve">
+    <value>'{0}' bakiyesi {1}, beklenen değerde değil. Yeniden okuyup tekrar deneyin.</value>
+  </data>
+  <data name="Balance.Bucket.Unknown" xml:space="preserve">
+    <value>'{0}' bu bakiyenin bir kovası değil. Kovalar: {1}.</value>
+  </data>
+  <data name="Balance.Amount.Invalid" xml:space="preserve">
+    <value>Miktar sıfır olamaz; taşınan miktar sıfırdan büyük olmalıdır.</value>
+  </data>
+  <data name="Balance.Move.Same" xml:space="preserve">
+    <value>Taşımanın kaynağı ve hedefi farklı kovalar olmalıdır.</value>
+  </data>
   <data name="Locale.Invalid" xml:space="preserve">
     <value>'{0}' bir dil etiketi değil; 'tr' veya 'pt-BR' gibi yazın.</value>
   </data>

@@ -198,7 +198,10 @@ internal sealed record ResourceModel(
     public string? StatusType => Workflow?.StatusType ?? (Archetype == Archetype.Job ? "global::Haldus.JobStatus" : null);
 
     /// <summary>Tekrara karşı korunabilecek bir uç var mı: oluşturma veya en az bir geçiş.</summary>
-    public bool HasWrites => Has(Operations.Create) || Transitions.Length > 0;
+    public bool HasWrites => Has(Operations.Create) || Transitions.Length > 0 || Archetype == Archetype.Balance;
+
+    /// <summary>Kaynak bir bakiyeyse (<c>MapBalance</c>) kovaları ve kuralları; değilse <c>null</c>.</summary>
+    public BalanceModel? Balance { get; init; }
 
     /// <summary>Bu kaynağın DTO'larına gömülü taşınan detayları; bağlama adımı doldurur.</summary>
     public EquatableArray<ResourceModel> Details { get; init; } = EquatableArray<ResourceModel>.Empty;
@@ -285,13 +288,16 @@ internal enum Archetype
 
     /// <summary>İsteği aşan iş: oluşturulur, arka planda çalışır, durumu izlenir, iptal edilebilir.</summary>
     Job,
+
+    /// <summary>Yalnızca komutlarla değişen ve her yazması deftere geçen nicelik.</summary>
+    Balance,
 }
 
 internal static class ArchetypeExtensions
 {
     public static Operations BaseOperations(this Archetype archetype) => archetype switch
     {
-        Archetype.ReadOnly => Operations.List | Operations.Get,
+        Archetype.ReadOnly or Archetype.Balance => Operations.List | Operations.Get,
         Archetype.AppendOnly or Archetype.Job => Operations.List | Operations.Get | Operations.Create,
         Archetype.Store or Archetype.Lookup => Operations.List | Operations.Get | Operations.Update | Operations.Delete,
         Archetype.Singleton => Operations.Get | Operations.Update | Operations.Patch,
@@ -301,14 +307,14 @@ internal static class ArchetypeExtensions
     /// <summary>Anahtar özelliğinin adı. Singleton'da anahtar entity'de görünmez.</summary>
     public static string KeyName(this Archetype archetype) => archetype switch
     {
-        Archetype.Store => "Key",
+        Archetype.Store or Archetype.Balance => "Key",
         Archetype.Lookup => "Code",
         Archetype.Singleton => string.Empty,
         _ => "Id",
     };
 
     /// <summary>Anahtarı sunucu mu üretir, yoksa istemci mi verir.</summary>
-    public static bool HasClientKey(this Archetype archetype) => archetype is Archetype.Store or Archetype.Lookup;
+    public static bool HasClientKey(this Archetype archetype) => archetype is Archetype.Store or Archetype.Lookup or Archetype.Balance;
 }
 
 [Flags]
@@ -674,6 +680,14 @@ internal sealed record WorkflowModel(
     string Initial,
     EquatableArray<string>? EditableIn,
     EquatableArray<string>? DeletableIn);
+
+/// <summary>Bakiyenin bir kovası.</summary>
+/// <param name="Name">İsteklerde ve defterde geçen ad: <c>on-hand</c>.</param>
+/// <param name="Property">Kovanın miktarını tutan alan: <c>OnHand</c>.</param>
+internal sealed record BucketModel(string Name, string Property);
+
+/// <param name="AllowNegative">Bakiye sıfırın altına düşebilir mi.</param>
+internal sealed record BalanceModel(EquatableArray<BucketModel> Buckets, bool AllowNegative);
 
 /// <summary>
 /// Kaydın asıl durumundan bağımsız ilerleyen ek bir durum ekseni (<c>.Axis&lt;PaymentStatus&gt;()</c>): siparişin

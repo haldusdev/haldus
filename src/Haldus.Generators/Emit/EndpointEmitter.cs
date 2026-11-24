@@ -320,6 +320,11 @@ internal sealed partial class EndpointEmitter
             EmitArchive("Unarchive", "unarchive", "entity.ArchivedAt = null;");
         }
 
+        if (_resource.Balance is not null)
+        {
+            EmitBalance();
+        }
+
         if (Translatable)
         {
             EmitTranslations();

@@ -47,6 +47,7 @@ internal static class MapCallParser
         "MapReadOnly" => Archetype.ReadOnly,
         "MapAppendOnly" => Archetype.AppendOnly,
         "MapStore" => Archetype.Store,
+        "MapBalance" => Archetype.Balance,
         "MapLookup" => Archetype.Lookup,
         "MapSingleton" => Archetype.Singleton,
         "MapDetail" => Archetype.Detail,
@@ -116,6 +117,38 @@ internal static class MapCallParser
         if (archetype == Archetype.Job)
         {
             lifecycle.Members.AddRange(LifecycleReader.JobMembers());
+        }
+
+        BalanceModel? balance = null;
+
+        if (archetype == Archetype.Balance)
+        {
+            // Kova bildirilmediyse bakiyenin tek bir miktarı vardır.
+            var buckets = (lifecycle.Buckets.Count == 0 ? ["quantity"] : lifecycle.Buckets)
+                .Select(bucket => new BucketModel(bucket, string.Concat(bucket.Split('-').Select(word => char.ToUpperInvariant(word[0]) + word.Substring(1)))))
+                .ToList();
+
+            if (buckets.FirstOrDefault(bucket => bucket.Property is "Key" or "TenantId" or "CreatedAt" or "UpdatedAt") is { } reserved)
+            {
+                diagnostics.Add(new DiagnosticInfo(
+                    "HALDUS010", location, new EquatableArray<string>([$"The bucket '{reserved.Name}' would collide with the '{reserved.Property}' field of the balance; choose another name"])));
+            }
+
+            balance = new BalanceModel(buckets.ToEquatableArray(), lifecycle.AllowNegative);
+
+            // Bakiyenin son ne zaman değiştiği bilinmelidir.
+            traits |= Traits.Auditable;
+
+            foreach (var bucket in buckets)
+            {
+                lifecycle.Members.Add(new TraitMember(
+                    bucket.Property, "decimal", InResponse: true, new SearchField(bucket.Property, SearchKind.Range, "decimal", IsNullable: false)));
+            }
+        }
+        else if (lifecycle.Buckets.Count > 0 || lifecycle.AllowNegative)
+        {
+            diagnostics.Add(new DiagnosticInfo(
+                "HALDUS007", location, new EquatableArray<string>(["Buckets and AllowNegative describe a balance; declare them on a MapBalance call"])));
         }
 
         FileModel? file = null;
@@ -637,6 +670,7 @@ internal static class MapCallParser
             File = file,
             Transfer = archetype == Archetype.Job ? transfer : null,
             RetentionTicks = lifecycle.RetentionTicks,
+            Balance = balance,
             Axes = lifecycle.Axes.ToEquatableArray(),
             Rollups = rollups.ToEquatableArray(),
             ReversibleIn = lifecycle.ReversibleIn,
@@ -769,19 +803,19 @@ internal static class MapCallParser
                 return archetype.HasClientKey();
             case SpecialType.System_Int32:
                 kind = IdKind.Int32;
-                return archetype != Archetype.Lookup;
+                return archetype is not (Archetype.Lookup or Archetype.Balance);
             case SpecialType.System_Int64:
                 kind = IdKind.Int64;
-                return archetype != Archetype.Lookup;
+                return archetype is not (Archetype.Lookup or Archetype.Balance);
             default:
                 kind = IdKind.Guid;
-                return archetype != Archetype.Lookup && type.ToDisplayString() == "System.Guid";
+                return archetype is not (Archetype.Lookup or Archetype.Balance) && type.ToDisplayString() == "System.Guid";
         }
     }
 
     private static string SupportedKeyTypes(Archetype archetype) => archetype switch
     {
-        Archetype.Lookup => "string",
+        Archetype.Lookup or Archetype.Balance => "string",
         Archetype.Store => "string, Guid, int and long",
         _ => "Guid, int and long",
     };
@@ -815,6 +849,18 @@ internal static class MapCallParser
         EquatableArray<ChainCall> chain)
     {
         var name = $"Map{archetype}";
+
+        if (archetype == Archetype.Balance)
+        {
+            // Bakiye yalnızca kendi komutlarıyla değişir; kaydı başka yoldan yazan veya gizleyen bildirimler onu bozardı.
+            foreach (var declaration in chain.Select(call => call.Name).Distinct())
+            {
+                if (declaration is not ("MultiTenant" or "Idempotent" or "Sortable" or "Searchable" or "Filterable" or "Buckets" or "AllowNegative" or "Without" or "Only"))
+                {
+                    yield return $"{declaration} cannot be combined with MapBalance: a balance changes only through its own commands";
+                }
+            }
+        }
 
         // Ayrı uçlu detay, sahibinin adresi altında yaşayan sıradan bir kaynaktır.
         var crudLike = archetype == Archetype.Crud
@@ -1031,7 +1077,7 @@ internal static class MapCallParser
                 "Numbered" or "Expiring" => archetype is Archetype.Crud or Archetype.AppendOnly,
 
                 // Anahtarla ekle-veya-güncelle zaten tekrara dayanıklıdır; tek kaydın oluşturma ucu yoktur.
-                "Idempotent" => archetype is Archetype.Crud or Archetype.ReadOnly or Archetype.AppendOnly or Archetype.Job,
+                "Idempotent" => archetype is Archetype.Crud or Archetype.ReadOnly or Archetype.AppendOnly or Archetype.Job or Archetype.Balance,
 
                 // Toplu uçlar, sunucunun anahtar ürettiği koleksiyonların işlemlerini izler.
                 "Batch" => archetype is Archetype.Crud or Archetype.ReadOnly or Archetype.AppendOnly,

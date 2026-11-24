@@ -40,6 +40,7 @@ Her archetype bir kaynağın hangi işlemlere sahip olduğunu seçer:
 | `MapSingleton<T>()` | Tek kayıt: `GET`, `PUT`, `PATCH` |
 | `MapDetail<T>()` | Sahibine ait satırlar: sahibin isteğine gömülü ya da onun adresi altında ayrı uçlar |
 | `MapJob<T>()` | Uzun süren iş: `POST` 202 döner, `GET` durumu gösterir, `POST /{id}/cancel` iptal eder |
+| `MapBalance<T>()` | Yalnızca komutlarla değişen nicelik: liste, tekil, `POST /{key}/adjust`, `/set`, `/move`, `GET /{key}/entries` |
 | `MapAction<TRequest, TResponse>()` | `POST`: entity'ye bağlı olmayan komut |
 | `MapQuery<TRequest, TResponse>()` | `GET`: entity'ye bağlı olmayan hesap |
 
@@ -422,6 +423,34 @@ app.MapJob<ProductImport>().Imports<Product>();
 CSV yeni bir bağımlılık olmadan okunur ve yazılır (RFC 4180). Dışa aktarılan metinlerden `=`, `+`, `-` veya `@` ile
 başlayanların önüne kesme işareti konur; böylece dosya bir tablolama programında açıldığında formül olarak çalışmaz.
 
+## Bakiyeler
+
+Stok seviyesi veya izin bakiyesi gibi bir nicelik `PUT` ile yazılmaz: aynı anda gelen iki yazmadan biri ötekini ezerdi
+ve neyin neden değiştiği kaybolurdu. `MapBalance` bakiyeyi yalnızca komutlarla değiştirir ve her değişimi deftere yazar.
+
+```csharp
+app.MapBalance<Inventory>()
+    .MultiTenant()
+    .Buckets("available", "reserved", "damaged")
+    .Idempotent();
+
+public partial class Inventory;   // Key, Available, Reserved, Damaged alanlarını Haldus üretir
+```
+
+| Uç | Etkisi |
+|---|---|
+| `POST /inventories/{key}/adjust` | `{ "delta": -3, "bucket": "available", "reason": "…" }`: bakiyeyi değişim kadar artırır veya azaltır. Hiç yazılmamış bir anahtarın ilk düzeltmesi kaydı oluşturur |
+| `POST /inventories/{key}/set` | `{ "quantity": 40, "expected": 38 }`: mutlak değere çeker (sayım). `expected` verildiyse ve bakiye o değerde değilse 409 döner |
+| `POST /inventories/{key}/move` | `{ "from": "available", "to": "reserved", "quantity": 2 }`: miktarı bir kovadan ötekine tek işlemde taşır. Yalnızca birden çok kova varsa üretilir |
+| `GET /inventories/{key}/entries` | Defter: her değişimin kovası, miktarı, sonraki bakiyesi, açıklaması, zamanı ve yapanı; en yeni başta. `?bucket=` ile süzülür |
+| `GET /inventories`, `GET /inventories/{key}` | Bakiyeler; kova alanları süzülebilir ve sıralanabilir |
+
+Hiçbir kova sıfırın altına düşemez: yetersiz bakiye 409 döner ve hiçbir şey yazılmaz (`.AllowNegative()` bu kuralı
+kaldırır). Kontrol ve yazma bakiye başına bir kilidin altındadır; aynı anda gelen yirmi düşüşten bakiyenin karşıladığı
+kadarı geçer. `.Buckets(...)` verilmezse bakiyenin tek kovası vardır (`quantity`). `.Idempotent()` komutları
+`Idempotency-Key` ile tekrara karşı korur; ağ hatasından sonra yinelenen bir düşüş iki kez uygulanmaz. Bekleyen
+talepler ayrı bir kovayla ifade edilir: izin talebi açılınca gün `available` kovasından `pending` kovasına taşınır.
+
 ## Çevrilebilen alanlar
 
 ```csharp
@@ -539,7 +568,7 @@ kısıtı olur, ayrı bağlamlardaysa referans yalnızca kimlikle tutulur ve var
 
 İlk iki plan tamamlandı: ilk sürümün on aşaması ve araştırmanın ikinci sürüm listesini kapatan on bir aşama. Üçüncü
 plan (araştırmanın üçüncü sürüm listesi ve sınamada kalan satırlar) sürüyor. Model, araştırmadaki 59 gerçek varlığa
-karşı sınanıyor: bugün 52'si eksiksiz, 6'sı kısmen ifade ediliyor, 1'i için gereken özellik yok (ilk sınamada bu
+karşı sınanıyor: bugün 55'i eksiksiz, 3'ü kısmen ifade ediliyor, 1'i için gereken özellik yok (ilk sınamada bu
 sayılar 19, 29 ve 11 idi). Ayrıntısı [taksonomi sınaması](reports/Haldus%20taksonomi%20sınaması.md) belgesindedir.
 
 Tasarım kararları için [CLAUDE.md](CLAUDE.md), kararların dayandığı araştırma için [reports](reports/)

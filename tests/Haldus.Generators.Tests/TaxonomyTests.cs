@@ -171,19 +171,11 @@ public sealed class TaxonomyTests
             fulfillments.MapTransition("accept", FulfillmentRequest.Submitted, FulfillmentRequest.Accepted);
             fulfillments.MapTransition("reject", FulfillmentRequest.Submitted, FulfillmentRequest.Rejected);
             """),
-        new(11, "Inventory level", Fit.Partial,
+        new(11, "Inventory level", Fit.Clean,
+            "public partial class InventoryLevel;",
             """
-            public partial class StockMovement { public string Sku { get; set; } = ""; public int Delta { get; set; } }
-            public partial class StockLevel { public string Sku { get; set; } = ""; public int OnHand { get; set; } }
-            public sealed class StockLevelProjection : IDerivation<StockMovement, StockLevel>
-            {
-                public System.Threading.Tasks.Task ApplyAsync(StockMovement source, IDerivedSet<StockLevel> targets, System.Threading.CancellationToken cancellationToken) =>
-                    System.Threading.Tasks.Task.CompletedTask;
-            }
-            """,
-            """
-            app.MapAppendOnly<StockMovement>().MultiTenant();
-            app.MapReadOnly<StockLevel>().MultiTenant().DerivedFrom<StockMovement>();
+            app.MapBalance<InventoryLevel>().MultiTenant().Idempotent()
+                .Buckets("available", "committed", "reserved", "damaged", "incoming");
             """),
 
         // ── Muhasebe ─────────────────────────────────────────────────────────────────────────────────
@@ -332,20 +324,11 @@ public sealed class TaxonomyTests
             leave.MapTransition("take", LeaveStatus.Requested, LeaveStatus.Taken);
             leave.MapTransition("cancel", LeaveStatus.Requested, LeaveStatus.Cancelled);
             """),
-        new(25, "Time-off balance", Fit.Partial,
-            """
-            public partial class LeaveEntry { public string EmployeeCode { get; set; } = ""; public decimal Days { get; set; } }
-            public partial class LeaveBalance { public string EmployeeCode { get; set; } = ""; public decimal Days { get; set; } }
-            public sealed class LeaveBalanceProjection : IDerivation<LeaveEntry, LeaveBalance>
-            {
-                public System.Threading.Tasks.Task ApplyAsync(LeaveEntry source, IDerivedSet<LeaveBalance> targets, System.Threading.CancellationToken cancellationToken) =>
-                    System.Threading.Tasks.Task.CompletedTask;
-            }
-            """,
-            """
-            app.MapAppendOnly<LeaveEntry>().Reversible();
-            app.MapReadOnly<LeaveBalance>().DerivedFrom<LeaveEntry>();
-            """),
+        new(25, "Time-off balance", Fit.Clean,
+            "public partial class LeaveBalance;",
+
+            // Bekleyen talepler ayrı bir kovadadır: talep açılınca gün "available" kovasından "pending" kovasına taşınır.
+            "app.MapBalance<LeaveBalance>().MultiTenant().Buckets(\"available\", \"pending\", \"taken\");"),
         new(26, "Timesheet / attendance", Fit.Clean,
             """
             public partial class TimeEntry
@@ -647,8 +630,8 @@ public sealed class TaxonomyTests
     public void Tally_MatchesTheWrittenResults()
     {
         // reports/Haldus taksonomi sınaması.md dosyasındaki sayılar; biri değişirse diğeri de güncellenmelidir.
-        Assert.Equal(53, Rows.Count(row => row.Fit == Fit.Clean));
-        Assert.Equal(5, Rows.Count(row => row.Fit == Fit.Partial));
+        Assert.Equal(55, Rows.Count(row => row.Fit == Fit.Clean));
+        Assert.Equal(3, Rows.Count(row => row.Fit == Fit.Partial));
         Assert.Equal(1, Rows.Count(row => row.Fit == Fit.Missing));
     }
 }

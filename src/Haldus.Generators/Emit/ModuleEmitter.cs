@@ -75,6 +75,12 @@ internal static class ModuleEmitter
                 model.Append("            global::Haldus.HaldusFileStore.Configure(modelBuilder);\n");
             }
 
+            if (resources.Any(entry => entry.Resource.Balance is not null))
+            {
+                // Bakiyelerin defteri tek bir tablodadır.
+                model.Append("            global::Haldus.HaldusBalances.Configure(modelBuilder);\n");
+            }
+
             if (resources.Any(entry => entry.Resource.Has(Traits.ChangeFeed)))
             {
                 model.Append("            global::Haldus.HaldusChanges.Configure(modelBuilder);\n");

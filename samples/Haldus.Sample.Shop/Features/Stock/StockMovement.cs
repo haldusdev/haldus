@@ -43,3 +43,9 @@ public sealed class StockLevelProjection : IDerivation<StockMovement, StockLevel
         level.Quantity += source.Quantity;
     }
 }
+
+/// <summary>Bir ürünün (SKU) stoğu; kovaları Haldus üretir: Available, Reserved, Damaged.</summary>
+public partial class Inventory;
+
+/// <summary>Bir çalışanın izin bakiyesi (gün); tek miktarlıdır.</summary>
+public partial class LeaveAllowance;

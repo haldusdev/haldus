@@ -7,12 +7,12 @@ sonunda (10. aşama) ve ikinci planın sonunda (21. aşama); aşağıdaki tablo 
 
 ## Sonuç
 
-59 satırın 58'i bugünkü API ile yazılıp derleniyor; 53'ü önerilen eşlemeyi eksiksiz ifade ediyor.
+59 satırın 58'i bugünkü API ile yazılıp derleniyor; 55'i önerilen eşlemeyi eksiksiz ifade ediyor.
 
 | Sonuç | İlk sınama | Bugün | Anlamı |
 |---|---|---|---|
-| Temiz | 19 | 53 | Raporun önerdiği eşleme, yazılmış özelliklerle eksiksiz ifade ediliyor |
-| Kısmi | 29 | 5 | Çekirdek ifade ediliyor; önerilen eşlemedeki bir özellik yok |
+| Temiz | 19 | 55 | Raporun önerdiği eşleme, yazılmış özelliklerle eksiksiz ifade ediliyor |
+| Kısmi | 29 | 3 | Çekirdek ifade ediliyor; önerilen eşlemedeki bir özellik yok |
 | Yok | 11 | 1 | Gereken archetype veya trait yazılmadı |
 
 Araştırmanın başlangıçtaki düz katalog için kendi sayımı 10 oturuyor, 31 zorlanarak, 18 oturmuyor idi. Üç sayım
@@ -37,6 +37,7 @@ iyileşme ölçüsü olarak değil, yön olarak okunmalıdır.
 | 22. Saklama, okundu takibi, toplama | `Retention`, `ReadTracking`, `Counts`, `Sums` | 4 |
 | 23. Yerelleştirilmiş alanlar | `Translatable` | 1 |
 | 24. Durum eksenleri | `Axis` | 1 |
+| 25. Bakiye | `MapBalance`, `Buckets`, `AllowNegative` | 2 |
 
 Dört katmanlı model (bir archetype, ilişkiler, en fazla bir durum modeli, trait'ler) iki sınamadan da sağlam çıktı:
 hiçbir satır iki archetype istemedi ve hiçbir satır modelin yeniden açılmasını gerektirmedi. Kapanan bütün boşluklar
@@ -69,7 +70,7 @@ yeni bir trait, ilişki bildirimi veya zincir metoduyla kapandı; kalanlar da ay
 | 8 | Payment (auth/capture/void) | Temiz | `MapCrud().Without(Delete)` + `Workflow` + `Idempotent`; hareketler `MapAppendOnly().Under<Payment>()` | — |
 | 9 | Refund | Temiz | `MapAppendOnly` + `Workflow` + `Idempotent` + `Metadata`; iptal bir geçiş | — |
 | 10 | FulfillmentOrder | Temiz | `MapReadOnly` + `Workflow` + `Axis<FulfillmentRequest>` + geçişler | |
-| 11 | Inventory level | Kısmi | `MapAppendOnly` hareket + `MapReadOnly().DerivedFrom<StockMovement>()` seviye | `MapBalance` (durum kovaları, kovalar arası taşıma) |
+| 11 | Inventory level | Temiz | `MapBalance` + `Buckets(...)` (kovalar arası `move`) + `Idempotent` | |
 | 12 | Invoice | Temiz | `MapCrud` + `Workflow` + `EditableIn` + `Numbered(assignOn)` + `Idempotent` + `MapDetail` + `Previewable`; ödeme durumu `Sums<InvoicePayment>()` + `IComputed` ile türetilir | |
 | 13 | InvoiceLine | Temiz | Gömülü `MapDetail` | — |
 | 14 | Credit note | Temiz | `MapAppendOnly` + `CreatedFrom<Invoice>` + `Workflow` (void) + `Numbered` | — |
@@ -83,7 +84,7 @@ yeni bir trait, ilişki bildirimi veya zincir metoduyla kapandı; kalanlar da ay
 | 22 | Transfer | Temiz | `MapCrud` + `Workflow` + `MapDetail` + `Idempotent` + `IComputed` + `Cloneable` | — |
 | 23 | Employee | Temiz | `MapCrud` + `Searchable` + `ChangeFeed` + `CustomFields` + entity aksiyonu; geçmiş `MapCrud().Under<Employee>().EffectiveDated()` | — |
 | 24 | LeaveRequest | Temiz | `MapCrud` + `Under<Employee>` + `Workflow` + `Approvable(levels: 2, "take")` | — |
-| 25 | Time-off balance | Kısmi | `MapAppendOnly` hareket + `MapReadOnly().DerivedFrom<LeaveEntry>()` bakiye | `MapBalance` (bakiyeye karşı atomik kontrol, bekleyen talepler) |
+| 25 | Time-off balance | Temiz | `MapBalance` + `Buckets("available", "pending", "taken")` | |
 | 26 | Timesheet / attendance | Temiz | `MapCrud` + `Batch(atomic: false)`; giriş/çıkış birer entity aksiyonu | — |
 | 27 | Post / Entry | Temiz | `MapCrud` + `Publishable` + `SoftDeletable` + `ConcurrencyChecked` + `Revisioned` | — |
 | 28 | Localized fields | Temiz | `Translatable(...)`; yayındaki hal çevirileri taşır (`Publishable`) | |
@@ -160,7 +161,7 @@ yeni bir trait, ilişki bildirimi veya zincir metoduyla kapandı; kalanlar da ay
 
 | Eksik | Satırlar | Neden yazılmadı |
 |---|---|---|
-| `MapBalance` (durum kovaları, bakiyeye karşı atomik kontrol) | 11, 25 | Araştırmanın üçüncü sürüm listesinde; bugün `MapAppendOnly` + `DerivedFrom` ile yaklaşık ifade ediliyor |
+
 
 | `MapChangeSet` | 1 | Üçüncü sürüm |
 
