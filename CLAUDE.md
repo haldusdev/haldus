@@ -21,6 +21,10 @@ EF Core yapılandırması üretilir.
   `pnpm typecheck`, `pnpm lint`, `pnpm build`. Paneli çalıştırmak için backend'in de çalışması gerekir (kendi
   README'sinde; `Shop:CreateDatabase` ayarı tabloları açılışta oluşturur). Panel yalnızca kullandığı etiketlerin
   istemcisini üretir (`orval.config.ts`: `filters.tags`); yeni bir kaynak kullanılacaksa etiketi oraya eklenir.
+- Örnek mobil uygulama (`samples/Haldus.Sample.Shop.Mobile`): `pnpm install`, `pnpm dev` (Expo), `pnpm generate:api`,
+  `pnpm typecheck`. Backend'in adresi `EXPO_PUBLIC_API_URL` ile verilir. Tarayıcıda çalıştırılırken backend'e kaynak
+  izni gerekir (`Shop:CorsOrigins`). pnpm burada düz `node_modules` kurar (`pnpm-workspace.yaml`: `nodeLinker: hoisted`);
+  Metro, sembolik bağlı düzende dolaylı bağımlılıkları (`react-native-css-interop`) çözemiyor.
 - Örnek uygulamada üretilen kod `samples/Haldus.Sample.Shop/obj/Generated` altında incelenebilir.
 
 ## Yapı
@@ -38,6 +42,8 @@ EF Core yapılandırması üretilir.
   istemcisi (tipler + TanStack Query hook'ları, `fetch`). Uygulama değildir; şemanın tüketilebildiğini kanıtlar.
 - `samples/Haldus.Sample.Shop.Web`: örnek mağazanın yönetim paneli (Vite + React + TypeScript, shadcn/ui `sidebar-07`
   ve `login-01`, Tailwind). Ürünler, kategoriler ve siparişlerin iş akışı; kendi orval istemcisi `src/api` altındadır.
+- `samples/Haldus.Sample.Shop.Mobile`: örnek mağazanın mobil uygulaması (Expo, Expo Router, React Native Reusables,
+  NativeWind). Ürünler, favoriler ve kullanıcının sepeti; kendi orval istemcisi `api` altındadır.
 - `samples/Haldus.Sample.Modular`: modüler yapının sınandığı küçük uygulama. `Catalog` ve `Sales` kendi
   bağlamına sahip modüllerdir; `Support` modülü ve `Host` ortak bağlamı kullanır.
 - `reports/`, `research_notes/`: archetype/trait taksonomisi araştırması. Tasarım kararlarının dayanağı
@@ -440,6 +446,14 @@ içeriyor (ilişki bildirimleri, `Sensitive`, `PublishesEvents`, `Purgeable`, ye
   - Paneldeki kimlik bir demodur: örnek backend'in `DemoIdentity`'si gibi kullanıcıyı ve kiracıyı başlıklarla
     gönderir, parola yoktur. Gerçek bir kimlik doğrulama örneği yazılmadı.
   - Arayüzün dili `Accept-Language` ile backend'e de gider; backend'in mesajları o dilde döner.
+  - Mobil uygulamada (aynı gerekçeyle, **ayrıca onaylanmadı**): yönlendirme genel kurallardaki Expo Router'dır; i18n
+    web'deki gibi i18next + react-i18next, cihazın dili `expo-localization` ile okunur; oturum ve dil seçimi
+    `expo-secure-store` ile saklanır (tarayıcıda `localStorage`); form kütüphanesi ve test altyapısı yoktur.
+    `expo-localization` ve `expo-secure-store` da onayı alınmamış yeni bağımlılıklardır.
+  - Mobil uygulama yalnızca Expo'nun **web** hedefinde, çalışan backend'e karşı doğrulandı (bu makinede emülatör
+    yoktu). Android ve iOS'ta çalıştırılmadı; "mobilde çalışıyor" denmeden önce bir cihazda denenmelidir.
+  - Örnek backend iki ayar kazandı, ikisi de varsayılan olarak kapalıdır: `Shop:CreateDatabase` (tabloları açılışta
+    oluşturur; yalnızca arayüzleri denemek için) ve `Shop:CorsOrigins` (sayılan kaynaklara CORS izni).
   - Örnek mağaza bu yüzden sayıları katı okur (`JsonNumberHandling.Strict`): varsayılan ayar şemaya `integer | string`
     yazıyor ve istemci tipleri her sayıyı `number | string` görüyordu. Bu, örnek uygulamanın ayarıdır; Haldus
     tüketen uygulamaya dayatmaz.

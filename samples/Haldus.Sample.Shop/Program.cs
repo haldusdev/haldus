@@ -37,6 +37,20 @@ builder.Services.AddOpenApi();
 builder.Services.ConfigureHttpJsonOptions(options =>
     options.SerializerOptions.NumberHandling = System.Text.Json.Serialization.JsonNumberHandling.Strict);
 
+// Başka bir kaynaktan çalışan örnek arayüzler (ör. mobil uygulamanın tarayıcıdaki hali) çağırabilsin diye, yalnızca
+// sayılan kaynaklara izin verilir (Shop:CorsOrigins). Varsayılan olarak hiçbir kaynağa izin yoktur; cihazda çalışan
+// uygulama ve aynı kaynaktan vekil üzerinden çağıran panel buna ihtiyaç duymaz.
+var corsOrigins = builder.Configuration.GetSection("Shop:CorsOrigins").Get<string[]>() ?? [];
+
+if (corsOrigins.Length > 0)
+{
+    builder.Services.AddCors(options => options.AddDefaultPolicy(policy => policy
+        .WithOrigins(corsOrigins)
+        .AllowAnyHeader()
+        .AllowAnyMethod()
+        .WithExposedHeaders("ETag", "Location")));
+}
+
 var app = builder.Build();
 
 // Örnek arayüzlerin (Haldus.Sample.Shop.Web, Haldus.Sample.Shop.Mobile) karşısında çalıştırmak için: istenirse
@@ -46,6 +60,11 @@ if (app.Configuration.GetValue<bool>("Shop:CreateDatabase") && !HaldusJobs.IsGen
 {
     await using var scope = app.Services.CreateAsyncScope();
     await scope.ServiceProvider.GetRequiredService<AppDbContext>().Database.EnsureCreatedAsync();
+}
+
+if (corsOrigins.Length > 0)
+{
+    app.UseCors();
 }
 
 app.UseHaldus();

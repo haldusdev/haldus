@@ -1,0 +1,6 @@
+# React Native araçları (Metro, autolinking) bağımlılıkları düz bir node_modules içinde arar.
+nodeLinker: hoisted
+enablePrePostScripts: true
+
+allowBuilds:
+  esbuild: false

@@ -1,0 +1,69 @@
+{
+  "app": {
+    "name": "Haldus Mağaza"
+  },
+  "common": {
+    "retry": "Yeniden dene",
+    "loadFailed": "Veriler yüklenemedi.",
+    "unexpectedError": "Bir şeyler ters gitti. Lütfen yeniden deneyin.",
+    "notFound": "Bu ekran yok.",
+    "goHome": "Ürünlere git"
+  },
+  "tabs": {
+    "products": "Ürünler",
+    "favorites": "Favoriler",
+    "basket": "Sepet",
+    "account": "Hesap"
+  },
+  "signIn": {
+    "title": "Giriş",
+    "heading": "Demoya giriş yap",
+    "description": "Örnek backend kullanıcıyı ve kiracıyı istek başlıklarından okur. Parola yoktur; istediğiniz adı yazın.",
+    "userId": "Kullanıcı adı",
+    "userIdRequired": "Bir kullanıcı adı yazın.",
+    "tenantId": "Kiracı kimliği",
+    "tenantIdInvalid": "Geçerli bir GUID yazın.",
+    "newTenant": "Yeni kiracı üret",
+    "submit": "Giriş yap"
+  },
+  "products": {
+    "searchPlaceholder": "Ürün ara",
+    "empty": "Henüz ürün yok",
+    "emptyDescription": "Yönetim panelinden ürün oluşturun; burada görünecek.",
+    "emptySearch": "Aramanızla eşleşen ürün yok.",
+    "addToBasket": "Sepete ekle",
+    "addToBasketLabel": "{{name}} ürününü sepete ekle",
+    "addFavorite": "{{name}} ürününü favorilere ekle",
+    "removeFavorite": "{{name}} ürününü favorilerden çıkar"
+  },
+  "favorites": {
+    "empty": "Henüz favori yok",
+    "emptyDescription": "Bir ürünü burada tutmak için kalbine dokunun."
+  },
+  "basket": {
+    "empty": "Sepetiniz boş",
+    "emptyDescription": "Bir sepet başlatmak için listeden ürün ekleyin.",
+    "quantity": "Adet {{count}}",
+    "increase": "{{name}} adedini artır",
+    "decrease": "{{name}} adedini azalt",
+    "remove": "{{name}} ürününü sepetten çıkar",
+    "clear": "Sepeti boşalt",
+    "lines_one": "{{count}} satır",
+    "lines_other": "{{count}} satır",
+    "expires": "{{date}} tarihine kadar saklanır"
+  },
+  "account": {
+    "user": "Kullanıcı",
+    "tenant": "Kiracı",
+    "language": "Dil",
+    "theme": "Tema",
+    "themeLight": "Açık",
+    "themeDark": "Koyu",
+    "signOut": "Çıkış yap",
+    "server": "Sunucu"
+  },
+  "languages": {
+    "en": "English",
+    "tr": "Türkçe"
+  }
+}

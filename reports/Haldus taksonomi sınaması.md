@@ -64,7 +64,7 @@ durum modeli" kuralı da açılmadı: ek durum eksenleri asıl durumun yanında,
   eşlemeye en yakın biçimde ve yalnızca yazılmış özelliklerle bildirir, generator'dan geçirir ve üretilen kodun
   hatasız derlendiğini doğrular. Aşağıdaki tablo o dosyadaki verinin aynısıdır; sayılar bir testle bağlıdır.
 - **Çalışma:** Derleme, uçların doğru davrandığını göstermez. Tablodaki özelliklerin her biri örnek uygulamalarda
-  gerçek PostgreSQL'e karşı sınanıyor (bugün 336 entegrasyon testi); ama her satırın kendi birleşimi değil.
+  gerçek PostgreSQL'e karşı sınanıyor (bugün 339 entegrasyon testi); ama her satırın kendi birleşimi değil.
   Örnek mağazada bulunmayan birleşimler (ör. iade, abonelik, rezervasyon satırlarının tam hali) yalnızca derleme
   düzeyinde doğrulandı.
 - **Hüküm:** "Temiz" ile "kısmi" arasındaki ayrım benim yorumumdur: önerilen eşlemede adı geçen bir özellik
@@ -194,6 +194,15 @@ durum modeli" kuralı da açılmadı: ek durum eksenleri asıl durumun yanında,
   orval ile üretilen istemci (579 dosya; tipler ve TanStack Query hook'ları) tip denetiminden hatasız geçiyor. Bunu
   sınarken şemadaki bir kusur görüldü: ASP.NET Core'un varsayılan sayı ayarı her tam sayıyı `integer | string`
   yazıyordu; örnek mağaza sayıları katı okuyacak biçimde ayarlandı.
+- **Sözleşme iki gerçek arayüzde tüketildi** (planlardan sonra): bir yönetim paneli (Vite + React + shadcn/ui) ve bir
+  mobil uygulama (Expo + React Native Reusables). İkisi de istemcisini aynı `openapi.json` dosyasından, yalnızca
+  kullandığı etiketler için üretir. Yazarken görülenler: orval'ın varsayılan `fetch` istemcisi hata yanıtında
+  fırlatmaz, bu yüzden bir sarmalayıcı (mutator) ve `forceSuccessResponse` gerekti; sürüm kontrollü kaynakta `ETag`
+  yanıt başlığından okunup `If-Match` ile geri gönderildi; doğrulama bütünüyle backend'de kaldı ve alan hataları
+  ile reddedilen geçişin nedeni, arayüzün dilinde, yanıttan okundu.
+- **Misafir sepeti bir açık gösterdi** (planlardan sonra, 5. satır örnek mağazada çalıştırılırken). `TokenAccess`
+  kimlikle çalışan adresleri de bırakıyordu; sahibi bir kullanıcı olmayan bir kayıtta bu, kimliği bilen herkese yazma
+  izni demekti. `TokenOnly` eklendi: kimlikli hiçbir uç üretilmez.
 - **Güvenlik incelemeleri üçüncü planda da aynı türden bulgular verdi.** Dört aşamadan sonra düzeltme gerekti:
   kullanıcılara ait kayıtların ortak bir kayıtta örtük toplanması (22), hassas alanın değişiklik kümesinde saklanıp
   geri gösterilmesi ve ölçütsüz sayılabilecek toplu silme (27), rolün zincirleme silmesinin kiracı sınırını aşması
@@ -225,7 +234,8 @@ sınırları ayrıca [README](../README.md) ve `CLAUDE.md` dosyalarında, özell
 | "İş tanımı + çalıştırmalar" modeli (AIP-152) | — | İş kaydı zaten bir çalıştırmadır; yeniden çalıştırma yeni bir iş kaydıdır |
 | ULID ve istemcinin verdiği kimlik | — | `KeyStrategy` için tercih belirtilmedi; önekli kimlik ve GUID yazıldı |
 | "Uzatma kancaları" | — | Araştırmanın ilk sürüm listesinde adı geçiyor, tanımı yok |
-| Örnek bir arayüz (web veya mobil uygulama) | — | Router, form, i18n ve test seçimleri sorulması gereken kararlardı; yalnızca üretilen istemci var |
+| Gerçek kimlik doğrulamalı bir örnek arayüz | — | Örnek panel ve mobil uygulama demo kimliğiyle (başlıklar) çalışır; kimlik sağlayıcı seçimi sorulması gereken bir karardır |
+| Arayüzler için otomatik test | — | Frontend test framework'ü sorulması gereken bir seçimdi; arayüzler tip denetimi, derleme ve elle doğrulandı |
 
 ## Bu sınamanın söylemediği
 
@@ -239,7 +249,7 @@ sınırları ayrıca [README](../README.md) ve `CLAUDE.md` dosyalarında, özell
   deposu, dışa aktarma) yük altında ölçülmedi.
 - Güvenliğin tam olduğu. Her aşamadan sonra yapılan incelemelerin bulguları düzeltildi; bu, bulunmamış bir
   birleşim hatası kalmadığını göstermez. Oran sınırlama ve onaylayanın yetkisi gibi konular uygulamaya bırakıldı.
-- Üretilen istemcinin kullanışlılığı. Şemanın orval'dan hatasız geçtiği ve tiplerin derlendiği doğrulandı; onu
-  tüketen bir arayüz yazılmadı, bu yüzden hook'ların gerçek bir ekranda nasıl durduğu sınanmadı.
+- Mobil uygulamanın cihazda çalıştığı. Örnek mobil uygulama yalnızca Expo'nun web hedefinde, çalışan backend'e karşı
+  denendi; Android ve iOS'ta çalıştırılmadı. Yönetim paneli tarayıcıda uçtan uca denendi, ama otomatik testi yoktur.
 - PostgreSQL dışındaki veritabanları. Numaralama, kilitler ve benzersizlik çakışmasının tanınması PostgreSQL'e
   özgüdür.

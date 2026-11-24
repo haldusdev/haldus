@@ -739,6 +739,18 @@ ile üretilen kodun derlendiği doğrulanır. Üretilen uçların adları (`oper
 Sayıların istemcide `number` olması için uygulamanın JSON ayarında sayılar katı okunmalıdır
 (`JsonNumberHandling.Strict`); ASP.NET Core'un varsayılanı şemaya `integer | string` yazar.
 
+Sözleşmeyi tüketen iki örnek arayüz vardır; ikisi de kendi istemcisini aynı `openapi.json` dosyasından, yalnızca
+kullandığı kaynaklar için üretir:
+
+| Örnek | Ne ile yazıldı | Ne gösterir |
+|---|---|---|
+| [Yönetim paneli](samples/Haldus.Sample.Shop.Web) | Vite, React, shadcn/ui, Tailwind | Ürünler (liste, arama, sıralama, yazma), kategori ağacı, siparişlerin iş akışı (`If-Match`, `Idempotency-Key`) |
+| [Mobil uygulama](samples/Haldus.Sample.Shop.Mobile) | Expo, Expo Router, React Native Reusables, NativeWind | Sayfa sayfa yüklenen ürün listesi, favoriler (`/me/favorites`), kullanıcının sepeti (`/me/baskets`) |
+
+İkisi de doğrulamayı backend'e bırakır (alan hataları yanıttan okunur) ve arayüzün dilini `Accept-Language` ile
+backend'e taşır; backend'in mesajları o dilde döner. Kimlik bir demodur: örnek backend kullanıcıyı ve kiracıyı
+başlıklardan okur. Mobil uygulama Expo'nun web hedefinde doğrulandı; Android ve iOS'ta çalıştırılmadı.
+
 ## Durum
 
 Üç plan da tamamlandı: ilk sürümün on aşaması, araştırmanın ikinci sürüm listesini kapatan on bir aşama ve üçüncü
@@ -747,9 +759,10 @@ sürüm listesiyle sınamada kalan satırları kapatan on bir aşama. Model, ara
 Ayrıntısı ve bilerek yazılmayanlar [taksonomi sınaması](reports/Haldus%20taksonomi%20sınaması.md) belgesindedir.
 
 Tasarım kararları için [CLAUDE.md](CLAUDE.md), kararların dayandığı araştırma için [reports](reports/)
-klasörüne bakın. İki örnek uygulama var: tek projeli [mağaza](samples/Haldus.Sample.Shop) ve
-[modüler](samples/Haldus.Sample.Modular) uygulama; mağazanın üretilmiş istemcisi de
-[ayrı bir klasördedir](samples/Haldus.Sample.Shop.Client).
+klasörüne bakın. İki örnek backend var: tek projeli [mağaza](samples/Haldus.Sample.Shop) ve
+[modüler](samples/Haldus.Sample.Modular) uygulama. Mağazanın üretilmiş istemcisi
+[ayrı bir klasördedir](samples/Haldus.Sample.Shop.Client); onu tüketen [yönetim paneli](samples/Haldus.Sample.Shop.Web)
+ve [mobil uygulama](samples/Haldus.Sample.Shop.Mobile) da öyle.
 
 ## Geliştirme
 
@@ -761,4 +774,5 @@ dotnet build
 dotnet test
 ```
 
-Entegrasyon testleri Docker gerektirir.
+Entegrasyon testleri Docker gerektirir. Örnek arayüzlerin komutları (`pnpm dev`, `pnpm generate:api`, `pnpm typecheck`)
+kendi README dosyalarındadır.

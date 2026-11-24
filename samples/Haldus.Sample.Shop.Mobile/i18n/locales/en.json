@@ -1,0 +1,69 @@
+{
+  "app": {
+    "name": "Haldus Shop"
+  },
+  "common": {
+    "retry": "Try again",
+    "loadFailed": "The data could not be loaded.",
+    "unexpectedError": "Something went wrong. Please try again.",
+    "notFound": "This screen does not exist.",
+    "goHome": "Go to products"
+  },
+  "tabs": {
+    "products": "Products",
+    "favorites": "Favorites",
+    "basket": "Basket",
+    "account": "Account"
+  },
+  "signIn": {
+    "title": "Sign in",
+    "heading": "Sign in to the demo",
+    "description": "The sample backend reads the user and the tenant from request headers. There is no password; pick any name.",
+    "userId": "User name",
+    "userIdRequired": "Enter a user name.",
+    "tenantId": "Tenant ID",
+    "tenantIdInvalid": "Enter a valid GUID.",
+    "newTenant": "Generate a new tenant",
+    "submit": "Sign in"
+  },
+  "products": {
+    "searchPlaceholder": "Search products",
+    "empty": "No products yet",
+    "emptyDescription": "Create products in the back office to see them here.",
+    "emptySearch": "No products match your search.",
+    "addToBasket": "Add to basket",
+    "addToBasketLabel": "Add {{name}} to the basket",
+    "addFavorite": "Add {{name}} to favorites",
+    "removeFavorite": "Remove {{name}} from favorites"
+  },
+  "favorites": {
+    "empty": "No favorites yet",
+    "emptyDescription": "Tap the heart on a product to keep it here."
+  },
+  "basket": {
+    "empty": "Your basket is empty",
+    "emptyDescription": "Add a product from the list to start a basket.",
+    "quantity": "Quantity {{count}}",
+    "increase": "Increase the quantity of {{name}}",
+    "decrease": "Decrease the quantity of {{name}}",
+    "remove": "Remove {{name}} from the basket",
+    "clear": "Empty the basket",
+    "lines_one": "{{count}} line",
+    "lines_other": "{{count}} lines",
+    "expires": "Kept until {{date}}"
+  },
+  "account": {
+    "user": "User",
+    "tenant": "Tenant",
+    "language": "Language",
+    "theme": "Theme",
+    "themeLight": "Light",
+    "themeDark": "Dark",
+    "signOut": "Sign out",
+    "server": "Server"
+  },
+  "languages": {
+    "en": "English",
+    "tr": "Türkçe"
+  }
+}
