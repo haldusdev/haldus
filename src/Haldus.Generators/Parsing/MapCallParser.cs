@@ -317,6 +317,7 @@ internal static class MapCallParser
             properties.Insert(0, LifecycleReader.FileName());
         }
 
+
         if ((traits & Traits.EffectiveDated) != 0)
         {
             // Dönemi istemci verir: iki alan da sıradan, yazılabilir alanlardır.
@@ -334,6 +335,7 @@ internal static class MapCallParser
         var createOnlyRequests = new List<SearchFieldRequest>();
         SearchFieldRequest? naturalKeyRequest = null;
         var effectiveKeyRequests = new List<SearchFieldRequest>();
+        TransferModel? transfer = null;
         var reverseAttachments = new List<ReverseDeclaration>();
         var tagDeclarations = new List<ReverseDeclaration>();
         var derivedFrom = new List<SourceDeclaration>();
@@ -379,6 +381,31 @@ internal static class MapCallParser
                     references.Add(ReadReference(
                         ReferenceKind.Reference, targets[0], call, context.SemanticModel, OnDeleteBehavior.Restrict, cancellationToken));
                     break;
+                case GenericNameSyntax { Identifier.ValueText: "Exports" or "Imports", TypeArgumentList.Arguments: { Count: 1 } moved } transferCall:
+                {
+                    var target = context.SemanticModel.GetTypeInfo(moved[0], cancellationToken).Type as INamedTypeSymbol;
+                    var known = target is { TypeKind: not TypeKind.Error };
+
+                    if (archetype != Archetype.Job || transfer is not null)
+                    {
+                        diagnostics.Add(new DiagnosticInfo(
+                            "HALDUS007",
+                            LocationInfo.From(callName.GetLocation()),
+                            new EquatableArray<string>(
+                            [
+                                archetype != Archetype.Job
+                                    ? $"{transferCall.Identifier.ValueText} turns a job into an export or an import; declare it on a MapJob call"
+                                    : $"'{entityName}' can export or import one resource, not both",
+                            ])));
+                    }
+
+                    transfer ??= new TransferModel(
+                        transferCall.Identifier.ValueText == "Exports",
+                        known ? target!.Name : moved[0].ToString(),
+                        known ? target!.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) : null,
+                        LocationInfo.From(moved[0].GetLocation()));
+                    break;
+                }
                 case GenericNameSyntax { Identifier.ValueText: "AttachedTo", TypeArgumentList.Arguments: { Count: 1 } hosts }:
                     references.Add(ReadReference(
                         ReferenceKind.Parent, hosts[0], call, context.SemanticModel, OnDeleteBehavior.Cascade, cancellationToken) with
@@ -472,6 +499,13 @@ internal static class MapCallParser
             detailOfType = owners[0] is IErrorTypeSymbol ? null : owners[0].ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
         }
 
+        if (transfer is not null && archetype == Archetype.Job)
+        {
+            // Aktarma işinin girdileri ve çıktıları Haldus'a aittir; mantığı da üretilir.
+            properties.AddRange(LifecycleReader.TransferInputs(transfer.Export).Where(input => properties.All(property => property.Name != input.Name)));
+            lifecycle.Members.AddRange(transfer.Export ? LifecycleReader.ExportMembers() : LifecycleReader.ImportMembers());
+        }
+
         return new ResourceModel(
             archetype,
             entityName,
@@ -512,6 +546,7 @@ internal static class MapCallParser
             Token = lifecycle.Token,
             Approval = lifecycle.Approval,
             File = file,
+            Transfer = archetype == Archetype.Job ? transfer : null,
             ReversibleIn = lifecycle.ReversibleIn,
             SupersedableIn = lifecycle.SupersedableIn,
             Batch = lifecycle.Batch,
@@ -734,6 +769,12 @@ internal static class MapCallParser
             yield return "ChangeFeed cannot be combined with Under<T>(shallow: true): the feed could not tell whose deleted records it is listing";
         }
 
+        if (chain.Any(call => call.Name == "CustomFields") && chain.Any(call => call.Name == "Under"))
+        {
+            // Tanımlar kaynağın kendi adresinde yönetilir ve bütün kayıtları için geçerlidir; ebeveyn başına değil.
+            yield return "CustomFields cannot be combined with Under<T>(): field definitions belong to the resource, not to one parent";
+        }
+
         if (chain.Any(call => call.Name == "Publishable"))
         {
             // Yayın kendi durum modelidir ve kopya, taslağın yalnızca içeriğini taşır; Haldus'un yönettiği alanları
@@ -919,6 +960,9 @@ internal static class MapCallParser
 
                 // Belge, taslağı düzenlenen ve düzeltmesi yeni bir kayıt olan bir koleksiyondur.
                 "Document" => crudLike,
+
+                // Özel alanlar, istemcinin yazıp değiştirdiği kayıtlar içindir.
+                "CustomFields" => crudLike,
 
                 // Taslak, istemcinin yazdığı kayıttır.
                 "Publishable" => crudLike,

@@ -187,6 +187,15 @@ public static class ResourceBuilderTraitExtensions
         where TEntity : class => builder;
 
     /// <summary>
+    /// Kayda, alanlarını kiracının tanımladığı bir değer çantası ekler (<c>customFields</c>). Tanımlar kaynağın
+    /// adresinde yönetilir: <c>GET /custom-fields</c>, <c>PUT</c> ve <c>DELETE /custom-fields/{key}</c>; her alanın
+    /// bir türü (metin, sayı, evet/hayır, gün, seçenek) vardır ve zorunlu olabilir. Değerler her yazmada tanımlara
+    /// göre doğrulanır: tanımı olmayan anahtar ve türüne uymayan değer 400 döner. <c>PATCH</c> çantayı birleştirir.
+    /// </summary>
+    public static ResourceBuilder<TEntity> CustomFields<TEntity>(this ResourceBuilder<TEntity> builder)
+        where TEntity : class => builder;
+
+    /// <summary>
     /// Kaynağa bir değişiklik akışı ekler: <c>GET /changes?since={imleç}</c>, imleçten sonra değişen kayıtların
     /// şimdiki halini ve silinenlerin kimliklerini döndürür; yanıttaki <c>next</c> bir sonraki isteğin imlecidir.
     /// </summary>

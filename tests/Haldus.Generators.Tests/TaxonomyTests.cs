@@ -286,13 +286,13 @@ public sealed class TaxonomyTests
             """),
 
         // ── İK ───────────────────────────────────────────────────────────────────────────────────────
-        new(23, "Employee", Fit.Partial,
+        new(23, "Employee", Fit.Clean,
             """
             public partial class Employee { public string Name { get; set; } = ""; }
             public partial class EmploymentRecord { public string Title { get; set; } = ""; }
             """,
             """
-            var employees = app.MapCrud<Employee>().MultiTenant().Searchable(employee => employee.Name).ChangeFeed();
+            var employees = app.MapCrud<Employee>().MultiTenant().Searchable(employee => employee.Name).ChangeFeed().CustomFields();
             employees.MapAction("terminate", employee => employee.Name = employee.Name.Trim());
             app.MapCrud<EmploymentRecord>().Under<Employee>().EffectiveDated();
             """),
@@ -520,9 +520,9 @@ public sealed class TaxonomyTests
             app.MapCrud<Invoice>().Commentable<Activity>();
             app.MapAppendOnly<Activity>().Auditable();
             """),
-        new(51, "Custom fields / metadata", Fit.Partial,
+        new(51, "Custom fields / metadata", Fit.Clean,
             Product,
-            "app.MapCrud<Product>().Metadata();"),
+            "app.MapCrud<Product>().MultiTenant().Metadata().CustomFields();"),
         new(52, "/me ve kullanıcıya ait kaynaklar", Fit.Clean,
             """
             public partial class SavedAddress { public string Line { get; set; } = ""; }
@@ -578,8 +578,11 @@ public sealed class TaxonomyTests
             app.MapJob<PriceUpdate>({{Job}});
             """),
         new(59, "Büyük veri export'u", Fit.Clean,
-            "public partial class DataExport { public string Kind { get; set; } = \"\"; public string? Url { get; private set; } }",
-            $"app.MapJob<DataExport>({Job}).MultiTenant().Idempotent();"),
+            Product + "public partial class ProductExport;",
+            """
+            app.MapCrud<Product>().MultiTenant();
+            app.MapJob<ProductExport>().Exports<Product>().MultiTenant().Idempotent();
+            """),
     ];
 
     public static TheoryData<int> RowNumbers => [.. Rows.Select(row => row.Number)];
@@ -630,8 +633,8 @@ public sealed class TaxonomyTests
     public void Tally_MatchesTheWrittenResults()
     {
         // reports/Haldus taksonomi sınaması.md dosyasındaki sayılar; biri değişirse diğeri de güncellenmelidir.
-        Assert.Equal(45, Rows.Count(row => row.Fit == Fit.Clean));
-        Assert.Equal(12, Rows.Count(row => row.Fit == Fit.Partial));
+        Assert.Equal(47, Rows.Count(row => row.Fit == Fit.Clean));
+        Assert.Equal(10, Rows.Count(row => row.Fit == Fit.Partial));
         Assert.Equal(2, Rows.Count(row => row.Fit == Fit.Missing));
     }
 }

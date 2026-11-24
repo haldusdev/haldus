@@ -115,6 +115,15 @@ internal sealed record ResourceModel(
     public TokenModel? Token { get; init; }
 
     /// <summary>Kaydın ters çevrilebildiği durumlar; durum makinesi yoksa <c>null</c> (her zaman).</summary>
+    /// <summary>Kaynak bir aktarma işiyse (<c>Exports</c> / <c>Imports</c>) aktardığı kaynak; değilse <c>null</c>.</summary>
+    public TransferModel? Transfer { get; init; }
+
+    /// <summary>Bir dışa aktarma işi bu kaynağın kayıtlarını okuyor mu; okuyorsa kayıtları veren metot üretilir.</summary>
+    public bool IsExported { get; init; }
+
+    /// <summary>Bir içe aktarma işi bu kaynağa kayıt ekliyor mu; ekliyorsa tek kaydı oluşturan metot üretilir.</summary>
+    public bool IsImported { get; init; }
+
     /// <summary>Kaynak bir dosyaysa (<c>MapFile</c>) içerik kuralları; değilse <c>null</c>.</summary>
     public FileModel? File { get; init; }
 
@@ -329,6 +338,7 @@ internal enum Traits
     ChangeFeed = 524288,
     Publishable = 1048576,
     EffectiveDated = 2097152,
+    CustomFields = 4194304,
 }
 
 /// <summary>
@@ -411,6 +421,9 @@ internal sealed record PropertyModel(
     bool IsEmbedded = false,
     bool IsCreateOnly = false)
 {
+    /// <summary>Alan yalnızca istekte yer alır; yanıtta gösterilmez (içe aktarmanın içeriği gibi).</summary>
+    public bool IsInputOnly { get; init; }
+
     public bool IsNonNullable => IsNonNullableReference || IsNonNullableValue;
 
     /// <summary>Alan güncelleme isteklerinde yer alır mı: yazılabilir ve yalnızca oluştururken yazılan bir alan değil.</summary>
@@ -653,6 +666,22 @@ internal sealed record NumberingModel(string Pattern, bool Gapless, string? Assi
 /// <param name="LifetimeTicks">Sunucunun verdiği ömür; <c>null</c> ise son kullanma zamanını istemci verir.</param>
 /// <param name="Sliding">Her yazmada süre yeniden başlar mı.</param>
 internal sealed record ExpiryModel(long? LifetimeTicks, bool Sliding);
+
+/// <summary>
+/// Bir işin (<c>MapJob</c>) zincirinde bildirilen aktarma: <c>Exports&lt;T&gt;()</c> veya <c>Imports&lt;T&gt;()</c>.
+/// Hedef kaynak, tüm kaynaklar bilindikten sonra çözülür.
+/// </summary>
+/// <param name="Export">Dışa aktarma mı; değilse içe aktarmadır.</param>
+/// <param name="TargetType">Hedef çözüldükten sonra tam adı.</param>
+/// <param name="TargetNamespace">Hedefin namespace'i; hedef çözülmeden önce boştur.</param>
+/// <param name="NeedsTime">Hedefin oluşturma kuralı şimdiki zamanı istiyor mu.</param>
+internal sealed record TransferModel(
+    bool Export,
+    string TargetName,
+    string? TargetType,
+    LocationInfo Location,
+    string TargetNamespace = "",
+    bool NeedsTime = false);
 
 /// <summary><c>MapFile</c> ile bildirilen dosya kaynağının içerik kuralları.</summary>
 /// <param name="MaxBytes">Kabul edilen en büyük içerik.</param>

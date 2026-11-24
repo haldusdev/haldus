@@ -6,19 +6,19 @@ sınamanın sonucudur: her satır, yazılmış olan API ile ifade edilmeye çal�
 
 ## Sonuç
 
-59 satırın 57'si bugünkü API ile yazılıp derleniyor (45'i eksiksiz); 2'si için anlamlı bir eşleme yok. (İlk sayım 19 temiz, 29
+59 satırın 57'si bugünkü API ile yazılıp derleniyor (47'si eksiksiz); 2'si için anlamlı bir eşleme yok. (İlk sayım 19 temiz, 29
 kısmi, 11 yok idi. Entity aksiyonu yazıldıktan sonra bir satır temize geçti; sahiplik yazıldıktan sonra iki satır
 temize, bir satır yoktan kısmiye geçti; alan eklentileri yazıldıktan sonra üç satır temize, bir satır yoktan
 kısmiye geçti; kayıt işlemleri yazıldıktan sonra üç satır daha temize geçti; kayıtlar arası zincir yazıldıktan
 sonra beş satır temize, bir satır yoktan kısmiye geçti; sırlar yazıldıktan sonra iki satır daha temize geçti;
 bağlar ve kapsam yazıldıktan sonra üç satır daha, onay yazıldıktan sonra bir satır daha temize geçti; zaman ve
 sürüm yazıldıktan sonra bir satır kısmiden, bir satır yoktan temize geçti; dosyalar ve takılabilirler yazıldıktan
-sonra bir satır kısmiden, üç satır yoktan temize geçti.)
+sonra bir satır kısmiden, üç satır yoktan temize geçti; özel alanlar yazıldıktan sonra iki satır daha temize geçti.)
 
 | Sonuç | Satır | Anlamı |
 |---|---|---|
-| Temiz | 45 | Raporun önerdiği eşleme, yazılmış özelliklerle eksiksiz ifade ediliyor |
-| Kısmi | 12 | Çekirdek ifade ediliyor; önerilen eşlemedeki bir veya daha çok özellik henüz yok |
+| Temiz | 47 | Raporun önerdiği eşleme, yazılmış özelliklerle eksiksiz ifade ediliyor |
+| Kısmi | 10 | Çekirdek ifade ediliyor; önerilen eşlemedeki bir veya daha çok özellik henüz yok |
 | Yok | 2 | Gereken archetype veya trait yazılmadı |
 
 Araştırmanın başlangıçtaki düz katalog için kendi sayımı 10 oturuyor, 31 zorlanarak, 18 oturmuyor idi. İki sayım
@@ -41,7 +41,7 @@ tamamı eksik trait veya archetype'tır.
   gösterilen sır, döndürme, token ile erişim, bağların topluca değiştirilmesi, yük ve durum taşıyan bağ, ebeveyn
   altında tek kayıt, kısa adres, komutla yazılan satırlar, onay (tek ve çok düzeyli), belge, saklanan sürümler ve
   geri yükleme, değişiklik akışı, dönemli kayıtlar, taslak ve yayın, dosya yükleme ve indirme, birkaç kaynağa
-  takılabilen ekler ve yorumlar, etiketler.
+  takılabilen ekler ve yorumlar, etiketler, kiracının tanımladığı özel alanlar, CSV / JSON dışa ve içe aktarma.
   Geri kalan satırlar yalnızca derleme düzeyinde doğrulandı.
 - **Hüküm:** "Temiz" ile "kısmi" arasındaki ayrım benim yorumumdur: önerilen eşlemede adı geçen bir özellik
   yazılmadıysa, aynı sonuç elle (ör. bir handler içinde) elde edilebilse bile satır kısmi sayıldı.
@@ -72,7 +72,7 @@ tamamı eksik trait veya archetype'tır.
 | 20 | StockMovement / defter kaydı | Temiz | `MapAppendOnly` + `Auditable` | — |
 | 21 | Reservation | Temiz | `MapCrud` + `Workflow` + `Expiring` | — |
 | 22 | Transfer | Temiz | `MapCrud` + `Workflow` + `MapDetail` + `Idempotent` + `IComputed` + `Cloneable` | — |
-| 23 | Employee | Kısmi | `MapCrud` + `Searchable` + `ChangeFeed` + entity aksiyonu; geçmiş `MapCrud().Under<Employee>().EffectiveDated()` | `CustomFields` |
+| 23 | Employee | Temiz | `MapCrud` + `Searchable` + `ChangeFeed` + `CustomFields` + entity aksiyonu; geçmiş `MapCrud().Under<Employee>().EffectiveDated()` | — |
 | 24 | LeaveRequest | Temiz | `MapCrud` + `Under<Employee>` + `Workflow` + `Approvable(levels: 2, "take")` | — |
 | 25 | Time-off balance | Kısmi | `MapAppendOnly` hareket + `MapReadOnly().DerivedFrom<LeaveEntry>()` bakiye | `MapBalance` (bakiyeye karşı atomik kontrol, bekleyen talepler) |
 | 26 | Timesheet / attendance | Temiz | `MapCrud` + `Batch(atomic: false)`; giriş/çıkış birer entity aksiyonu | — |
@@ -100,7 +100,7 @@ tamamı eksik trait veya archetype'tır.
 | 48 | Subscription / Plan | Temiz | `MapCrud` + `Workflow` + `MapDetail` | — |
 | 49 | Polimorfik attachment | Temiz | `MapFile`; hedeflerde `Attachable<Attachment>()` | — |
 | 50 | Comment / activity feed | Temiz | `MapAppendOnly`; hedeflerde `Commentable<Activity>()` | — |
-| 51 | Custom fields / metadata | Kısmi | `Metadata` (serbest anahtar-değer çantası) | `CustomFields` (kiracının tanımladığı, doğrulanan alanlar) |
+| 51 | Custom fields / metadata | Temiz | `Metadata` (serbest çanta) + `CustomFields` (kiracının tanımladığı, türüne göre doğrulanan alanlar) | — |
 | 52 | `/me` ve kullanıcıya ait kaynaklar | Temiz | `OwnedByCurrentUser()` (`/me` altında) veya `OwnedByCurrentUser(underMe: false)` | — |
 | 53 | Report / aggregation | Temiz | `MapQuery` veya `MapJob` | — |
 | 54 | Search | Temiz | `Searchable` | — |
@@ -108,7 +108,7 @@ tamamı eksik trait veya archetype'tır.
 | 56 | Ordering / position | Temiz | `Orderable` (`Position` alanı, `POST /{id}/move`) | — |
 | 57 | Counter | Kısmi | Gömülü satırlardan `IComputed` | Başka kaynaklardan toplama (`Rollup`) |
 | 58 | Bulk operations | Temiz | `Batch` + `MapJob` | — |
-| 59 | Büyük veri export'u | Temiz | `MapJob` + `Idempotent` | — |
+| 59 | Büyük veri export'u | Temiz | `MapJob().Exports<T>()` + `Idempotent` (mantığı üretilir; dosya işten indirilir) | — |
 
 ## Bulgular
 
@@ -156,7 +156,7 @@ tamamı eksik trait veya archetype'tır.
 
 | Eksik | Satırlar |
 |---|---|
-| `CustomFields` | 23, 51 |
+
 
 | `MapBalance` | 11, 25 |
 

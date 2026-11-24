@@ -108,6 +108,36 @@
   <data name="FileContentMissing.Detail" xml:space="preserve">
     <value>The content of {0} '{1}' has not been uploaded yet.</value>
   </data>
+  <data name="CustomField.Unknown" xml:space="preserve">
+    <value>No custom field with this key is defined.</value>
+  </data>
+  <data name="CustomField.Invalid" xml:space="preserve">
+    <value>The value is not a valid {0}.</value>
+  </data>
+  <data name="CustomField.KeyInvalid" xml:space="preserve">
+    <value>The key must start with a letter and contain only letters, digits and underscores (at most 40 characters).</value>
+  </data>
+  <data name="CustomField.OptionsInvalid" xml:space="preserve">
+    <value>A choice field needs between 1 and 100 options of at most 200 characters; other field types take no options.</value>
+  </data>
+  <data name="CustomField.Limit" xml:space="preserve">
+    <value>A resource can have at most {0} custom fields.</value>
+  </data>
+  <data name="Transfer.FormatInvalid" xml:space="preserve">
+    <value>The format must be 'csv' or 'json'.</value>
+  </data>
+  <data name="Import.TooLarge" xml:space="preserve">
+    <value>An import can contain at most {0} rows.</value>
+  </data>
+  <data name="Import.Malformed" xml:space="preserve">
+    <value>The content is not a valid {0} list of records.</value>
+  </data>
+  <data name="Import.Row" xml:space="preserve">
+    <value>Row {0}: {1}</value>
+  </data>
+  <data name="Import.RowUnreadable" xml:space="preserve">
+    <value>The value at '{0}' cannot be read.</value>
+  </data>
   <data name="ChainMember.Detail" xml:space="preserve">
     <value>{0} '{1}' is linked to the record that reverses or supersedes it (or that it reverses or supersedes) and cannot be deleted.</value>
   </data>

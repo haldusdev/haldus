@@ -192,6 +192,13 @@ public sealed class HaldusGenerator : IIncrementalGenerator
                 .Select(resource => (resource, resource.Namespace)),
         ];
 
+        valid =
+        [
+            .. ResourceLinker
+                .AttachTransfers([.. valid.Select(entry => entry.Resource)], diagnostic => Report(context, diagnostic))
+                .Select(resource => (resource, resource.Namespace)),
+        ];
+
         // Aynı istek tipi birden çok rotaya eşlenebilir; endpoint kodu bir kez üretilir.
         var validQueries = new List<QueryModel>();
         var seenQueries = new HashSet<string>();
@@ -212,7 +219,18 @@ public sealed class HaldusGenerator : IIncrementalGenerator
         }
 
         // Partial bir handler sınıfı her bildirimi için bir kez gelir.
-        var distinctHandlers = handlers.Distinct().OrderBy(handler => handler.Implementation, StringComparer.Ordinal).ToList();
+        // Aktarma işlerinin mantığı üretilir; üretilen handler sınıfı, yazılmış olanlar gibi kaydedilir.
+        var transferJobs = valid.Where(entry => entry.Resource.Transfer is { TargetNamespace: not null, TargetType: not null } && entry.Resource.Archetype == Archetype.Job)
+            .Select(entry => entry.Resource)
+            .ToList();
+
+        var distinctHandlers = handlers
+            .Concat(transferJobs.Select(job => new HandlerModel(
+                $"{job.QualifiedName}TransferHandler",
+                new EquatableArray<string>([$"global::Haldus.IJobHandler<{job.QualifiedName}>"]))))
+            .Distinct()
+            .OrderBy(handler => handler.Implementation, StringComparer.Ordinal)
+            .ToList();
 
         if (valid.Count == 0 && validQueries.Count == 0 && distinctHandlers.Count == 0)
         {
@@ -235,6 +253,11 @@ public sealed class HaldusGenerator : IIncrementalGenerator
             }
 
             AddSource(context, $"{hintPrefix}.Dtos.g.cs", ResourceEmitter.EmitDtos(resource, entityNamespace));
+
+            if (resource is { Archetype: Archetype.Job, Transfer: { TargetType: not null } })
+            {
+                AddSource(context, $"{hintPrefix}.Transfer.g.cs", EndpointEmitter.EmitTransferHandler(resource, entityNamespace));
+            }
 
             if (resource.Attachments.ToList() is { Count: > 0 } attachments)
             {

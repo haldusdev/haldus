@@ -80,6 +80,23 @@ public sealed class ResourceBuilder<TEntity>(RouteGroupBuilder group, IEndpointR
     public ResourceBuilder<TEntity> NaturalKey(Expression<Func<TEntity, object?>> field) => this;
 
     /// <summary>
+    /// İşi (<c>MapJob</c>) bir dışa aktarma yapar: iş, <typeparamref name="TResource"/> kaynağının işi başlatana
+    /// görünen bütün kayıtlarını bir dosyaya döker (<c>format</c>: <c>csv</c> veya <c>json</c>). Dosya, iş bitince
+    /// <c>GET /{id}/content</c> ile indirilir. Mantığı Haldus üretir; handler yazılmaz.
+    /// </summary>
+    public ResourceBuilder<TEntity> Exports<TResource>()
+        where TResource : class => this;
+
+    /// <summary>
+    /// İşi (<c>MapJob</c>) bir içe aktarma yapar: iş, isteğin <c>content</c> alanındaki satırları (başlıklı CSV veya
+    /// JSON dizisi) <typeparamref name="TResource"/> kaynağında, tekil oluşturmanın bütün kurallarıyla oluşturur.
+    /// Satırlar tek bir transaction içindedir: biri bile reddedilirse hiçbiri oluşturulmaz ve nedenleri işin
+    /// <c>errors</c> alanında döner. Kaynak <c>.Batch()</c> bildirmiş olmalıdır.
+    /// </summary>
+    public ResourceBuilder<TEntity> Imports<TResource>()
+        where TResource : class => this;
+
+    /// <summary>
     /// Kaydı birkaç farklı kaynağa takılabilir yapar (ek, yorum, not): her çağrı bir hedef ekler. Kaynak her hedefin
     /// adresi altında sunulur (<c>/orders/{orderId}/comments</c>, <c>/invoices/{invoiceId}/comments</c>); her hedef
     /// için isteğe bağlı bir yabancı anahtar üretilir ve bir kayıtta tam olarak biri doludur. Kayıt, takıldığı kayıt

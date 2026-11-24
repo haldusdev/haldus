@@ -40,6 +40,12 @@ public static class SupplyEndpoints
         supplies.MapTransition("approve", from: SupplyStatus.Proposed, to: SupplyStatus.Approved);
         supplies.MapTransition("discontinue", from: [SupplyStatus.Proposed, SupplyStatus.Approved], to: SupplyStatus.Discontinued);
 
+        // Makine kiracıya aittir ve her kiracı ona kendi alanlarını tanımlar: PUT /machines/custom-fields/{key}
+        // ile tanımlanan alanlar, kaydın customFields çantasında yazılır ve her yazmada tanıma göre doğrulanır.
+        app.MapCrud<Machine>()
+            .MultiTenant()
+            .CustomFields();
+
         // Tedarikçinin fiyatı belirli bir dönemde geçerlidir; para birimi başına bir dönem dizisi tutulur. Dönemler
         // çakışamaz; açık uçlu fiyatın içinde başlayan yeni fiyat, eskisini kendi başladığı gün kapatır.
         // GET /suppliers/{supplierId}/supplier-rates?asOf=2026-06-01 o gün geçerli olanları döndürür.

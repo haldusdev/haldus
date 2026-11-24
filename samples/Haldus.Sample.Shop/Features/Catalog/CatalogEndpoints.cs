@@ -35,6 +35,16 @@ public static class CatalogEndpoints
         // POST /products/{id}/reprice
         products.MapAction<RepriceProduct, RepriceResult>();
 
+        // Ürünlerin dışa ve içe aktarılması birer iştir; mantıklarını Haldus üretir.
+        // POST /product-exports { "format": "csv" } işi başlatır; bitince GET /product-exports/{id}/content dosyayı verir.
+        // POST /product-imports { "format": "csv", "content": "name,price\n…" } satırları ürün olarak oluşturur:
+        // her satır tekil oluşturmanın kurallarından geçer ve biri bile reddedilirse hiçbiri oluşturulmaz.
+        app.MapJob<ProductExport>()
+            .Exports<Product>();
+
+        app.MapJob<ProductImport>()
+            .Imports<Product>();
+
         // Ürünler ve etiketler çoktan-çoğa bağlanır: PUT /products/{productId}/tags/{tagId}
         // Bağ kayıtlarının entity'si (ProductTag) üretilir.
         // Etiketlerde kısmi başarı: geçerli öğeler kaydedilir, yanıt 207 ile öğe başına sonuç döner.

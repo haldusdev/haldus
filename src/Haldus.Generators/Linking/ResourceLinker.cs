@@ -195,6 +195,8 @@ internal static class ResourceLinker
             ? "it is created from another record with CreatedFrom<T>()"
         : resource.Has(Traits.Orderable)
             ? "it is Orderable"
+        : resource.Has(Traits.CustomFields)
+            ? "it has CustomFields, whose definitions are managed at a single address"
         : resource.Has(Traits.ChangeFeed)
             ? "it has a ChangeFeed, which could not tell whose deleted records it is listing"
         : resource.NaturalKeyRequest is not null
@@ -644,6 +646,66 @@ internal static class ResourceLinker
             .. associations.Select(association => attached[association.LinkName] is { Count: > 0 } own
                 ? association with { Transitions = own.ToEquatableArray() }
                 : association),
+        ];
+    }
+
+    /// <summary>
+    /// Aktarma işlerini (<c>Exports</c> / <c>Imports</c>) aktardıkları kaynağa bağlar. İş hedefin adını ve
+    /// namespace'ini, hedef ise kendisinden okunduğunu veya kendisine yazıldığını öğrenir; böylece hedefin uç
+    /// sınıfında işin çağıracağı metot üretilir.
+    /// </summary>
+    public static List<ResourceModel> AttachTransfers(IReadOnlyList<ResourceModel> resources, Action<DiagnosticInfo> report)
+    {
+        var byType = resources.ToDictionary(resource => resource.QualifiedName);
+        var exported = new HashSet<string>();
+        var imported = new HashSet<string>();
+        var resolved = new Dictionary<string, TransferModel?>();
+
+        foreach (var job in resources.Where(resource => resource.Transfer is not null))
+        {
+            var transfer = job.Transfer!;
+
+            void Fail(string id, params string[] arguments) =>
+                report(new DiagnosticInfo(id, transfer.Location, arguments.ToEquatableArray()));
+
+            var declaration = transfer.Export ? "Exports" : "Imports";
+            resolved[job.QualifiedName] = null;
+
+            if (Find(transfer.TargetName, transfer.TargetType, resources, byType) is not { } target)
+            {
+                Fail("HALDUS009", transfer.TargetName, job.EntityName);
+            }
+            else if (target.Archetype is not (Archetype.Crud or Archetype.ReadOnly or Archetype.AppendOnly) || target.Attachments.Any())
+            {
+                // Hedefin kayıtlarını veren ve oluşturan metotlar, kendi uç sınıfı olan bir koleksiyonda üretilir.
+                Fail("HALDUS007", $"{declaration}<{target.EntityName}>() needs a resource mapped with MapCrud, MapReadOnly or MapAppendOnly that is not attached to other resources");
+            }
+            else if (!transfer.Export && (target.Batch is null || !target.Has(Operations.Create) || target.Parent is not null))
+            {
+                // İçe aktarma her satırı toplu oluşturmanın öğe yoluyla oluşturur; o yol kaynağın kendi adresindedir.
+                Fail("HALDUS007", $"Imports<{target.EntityName}>() needs '{target.EntityName}' to declare Batch() with the Create operation and to live at its own address (not under a parent)");
+            }
+            else
+            {
+                (transfer.Export ? exported : imported).Add(target.QualifiedName);
+
+                resolved[job.QualifiedName] = transfer with
+                {
+                    TargetType = target.QualifiedName,
+                    TargetNamespace = target.Namespace,
+                    NeedsTime = target.Expiry is { LifetimeTicks: not null },
+                };
+            }
+        }
+
+        return
+        [
+            .. resources.Select(resource => resource with
+            {
+                Transfer = resolved.TryGetValue(resource.QualifiedName, out var transfer) ? transfer : resource.Transfer,
+                IsExported = exported.Contains(resource.QualifiedName),
+                IsImported = imported.Contains(resource.QualifiedName),
+            }),
         ];
     }
 

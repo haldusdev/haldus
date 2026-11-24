@@ -317,6 +317,62 @@ internal static class LifecycleReader
         yield return new TraitMember("StorageKey", "string?", InResponse: false, Search: null);
     }
 
+    /// <summary>Dışa aktarma işinin çıktıları (<c>IHaldusExportJob</c>).</summary>
+    public static IEnumerable<TraitMember> ExportMembers()
+    {
+        yield return new TraitMember("Rows", "int", InResponse: true, Search: null);
+        yield return new TraitMember("Size", "long", InResponse: true, Search: null);
+        yield return new TraitMember("FileName", "string?", InResponse: true, Search: null);
+        yield return new TraitMember("StorageKey", "string?", InResponse: false, Search: null);
+    }
+
+    /// <summary>İçe aktarma işinin çıktıları (<c>IHaldusImportJob</c>).</summary>
+    public static IEnumerable<TraitMember> ImportMembers()
+    {
+        yield return new TraitMember("Imported", "int", InResponse: true, Search: null);
+        yield return new TraitMember("Failed", "int", InResponse: true, Search: null);
+        yield return new TraitMember("Errors", "string?", InResponse: true, Search: null);
+    }
+
+    /// <summary>Aktarma işinin girdileri: biçim ve, içe aktarmada, yanıtta gösterilmeyen içerik.</summary>
+    public static IEnumerable<PropertyModel> TransferInputs(bool export)
+    {
+        // Biçim isteğe bağlıdır; verilmezse CSV sayılır.
+        yield return new PropertyModel(
+            "Format",
+            "string?",
+            NullableType: "string?",
+            IsWritable: true,
+            IsNonNullableReference: false,
+            IsNonNullableValue: false,
+            SearchKind.String,
+            "string",
+            new EquatableArray<AttributeModel>([new AttributeModel("global::System.ComponentModel.DataAnnotations.MaxLengthAttribute(10)", IsRequired: false)]),
+            IsGenerated: true);
+
+        if (!export)
+        {
+            yield return new PropertyModel(
+                "Content",
+                "string",
+                NullableType: "string?",
+                IsWritable: true,
+                IsNonNullableReference: true,
+                IsNonNullableValue: false,
+                SearchKind.String,
+                "string",
+                new EquatableArray<AttributeModel>(
+                [
+                    new AttributeModel("global::System.ComponentModel.DataAnnotations.RequiredAttribute", IsRequired: true),
+                    new AttributeModel("global::System.ComponentModel.DataAnnotations.MaxLengthAttribute(5000000)", IsRequired: false),
+                ]),
+                IsGenerated: true)
+            {
+                IsInputOnly = true,
+            };
+        }
+    }
+
     /// <summary>Dosyanın adı: istemcinin yazdığı sıradan bir alandır.</summary>
     public static PropertyModel FileName() => new(
         "FileName",

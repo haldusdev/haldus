@@ -61,6 +61,11 @@ internal static class ResourceEmitter
             interfaces.Add("global::Haldus.IHaldusJob");
         }
 
+        if (resource.Transfer is { } transfer)
+        {
+            interfaces.Add(transfer.Export ? "global::Haldus.IHaldusExportJob" : "global::Haldus.IHaldusImportJob");
+        }
+
         if (resource.File is not null)
         {
             interfaces.Add("global::Haldus.IHaldusFile");
@@ -137,7 +142,7 @@ internal static class ResourceEmitter
             builder.Append($"    public required {resource.IdType} {resource.KeyName} {{ get; init; }}\n");
         }
 
-        foreach (var property in resource.Properties)
+        foreach (var property in resource.Properties.Where(property => !property.IsInputOnly))
         {
             builder.Append($"    public required {property.Type} {property.Name} {{ get; init; }}\n");
         }
@@ -253,7 +258,7 @@ internal static class ResourceEmitter
     public static string ResponseAssignments(ResourceModel resource) => string.Join(
         ", ",
         (resource.KeyName.Length == 0 ? Array.Empty<string>() : [$"{resource.KeyName} = item.{resource.KeyName}"])
-            .Concat(resource.Properties.Select(property => $"{property.Name} = item.{property.Name}"))
+            .Concat(resource.Properties.Where(property => !property.IsInputOnly).Select(property => $"{property.Name} = item.{property.Name}"))
             .Concat(resource.ResponseMembers.Select(member => $"{member.Name} = item.{member.Name}"))
             .Concat(resource.Details.Select(DetailProjection)));
 
@@ -481,6 +486,14 @@ internal static class ResourceEmitter
             builder.Append(first ? string.Empty : "\n");
             builder.Append($"    [{MetadataAttributeName}]\n");
             builder.Append($"    public {TraitCatalog.MetadataType}? Metadata {{ get; init; }}\n");
+            first = false;
+        }
+
+        if (resource.Has(Traits.CustomFields))
+        {
+            // Değerler kiracının tanımlarına göre uçta doğrulanır; burada yalnızca taşınırlar.
+            builder.Append(first ? string.Empty : "\n");
+            builder.Append($"    public {TraitCatalog.JsonBag}? CustomFields {{ get; init; }}\n");
         }
 
         builder.Append("}\n");
@@ -495,6 +508,7 @@ internal static class ResourceEmitter
     {
         var writable = properties
             .Concat(resource.Has(Traits.Metadata) ? [MetadataChanges()] : Array.Empty<PropertyModel>())
+            .Concat(resource.Has(Traits.CustomFields) ? [CustomFieldChanges()] : Array.Empty<PropertyModel>())
             .ToArray();
 
         builder.Append('\n');
@@ -556,6 +570,18 @@ internal static class ResourceEmitter
         builder.Append("    };\n");
         builder.Append("}\n");
     }
+
+    /// <summary>PATCH isteğindeki özel alan değişiklikleri: değeri <c>null</c> olan anahtar silinir.</summary>
+    private static PropertyModel CustomFieldChanges() => new(
+        "CustomFields",
+        TraitCatalog.JsonBag,
+        NullableType: TraitCatalog.JsonBag + "?",
+        IsWritable: true,
+        IsNonNullableReference: false,
+        IsNonNullableValue: false,
+        SearchKind.Equality,
+        TraitCatalog.JsonBag,
+        EquatableArray<AttributeModel>.Empty);
 
     /// <summary>
     /// PATCH isteğindeki metadata değişiklikleri: değeri <c>null</c> olan anahtar silinir, bu yüzden değerler

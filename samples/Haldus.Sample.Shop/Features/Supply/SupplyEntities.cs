@@ -58,6 +58,14 @@ public partial class SupplierRate
     public decimal UnitPrice { get; set; }
 }
 
+/// <summary>Makine. Kendi alanı yalnızca adıdır; geri kalanını her kiracı kendisi tanımlar.</summary>
+public partial class Machine
+{
+    [Required]
+    [MaxLength(200)]
+    public string Name { get; set; } = "";
+}
+
 public enum PurchaseRequestStatus
 {
     Open,

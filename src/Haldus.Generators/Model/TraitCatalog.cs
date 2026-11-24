@@ -65,6 +65,12 @@ internal static class TraitCatalog
         new(Traits.Revisioned, "global::Haldus.IRevisioned", []),
         new(Traits.ChangeFeed, "global::Haldus.IChangeTracked", []),
 
+        // Değerler yanıtta görünür; isteklerdeki yeri ve tanımlara göre doğrulanması ayrıca üretilir.
+        new(Traits.CustomFields, "global::Haldus.IHasCustomFields",
+        [
+            new("CustomFields", JsonBag, InResponse: true, Search: null),
+        ]),
+
         // Dönem alanları istemcinin yazdığı sıradan alanlardır; ayrıca eklenirler.
         new(Traits.EffectiveDated, "global::Haldus.IEffectiveDated", []),
 
@@ -81,11 +87,13 @@ internal static class TraitCatalog
 
     public const string StringList = "global::System.Collections.Generic.List<string>";
 
+    public const string JsonBag = "global::System.Collections.Generic.Dictionary<string, global::System.Text.Json.JsonElement>";
+
     /// <summary>Üretilen trait alanının başlangıç değeri; null olamayan referans tipleri boş başlar.</summary>
     public static string Initializer(string type) => type switch
     {
         "string" => " = \"\";",
-        MetadataType or StringList => " = new();",
+        MetadataType or StringList or JsonBag => " = new();",
         _ => string.Empty,
     };
 

@@ -108,6 +108,36 @@
   <data name="FileContentMissing.Detail" xml:space="preserve">
     <value>'{1}' kimlikli {0} kaydının içeriği henüz yüklenmedi.</value>
   </data>
+  <data name="CustomField.Unknown" xml:space="preserve">
+    <value>Bu anahtarla tanımlanmış bir özel alan yok.</value>
+  </data>
+  <data name="CustomField.Invalid" xml:space="preserve">
+    <value>Değer geçerli bir {0} değil.</value>
+  </data>
+  <data name="CustomField.KeyInvalid" xml:space="preserve">
+    <value>Anahtar bir harfle başlamalı ve yalnızca harf, rakam ve alt çizgi içermelidir (en çok 40 karakter).</value>
+  </data>
+  <data name="CustomField.OptionsInvalid" xml:space="preserve">
+    <value>Seçenekli alan, her biri en çok 200 karakterlik 1 ile 100 arasında seçenek ister; diğer türler seçenek almaz.</value>
+  </data>
+  <data name="CustomField.Limit" xml:space="preserve">
+    <value>Bir kaynağın en çok {0} özel alanı olabilir.</value>
+  </data>
+  <data name="Transfer.FormatInvalid" xml:space="preserve">
+    <value>Biçim 'csv' veya 'json' olmalıdır.</value>
+  </data>
+  <data name="Import.TooLarge" xml:space="preserve">
+    <value>Bir içe aktarma en çok {0} satır içerebilir.</value>
+  </data>
+  <data name="Import.Malformed" xml:space="preserve">
+    <value>İçerik geçerli bir {0} kayıt listesi değil.</value>
+  </data>
+  <data name="Import.Row" xml:space="preserve">
+    <value>Satır {0}: {1}</value>
+  </data>
+  <data name="Import.RowUnreadable" xml:space="preserve">
+    <value>'{0}' yerindeki değer okunamıyor.</value>
+  </data>
   <data name="ChainMember.Detail" xml:space="preserve">
     <value>'{1}' kimlikli {0} kaydı, onu ters çeviren ya da yerine geçen (veya kendisinin ters çevirdiği ya da yerine geçtiği) kayda bağlıdır; silinemez.</value>
   </data>

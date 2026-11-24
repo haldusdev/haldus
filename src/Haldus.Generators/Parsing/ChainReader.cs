@@ -51,6 +51,9 @@ internal static class ChainReader
         "ChangeFeed",
         "Publishable",
         "EffectiveDated",
+        "CustomFields",
+        "Exports",
+        "Imports",
         "AttachedTo",
         "Attachable",
         "Commentable",
@@ -157,6 +160,9 @@ internal static class ChainReader
                     break;
                 case "EffectiveDated":
                     traits |= Traits.EffectiveDated;
+                    break;
+                case "CustomFields":
+                    traits |= Traits.CustomFields;
                     break;
                 case "OwnedByCurrentUser":
                     traits |= Traits.Owned;

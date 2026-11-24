@@ -64,7 +64,12 @@ internal static class ModuleEmitter
                 model.Append("            global::Haldus.HaldusRevisions.Configure(modelBuilder);\n");
             }
 
-            if (resources.Any(entry => entry.Resource.File is not null))
+            if (resources.Any(entry => entry.Resource.Has(Traits.CustomFields)))
+            {
+                model.Append("            global::Haldus.HaldusCustomFieldStore.Configure(modelBuilder);\n");
+            }
+
+            if (resources.Any(entry => entry.Resource.File is not null || entry.Resource.Transfer is { Export: true }))
             {
                 // İçerik başka bir depoda tutulsa da tablo modeldedir; varsayılan depo onu kullanır.
                 model.Append("            global::Haldus.HaldusFileStore.Configure(modelBuilder);\n");
@@ -105,6 +110,7 @@ internal static class ModuleEmitter
                 // İçerik alanlarından biri değişince toplanan onaylar düşer; Haldus'un yönettiği alanlar içerik değildir.
                 var content = resource.Properties.Select(property => property.Name)
                     .Concat(resource.Has(Traits.Metadata) ? ["Metadata"] : [])
+                    .Concat(resource.Has(Traits.CustomFields) ? ["CustomFields"] : [])
                     .Select(ResourceEmitter.Literal);
 
                 blocks.Add($"        global::Haldus.HaldusApprovals.Register<{entity}>({string.Join(", ", content)});\n");
@@ -414,6 +420,11 @@ internal static class ModuleEmitter
                 // sürüm kontrollü kaynakta aynı işi satır sürümü görür.
                 statements.Add("entity.Property(item => item.Status).IsConcurrencyToken();");
             }
+        }
+
+        if (resource.Has(Traits.CustomFields))
+        {
+            statements.Add("global::Haldus.HaldusCustomFieldStore.ConfigureValues(entity.Property(item => item.CustomFields));");
         }
 
         if (resource.File is not null)

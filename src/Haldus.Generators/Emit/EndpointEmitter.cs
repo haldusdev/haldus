@@ -60,7 +60,9 @@ internal sealed partial class EndpointEmitter
     private bool HasMetadata => _resource.Has(Traits.Metadata);
 
     /// <summary>Oluşturma bir hata yanıtıyla dönebilir mi: referans bulunamayabilir veya doğal anahtar çakışabilir.</summary>
-    private bool CreateCanFail => ChecksReferences || NaturalKey is not null || EffectiveDated;
+    private bool CreateCanFail => ChecksReferences || NaturalKey is not null || EffectiveDated || HasCustomFields;
+
+    private bool HasCustomFields => _resource.Has(Traits.CustomFields);
 
     private bool EffectiveDated => _resource.Has(Traits.EffectiveDated);
 
@@ -118,6 +120,37 @@ internal sealed partial class EndpointEmitter
 
     public static string Emit(ResourceModel resource, string entityNamespace) =>
         new EndpointEmitter(resource).Build(entityNamespace);
+
+    /// <summary>
+    /// Bir aktarma işinin (<c>Exports</c> / <c>Imports</c>) mantığı: yazılmış bir <c>IJobHandler</c> gibi bulunur ve
+    /// kaydedilir. Kayıtları veren ve tek kaydı oluşturan metotlar hedef kaynağın uç sınıfındadır; biçimler,
+    /// sınırlar ve hata raporu çalışma zamanındadır (<c>HaldusTransfers</c>).
+    /// </summary>
+    public static string EmitTransferHandler(ResourceModel job, string entityNamespace)
+    {
+        var transfer = job.Transfer!;
+        var target = transfer.TargetType!;
+        var request = (transfer.TargetNamespace.Length == 0 ? "global::" : $"global::{transfer.TargetNamespace}.") + $"Create{transfer.TargetName}Request";
+
+        var body = transfer.Export
+            ? $"global::Haldus.HaldusTransfers.ExportAsync(job, {target}Endpoints.ExportAsync(context.Services, cancellationToken), context, cancellationToken)"
+            : $"global::Haldus.HaldusTransfers.ImportAsync<{job.EntityName}, {target}, {request}>(job, {target}Endpoints.ImportItemAsync, context, cancellationToken)";
+
+        return $$"""
+            {{ResourceEmitter.Header}}
+            {{ResourceEmitter.NamespaceLine(entityNamespace)}}
+            /// <summary>{{(transfer.Export ? $"'{transfer.TargetName}' kayıtlarını dosyaya döker." : $"İçerikteki satırları '{transfer.TargetName}' kayıtları olarak oluşturur.")}}</summary>
+            internal sealed class {{job.EntityName}}TransferHandler : global::Haldus.IJobHandler<{{job.EntityName}}>
+            {
+                public global::System.Threading.Tasks.Task HandleAsync(
+                    {{job.EntityName}} job,
+                    global::Haldus.JobContext context,
+                    global::System.Threading.CancellationToken cancellationToken) =>
+                    {{body}};
+            }
+
+            """;
+    }
 
     /// <summary>
     /// Takılabilir bir kaynağın (<c>.AttachedTo&lt;T&gt;()</c>) giriş noktası: uçları her hedef için ayrı bir sınıfta
@@ -372,6 +405,13 @@ internal sealed partial class EndpointEmitter
         {
             EmitFileContent();
         }
+
+        if (HasCustomFields)
+        {
+            EmitCustomFieldDefinitions();
+        }
+
+        EmitTransfers();
 
         if (_resource.Has(Operations.Update) || _resource.Has(Operations.Patch))
         {
@@ -815,6 +855,17 @@ internal sealed partial class EndpointEmitter
         if (HasMetadata && metadata)
         {
             keys.Add($"Metadata = global::Haldus.HaldusMetadata.Create({source}.Metadata)");
+        }
+
+        if (HasCustomFields && source == "request")
+        {
+            // İstekteki değerler kayıt kurulmadan önce doğrulanmıştır (CustomFieldCheck).
+            keys.Add("CustomFields = customFields.Values");
+        }
+        else if (HasCustomFields && only is null)
+        {
+            // Aynı kaynağın başka bir kaydından doğan kayıt (kopya, yayın, düzeltme) değerleri olduğu gibi taşır.
+            keys.Add($"CustomFields = new({source}.CustomFields)");
         }
 
         if (!preview && source == "request")
@@ -2250,7 +2301,8 @@ internal sealed partial class EndpointEmitter
 
     private string UpdateAssignments() =>
         string.Concat(_updatable.Select(property => $"        entity.{property.Name} = request.{property.Name};\n"))
-        + (HasMetadata ? "        entity.Metadata = global::Haldus.HaldusMetadata.Create(request.Metadata);\n" : string.Empty);
+        + (HasMetadata ? "        entity.Metadata = global::Haldus.HaldusMetadata.Create(request.Metadata);\n" : string.Empty)
+        + CustomFieldAssignment(merge: false);
 
     private string PatchAssignments() => PatchAssignments(_updatable);
 
@@ -2297,11 +2349,58 @@ internal sealed partial class EndpointEmitter
                 """);
         }
 
+        if (HasCustomFields)
+        {
+            // Değerler birleştirilir ve birleşmiş çanta tanımlara göre doğrulanır (zorunlu alanlar dahil).
+            builder.Append($$"""
+                        if (((global::Haldus.IHaldusPatch)request).IsSet("CustomFields"))
+                        {
+                {{CustomFieldAssignment(merge: true, indent: "            ")}}        }
+
+
+                """);
+        }
+
         return builder.ToString();
     }
 
     /// <summary>Bir yazmanın, kayda dokunmadan önce yaptığı kontroller: referansların varlığı ve doğal anahtarın benzersizliği.</summary>
-    private string WriteChecks(bool patch, bool creating) => ReferenceChecks(patch, creating) + NaturalKeyCheck(patch, creating);
+    private string WriteChecks(bool patch, bool creating) =>
+        ReferenceChecks(patch, creating) + NaturalKeyCheck(patch, creating) + (creating ? CustomFieldCheck() : string.Empty);
+
+    /// <summary>
+    /// Yeni kaydın özel alan değerlerini kiracının tanımlarına göre doğrular; değerler kayıt kurulurken
+    /// (<see cref="CreateInitializer"/>) buradan alınır. Güncellemede aynı doğrulama atamanın içindedir.
+    /// </summary>
+    private string CustomFieldCheck() => !HasCustomFields
+        ? string.Empty
+        : $$"""
+                    var customFields = await global::Haldus.HaldusCustomFields.ApplyAsync<{{_entity}}>(
+                        contexts.For<{{_entity}}>(), null, request.CustomFields, merge: false, messages, cancellationToken);
+
+                    if (customFields.Rejected is { } invalidFields)
+                    {
+                        return invalidFields;
+                    }
+
+
+            """;
+
+    /// <summary>Var olan kaydın özel alan değerlerini istekle değiştirir (<paramref name="merge"/>: birleştirir) ve doğrular.</summary>
+    private string CustomFieldAssignment(bool merge, string indent = "        ") => !HasCustomFields
+        ? string.Empty
+        : $$"""
+            {{indent}}var customFields = await global::Haldus.HaldusCustomFields.ApplyAsync<{{_entity}}>(
+            {{indent}}    context, entity.CustomFields, request.CustomFields, merge: {{(merge ? "true" : "false")}}, messages, cancellationToken);
+
+            {{indent}}if (customFields.Rejected is { } invalidFields)
+            {{indent}}{
+            {{indent}}    return invalidFields;
+            {{indent}}}
+
+            {{indent}}entity.CustomFields = customFields.Values;
+
+            """;
 
     private bool IsCreateOnly(string propertyName) =>
         _resource.Properties.Any(property => property.Name == propertyName && property.IsCreateOnly);
@@ -2640,7 +2739,8 @@ internal sealed partial class EndpointEmitter
         var restored = _updatable.Where(property => _resource.References.All(reference =>
             reference.Kind != ReferenceKind.Self || reference.PropertyName != property.Name));
         var assignments = string.Concat(restored.Select(property => $"        entity.{property.Name} = revision.{property.Name};\n"))
-            + (HasMetadata ? "        entity.Metadata = new(revision.Metadata);\n" : string.Empty);
+            + (HasMetadata ? "        entity.Metadata = new(revision.Metadata);\n" : string.Empty)
+            + (HasCustomFields ? "        entity.CustomFields = new(revision.CustomFields);\n" : string.Empty);
 
         var rows = new StringBuilder();
 
@@ -2774,6 +2874,171 @@ internal sealed partial class EndpointEmitter
                         .ToList();
 
                     return {{Http}}.TypedResults.Ok(new {{page}}(items, window.Next, window.HasMore));
+                }
+
+            """);
+    }
+
+    // ── İçe ve dışa aktarma ────────────────────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Aktarma işlerinin kullandığı parçalar. Kaynak bir dışa aktarmanın hedefiyse kayıtlarını veren, bir içe
+    /// aktarmanın hedefiyse tek bir kaydı oluşturan herkese açık bir metot kazanır; ikisi de bir isteğin dışında,
+    /// işin kimliğiyle çalışır ve kaynağın kendi filtrelerinden ve oluşturma kurallarından geçer. Kaynağın kendisi
+    /// bir dışa aktarma işiyse üretilen dosyayı indiren uç eklenir.
+    /// </summary>
+    private void EmitTransfers()
+    {
+        const string Services = "global::System.IServiceProvider";
+        const string Injection = "global::Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions";
+        const string Stream = "global::Microsoft.AspNetCore.Http.HttpResults.FileStreamHttpResult";
+
+        if (_resource.IsExported)
+        {
+            _handlers.Append($$"""
+
+                    /// <summary>
+                    /// Kaynağın, çağıranın kimliğiyle görünen bütün kayıtları. Sorgu kaynağın kendi filtrelerinden geçer;
+                    /// dışa aktarma işi bunu, işi başlatan kiracı ve kullanıcı adına okur.
+                    /// </summary>
+                    public static async global::System.Collections.Generic.IAsyncEnumerable<{{_entity}}Response> ExportAsync(
+                        {{Services}} services,
+                        [global::System.Runtime.CompilerServices.EnumeratorCancellation] global::System.Threading.CancellationToken cancellationToken)
+                    {
+                        var contexts = {{Injection}}.GetRequiredService<global::Haldus.IHaldusDbContextProvider>(services);
+
+                        var records = contexts.For<{{_entity}}>().Set<{{_entity}}>().AsNoTracking(){{Includes}}
+                            .OrderBy(item => item.{{_key}})
+                            .AsAsyncEnumerable();
+
+                        // Uzantı tam adıyla çağrılır: tüketen projede örtük using'ler kapalı olabilir.
+                        await foreach (var item in global::System.Threading.Tasks.TaskAsyncEnumerableExtensions.WithCancellation(records, cancellationToken))
+                        {
+                            yield return ToResponse(item);
+                        }
+                    }
+
+                """);
+        }
+
+        if (_resource.IsImported)
+        {
+            var time = HasLifetime ? $"{Injection}.GetRequiredService<global::System.TimeProvider>(services), " : string.Empty;
+
+            _handlers.Append($$"""
+
+                    /// <summary>
+                    /// Tek bir kaydı, bir isteğin dışında, tekil oluşturma ucunun bütün kurallarıyla oluşturur; reddederse
+                    /// nedenini döndürür. Kayıt kendi sınırı içindedir: açık bir transaction varsa bu bir kayıt noktasıdır
+                    /// ve reddedilen kayıt yalnızca kendini geri alır.
+                    /// </summary>
+                    public static async {{Task}}<{{Problem}}?> ImportItemAsync(
+                        Create{{_entity}}Request request,
+                        {{Services}} services,
+                        global::System.Threading.CancellationToken cancellationToken)
+                    {
+                        var contexts = {{Injection}}.GetRequiredService<global::Haldus.IHaldusDbContextProvider>(services);
+                        var messages = {{Injection}}.GetRequiredService<global::Haldus.IHaldusMessages>(services);
+                        var context = contexts.For<{{_entity}}>();
+                        var saved = new global::System.Collections.Generic.List<{{_entity}}>(1);
+
+                        await using var item = await global::Haldus.HaldusBatch.BeginAsync(context, cancellationToken);
+                        var problem = global::Haldus.HaldusBatch.Validate(request, messages)
+                            ?? await BatchCreateItemAsync(request, context, saved, {{time}}contexts, messages, cancellationToken);
+
+                        if (problem is null)
+                        {
+                            await item.CommitAsync(cancellationToken);
+                        }
+
+                        return problem;
+                    }
+
+                """);
+        }
+
+        if (_resource is { Archetype: Archetype.Job, Transfer: { Export: true, TargetType: not null } })
+        {
+            _map.Append($$"""
+                        group.MapGet("{{_keyRoute}}/content", DownloadAsync)
+                            .WithName("Download{{_entity}}")
+                            .ProducesProblem(404);
+
+
+                """);
+
+            _handlers.Append($$"""
+
+                    /// <summary>Bitmiş işin ürettiği dosya; iş henüz bitmediyse (veya başarısız olduysa) 404 döner.</summary>
+                    private static async {{Task}}<{{Results}}.Results<{{Stream}}, {{Problem}}>> DownloadAsync(
+                {{KeyParameter}}{{HttpContextParameter}}{{ContextsParameter}}{{MessagesParameter}}{{CancellationParameter}}    {
+                        var context = contexts.For<{{_entity}}>();
+                        var entity = await context.Set<{{_entity}}>().AsNoTracking().FirstOrDefaultAsync(item => {{Match}}, cancellationToken);
+
+                        if (entity is null)
+                        {
+                            return {{NotFound}};
+                        }
+
+                        return await global::Haldus.HaldusTransfers.SendAsync(httpContext, context, entity, messages, "{{_entity}}", {{_keyParameter}}, cancellationToken);
+                    }
+
+                """);
+        }
+    }
+
+    // ── Özel alanlar ───────────────────────────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Özel alan tanımlarının uçları. Tanımlar kaynağın tipine ve geçerli kiracıya aittir; kuralları çalışma
+    /// zamanındadır (<c>HaldusCustomFields</c>).
+    /// </summary>
+    private void EmitCustomFieldDefinitions()
+    {
+        const string Definition = "global::Haldus.CustomFieldDefinition";
+        const string Request = "global::Haldus.CustomFieldDefinitionRequest";
+
+        _map.Append($$"""
+                    group.MapGet("/custom-fields", ListCustomFieldsAsync)
+                        .WithName("List{{_entity}}CustomFields");
+
+                    group.MapPut("/custom-fields/{key}", DefineCustomFieldAsync)
+                        .WithName("Define{{_entity}}CustomField")
+                        .AddEndpointFilter<global::Haldus.HaldusValidationFilter<{{Request}}>>()
+                        .ProducesValidationProblem()
+                        .ProducesProblem(409);
+
+                    group.MapDelete("/custom-fields/{key}", RemoveCustomFieldAsync)
+                        .WithName("Remove{{_entity}}CustomField")
+                        .ProducesProblem(404);
+
+
+            """);
+
+        _handlers.Append($$"""
+
+                private static async {{Task}}<{{Results}}.Ok<global::System.Collections.Generic.IReadOnlyList<{{Definition}}>>> ListCustomFieldsAsync(
+            {{ContextsParameter}}{{CancellationParameter}}    {
+                    return {{Http}}.TypedResults.Ok(
+                        await global::Haldus.HaldusCustomFields.ListAsync<{{_entity}}>(contexts.For<{{_entity}}>(), cancellationToken));
+                }
+
+                private static {{Task}}<{{Results}}.Results<{{Results}}.Ok<{{Definition}}>, {{Problem}}>> DefineCustomFieldAsync(
+                    string key,
+                    {{Request}} request,
+            {{ContextsParameter}}{{MessagesParameter}}{{CancellationParameter}}    {
+                    return global::Haldus.HaldusCustomFields.DefineAsync<{{_entity}}>(contexts.For<{{_entity}}>(), key, request, messages, cancellationToken);
+                }
+
+                private static async {{NoContentOrProblem}} RemoveCustomFieldAsync(
+                    string key,
+            {{ContextsParameter}}{{MessagesParameter}}{{CancellationParameter}}    {
+                    if (!await global::Haldus.HaldusCustomFields.RemoveAsync<{{_entity}}>(contexts.For<{{_entity}}>(), key, cancellationToken))
+                    {
+                        return {{Problems}}.NotFound(messages, "{{_entity}}CustomField", key);
+                    }
+
+                    return {{Http}}.TypedResults.NoContent();
                 }
 
             """);

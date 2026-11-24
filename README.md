@@ -380,6 +380,25 @@ olur). `builder.Services.AddHaldusFileSystemStorage(path)` içerikleri bir klas�
 `IHaldusFileStorage` uygulanarak eklenir. İndirilen içerik her zaman ek olarak (`attachment`) ve `nosniff` ile
 gönderilir: tür yükleyenin beyanıdır ve içerik tarayıcıda sayfanın içinde açılmamalıdır.
 
+## Özel alanlar ve aktarma
+
+```csharp
+app.MapCrud<Machine>().MultiTenant().CustomFields();
+
+app.MapCrud<Product>().Batch();
+app.MapJob<ProductExport>().Exports<Product>();
+app.MapJob<ProductImport>().Imports<Product>();
+```
+
+| Bildirim | Etkisi |
+|---|---|
+| `.CustomFields()` | Kayda, alanlarını kiracının tanımladığı bir `customFields` çantası ekler. Tanımlar kaynağın adresindedir: `GET /custom-fields`, `PUT` / `DELETE /custom-fields/{key}` (tür: metin, sayı, evet/hayır, gün, seçenek; zorunlu olabilir). Değerler her yazmada tanımlara göre doğrulanır; `PATCH` çantayı birleştirir |
+| `MapJob<T>().Exports<TResource>()` | İş, kaynağın işi başlatana görünen bütün kayıtlarını CSV veya JSON dosyasına döker; dosya iş bitince `GET /{id}/content` ile indirilir. Mantık üretilir, handler yazılmaz |
+| `MapJob<T>().Imports<TResource>()` | İş, isteğin `content` alanındaki satırları (başlıklı CSV veya JSON dizisi) tekil oluşturmanın bütün kurallarıyla oluşturur. Satırlar tek bir transaction içindedir: biri bile reddedilirse hiçbiri oluşturulmaz ve nedenleri `errors` alanında döner |
+
+CSV yeni bir bağımlılık olmadan okunur ve yazılır (RFC 4180). Dışa aktarılan metinlerden `=`, `+`, `-` veya `@` ile
+başlayanların önüne kesme işareti konur; böylece dosya bir tablolama programında açıldığında formül olarak çalışmaz.
+
 ## Sırlar
 
 ```csharp
@@ -429,7 +448,7 @@ kısıtı olur, ayrı bağlamlardaysa referans yalnızca kimlikle tutulur ve var
 ## Durum
 
 İlk sürümün planlanan on aşaması tamamlandı; eksikleri kapatan ikinci plan sürüyor. Model, araştırmadaki 59
-gerçek varlığa karşı sınanıyor: bugün 45'i temiz, 12'si kısmen ifade ediliyor, 2'si için gereken özellik henüz
+gerçek varlığa karşı sınanıyor: bugün 47'si temiz, 10'u kısmen ifade ediliyor, 2'si için gereken özellik henüz
 yok. Ayrıntısı ve eksiklerin listesi [taksonomi sınaması](reports/Haldus%20taksonomi%20sınaması.md)
 belgesindedir.
 

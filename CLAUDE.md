@@ -177,6 +177,16 @@ Bunlar kullanıcıyla kararlaştırıldı; yeniden sorma.
     ve kaynağı her hedefin adresi altında ayrı ayrı sunar. `Attachable<TFile>()` ve `Commentable<TComment>()` aynı
     bildirimin hedef tarafında yazılan biçimidir; `Taggable<TTag>()` bir `MapAssociation`'dır.
   - Yükleme bekleyen dosya kayıtları kendiliğinden silinmez (süresi dolan kayıtlardaki gerekçeyle).
+- Özel alanlar ve aktarma (20. aşama). Kullanıcı sormamamı istedi; yazılan, önerdiğim seçeneklerdir ve ayrıca
+  onaylanmadı:
+  - `.CustomFields()`: tanımlar kaynak tipi ve kiracı başınadır ve kaynağın adresinde yönetilir
+    (`GET /custom-fields`, `PUT` / `DELETE /custom-fields/{key}`); türler metin, sayı, evet/hayır, gün ve seçenektir.
+    Değerler kayıttaki `customFields` çantasında (jsonb) durur ve her yazmada tanımlara göre doğrulanır; tanımı
+    kaldırılan alanın değeri kaydın bir sonraki yazmasında düşer.
+  - Aktarma biçimleri CSV (varsayılan) ve JSON'dur; CSV yeni bir bağımlılık eklenmeden, elle yazıldı.
+  - `MapJob<T>().Exports<TResource>()`: dosya içerik deposuna yazılır ve işten indirilir.
+  - `MapJob<T>().Imports<TResource>()`: içerik isteğin gövdesinde gelir (en çok 5 milyon karakter, 10 000 satır)
+    ve atomiktir: bir satır bile reddedilirse hiçbiri oluşturulmaz.
 - Eşzamanlılık trait'inin adı `ConcurrencyChecked` (eski adı `Versioned`). Sürüm yanıt gövdesinde değil
   `ETag` başlığında taşınır; güncelleme ve silme `If-Match` ister (eksikse 428, uyuşmazlıkta 412).
 - Güncelleme için hem `PUT` (tam değiştirme) hem `PATCH` (kısmi) üretilir.
@@ -246,7 +256,7 @@ Bunlar kullanıcıyla kararlaştırıldı; yeniden sorma.
 ## Aşamalar
 
 On aşamanın tamamı bitti (3. aşamaya `.Searchable()`, 8. aşamaya fiziksel temizlik de eklendi). 10. aşamanın
-sonucu `reports/Haldus taksonomi sınaması.md` dosyasındadır: araştırmadaki 59 varlığın (bugünkü sayımla) 45'i temiz, 12'si
+sonucu `reports/Haldus taksonomi sınaması.md` dosyasındadır: araştırmadaki 59 varlığın (bugünkü sayımla) 47'si temiz, 10'u
 kısmen ifade ediliyor, 2'si için gereken özellik yok. Aynı veri `tests/Haldus.Generators.Tests/TaxonomyTests.cs`
 içinde derlenir; yeni bir archetype veya trait bir satırı kapatıyorsa ikisini birlikte güncelle.
 
@@ -268,7 +278,7 @@ içinde derlenir; yeni bir archetype veya trait bir satırı kapatıyorsa ikisin
 Kullanıcı 2026-11-24'te onayladı. Kapsamı araştırma raporunun v2 listesi, ilk sürümden kalan küçük kalemler
 ve sınamada çıkan küçük eksiklerdir. Raporun v3 listesi (`MapBalance`, `MapChangeSet`, birden çok durum
 ekseni, çeviri, saklama süresi, okundu takibi) ve tekrar serisi bu planın dışındadır. Her aşama testleriyle
-birlikte ayrı commit olur; 11–19. aşamalar bitti, sıradaki 20.
+birlikte ayrı commit olur; 11–20. aşamalar bitti, sıradaki 21.
 
 11. Sahiplik: `OwnedByCurrentUser`, `MapAssociation().ForCurrentUser()`
 12. Alan eklentileri: `Metadata`, yalnızca oluştururken yazılan alan, `NaturalKey`, `KeyStrategy`, liste
@@ -295,7 +305,7 @@ Aşama başına açık kararlar (uygulandıkça "Tasarım kararları"na taşın�
 
 
 
-- 20: Aktarma biçimleri; CSV için bir kütüphane yeni bağımlılık olabilir.
+
 
 Raporun v1 listesindeki "uzatma kancaları" plana girmedi ve yazılmadı: raporda tanımı yok.
 
@@ -639,6 +649,36 @@ Raporun v1 listesindeki "uzatma kancaları" plana girmedi ve yazılmadı: rapord
     listede olmayan geçişin token adresi yoktur. Token ebeveyn altındaki ve kullanıcıya ait kaynaklarla
     birleşmez (görünürlükleri, token'ı taşıyanın sahip olmadığı bir kimliğe bağlıdır). Bilinen sınır: token
     kullanılınca kendiliğinden geçersiz olmaz; ömrünü `Expiring` ve durum makinesi belirler. Oran sınırlama yoktur.
+- **Özel alanlar.** `Traits.CustomFields` (`IHasCustomFields`; çanta `Dictionary<string, JsonElement>`, jsonb).
+  Tanımlar `HaldusCustomFieldDefinitions` tablosundadır (kaynağın tam tip adı + kiracı + anahtar; kiracıya bağlı
+  olmayan kaynakta kiracı `Guid.Empty`'dir ki benzersiz indeks işlesin). Doğrulama çalışma zamanındadır
+  (`HaldusCustomFields.ApplyAsync`): tanımsız anahtar, türüne uymayan değer ve eksik zorunlu alan
+  `customFields.{anahtar}` adıyla alan düzeyinde 400 olur. Oluşturmada değerler kayıt kurulmadan önce doğrulanır
+  (`CustomFieldCheck`, `WriteChecks` içinde) ve `CreateInitializer` onları oradan alır; güncellemede doğrulama
+  atamanın içindedir (`CustomFieldAssignment`; `UpdateAssignments` ve `PatchAssignments` çağırır). Aynı kaynağın
+  başka bir kaydından doğan kayıt (kopya, yayın, düzeltme, geri yükleme) değerleri doğrulamadan taşır. Özel alanlar
+  içeriktir: onaya bağlı kaynakta değişmeleri onayı düşürür. Sınırlar: değerlere göre süzme, sıralama ve arama
+  yoktur; tanım değişince var olan kayıtlar yeniden doğrulanmaz; `Under` ve `AttachedTo` ile birleşmez (tanımlar
+  tek bir adreste yönetilir); kaynak başına en çok 100 alan.
+- **Aktarma.** Zincirdeki `Exports<T>()` / `Imports<T>()` işe `ResourceModel.Transfer` verir; hedefi
+  `ResourceLinker.AttachTransfers` çözer ve hedef kaynağı işaretler (`IsExported`, `IsImported`). Hedefin uç sınıfı
+  işin çağıracağı herkese açık metotları kazanır (`EmitTransfers`): `ExportAsync` kayıtları kaynağın kendi
+  filtrelerinden geçirip yanıt biçiminde verir, `ImportItemAsync` tek bir kaydı toplu oluşturmanın öğe yoluyla
+  (`BatchCreateItemAsync`) oluşturur; bu yüzden içe aktarmanın hedefi `.Batch()` bildirmiş olmalıdır ve tekil
+  oluşturmanın bütün kuralları içe aktarmada da geçerlidir. İşin mantığı üretilen bir handler sınıfıdır
+  (`{İş}TransferHandler`, `EmitTransferHandler`) ve yazılmış handler'lar gibi kaydedilir. Biçimler, sınırlar ve
+  hata raporu çalışma zamanındadır (`HaldusTransfers`).
+  - İş, onu başlatan kiracı ve kullanıcının kimliğiyle çalışır (`HaldusAmbient`); dışa aktarma yalnızca onların
+    görebildiği kayıtları içerir.
+  - İçe aktarma atomiktir: satırlar tek transaction içinde, her biri kendi kayıt noktasında işlenir; biri bile
+    reddedilirse hepsi geri alınır. Bu, yarıda kalıp yeniden çalışan işin aynı kayıtları iki kez eklemesini de
+    önler. İçerik (`Content`) yalnızca istekte yer alır (`PropertyModel.IsInputOnly`) ve iş bitince boşaltılır.
+  - Dışa aktarılan CSV'de formül gibi başlayan metinlerin önüne kesme işareti konur (CSV enjeksiyonu). **Dışa
+    aktarmaya yeni bir biçim eklenirse aynı koruma düşünülmelidir.**
+  - Üretilen kodda uzantı metotları tam adıyla çağrılır (`TaskAsyncEnumerableExtensions.WithCancellation`):
+    örtük `using`'ler kapalıyken `WithCancellation` `System.Linq`'teki yanlış uzantıya bağlanıyordu.
+  - Sınırlar: dışa aktarma dosyayı bellekte kurar; üretilen dosyalar kendiliğinden silinmez; içe aktarma yalnızca
+    kayıt oluşturur (güncellemez) ve ebeveyn altındaki kaynaklara yazamaz; ilerleme yalnızca içe aktarmada bildirilir.
 - **Dosyalar.** `MapFile` ayrı bir archetype değil, `ResourceModel.File` taşıyan bir `Archetype.Crud`'dır
   (`MapCallParser.ArchetypeOf`); bu yüzden bütün trait'ler, ilişkiler ve toplu yollar onun için de geçerlidir.
   Alanları (`ContentType`, `Size`, `Checksum`, `Status`, `UploadedAt`, `StorageKey`) `LifecycleReader.FileMembers()`

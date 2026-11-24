@@ -34,6 +34,16 @@ public static class HaldusMessageKeys
     public const string SupersededDetail = "Superseded.Detail";
     public const string ChainMemberDetail = "ChainMember.Detail";
     public const string AmendedDetail = "Amended.Detail";
+    public const string TransferFormatInvalid = "Transfer.FormatInvalid";
+    public const string ImportTooLarge = "Import.TooLarge";
+    public const string ImportMalformed = "Import.Malformed";
+    public const string ImportRow = "Import.Row";
+    public const string ImportRowUnreadable = "Import.RowUnreadable";
+    public const string CustomFieldUnknown = "CustomField.Unknown";
+    public const string CustomFieldInvalid = "CustomField.Invalid";
+    public const string CustomFieldKeyInvalid = "CustomField.KeyInvalid";
+    public const string CustomFieldOptionsInvalid = "CustomField.OptionsInvalid";
+    public const string CustomFieldLimit = "CustomField.Limit";
     public const string FileTooLargeTitle = "FileTooLarge.Title";
     public const string FileTooLargeDetail = "FileTooLarge.Detail";
     public const string FileTypeNotAllowedTitle = "FileTypeNotAllowed.Title";
