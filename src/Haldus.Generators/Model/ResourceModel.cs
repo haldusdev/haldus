@@ -203,6 +203,18 @@ internal sealed record ResourceModel(
     /// <summary>Tekrara karşı korunabilecek bir uç var mı: oluşturma veya en az bir geçiş.</summary>
     public bool HasWrites => Has(Operations.Create) || Transitions.Length > 0 || Archetype == Archetype.Balance;
 
+    /// <summary><c>.SubtypeOf&lt;TBase&gt;()</c> ile bildirilen üst tip; henüz çözülmemiştir.</summary>
+    public BaseDeclaration? BaseDeclaration { get; init; }
+
+    /// <summary>Kaynak bir alt tipse üst tipinin tam adı. Alt tip üst tipin tablosunu, anahtarını ve trait'lerini paylaşır.</summary>
+    public string? BaseType { get; init; }
+
+    /// <summary>Kaynağın alt tipleri; boş değilse kaynak bir üst tiptir ve kayıtları türlerine göre ayrışır.</summary>
+    public EquatableArray<SubtypeModel> Subtypes { get; init; } = EquatableArray<SubtypeModel>.Empty;
+
+    /// <summary>Kaydın bir tipi varsa (<c>.TypedBy&lt;T&gt;()</c>) ondan devraldığı alanlar; yoksa <c>null</c>.</summary>
+    public TypeDefaultsModel? TypeDefaults { get; init; }
+
     /// <summary>Kayıt değişiklik kümeleriyle düzenlenebiliyorsa kuralları; değilse <c>null</c>.</summary>
     public ChangeSetModel? ChangeSets { get; init; }
 
@@ -530,7 +542,25 @@ internal sealed record ReferenceDeclaration(
 
     /// <summary><c>.AttachedTo&lt;T&gt;()</c>: hedef, kaydın takılabildiği birkaç ebeveynden biridir.</summary>
     public bool Attached { get; init; }
+
+    /// <summary><c>.TypedBy&lt;T&gt;()</c>: hedef kaydın tipidir; boş bırakılan alanlar ondan gelir.</summary>
+    public bool Typed { get; init; }
+
+    /// <summary><c>.RoleOf&lt;T&gt;()</c>: kayıt hedefin bir rolüdür; bir hedefin bu rolden en çok bir kaydı olur.</summary>
+    public bool Role { get; init; }
 }
+
+/// <summary><c>.SubtypeOf&lt;TBase&gt;()</c> bildirimi; üst tip henüz çözülmemiştir.</summary>
+/// <param name="Inherits">Entity sınıfı gerçekten üst tipten türüyor mu.</param>
+internal sealed record BaseDeclaration(string TargetName, string? TargetType, bool Inherits, LocationInfo Location);
+
+/// <summary>Bir üst tipin alt tipi ve tablodaki ayırt edici değeri.</summary>
+internal sealed record SubtypeModel(string QualifiedName, string Discriminator);
+
+/// <summary>Kaydın tipinden devraldığı alanlar (<c>.TypedBy&lt;T&gt;()</c>).</summary>
+/// <param name="PropertyName">Tipe işaret eden alan.</param>
+/// <param name="Fields">Kayıtta boş bırakılınca tipin aynı adlı alanından doldurulan alanlar.</param>
+internal sealed record TypeDefaultsModel(string PropertyName, string TargetType, string TargetKeyName, EquatableArray<string> Fields);
 
 /// <summary><c>.SecretOnce(...)</c> ve <c>.Rotatable(...)</c> ile bildirilen sır.</summary>
 /// <param name="Recoverable">Sır, sunucu kullanabilsin diye şifrelenmiş olarak da saklanıyor mu.</param>

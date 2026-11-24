@@ -29,6 +29,31 @@ public static class EngagementEndpoints
             .SoftDeletable()
             .PublishesEvents();
 
+        // Tip–örnek: cihaz, modelinden varsayılan devralır. Boş bırakılan garanti süresi ve kılavuz modelden gelir.
+        // Model kayıt oluşturulurken seçilir ve değişmez; cihazı olan model silinemez.
+        app.MapCrud<DeviceModel>();
+        app.MapCrud<Device>()
+            .TypedBy<DeviceModel>();
+
+        // Rol: çalışan, bir kişinin oynadığı roldür. Bir kişinin en çok bir çalışan kaydı olur (ikincisi 409) ve rol
+        // kişinin kimliğiyle de okunur: GET /staff-members/by-person-id/{personId}. Rolün kendi numarası vardır.
+        app.MapCrud<Person>();
+        app.MapCrud<StaffMember>()
+            .RoleOf<Person>()
+            .Numbered("EMP-{seq:5}");
+        // Genelleme: otomobil ve kamyon birer araçtır. Üçü tek tabloda durur ve üst tipin trait'lerini paylaşır.
+        // /vehicles bütün türleri ortak alanlarıyla listeler ("kind": "car"); /cars ve /trucks yalnızca kendi
+        // kayıtlarını, kendi alanlarıyla birlikte sunar. Bir otomobil /vehicles/{id} adresinden de okunur.
+        app.MapCrud<Vehicle>()
+            .Auditable()
+            .SoftDeletable();
+
+        app.MapCrud<Car>()
+            .SubtypeOf<Vehicle>();
+
+        app.MapCrud<Truck>()
+            .SubtypeOf<Vehicle>()
+            .Sortable(truck => truck.PayloadTons);
         // Kimlik numarası hassastır: isteklerde yazılır, hiçbir yanıtta ve saklanan sürümde yer almaz.
         // Ölçüte uyan kayıtlar topluca silinir: POST /contacts/purge?source=import-2024 önce sayar,
         // &force=true ile siler. Ölçüt, liste ucunun filtresidir.

@@ -29,6 +29,12 @@ internal static class ResourceEmitter
     /// <summary>Üretilecek bir şey yoksa (kullanıcı Id'yi yazdıysa ve trait yoksa) <c>null</c> döner.</summary>
     public static string? EmitEntity(ResourceModel resource, string entityNamespace)
     {
+        if (resource.BaseType is not null)
+        {
+            // Alt tip, anahtarını ve Haldus'un ürettiği bütün alanları üst tipinden miras alır.
+            return null;
+        }
+
         var declared = new HashSet<string>(resource.DeclaredTraitMembers);
         var interfaces = new List<string>();
         var members = new List<string>();

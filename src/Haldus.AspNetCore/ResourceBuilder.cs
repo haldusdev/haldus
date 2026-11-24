@@ -46,6 +46,32 @@ public sealed class ResourceBuilder<TEntity>(RouteGroupBuilder group, IEndpointR
     public ResourceBuilder<TEntity> Sortable(params Expression<Func<TEntity, object?>>[] fields) => this;
 
     /// <summary>
+    /// Kaynağın, başka bir kaynağın alt tipi olduğunu bildirir (araç ve otomobil): entity sınıfı üst tipten türer
+    /// (<c>public partial class Car : Vehicle</c>) ve kayıtları üst tipin tablosunda, onun anahtarı ve trait'leriyle
+    /// durur. Alt tipin uçları yalnızca kendi kayıtlarını ve üst tipin alanlarıyla birlikte kendi alanlarını taşır;
+    /// üst tipin uçları bütün türleri döndürür ve her kaydın türünü <c>kind</c> alanında söyler.
+    /// </summary>
+    public ResourceBuilder<TEntity> SubtypeOf<TBase>()
+        where TBase : class => this;
+
+    /// <summary>
+    /// Kaydın bir tipi olduğunu bildirir (ürün ve ürün tipi, cihaz ve cihaz modeli): tipe zorunlu, kayıt oluşturulduktan
+    /// sonra değişmeyen bir referans üretilir. Kayıtta boş bırakılan ve tipte aynı adla bulunan alanlar tipten
+    /// devralınır; böylece tip varsayılanları taşır, kayıt yalnızca farklı olanı yazar. Kayıtları olan tip silinemez.
+    /// </summary>
+    public ResourceBuilder<TEntity> TypedBy<TType>()
+        where TType : class => this;
+
+    /// <summary>
+    /// Kaydın, başka bir kaydın (oyuncunun) bir rolü olduğunu bildirir (kişinin müşteri ya da çalışan olması):
+    /// oyuncuya zorunlu, değişmeyen bir referans üretilir ve bir oyuncunun bu rolden en çok bir kaydı olur (ikincisi
+    /// 409). Rol, oyuncunun kimliğiyle de okunur: <c>GET /customers/by-person-id/{personId}</c>. Oyuncu silinince rolü
+    /// de silinir.
+    /// </summary>
+    public ResourceBuilder<TEntity> RoleOf<TPlayer>(OnDelete onDelete = OnDelete.Cascade)
+        where TPlayer : class => this;
+
+    /// <summary>
     /// Sayılan alanlar yalnızca yazılır: isteklerde yer alırlar, hiçbir yanıtta, dışa aktarmada ve saklanan sürümde
     /// yer almazlar (kimlik numarası, banka hesabı gibi). Böyle bir alana göre aranamaz ve sıralanamaz.
     /// </summary>

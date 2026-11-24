@@ -104,6 +104,33 @@ memberships.MapTransition("activate", from: MembershipStatus.Invited, to: Member
 `POST …/users/{userId}/activate` durumu değiştirir; bağlar yükleri ve durumlarıyla
 `GET /organizations/{id}/users/links` altında (öteki yönden `GET /users/{id}/organizations/links`) listelenir.
 
+### Tip, rol ve genelleme
+
+```csharp
+// Tip–örnek: cihaz, modelinden varsayılan devralır.
+app.MapCrud<DeviceModel>();
+app.MapCrud<Device>().TypedBy<DeviceModel>();
+
+// Rol: çalışan, bir kişinin oynadığı roldür.
+app.MapCrud<Person>();
+app.MapCrud<StaffMember>().RoleOf<Person>();
+
+// Genelleme: otomobil bir araçtır (public partial class Car : Vehicle).
+app.MapCrud<Vehicle>().Auditable().SoftDeletable();
+app.MapCrud<Car>().SubtypeOf<Vehicle>();
+```
+
+| Bildirim | Etkisi |
+|---|---|
+| `.TypedBy<TType>()` | Tipe zorunlu, yalnızca oluştururken yazılan bir referans (`DeviceModelId`). Kayıtta boş bırakılan ve tipte aynı adla, aynı türde bulunan alanlar tipten doldurulur (her yazmada, hesaplanan alanlardan önce); alanı sonradan boşaltmak onu yeniden tipe bağlar. Kayıtları olan tip silinemez |
+| `.RoleOf<TPlayer>()` | Oyuncuya zorunlu, değişmeyen bir referans. Bir oyuncunun bu rolden en çok bir kaydı olur (ikincisi 409) ve rol oyuncunun kimliğiyle de okunur: `GET /staff-members/by-person-id/{personId}`. Oyuncu silinince rolü de silinir |
+| `.SubtypeOf<TBase>()` | Alt tip üst tipin tablosunda, onun anahtarı ve trait'leriyle durur. `/cars` yalnızca otomobilleri, üst tipin alanlarıyla birlikte kendi alanlarıyla sunar; `/vehicles` bütün türleri ortak alanlarıyla döndürür, her kaydın türünü `kind` alanında söyler ve `?kind=car` ile daraltılır. Tür istekle yazılamaz |
+
+Değer tipten **yazılırken** devralınır: tipin varsayılanı sonradan değişirse var olan kayıtlar kendi değerini korur.
+Bir üst tip yalnızca bütün alt tipleri için aynı anlama gelen bildirimleri taşır: `MultiTenant`, `Auditable`,
+`SoftDeletable`, `Archivable`, `ConcurrencyChecked` ve okuma seçenekleri. Alt tipin zincirinde yalnızca işlemler ve
+okuma seçenekleri (`Without`, `Only`, `Sortable`, `Searchable`, `Filterable`) yazılır.
+
 ## Detaylar ve hesaplanan alanlar
 
 Bir kaydın satırları (sipariş ve sipariş satırları gibi) sahibinin builder'ından bildirilir:

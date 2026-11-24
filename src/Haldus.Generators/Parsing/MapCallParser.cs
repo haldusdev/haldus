@@ -380,6 +380,7 @@ internal static class MapCallParser
         var sortRequests = new List<SearchFieldRequest>();
         var createOnlyRequests = new List<SearchFieldRequest>();
         var translatableRequests = new List<SearchFieldRequest>();
+        BaseDeclaration? baseDeclaration = null;
         var sensitiveRequests = new List<SearchFieldRequest>();
         SearchFieldRequest? naturalKeyRequest = null;
         var effectiveKeyRequests = new List<SearchFieldRequest>();
@@ -435,6 +436,37 @@ internal static class MapCallParser
                 case GenericNameSyntax { Identifier.ValueText: "References", TypeArgumentList.Arguments: { Count: 1 } targets }:
                     references.Add(ReadReference(
                         ReferenceKind.Reference, targets[0], call, context.SemanticModel, OnDeleteBehavior.Restrict, cancellationToken));
+                    break;
+
+                case GenericNameSyntax { Identifier.ValueText: "SubtypeOf", TypeArgumentList.Arguments: { Count: 1 } bases }:
+                {
+                    var parent = context.SemanticModel.GetTypeInfo(bases[0], cancellationToken).Type as INamedTypeSymbol;
+                    var known = parent is { TypeKind: not TypeKind.Error };
+
+                    baseDeclaration = new BaseDeclaration(
+                        known ? parent!.Name : bases[0].ToString(),
+                        known ? parent!.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) : null,
+                        known && entity is not null && SymbolEqualityComparer.Default.Equals(entity.BaseType, parent),
+                        LocationInfo.From(bases[0].GetLocation()));
+                    break;
+                }
+
+                // Tip ve rol de birer referanstır; ikisi de zorunludur ve kayıt oluşturulduktan sonra değişmez.
+                case GenericNameSyntax { Identifier.ValueText: "TypedBy", TypeArgumentList.Arguments: { Count: 1 } types }:
+                    references.Add(ReadReference(
+                        ReferenceKind.Reference, types[0], call, context.SemanticModel, OnDeleteBehavior.Restrict, cancellationToken) with
+                    {
+                        Typed = true,
+                        Required = true,
+                    });
+                    break;
+                case GenericNameSyntax { Identifier.ValueText: "RoleOf", TypeArgumentList.Arguments: { Count: 1 } players }:
+                    references.Add(ReadReference(
+                        ReferenceKind.Reference, players[0], call, context.SemanticModel, OnDeleteBehavior.Cascade, cancellationToken) with
+                    {
+                        Role = true,
+                        Required = true,
+                    });
                     break;
                 case GenericNameSyntax { Identifier.ValueText: "Counts" or "Sums", TypeArgumentList.Arguments: { Count: 1 } counted } rollupCall:
                 {
@@ -664,6 +696,7 @@ internal static class MapCallParser
             SortRequests = sortRequests.ToEquatableArray(),
             CreateOnlyRequests = createOnlyRequests.ToEquatableArray(),
             TranslatableRequests = translatableRequests.ToEquatableArray(),
+            BaseDeclaration = baseDeclaration,
             SensitiveRequests = sensitiveRequests.ToEquatableArray(),
             NaturalKeyRequest = naturalKeyRequest,
             EffectiveKeyRequests = effectiveKeyRequests.ToEquatableArray(),
@@ -861,6 +894,24 @@ internal static class MapCallParser
         EquatableArray<ChainCall> chain)
     {
         var name = $"Map{archetype}";
+
+        if (chain.Any(call => call.Name == "SubtypeOf"))
+        {
+            // Alt tip üst tipin tablosunu, anahtarını ve trait'lerini paylaşır; kendi zincirinde yalnızca işlemleri ve
+            // okuma biçimini seçer. Gerisi üst tipte bildirilir.
+            if (archetype != Archetype.Crud)
+            {
+                yield return $"SubtypeOf cannot be combined with {name}: a subtype is mapped with MapCrud, like its base";
+            }
+
+            foreach (var declaration in chain.Select(call => call.Name).Distinct())
+            {
+                if (declaration is not ("SubtypeOf" or "Without" or "Only" or "Sortable" or "Searchable" or "Filterable"))
+                {
+                    yield return $"{declaration} cannot be declared on a subtype: declare it on the base, which the subtype shares its table and traits with";
+                }
+            }
+        }
 
         if (archetype == Archetype.Balance)
         {
@@ -1074,6 +1125,9 @@ internal static class MapCallParser
             var allowed = relation switch
             {
                 "References" => archetype != Archetype.Singleton,
+
+                // Tip ve rol, anahtarıyla adreslenen koleksiyonlar içindir.
+                "TypedBy" or "RoleOf" => crudLike || archetype is Archetype.ReadOnly or Archetype.AppendOnly,
 
                 // Ebeveyn altında yaşamak, sunucunun anahtar ürettiği koleksiyonlar ve ebeveyn başına tek kayıt içindir.
                 "Under" => archetype is Archetype.Crud or Archetype.ReadOnly or Archetype.AppendOnly or Archetype.Singleton,

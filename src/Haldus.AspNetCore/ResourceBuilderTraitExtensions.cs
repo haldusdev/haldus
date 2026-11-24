@@ -78,6 +78,7 @@ public static class ResourceBuilderTraitExtensions
     public static ResourceBuilder<TEntity> Expiring<TEntity>(this ResourceBuilder<TEntity> builder, TimeSpan lifetime, bool sliding = false)
         where TEntity : class => builder;
 
+
     /// <summary>
     /// Kayıt değiştikçe olay yayınlar: <c>order.created</c>, <c>order.updated</c>, <c>order.deleted</c> ve her geçiş
     /// için <c>order.{geçiş}</c>. Olay, kaydın o andaki halini (yanıt biçiminde) taşır, kayıtla aynı kaydetmede

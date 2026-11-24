@@ -372,6 +372,12 @@ internal static class ModuleEmitter
 
     private static void AppendModel(StringBuilder builder, ResourceModel resource, string entity)
     {
+        if (resource.BaseType is not null)
+        {
+            // Alt tip üst tipin tablosunda durur; tablo, anahtar, filtreler ve ayırt edici alan üst tipte kurulur.
+            return;
+        }
+
         var tenant = resource.Has(Traits.MultiTenant);
 
         // Tablo adı açıkça verilir. EF Core adı bağlamdaki DbSet özelliğinden alır; entity başka bir modülden
@@ -693,6 +699,20 @@ internal static class ModuleEmitter
             statements.Add("entity.Property(item => item.Version).IsRowVersion();");
         }
 
+
+        if (resource.Subtypes.Length > 0)
+        {
+            // Üst tip ve alt tipleri tek tabloda durur; kaydın türünü Kind alanı söyler ve değerini EF Core atar.
+            statements.AddRange(resource.Subtypes.Select(subtype => $"modelBuilder.Entity<{subtype.QualifiedName}>().HasBaseType<{entity}>();"));
+            statements.Add(
+                $"entity.HasDiscriminator(item => item.Kind).HasValue<{entity}>({ResourceEmitter.Literal(Naming.ToKebabCase(resource.EntityName))})"
+                + string.Concat(resource.Subtypes.Select(subtype => $".HasValue<{subtype.QualifiedName}>({ResourceEmitter.Literal(subtype.Discriminator)})"))
+                + ";");
+
+            // Alan boş metinle başlar; EF Core'un türü atayabilmesi için "atanmamış" değerin bu olduğu bildirilir.
+            statements.Add("entity.Property(item => item.Kind).HasMaxLength(64).HasSentinel(string.Empty);");
+            statements.Add("entity.HasIndex(item => item.Kind);");
+        }
 
         builder.Append($"            modelBuilder.Entity<{entity}>(entity =>\n");
         builder.Append("            {\n");

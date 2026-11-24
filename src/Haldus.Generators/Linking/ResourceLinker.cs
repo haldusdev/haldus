@@ -15,7 +15,7 @@ internal static class ResourceLinker
 
     public static List<ResourceModel> Link(IReadOnlyList<ResourceModel> resources, Action<DiagnosticInfo> report)
     {
-        resources = PrepareDetails(MergeReverseAttachments(resources, report), report);
+        resources = PrepareDetails(MergeReverseAttachments(PrepareSubtypes(resources, report), report), report);
 
         var byType = resources.ToDictionary(resource => resource.QualifiedName);
         var linked = new List<ResourceModel>();
@@ -63,6 +63,9 @@ internal static class ResourceLinker
                 }
             }
 
+            var typeDefaults = ResolveTypeDefaults(resource, references, properties, byType, Fail);
+            var roled = ResolveRole(resource, references, byType, Fail);
+
             // Hassas alanlar önce işaretlenir ki arama, sıralama ve doğal anahtar onları aday saymasın.
             foreach (var request in resource.SensitiveRequests)
             {
@@ -83,7 +86,7 @@ internal static class ResourceLinker
             var searchFields = ResolveSearchFields(resource, properties, Fail);
             var sortFields = ResolveSortFields(resource, properties, Fail);
             MarkCreateOnly(resource, properties, Fail);
-            var naturalKey = ResolveNaturalKey(resource, properties, Fail);
+            var naturalKey = ResolveNaturalKey(roled, properties, Fail);
             var effectiveKeys = new List<string>();
 
             foreach (var request in resource.EffectiveKeyRequests)
@@ -127,6 +130,7 @@ internal static class ResourceLinker
             {
                 linked.Add(resource with
                 {
+                    TypeDefaults = typeDefaults,
                     TranslatableFields = translatable.Distinct().ToEquatableArray(),
                     Properties = properties.ToEquatableArray(),
                     References = references.ToEquatableArray(),
@@ -152,6 +156,15 @@ internal static class ResourceLinker
             }),
         ];
 
+        foreach (var resource in attached.Where(resource => (resource.BaseType is not null || resource.Subtypes.Length > 0) && resource.Details.Length > 0))
+        {
+            // Gömülü satırlar sahibinin sınıfına bir koleksiyon ekler; alt tiplerin uçları onu taşımazdı.
+            report(new DiagnosticInfo("HALDUS007", resource.Location, new[]
+            {
+                $"'{resource.EntityName}' takes part in a type hierarchy and cannot own embedded details; map the rows with Under<{resource.EntityName}>() instead",
+            }.ToEquatableArray()));
+        }
+
         foreach (var resource in attached.Where(resource => resource.ChangeSets is not null))
         {
             // Değişiklik kümesi isteğin gövdesini saklar ve geri gösterir; yalnızca yazılan bir alan orada okunur olurdu.
@@ -165,6 +178,96 @@ internal static class ResourceLinker
         }
 
         return attached;
+    }
+
+    /// <summary>
+    /// <c>.TypedBy&lt;T&gt;()</c>: kayıtta boş bırakılabilen ve tipte aynı adla, aynı türde bulunan alanlar tipten
+    /// devralınır. Tipin alanları bilinmelidir; bu yüzden tip aynı projede eşlenmiş olmalıdır.
+    /// </summary>
+    private static TypeDefaultsModel? ResolveTypeDefaults(
+        ResourceModel resource,
+        List<ResolvedReference> references,
+        List<PropertyModel> properties,
+        Dictionary<string, ResourceModel> byType,
+        Action<string, LocationInfo, string[]> fail)
+    {
+        var declarations = resource.ReferenceDeclarations.Where(declaration => declaration.Typed).ToList();
+
+        if (declarations.Count == 0)
+        {
+            return null;
+        }
+
+        var declaration = declarations[0];
+
+        if (declarations.Count > 1)
+        {
+            fail("HALDUS007", declarations[1].Location, [$"'{resource.EntityName}' can have only one type; TypedBy is declared more than once"]);
+            return null;
+        }
+
+        var reference = references.FirstOrDefault(candidate => candidate.TargetName == declaration.TargetName && candidate.Kind == ReferenceKind.Reference);
+
+        if (reference is null || !byType.TryGetValue(reference.TargetType, out var type))
+        {
+            if (reference is not null)
+            {
+                fail("HALDUS007", declaration.Location, [$"TypedBy<{declaration.TargetName}>() needs '{declaration.TargetName}' to be mapped with a Map call in the same project; its fields are the defaults of '{resource.EntityName}'"]);
+            }
+
+            return null;
+        }
+
+        var fields = properties
+            .Where(property => property is { IsWritable: true, IsNonNullable: false, IsEmbedded: false, IsGenerated: false }
+                && type.Properties.Any(candidate => candidate.Name == property.Name && candidate.ValueType == property.ValueType && !candidate.IsEmbedded))
+            .Select(property => property.Name)
+            .ToEquatableArray();
+
+        return new TypeDefaultsModel(reference.PropertyName, reference.TargetType, reference.TargetKeyName, fields);
+    }
+
+    /// <summary>
+    /// <c>.RoleOf&lt;T&gt;()</c>: oyuncuya işaret eden alan kaydın doğal anahtarı olur; böylece bir oyuncunun bu rolden en
+    /// çok bir kaydı olur ve rol, oyuncunun kimliğiyle de okunur.
+    /// </summary>
+    private static ResourceModel ResolveRole(
+        ResourceModel resource,
+        List<ResolvedReference> references,
+        Dictionary<string, ResourceModel> byType,
+        Action<string, LocationInfo, string[]> fail)
+    {
+        var declarations = resource.ReferenceDeclarations.Where(declaration => declaration.Role).ToList();
+
+        if (declarations.Count == 0)
+        {
+            return resource;
+        }
+
+        if (declarations.Count > 1 || resource.NaturalKeyRequest is not null)
+        {
+            fail(
+                "HALDUS007",
+                declarations[declarations.Count - 1].Location,
+                [$"RoleOf makes the player the natural key of '{resource.EntityName}'; a resource can be the role of one player and cannot declare another NaturalKey"]);
+            return resource;
+        }
+
+        var reference = references.FirstOrDefault(candidate => candidate.TargetName == declarations[0].TargetName && candidate.Kind == ReferenceKind.Reference);
+
+        if (reference is null)
+        {
+            return resource;
+        }
+
+        if (!byType.ContainsKey(reference.TargetType))
+        {
+            // Rol, bir kaynağın kaydının oynadığı roldür; oyuncu da bu projede eşlenmiş olmalıdır.
+            fail("HALDUS007", declarations[0].Location, [$"RoleOf<{reference.TargetName}>() needs '{reference.TargetName}' to be mapped with a Map call in the same project"]);
+            return resource;
+        }
+
+        return resource with { NaturalKeyRequest = new SearchFieldRequest(reference.PropertyName, $"RoleOf<{reference.TargetName}>()", declarations[0].Location) };
     }
 
     /// <summary>
@@ -245,6 +348,100 @@ internal static class ResourceLinker
         return depth < 8 && resource.ReferenceDeclarations
             .Where(declaration => declaration.Kind == ReferenceKind.Parent)
             .Any(parent => FindTarget(parent, resources, byType) is { } target && IsOwnerScoped(target, resources, byType, depth + 1));
+    }
+
+    /// <summary>
+    /// Alt tipleri (<c>.SubtypeOf&lt;TBase&gt;()</c>) üst tiplerine bağlar. Alt tip üst tipin tablosunda durur: trait'lerini
+    /// (kiracı, denetim, silme, sürüm) ondan alır ve ikisi de kaydın türünü söyleyen <c>Kind</c> alanını kazanır. Üst tip
+    /// yalnızca bütün alt tipler için aynı anlama gelen bildirimleri taşıyabilir.
+    /// </summary>
+    private static List<ResourceModel> PrepareSubtypes(IReadOnlyList<ResourceModel> resources, Action<DiagnosticInfo> report)
+    {
+        if (resources.All(resource => resource.BaseDeclaration is null))
+        {
+            return [.. resources];
+        }
+
+        var byType = resources.GroupBy(resource => resource.QualifiedName).ToDictionary(group => group.Key, group => group.First());
+        var subtypes = new Dictionary<string, List<SubtypeModel>>();
+        var prepared = new Dictionary<string, ResourceModel>();
+        var failed = new HashSet<string>();
+
+        // Kaydın türü yanıtta görünür, istekle yazılamaz; değerini veritabanı eşlemesi atar.
+        var kind = new TraitMember("Kind", "string", InResponse: true, new SearchField("Kind", SearchKind.String, "string", IsNullable: false));
+
+        foreach (var resource in resources.Where(resource => resource.BaseDeclaration is not null))
+        {
+            var declaration = resource.BaseDeclaration!;
+            string? problem = null;
+
+            if (Find(declaration.TargetName, declaration.TargetType, resources, byType) is not { } parent)
+            {
+                report(new DiagnosticInfo("HALDUS009", declaration.Location, new[] { declaration.TargetName, resource.EntityName }.ToEquatableArray()));
+                failed.Add(resource.QualifiedName);
+                continue;
+            }
+
+            if (!declaration.Inherits)
+            {
+                problem = $"'{resource.EntityName}' must derive from '{parent.EntityName}': write 'public partial class {resource.EntityName} : {parent.EntityName}'";
+            }
+            else if (parent.BaseDeclaration is not null)
+            {
+                problem = $"'{parent.EntityName}' is itself a subtype; a hierarchy has one base and its direct subtypes";
+            }
+            else if (parent.Archetype != Archetype.Crud)
+            {
+                problem = $"'{parent.EntityName}' cannot have subtypes: it must be mapped with MapCrud";
+            }
+            else if (parent.Chain.Select(call => call.Name).FirstOrDefault(name => name is not
+                ("MultiTenant" or "Auditable" or "SoftDeletable" or "Archivable" or "ConcurrencyChecked" or "Without" or "Only" or "Sortable" or "Searchable" or "Filterable")) is { } unsupported)
+            {
+                // Üst tipin bildirimleri bütün alt tipler için geçerlidir; kayıt tipine bağlı çalışan bildirimler
+                // (durum, sürümler, olaylar...) alt tiplerin kayıtlarını tanımazdı.
+                problem = $"'{parent.EntityName}' cannot have subtypes while it declares {unsupported}: a base carries only MultiTenant, Auditable, SoftDeletable, Archivable, ConcurrencyChecked and its read options";
+            }
+            else if (parent.IdKind != IdKind.Guid)
+            {
+                problem = $"'{parent.EntityName}' cannot have subtypes: a hierarchy shares a Guid key generated by the server";
+            }
+
+            if (problem is not null)
+            {
+                report(new DiagnosticInfo("HALDUS007", declaration.Location, new[] { problem }.ToEquatableArray()));
+                failed.Add(resource.QualifiedName);
+                continue;
+            }
+
+            if (!subtypes.TryGetValue(parent!.QualifiedName, out var siblings))
+            {
+                subtypes[parent.QualifiedName] = siblings = [];
+            }
+
+            siblings.Add(new SubtypeModel(resource.QualifiedName, Naming.ToKebabCase(resource.EntityName)));
+
+            prepared[resource.QualifiedName] = resource with
+            {
+                Traits = resource.Traits | parent.Traits,
+                BaseType = parent.QualifiedName,
+                ExtraMembers = resource.ExtraMembers.Append(kind).ToEquatableArray(),
+            };
+        }
+
+        return
+        [
+            .. resources
+                .Where(resource => !failed.Contains(resource.QualifiedName))
+                .Select(resource => prepared.TryGetValue(resource.QualifiedName, out var subtype)
+                    ? subtype
+                    : subtypes.TryGetValue(resource.QualifiedName, out var children)
+                        ? resource with
+                        {
+                            Subtypes = children.ToEquatableArray(),
+                            ExtraMembers = resource.ExtraMembers.Append(kind).ToEquatableArray(),
+                        }
+                        : resource),
+        ];
     }
 
     /// <summary>
@@ -1200,6 +1397,9 @@ internal static class ResourceLinker
         var shallow = declaration is { Kind: ReferenceKind.Parent, Shallow: true };
         var settable = shallow || declaration.Kind is not (ReferenceKind.Parent or ReferenceKind.Source);
 
+        // Tip ve rol de kayıt oluşturulurken seçilir ve değişmez: kayıt başka bir tipe veya oyuncuya geçemez.
+        var fixedOnCreate = shallow || declaration.Typed || declaration.Role;
+
         // Ebeveyn silinince altındakiler de silinir; ama kiracıya ait kayıtlar genel bir ebeveynin
         // altındaysa bu, ebeveyni silen kişinin başka kiracıların verisini silmesi demektir. Geliştirici
         // açıkça seçmediyse o durumda silme reddedilir.
@@ -1227,9 +1427,9 @@ internal static class ResourceLinker
         {
             // Adrese girmeyen ebeveyn kayıt oluşturulurken seçilir ve değişmez: kayıt başka bir ebeveynin altına
             // taşınamaz, tıpkı adresi ebeveyniyle başlayan bir kayıt gibi.
-            properties.Add(ForeignKey(propertyName, targetKeyType, required, writable: settable) with { IsCreateOnly = shallow });
+            properties.Add(ForeignKey(propertyName, targetKeyType, required, writable: settable) with { IsCreateOnly = fixedOnCreate });
         }
-        else if (shallow)
+        else if (fixedOnCreate)
         {
             properties[properties.IndexOf(declared)] = declared with { IsCreateOnly = true };
         }

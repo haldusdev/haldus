@@ -128,3 +128,68 @@ public partial class BillPayment
     [Range(0.01, 1_000_000)]
     public decimal Amount { get; set; }
 }
+
+/// <summary>Cihaz modeli: cihazların tipi. Garanti süresi ve bakım aralığı, cihazlar için varsayılandır.</summary>
+public partial class DeviceModel
+{
+    [Required]
+    [MaxLength(100)]
+    public string Name { get; set; } = "";
+
+    [Range(0, 120)]
+    public int WarrantyMonths { get; set; }
+
+    [MaxLength(200)]
+    public string? Manual { get; set; }
+}
+
+/// <summary>Cihaz. Boş bıraktığı alanları modelinden devralır; yalnızca farklı olanı yazar.</summary>
+public partial class Device
+{
+    [Required]
+    [MaxLength(50)]
+    public string SerialNumber { get; set; } = "";
+
+    [Range(0, 120)]
+    public int? WarrantyMonths { get; set; }
+
+    [MaxLength(200)]
+    public string? Manual { get; set; }
+}
+
+/// <summary>Kişi: müşteri veya çalışan rollerini oynayabilir.</summary>
+public partial class Person
+{
+    [Required]
+    [MaxLength(200)]
+    public string FullName { get; set; } = "";
+}
+
+/// <summary>Kişinin çalışan rolü; kendi numarası ve alanları vardır. Bir kişi en çok bir kez çalışandır.</summary>
+public partial class StaffMember
+{
+    [MaxLength(100)]
+    public string? Department { get; set; }
+}
+
+/// <summary>Araç: otomobil ve kamyonun üst tipi. Ortak alanlar buradadır.</summary>
+public partial class Vehicle
+{
+    [Required]
+    [MaxLength(20)]
+    public string Plate { get; set; } = "";
+}
+
+/// <summary>Otomobil bir araçtır; aynı tabloda, aynı kimlikle durur ve kendi alanını ekler.</summary>
+public partial class Car : Vehicle
+{
+    [Range(1, 9)]
+    public int Seats { get; set; }
+}
+
+/// <summary>Kamyon bir araçtır.</summary>
+public partial class Truck : Vehicle
+{
+    [Range(0.0, 100.0)]
+    public decimal PayloadTons { get; set; }
+}

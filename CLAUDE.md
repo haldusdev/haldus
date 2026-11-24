@@ -243,6 +243,13 @@ Bunlar kullanıcıyla kararlaştırıldı; yeniden sorma.
   - Olay türleri: `{kaynak}.created` / `.updated` / `.deleted` ve geçiş başına `{kaynak}.{geçiş}` (geçişin adı
     olduğu gibi; geçmiş zamana çevrilmez). Veri, kaydın yanıt biçimidir ("kalın" olay).
   - Teslimat en az bir kez ve tek sıralıdır: başarısız olay arkasındakileri bekletir, on denemeden sonra bırakılır.
+- Tip, rol, genelleme (29. aşama). Kullanıcı sormamamı istedi; yazılan, önerdiğim seçeneklerdir ve ayrıca onaylanmadı:
+  - `.TypedBy<TType>()`: varsayılanlar okurken değil **yazarken** devralınır (kayıtta saklanır). Okurken devralma her
+    listeyi tipe bağlardı; karşılığında tipin varsayılanı sonradan değişince var olan kayıtlar eski değerde kalır.
+    "Tip örneği kısıtlar" yalnızca şu kadarıyla yazıldı: tip zorunludur, değişmez ve kayıtları varken silinemez.
+  - `.RoleOf<TPlayer>()`: rol, oyuncuya zorunlu ve benzersiz bir referanstır; oyuncu rolün doğal anahtarı olur.
+  - `.SubtypeOf<TBase>()`: üç kalıtım eşlemesinden tek tablo (TPH) seçildi ve yalnızca tek düzey desteklenir. Alt
+    tipin entity sınıfı üst tipten gerçekten türer; ayırt edici alan `Kind`'dır (kaynağın kebab-case adı).
 - Eşzamanlılık trait'inin adı `ConcurrencyChecked` (eski adı `Versioned`). Sürüm yanıt gövdesinde değil
   `ETag` başlığında taşınır; güncelleme ve silme `If-Match` ister (eksikse 428, uyuşmazlıkta 412).
 - Güncelleme için hem `PUT` (tam değiştirme) hem `PATCH` (kısmi) üretilir.
@@ -723,6 +730,33 @@ içeriyor (ilişki bildirimleri, `Sensitive`, `PublishesEvents`, `Purgeable`, ye
     listede olmayan geçişin token adresi yoktur. Token ebeveyn altındaki ve kullanıcıya ait kaynaklarla
     birleşmez (görünürlükleri, token'ı taşıyanın sahip olmadığı bir kimliğe bağlıdır). Bilinen sınır: token
     kullanılınca kendiliğinden geçersiz olmaz; ömrünü `Expiring` ve durum makinesi belirler. Oran sınırlama yoktur.
+- **Tip–örnek ve rol.** İkisi de zincirde `Reference` bildirimi olarak okunur (`ReferenceDeclaration.Typed` / `Role`) ve
+  `Resolve` yabancı anahtarı yalnızca oluştururken yazılan bir alan yapar (`fixedOnCreate`; kısa adresli ebeveynle
+  aynı yol). Hedef aynı projede eşlenmiş olmalıdır.
+  - `ResolveTypeDefaults` devralınan alanları seçer: kayıtta yazılabilir ve boş bırakılabilir, tipte aynı adla ve
+    aynı değer tipiyle bulunan alanlar (`ResourceModel.TypeDefaults`). Doldurma `EndpointEmitter.TypeDefaults()`
+    parçasıdır ve **`Compute()` parçasının başına eklenir**: böylece hesaplamanın çağrıldığı her yazma yolunda
+    (oluşturma, güncelleme, yama, toplu yollar, kopya, önizleme, değişiklik kümesi, geçiş ve aksiyon) hesaptan önce
+    çalışır. Tip, kendi sorgu filtrelerinden geçerek okunur; her yazma bir ek sorgudur. Uygulamanın kendi kodu
+    kaydı doğrudan yazarsa devralma çalışmaz (uçlara bağlıdır, kaydetmeye değil).
+  - `ResolveRole` oyuncunun yabancı anahtarını kaydın doğal anahtarı yapar; benzersiz indeks, çakışmanın 409'u ve
+    `by-{alan}` ucu doğal anahtarın yolundan gelir. Bu yüzden rol başka bir `NaturalKey` bildiremez ve tek bir
+    oyuncunun rolüdür. Silme davranışı varsayılan olarak `Cascade`'dir.
+- **Genelleme.** `ResourceModel.BaseDeclaration` → `ResourceLinker.PrepareSubtypes` (bağlamanın ilk adımı): alt tipin
+  modeli üst tipin trait'leriyle birleştirilir (`BaseType`), üst tip alt tiplerini öğrenir (`Subtypes`) ve ikisi de
+  `Kind` alanını `ExtraMembers`'a alır. Alt tip için entity üretilmez (`EmitEntity` boş döner; anahtar ve trait
+  alanları C# kalıtımıyla gelir) ve model yapılandırması yazılmaz; tablo, anahtar, sorgu filtreleri ve ayırt edici
+  alan yalnızca üst tipte kurulur (EF Core sorgu filtresine yalnızca kök tipte izin verir). `Kind` boş metinle başlar;
+  EF Core'un değeri atayabilmesi için alanın "atanmamış" değeri bildirilir (`HasSentinel`). Alt tipin uçları standart
+  üreticiden, birleşmiş modelle geçer ve `Set<Car>()` üzerinde çalışır.
+  - **Üst tipin zinciri bir beyaz listeyle sınırlıdır** (`MultiTenant`, `Auditable`, `SoftDeletable`, `Archivable`,
+    `ConcurrencyChecked`, `Without`, `Only`, `Sortable`, `Searchable`, `Filterable`). Kayıt tipini anahtar alan
+    çalışma zamanı kayıtları (sürümler, onay, olaylar, toplanan alanlar...) alt tipin kayıtlarını üst tipin adıyla
+    bulamaz; listeye yeni bir bildirim eklenmeden önce bu doğrulanmalıdır.
+  - Sınırlar: tek düzey; üst tip ve alt tipler `MapCrud` olmalı ve aynı projede eşlenmeli; hiyerarşideki bir kaynak
+    gömülü detay taşıyamaz; alt tipin kendi referansı, durumu veya trait'i olamaz; alt tipin alanları tabloda boş
+    bırakılabilir kolonlardır; üst tipin adresinden oluşturulan kayıt üst tipin kendisidir (`kind` = üst tipin adı);
+    başka bir kaynağın `Counts<Üst>()` toplamı alt tipin kayıtlarını saymaz.
 - **Olay yayını.** `Traits.PublishesEvents` (`IPublishesEvents`; alanı yoktur). Üretilen modül
   `HaldusEvents.Register<T>("ad", item => {Entity}Endpoints.Describe(item))` çağırır; `Describe`, `ToResponse`'un
   içeriden çağrılan halidir, yani olayın verisi yanıt izdüşümünden gelir.

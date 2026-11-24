@@ -535,6 +535,7 @@ internal sealed partial class EndpointEmitter
         var statusParameter = (status is null ? string.Empty : $"        {status}? status,\n")
             + (EffectiveDated ? "        global::System.DateOnly? asOf,\n" : string.Empty)
             + string.Concat(axes.Select(axis => $"        {axis.StatusType}? {ResourceEmitter.CamelCase(axis.Property)},\n"))
+            + (_resource.Subtypes.Length > 0 ? "        string? kind,\n" : string.Empty)
             + (readTracking ? "        bool? unread,\n" : string.Empty)
             + (Translatable ? "        string? locale,\n" : string.Empty);
 
@@ -583,6 +584,19 @@ internal sealed partial class EndpointEmitter
                         if ({{parameter}} is { } {{parameter}}Value)
                         {
                             query = query.Where(item => item.{{axis.Property}} == {{parameter}}Value);
+                        }
+
+                """);
+        }
+
+        if (_resource.Subtypes.Length > 0)
+        {
+            // Üst tipin listesi bütün türleri döndürür; tek bir türe daraltılabilir.
+            _handlers.Append("""
+
+                        if (!string.IsNullOrEmpty(kind))
+                        {
+                            query = query.Where(item => item.Kind == kind);
                         }
 
                 """);
@@ -2253,9 +2267,39 @@ internal sealed partial class EndpointEmitter
         : string.Empty;
 
     /// <summary>Entity hesaplanan alanlar taşıyorsa, istek uygulandıktan sonra ve kaydetmeden önce hesaplatır.</summary>
-    private string Compute() => _resource.IsComputed
+    private string Compute() => TypeDefaults() + (_resource.IsComputed
         ? "        ((global::Haldus.IComputed)entity).Compute();\n"
-        : string.Empty;
+        : string.Empty);
+
+    /// <summary>
+    /// Kaydın tipi varsa (<c>.TypedBy&lt;T&gt;()</c>), boş bırakılan alanlar tipin aynı adlı alanından doldurulur. Hesaplanan
+    /// alanlardan önce çalışır ki hesap devralınan değeri görsün; bu yüzden hesaplamayla aynı yerde, her yazma yolunda
+    /// çağrılır.
+    /// </summary>
+    private string TypeDefaults()
+    {
+        if (_resource.TypeDefaults is not { Fields.Length: > 0 } type)
+        {
+            return string.Empty;
+        }
+
+        var fills = string.Concat(type.Fields.Select(field => $"                entity.{field} ??= typeDefaults.{field};\n"));
+
+        return $$"""
+                    {
+                        // Boş bırakılan alanlar kaydın tipinden gelir.
+                        var typeDefaults = await contexts.For<{{type.TargetType}}>().Set<{{type.TargetType}}>()
+                            .AsNoTracking()
+                            .FirstOrDefaultAsync(target => target.{{type.TargetKeyName}} == entity.{{type.PropertyName}}, cancellationToken);
+
+                        if (typeDefaults is not null)
+                        {
+            {{fills}}            }
+                    }
+
+
+            """;
+    }
 
     /// <summary>Oluşturma isteğindeki gömülü satırları yeni kayda ekler.</summary>
     private string CreateDetails()
