@@ -16,7 +16,11 @@ EF Core yapılandırması üretilir.
 - Örnek mağazanın istemcisi (`samples/Haldus.Sample.Shop.Client`): `pnpm install`, `pnpm generate:api`,
   `pnpm typecheck`. **Örnek mağazada bir uç veya DTO değiştiğinde (üretilen kod değiştiğinde de) backend derlendikten
   sonra istemci aynı görevde yeniden üretilir ve tip denetimi çalıştırılır;** `openapi.json` ile `src/api` birlikte
-  commit'lenir.
+  commit'lenir. Aynı kural örnek arayüzlerin kendi istemcileri için de geçerlidir (aşağıda).
+- Örnek yönetim paneli (`samples/Haldus.Sample.Shop.Web`): `pnpm install`, `pnpm dev`, `pnpm generate:api`,
+  `pnpm typecheck`, `pnpm lint`, `pnpm build`. Paneli çalıştırmak için backend'in de çalışması gerekir (kendi
+  README'sinde; `Shop:CreateDatabase` ayarı tabloları açılışta oluşturur). Panel yalnızca kullandığı etiketlerin
+  istemcisini üretir (`orval.config.ts`: `filters.tags`); yeni bir kaynak kullanılacaksa etiketi oraya eklenir.
 - Örnek uygulamada üretilen kod `samples/Haldus.Sample.Shop/obj/Generated` altında incelenebilir.
 
 ## Yapı
@@ -32,6 +36,8 @@ EF Core yapılandırması üretilir.
 - `samples/Haldus.Sample.Shop`: örnek uygulama ve modelin sınandığı yer.
 - `samples/Haldus.Sample.Shop.Client`: örnek mağazanın `openapi.json` dosyasından orval ile üretilen TypeScript
   istemcisi (tipler + TanStack Query hook'ları, `fetch`). Uygulama değildir; şemanın tüketilebildiğini kanıtlar.
+- `samples/Haldus.Sample.Shop.Web`: örnek mağazanın yönetim paneli (Vite + React + TypeScript, shadcn/ui `sidebar-07`
+  ve `login-01`, Tailwind). Ürünler, kategoriler ve siparişlerin iş akışı; kendi orval istemcisi `src/api` altındadır.
 - `samples/Haldus.Sample.Modular`: modüler yapının sınandığı küçük uygulama. `Catalog` ve `Sales` kendi
   bağlamına sahip modüllerdir; `Support` modülü ve `Host` ortak bağlamı kullanır.
 - `reports/`, `research_notes/`: archetype/trait taksonomisi araştırması. Tasarım kararlarının dayanağı
@@ -418,9 +424,22 @@ içeriyor (ilişki bildirimleri, `Sensitive`, `PublishesEvents`, `Purgeable`, ye
   ve onu tüketmenin yolu kullanıcının genel kurallarındaki yoldur: orval, TanStack Query hook'ları, `fetch`. Depoda
   bunun çalışan örneği vardır (`samples/Haldus.Sample.Shop.Client`) ve şemanın orval'dan hatasız geçtiği `pnpm typecheck`
   ile doğrulanır.
-  - Tam bir örnek arayüz (web veya mobil uygulama) **yazılmadı**: router, form/validasyon kütüphanesi, i18n kütüphanesi
-    ve test framework'ü kullanıcının genel kurallarına göre sorulması gereken seçimlerdir ve soru sorulamıyordu.
-    Kullanıcı bir örnek arayüz isterse bu dört seçim sorulur; istemci paketi olduğu gibi kullanılır.
+  - Örnek arayüzler sonradan yazıldı (kullanıcı hedefi 2026-11-24'te yeniden kurdu: "projenin tamamen bitmesini
+    istiyorum bana soru sorma"). Kullanıcının genel kurallarına göre sorulması gereken seçimler sorulamadığı için
+    önerdiğim seçenekle verildi ve **ayrıca onaylanmadı**; yeniden sorma, ama kullanıcı değiştirmek isterse yer burasıdır:
+    - Web'de yönlendirme: **React Router** (`react-router`; `BrowserRouter` + `Routes`).
+    - i18n kütüphanesi: **i18next + react-i18next**; diller backend'deki gibi en (varsayılan) ve tr. Çeviri anahtarları
+      derleme zamanında denetlenir (`src/i18n/i18next.d.ts`).
+    - Form/validasyon kütüphanesi: **yok**. shadcn'in güncel CLI'ı `form` yerine `field` bileşenini veriyor ve bir
+      form kütüphanesi kurmuyor; formlar `Field` + bileşen durumuyla yazıldı, doğrulama backend'de kaldı ve alan
+      hataları `HttpValidationProblemDetails.errors` içinden okunuyor. Bu, Haldus'un doğrulamasını da gösteriyor.
+    - Frontend test framework'ü: **kurulmadı** (genel kural: test altyapısı yoksa kendiliğinden kurma). Panel
+      `pnpm typecheck`, `pnpm lint`, `pnpm build` ile ve çalışan backend'e karşı tarayıcıda elle doğrulandı.
+    - Bunlar yeni bağımlılıklardır (`react-router`, `i18next`, `react-i18next`) ve onayı alınmadı. Geri kalan
+      bağımlılıklar genel kurallarda adı geçen araçlardan ve onların CLI'ından gelir.
+  - Paneldeki kimlik bir demodur: örnek backend'in `DemoIdentity`'si gibi kullanıcıyı ve kiracıyı başlıklarla
+    gönderir, parola yoktur. Gerçek bir kimlik doğrulama örneği yazılmadı.
+  - Arayüzün dili `Accept-Language` ile backend'e de gider; backend'in mesajları o dilde döner.
   - Örnek mağaza bu yüzden sayıları katı okur (`JsonNumberHandling.Strict`): varsayılan ayar şemaya `integer | string`
     yazıyor ve istemci tipleri her sayıyı `number | string` görüyordu. Bu, örnek uygulamanın ayarıdır; Haldus
     tüketen uygulamaya dayatmaz.
