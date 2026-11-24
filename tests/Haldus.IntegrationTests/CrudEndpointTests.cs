@@ -89,6 +89,22 @@ public sealed class CrudEndpointTests(ShopFixture fixture)
         Assert.True(page.TotalCount >= 3);
     }
 
+    [Theory]
+    [InlineData("page=2147483647&pageSize=100")]
+    [InlineData("page=2147483647&pageSize=2147483647")]
+    [InlineData("page=-5&pageSize=-5")]
+    public async Task List_WithOutOfRangePaging_ClampsInsteadOfFailing(string query)
+    {
+        var response = await _client.GetAsync($"/products?{query}", CancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var page = await response.Content.ReadFromJsonAsync<PagedResult<ProductResponse>>(CancellationToken);
+        Assert.NotNull(page);
+        Assert.InRange(page.Page, 1, PageRequest.MaxPage);
+        Assert.InRange(page.PageSize, 1, PageRequest.MaxPageSize);
+    }
+
     [Fact]
     public async Task Create_WithDeclaredIntId_UsesDatabaseGeneratedKey()
     {
