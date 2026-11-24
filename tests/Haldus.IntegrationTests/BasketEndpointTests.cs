@@ -55,6 +55,23 @@ public sealed class BasketEndpointTests(ShopFixture fixture)
             [("Keyboard", 4), ("Mouse", 2)],
             added.GuestBasketItems.Select(item => (item.ProductName, item.Quantity)));
 
+        // Kimlikle çalışan hiçbir adres yoktur: kimliği bilen biri sepete satır ekleyemez, sepeti sonlandıramaz.
+        foreach (var (method, url) in new[]
+        {
+            (HttpMethod.Post, $"/guest-baskets/{basket.Id}/add-basket-item"),
+            (HttpMethod.Post, $"/guest-baskets/{basket.Id}/expire"),
+            (HttpMethod.Put, $"/guest-baskets/{basket.Id}"),
+            (HttpMethod.Patch, $"/guest-baskets/{basket.Id}"),
+            (HttpMethod.Delete, $"/guest-baskets/{basket.Id}"),
+        })
+        {
+            var response = await SendAsync(method, url, body: new { productName = "Intruder", quantity = 1 });
+            Assert.Contains(response.StatusCode, new[] { HttpStatusCode.NotFound, HttpStatusCode.MethodNotAllowed });
+        }
+
+        var untouched = await ReadAsync<GuestBasketResponse>(await SendAsync(HttpMethod.Get, "/guest-baskets/by-token", token: basket.Token));
+        Assert.Equal(2, untouched.GuestBasketItems.Count);
+
         // Aksiyonun isteği de doğrulanır.
         Assert.Equal(
             HttpStatusCode.BadRequest,

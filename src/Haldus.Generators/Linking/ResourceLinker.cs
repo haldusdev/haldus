@@ -910,6 +910,10 @@ internal static class ResourceLinker
             {
                 Fail("HALDUS007", $"'{attached.EntityName}' is attached to several resources and has no single address, so it cannot be an end of an association");
             }
+            else if (new[] { left, right }.FirstOrDefault(end => end.Token is { Only: true }) is { } sealedEnd)
+            {
+                Fail("HALDUS007", $"'{sealedEnd.EntityName}' is reachable only by its token (TokenOnly), so it cannot be an end of an association: the links would list it by its key");
+            }
             else if (new[] { left, right }.FirstOrDefault(end => end.OwnedUnderMe) is { } personal)
             {
                 Fail("HALDUS007", $"'{personal.EntityName}' lives under /me and cannot be an end of an association; use ForCurrentUser() to link the current user to a resource");
@@ -1046,6 +1050,10 @@ internal static class ResourceLinker
             {
                 Fail("HALDUS007", $"{declaration}<{target.EntityName}>() moves records that belong to a user, so the job '{job.EntityName}' must be OwnedByCurrentUser() as well; otherwise its file and its report would be visible to other users");
             }
+            else if (target.Token is { Only: true })
+            {
+                Fail("HALDUS007", $"{declaration}<{target.EntityName}>() cannot move '{target.EntityName}': it is reachable only by its token (TokenOnly)");
+            }
             else if (!transfer.Export && (target.Batch is null || !target.Has(Operations.Create) || target.Parent is not null))
             {
                 // İçe aktarma her satırı toplu oluşturmanın öğe yoluyla oluşturur; o yol kaynağın kendi adresindedir.
@@ -1166,6 +1174,42 @@ internal static class ResourceLinker
                 }
             }
 
+            if (resource.Token is { Only: true } sealedToken)
+            {
+                // Yalnızca token ile ulaşılan kaydın kimlikle çalışan hiçbir adresi olmamalıdır; aşağıdakilerin her
+                // biri öyle bir adres açardı (veya hiç çağrılamayan bir uç bırakırdı).
+                foreach (var transition in resource.Transitions.Where(transition => !sealedToken.Operations.Contains(transition.Route)))
+                {
+                    Fail(resource.Location, $"'{resource.EntityName}' is reachable only by its token (TokenOnly), so '{transition.Route}' could never be called; list it in TokenAccess or remove it");
+                }
+
+                if (resource.Details.Any(detail => detail.IsCommandWritten))
+                {
+                    Fail(resource.Location, $"'{resource.EntityName}' is reachable only by its token (TokenOnly), so its details cannot be written by commands: those live at the address of the record");
+                }
+
+                foreach (var other in resources.Where(other => other.Archetype != Archetype.Detail))
+                {
+                    if (other.Parent?.TargetType == resource.QualifiedName
+                        || other.ShallowParent?.TargetType == resource.QualifiedName
+                        || other.Attachments.Any(attachment => attachment.TargetType == resource.QualifiedName))
+                    {
+                        Fail(other.Location, $"'{other.EntityName}' cannot live under '{resource.EntityName}': it is reachable only by its token (TokenOnly), and the nested address would reach it by its key");
+                    }
+
+                    if (other.ReferenceDeclarations.Any(declaration =>
+                        declaration.Kind == ReferenceKind.Source
+                        && declaration.Trigger is null
+                        && other.References.Any(reference =>
+                            reference.Kind == ReferenceKind.Source
+                            && reference.TargetName == declaration.TargetName
+                            && reference.TargetType == resource.QualifiedName)))
+                    {
+                        Fail(other.Location, $"'{other.EntityName}' cannot be created from '{resource.EntityName}' by its key: it is reachable only by its token (TokenOnly); create it from one of its transitions instead (on: ...)");
+                    }
+                }
+            }
+
             foreach (var declaration in resource.DerivedFrom)
             {
                 var source = Find(declaration.Name, declaration.Type, resources, byType);
@@ -1254,6 +1298,10 @@ internal static class ResourceLinker
             else if (!HasSingleColumnKey(right))
             {
                 Fail("HALDUS007", $"'{right.EntityName}' cannot take part in an association: it has no single-column key (it is a singleton or a tenant-scoped store)");
+            }
+            else if (right.Token is { Only: true })
+            {
+                Fail("HALDUS007", $"'{right.EntityName}' is reachable only by its token (TokenOnly), so it cannot be linked to the current user: the links would list it without the token");
             }
             else if (resources.Any(resource => resource.EntityName == declaration.LeftName))
             {

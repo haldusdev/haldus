@@ -136,7 +136,7 @@ public sealed class TaxonomyTests
             carts.MapAction<MergeCart>();
 
             // Oturumu olmayan ziyaretçinin sepeti: sahibi bir kullanıcı değil, yalnızca onu oluşturanın bildiği token'dır.
-            var guests = app.MapCrud<GuestCart>().Expiring(TimeSpan.FromDays(7), sliding: true).TokenAccess("cart", "add-line");
+            var guests = app.MapCrud<GuestCart>().Expiring(TimeSpan.FromDays(7), sliding: true).TokenAccess("cart", "add-line").TokenOnly();
             guests.MapDetail<GuestCartItem>();
             guests.MapAction("add-line", cart => cart.GuestCartItems.Add(new GuestCartItem { Sku = "SKU", Quantity = 1 }));
             """),

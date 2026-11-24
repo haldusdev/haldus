@@ -348,7 +348,8 @@ internal sealed partial class EndpointEmitter
             EmitReadAll();
         }
 
-        if (_resource.Expiry is not null)
+        // Yalnızca token ile ulaşılan kaydın kimlikle çalışan adresi yoktur; süresi de ancak kendiliğinden dolar.
+        if (_resource.Expiry is not null && !TokenOnly)
         {
             EmitExpire();
         }
@@ -2073,20 +2074,30 @@ internal sealed partial class EndpointEmitter
             ? string.Empty
             : $"\n            .AddEndpointFilter<global::Haldus.HaldusValidationFilter<{request}>>()\n            .ProducesValidationProblem()";
 
-        _transitionMaps.Append($$"""
-
-                public static global::Microsoft.AspNetCore.Builder.RouteHandlerBuilder {{transition.MapperName}}(
-                    global::Microsoft.AspNetCore.Routing.IEndpointRouteBuilder group,
-                    {{apply}} apply)
-                {
-            {{requireHandler}}{{TokenTransitionMap(transition, method, parameters, validation)}}        return group.MapPost("{{_keyRoute}}/{{transition.Route}}", (
+        var keyedRoute = $$"""
+                    return group.MapPost("{{_keyRoute}}/{{transition.Route}}", (
             {{lambdaParameters}}) =>
                             {{method}}({{arguments}}))
                         .WithName("{{transition.PascalName}}{{_entity}}"){{validation}}{{IdempotencyFilter(request)}}
                         .ProducesProblem(404)
                         .ProducesProblem(409)
                         .ProducesProblem(422){{ConcurrencyMetadata()}};
-                }
+
+            """;
+
+        // Yalnızca token ile ulaşılan kayıtta işlemin kimlikli adresi eşlenmez; eşleyici token adresini döndürür.
+        var tokenRoute = TokenTransitionMap(transition, method, parameters, validation);
+        var routes = TokenOnly
+            ? "        return " + tokenRoute.Trim() + "\n"
+            : tokenRoute + keyedRoute;
+
+        _transitionMaps.Append($$"""
+
+                public static global::Microsoft.AspNetCore.Builder.RouteHandlerBuilder {{transition.MapperName}}(
+                    global::Microsoft.AspNetCore.Routing.IEndpointRouteBuilder group,
+                    {{apply}} apply)
+                {
+            {{requireHandler}}{{routes}}    }
 
             """);
 
@@ -4056,6 +4067,9 @@ internal sealed partial class EndpointEmitter
 
     private bool RunsByToken(TransitionModel transition) =>
         _resource.Token is { } token && token.Operations.Contains(transition.Route);
+
+    /// <summary>Kayda yalnızca token ile ulaşılır: kimlikle çalışan uçlar üretilmez (<c>.TokenOnly()</c>).</summary>
+    private bool TokenOnly => _resource.Token is { Only: true };
 
     /// <summary>Token ile çalıştırılabilen bir geçişin ikinci adresi: <c>POST /by-token/{geçiş}</c>.</summary>
     private string TokenTransitionMap(

@@ -318,6 +318,15 @@ public static class ResourceBuilderTraitExtensions
     public static ResourceBuilder<TEntity> TokenAccess<TEntity>(this ResourceBuilder<TEntity> builder, string prefix, params string[] operations)
         where TEntity : class => builder;
 
+    /// <summary>
+    /// Kayda yalnızca token'ı ile ulaşılır (misafir sepeti gibi, sahibi bir kullanıcı olmayan kayıtlar için).
+    /// <c>.TokenAccess()</c> ile birlikte yazılır: kimlikle çalışan hiçbir uç üretilmez (okuma, liste, güncelleme,
+    /// silme, geçişlerin ve aksiyonların <c>/{id}/…</c> adresi, <c>/{id}/expire</c>); geriye oluşturma ile
+    /// <c>/by-token</c> uçları kalır. Kaydın bütün geçişleri ve aksiyonları <c>TokenAccess</c>'te sayılmış olmalıdır.
+    /// </summary>
+    public static ResourceBuilder<TEntity> TokenOnly<TEntity>(this ResourceBuilder<TEntity> builder)
+        where TEntity : class => builder;
+
     /// <summary>Sunucunun ürettiği anahtarın biçimini seçer; varsayılanı zamana göre sıralı GUID'dir.</summary>
     /// <param name="strategy">Anahtarın biçimi.</param>
     /// <param name="prefix">

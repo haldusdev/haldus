@@ -53,13 +53,11 @@ public static class AccountEndpoints
         // Misafir sepetinin sahibi bir kullanıcı değil, yalnızca onu oluşturanın bildiği token'dır. Token oluşturma
         // yanıtında bir kez gösterilir ve X-Access-Token başlığında taşınır:
         // GET /guest-baskets/by-token, POST /guest-baskets/by-token/add-basket-item
-        // Okuma, liste ve düzenleme uçları kapalıdır (yalnızca oluşturma açık); sepet token olmadan okunamaz.
-        // Aksiyonun kimlikle çalışan adresi (/guest-baskets/{id}/add-basket-item) yine de üretilir; gerçek bir
-        // uygulamada kaynağa yetkilendirme eklenir (token uçları oturumsuz kalır).
+        // TokenOnly: kayda kimliğiyle ulaşan hiçbir uç üretilmez; kimliği bilen biri sepeti ne okuyabilir ne yazabilir.
         var guests = app.MapCrud<GuestBasket>()
-            .Only(CrudOperation.Create)
             .Expiring(TimeSpan.FromDays(7), sliding: true)
-            .TokenAccess(prefix: "basket", "add-basket-item");
+            .TokenAccess(prefix: "basket", "add-basket-item")
+            .TokenOnly();
 
         guests.MapDetail<GuestBasketItem>();
         guests.MapAction<AddBasketItem>();

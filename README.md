@@ -684,6 +684,7 @@ invitations.MapTransition("accept", from: InvitationStatus.Pending, to: Invitati
 | `.SecretOnce(prefix, recoverable: true)` | Sır ayrıca ASP.NET Data Protection ile şifrelenir; sunucu onu açıp kullanabilir (`HaldusSecretProtection.Reveal`) |
 | `.Rotatable(overlap)` | `POST /{id}/rotate` yeni sır üretir; eski sır hemen ya da örtüşme süresi sonunda geçersiz olur |
 | `.TokenAccess(prefix, ...)` | Kayıt, oturumu olmayan biri tarafından `X-Access-Token` başlığındaki token ile okunur (`GET /by-token`) ve yalnızca sayılan geçişler çalıştırılır (`POST /by-token/accept`) |
+| `.TokenOnly()` | `TokenAccess` ile birlikte: kayda **yalnızca** token ile ulaşılır. Kimlikle çalışan hiçbir uç üretilmez (okuma, liste, güncelleme, silme, geçişlerin `/{id}/…` adresi, `/{id}/expire`); geriye oluşturma ile `/by-token` uçları kalır. Sahibi bir kullanıcı olmayan kayıtlar (misafir sepeti) içindir |
 
 Sunulan bir sırrın kime ait olduğu `FindBySecretAsync` ile bulunur:
 

@@ -33,6 +33,8 @@ internal static class LifecycleReader
 
         public TokenModel? Token { get; set; }
 
+        public bool TokenOnly { get; set; }
+
         public ApprovalModel? Approval { get; set; }
 
         public long? RetentionTicks { get; set; }
@@ -154,6 +156,10 @@ internal static class LifecycleReader
                     result.Token = ReadToken(semanticModel, name, arguments, Invalid, cancellationToken);
                     break;
 
+                case "TokenOnly":
+                    result.TokenOnly = true;
+                    break;
+
                 // Durumları, durum makinesi zincirin neresinde bildirilmiş olursa olsun doğrulanabilsin diye
                 // döngüden sonra okunur.
                 case "Reversible":
@@ -256,6 +262,8 @@ internal static class LifecycleReader
 
         if (result.Token is not null)
         {
+            // Zincirde hangisi önce yazılırsa yazılsın, kısıt token'ın bir özelliğidir.
+            result.Token = result.Token with { Only = result.TokenOnly };
             result.Members.Add(new TraitMember("TokenHash", "string", InResponse: false, Search: null));
         }
 

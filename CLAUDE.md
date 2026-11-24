@@ -128,6 +128,10 @@ Bunlar kullanıcıyla kararlaştırıldı; yeniden sorma.
   - `.TokenAccess(prefix: "inv", "accept")`: kayıt, oturumu olmayan biri tarafından gizli bir token ile okunur
     (`GET /by-token`) ve yalnızca sayılan geçişler/aksiyonlar çalıştırılır (`POST /by-token/accept`). Token adreste
     değil `X-Access-Token` başlığında taşınır.
+  - `.TokenOnly()` (üçüncü plandan sonra, güvenlik incelemesi üzerine eklendi; ayrıca onaylanmadı): kayda yalnızca
+    token ile ulaşılır. `TokenAccess` tek başına kimlikli adresleri de bırakır (davet: yönetici kimlikle iptal eder,
+    davetli token ile kabul eder); sahibi bir kullanıcı olmayan kayıtta (misafir sepeti) bu, kimliği bilen herkese
+    yazma izni demekti.
 - Bağlar ve kapsam (16. aşama). Kullanıcı sormamamı istedi; yazılan, önerdiğim seçeneklerdir ve ayrıca onaylanmadı:
   - Bağların topluca değiştirilmesi: `PUT /products/{id}/tags` gövdesinde `{ "ids": [...] }` alır ve o ucun
     bağlarını listeyle aynı yapar (iki yönden de). Yalnızca yükü ve durumu olmayan bağlarda üretilir.
@@ -262,7 +266,8 @@ Bunlar kullanıcıyla kararlaştırıldı; yeniden sorma.
     ikinci salısı" gibi kurallar ve saat dilimi (yaz saati) yoktur; oluşlar ilk oluşun UTC farkıyla hesaplanır.
   - Kombinatoryal varyant üretimi ve sepet birleştirme için yeni bir bildirim yazılmadı: araştırma bunları "tek seferlik,
     partial metotla yazılır" saymıştı. İkisi de entity aksiyonuyla ifade edilir; bunun için aksiyon ve geçişlerin
-    eklediği gömülü satırlara kimlik ve sıra verilmesi sağlandı. Misafir sepeti `TokenAccess` ile ifade edilir.
+    eklediği gömülü satırlara kimlik ve sıra verilmesi sağlandı. Misafir sepeti `TokenAccess` + `TokenOnly` ile ifade edilir;
+    ikisi de örnek mağazada çalışır (`/me/baskets`, `/guest-baskets`, `POST /me/baskets/{id}/merge`).
 - Eşzamanlılık trait'inin adı `ConcurrencyChecked` (eski adı `Versioned`). Sürüm yanıt gövdesinde değil
   `ETag` başlığında taşınır; güncelleme ve silme `If-Match` ister (eksikse 428, uyuşmazlıkta 412).
 - Güncelleme için hem `PUT` (tam değiştirme) hem `PATCH` (kısmi) üretilir.
@@ -755,6 +760,14 @@ içeriyor (ilişki bildirimleri, `Sensitive`, `PublishesEvents`, `Purgeable`, ye
     listede olmayan geçişin token adresi yoktur. Token ebeveyn altındaki ve kullanıcıya ait kaynaklarla
     birleşmez (görünürlükleri, token'ı taşıyanın sahip olmadığı bir kimliğe bağlıdır). Bilinen sınır: token
     kullanılınca kendiliğinden geçersiz olmaz; ömrünü `Expiring` ve durum makinesi belirler. Oran sınırlama yoktur.
+  - **Yalnızca token** (`TokenModel.Only`; zincirde `TokenOnly`, sırası önemli değildir). Temel işlemler oluşturmaya
+    indirilir (`MapCallParser`), `expire` ucu üretilmez ve geçiş eşleyicisi kimlikli adresi eşlemeyip token adresini
+    döndürür (`EmitTransition`: `routes`). Kayda kimliğiyle ulaşacak her şey reddedilir: zincirde bir beyaz liste
+    vardır (`Conflicts`; kimlikli uç üreten veya kayıtları listeleyen her bildirim `HALDUS007`), bağlayıcı ise
+    `TokenAccess`'te sayılmamış geçişi, komutla yazılan detayı, kaydın altına yerleşen veya ona takılan kaynağı,
+    ondan kimlikle üretilen kaynağı (`CreatedFrom`, `on:` olmadan), bağın ucu olmasını ve aktarılmasını reddeder.
+    **Kimlikli bir uç üreten yeni bir bildirim beyaz listeye eklenmemelidir.** Bilinen sınır: oluşturma yanıtının
+    `Location` başlığı var olmayan kimlikli adresi gösterir.
 - **Tekrar serisi.** `Traits.Recurring` (`IRecurring`); beş alan `LifecycleReader.RecurrenceFields()` ile, dönemli
   kayıtlardaki gibi sıradan, yazılabilir alan olarak eklenir. Oluşlar saklanmaz: `HaldusRecurrence.Expand` her okumada
   kuraldan hesaplar (her oluş ilk oluştan sayılır; günlük ve haftalık seride aralığın başına doğrudan atlanır) ve

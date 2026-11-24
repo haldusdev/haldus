@@ -72,8 +72,8 @@ durum modeli" kuralı da açılmadı: ek durum eksenleri asıl durumun yanında,
   satır için ayrıca not ettiği ama eşlemeye koymadığı eksikler (ör. zamanlanmış yayın) satırı kısmi yapmadı.
   Bu ölçünün bir istisnası vardır: araştırmanın kendisinin "alana özgü, elle yazılır" saydığı iki iş (varyant
   üretimi, sepet birleştirme) bir entity aksiyonu olarak yazılabildiği gösterilince temiz sayıldı (3, 5). Varyant
-  üretimi örnek mağazada gerçekten çalışırken sınandı; sepet birleştirme ve misafir sepeti yalnızca derleme
-  düzeyinde doğrulandı. Bu hüküm de benim yorumumdur.
+  üretimi de sepet birleştirme ve misafir sepeti de örnek mağazada gerçek veritabanına karşı sınanıyor. Bu hüküm de
+  benim yorumumdur.
 
 ## Satırlar
 
@@ -83,7 +83,7 @@ durum modeli" kuralı da açılmadı: ek durum eksenleri asıl durumun yanında,
 | 2 | OrderItem / LineItem | Temiz | Gömülü `MapDetail` + `IComputed` toplamlar | — |
 | 3 | Product + Variant + Option | Temiz | `MapCrud` + `Publishable` + gömülü `MapDetail` (sırası korunur) + `Batch`; varyant üretimi satırlara erişen bir entity aksiyonu | — |
 | 4 | Category / Collection | Temiz | `MapCrud` + `Hierarchical` + `Archivable` + `Orderable` | — |
-| 5 | Cart | Temiz | `MapCrud` + `OwnedByCurrentUser` + `MapDetail` + `Expiring(sliding)` + `Cloneable`; misafir sepeti `TokenAccess`, birleştirme bir entity aksiyonu | — |
+| 5 | Cart | Temiz | `MapCrud` + `OwnedByCurrentUser` + `MapDetail` + `Expiring(sliding)` + `Cloneable`; misafir sepeti `TokenAccess` + `TokenOnly`, birleştirme bir entity aksiyonu | — |
 | 6 | Checkout Session | Temiz | `MapCrud().Without(Delete)` + `Workflow` + `Expiring` + `Idempotent`; tamamlanınca doğan kayıt `CreatedFrom<CheckoutSession>(on: "complete")` | — |
 | 7 | Coupon | Temiz | `MapCrud` + `Expiring()` + `NaturalKey` + `CreateOnly` + `IComputed` | — |
 | 8 | Payment (auth/capture/void) | Temiz | `MapCrud().Without(Delete)` + `Workflow` + `Idempotent`; hareketler `MapAppendOnly().Under<Payment>()` | — |

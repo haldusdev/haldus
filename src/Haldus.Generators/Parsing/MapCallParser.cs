@@ -72,6 +72,13 @@ internal static class MapCallParser
         var location = LocationInfo.From(name.GetLocation());
         var chain = ChainReader.Read(invocation);
         var (traits, operations, unsupportedOperations) = ChainReader.Interpret(chain, archetype.BaseOperations());
+
+        if (chain.Any(call => call.Name == "TokenOnly"))
+        {
+            // Yalnızca token ile ulaşılan kaydın kimlikle çalışan temel uçları yoktur; geriye oluşturma kalır.
+            operations &= Operations.Create;
+        }
+
         var diagnostics = new List<DiagnosticInfo>();
 
         string entityName;
@@ -1066,6 +1073,26 @@ internal static class MapCallParser
             }
         }
 
+        if (chain.Any(call => call.Name == "TokenOnly"))
+        {
+            if (chain.All(call => call.Name != "TokenAccess"))
+            {
+                yield return "TokenOnly restricts a record to its token; declare TokenAccess(prefix: ...) as well";
+            }
+
+            // Kayda kimliğiyle ulaşan her uç token'ı anlamsız kılardı. Bu yüzden izin verilenler sayılır; kimlikle
+            // çalışan bir uç üreten (veya kayıtları listeleyen) her bildirim reddedilir.
+            foreach (var declaration in chain.Select(call => call.Name).Distinct())
+            {
+                if (declaration is not ("TokenOnly" or "TokenAccess" or "Only" or "Without" or "Expiring" or "Workflow" or "EditableIn"
+                    or "DeletableIn" or "Axis" or "MultiTenant" or "Auditable" or "Idempotent" or "Numbered" or "Embeds" or "References"
+                    or "KeyStrategy" or "Sensitive" or "Metadata" or "PublishesEvents" or "Retention"))
+                {
+                    yield return $"{declaration} cannot be combined with TokenOnly: the record would be reachable without its token";
+                }
+            }
+        }
+
         // Geçişle doğan kayıt için açık bir uç üretilmez; üretilen uç ise bir oluşturmadır.
         if (chain.Any(call => call.Name == "CreatedFrom" && !call.Arguments.Any(argument => argument.StartsWith("\"", StringComparison.Ordinal)))
             && (crudLike || archetype == Archetype.AppendOnly)
@@ -1200,7 +1227,7 @@ internal static class MapCallParser
                 "Orderable" or "Cloneable" => crudLike,
 
                 // Sır ve token kayıt oluşturulurken üretilir ve yalnızca o yanıtta gösterilir.
-                "SecretOnce" or "Rotatable" or "TokenAccess" => crudLike || archetype == Archetype.AppendOnly,
+                "SecretOnce" or "Rotatable" or "TokenAccess" or "TokenOnly" => crudLike || archetype == Archetype.AppendOnly,
 
                 // Başka bir kayıttan üretilen kayıt, sunucunun anahtar ürettiği bir koleksiyona eklenir.
                 "CreatedFrom" => crudLike || archetype == Archetype.AppendOnly,

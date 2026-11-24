@@ -257,6 +257,73 @@ public sealed class SecretTests
         AssertSingle(Run(body), id, message);
 
     [Fact]
+    public void TokenOnly_LeavesNoEndpointThatReachesTheRecordByItsKey()
+    {
+        var run = Run("""
+            var invitations = app.MapCrud<Invitation>()
+                .Workflow<InvitationStatus>(initial: InvitationStatus.Pending)
+                .Expiring(TimeSpan.FromDays(1))
+                .TokenAccess(prefix: "inv", "accept")
+                .TokenOnly();
+            invitations.MapTransition("accept", InvitationStatus.Pending, InvitationStatus.Accepted);
+            """).AssertCompiles();
+
+        var endpoints = run.Sources["Shop.Invitation.Endpoints.g.cs"];
+
+        // Geriye oluşturma ile token uçları kalır.
+        Assert.Contains("group.MapPost(\"/\", CreateAsync)", endpoints);
+        Assert.Contains("group.MapGet(\"/by-token\", GetByTokenAsync)", endpoints);
+
+        // Geçişin eşleyicisi kimlikli adresi değil token adresini eşler ve onu döndürür.
+        Assert.Contains("return group.MapPost(\"/by-token/accept\", (", endpoints);
+        Assert.Contains(".WithMetadata(global::Haldus.HaldusTokenAccess.Instance)\n            .AllowAnonymous()", endpoints);
+
+        // Kimlikle çalışan hiçbir adres yoktur: okuma, liste, güncelleme, silme, geçiş, süreyi sonlandırma.
+        Assert.DoesNotContain("{id:guid}", endpoints);
+        Assert.DoesNotContain("group.MapGet(\"/\"", endpoints);
+        Assert.DoesNotContain("ExpireAsync", endpoints);
+
+        // Kısıt zincirde TokenAccess'ten önce yazılsa da aynıdır.
+        var reordered = Run("""
+            var invitations = app.MapCrud<Invitation>()
+                .TokenOnly()
+                .Workflow<InvitationStatus>(initial: InvitationStatus.Pending)
+                .TokenAccess(prefix: "inv", "accept");
+            invitations.MapTransition("accept", InvitationStatus.Pending, InvitationStatus.Accepted);
+            """).AssertCompiles();
+
+        Assert.DoesNotContain("{id:guid}", reordered.Sources["Shop.Invitation.Endpoints.g.cs"]);
+
+        // TokenOnly olmadan aynı kaynak kimlikli adreslerini de taşır.
+        var open = Run(Invitations).AssertCompiles().Sources["Shop.Invitation.Endpoints.g.cs"];
+        Assert.Contains("return group.MapPost(\"/{id:guid}/accept\", (", open);
+    }
+
+    [Theory]
+    [InlineData("app.MapCrud<Invitation>().TokenOnly();", "TokenOnly restricts a record to its token")]
+    [InlineData("app.MapCrud<Invitation>().TokenAccess(\"inv\").TokenOnly().Archivable();", "Archivable cannot be combined with TokenOnly")]
+    [InlineData("app.MapCrud<Invitation>().TokenAccess(\"inv\").TokenOnly().SoftDeletable();", "SoftDeletable cannot be combined with TokenOnly")]
+    [InlineData("app.MapCrud<Invitation>().TokenAccess(\"inv\").TokenOnly().ChangeFeed();", "ChangeFeed cannot be combined with TokenOnly")]
+    [InlineData(
+        """
+        var invitations = app.MapCrud<Invitation>().Workflow<InvitationStatus>(initial: InvitationStatus.Pending).TokenAccess("inv", "accept").TokenOnly();
+        invitations.MapTransition("accept", InvitationStatus.Pending, InvitationStatus.Accepted);
+        invitations.MapTransition("revoke", InvitationStatus.Pending, InvitationStatus.Revoked);
+        """,
+        "'revoke' could never be called")]
+    [InlineData(
+        "app.MapCrud<Invitation>().TokenAccess(\"inv\").TokenOnly(); app.MapCrud<Board>().Under<Invitation>();",
+        "'Board' cannot live under 'Invitation'")]
+    [InlineData(
+        "app.MapCrud<Board>(); app.MapCrud<Invitation>().TokenAccess(\"inv\").TokenOnly(); app.MapAssociation<Board, Invitation>();",
+        "cannot be an end of an association")]
+    [InlineData(
+        "app.MapCrud<Invitation>().TokenAccess(\"inv\").TokenOnly(); app.MapAssociation<Bookmark, Invitation>().ForCurrentUser();",
+        "cannot be linked to the current user")]
+    public void TokenOnly_RejectsWhateverWouldReachTheRecordWithoutItsToken(string body, string message) =>
+        AssertSingle(Run(body), "HALDUS007", message);
+
+    [Fact]
     public void SecretsSnapshot()
     {
         var run = Run($$"""

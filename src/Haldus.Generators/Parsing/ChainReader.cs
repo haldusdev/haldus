@@ -61,6 +61,7 @@ internal static class ChainReader
         "Sensitive",
         "Purgeable",
         "Rerunnable",
+        "TokenOnly",
         "Buckets",
         "AllowNegative",
         "ChangeSets",

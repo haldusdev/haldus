@@ -570,7 +570,14 @@ internal sealed record SecretModel(string Prefix, bool Recoverable, bool Rotatab
 
 /// <summary><c>.TokenAccess(...)</c> ile bildirilen token.</summary>
 /// <param name="Operations">Token ile çalıştırılabilen geçişlerin ve aksiyonların adları.</param>
-internal sealed record TokenModel(string Prefix, EquatableArray<string> Operations);
+internal sealed record TokenModel(string Prefix, EquatableArray<string> Operations)
+{
+    /// <summary>
+    /// <c>.TokenOnly()</c>: kayda yalnızca token ile ulaşılır. Kimlikle çalışan hiçbir uç (okuma, yazma, geçiş,
+    /// aksiyon, süreyi sonlandırma) üretilmez; yalnızca oluşturma ve token uçları kalır.
+    /// </summary>
+    public bool Only { get; init; }
+}
 
 /// <summary><c>.DerivedFrom&lt;T&gt;()</c> ile gösterilen, henüz çözülmemiş kaynak.</summary>
 internal sealed record SourceDeclaration(string Name, string? Type, LocationInfo Location);
