@@ -558,6 +558,22 @@ internal static class LifecycleReader
         yield return Field("RecurrenceInterval", "int", required: false, "int", SearchKind.Range, Range);
         yield return Field("RecurrenceUntil", DateTimeOffset, required: false, DateTimeOffset, SearchKind.Range);
         yield return Field("RecurrenceCount", "int", required: false, "int", SearchKind.Range, Range);
+        yield return Field(
+            "RecurrenceByDay",
+            "string",
+            required: false,
+            "string",
+            SearchKind.String,
+            "global::System.ComponentModel.DataAnnotations.MaxLengthAttribute(100)",
+            "global::Haldus.RecurrenceDaysAttribute");
+        yield return Field(
+            "RecurrenceTimeZone",
+            "string",
+            required: false,
+            "string",
+            SearchKind.String,
+            "global::System.ComponentModel.DataAnnotations.MaxLengthAttribute(100)",
+            "global::Haldus.TimeZoneIdAttribute");
     }
 
     /// <summary>Dönemli kaydın (<c>.EffectiveDated()</c>) istemcinin yazdığı iki alanı.</summary>

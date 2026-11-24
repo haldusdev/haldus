@@ -223,7 +223,7 @@ sınırları ayrıca [README](../README.md) ve `CLAUDE.md` dosyalarında, özell
 | Yazılmayan | İlgili satırlar | Neden |
 |---|---|---|
 | Onay zinciri (düzey başına rol, koşullu adım) | 24 | `Approvable` yalnızca "birbirinden farklı N kişi" der; onaylayanın yetkisi denetlenmez |
-| Tam tekrar kuralı (RRULE: haftanın günleri, "ayın ikinci salısı", saat dilimi) | 36 | Araştırmada kapsam dışıydı; satır dar biçimiyle kapandı |
+| `RRULE`'un tamamı (`BYMONTHDAY`, `BYSETPOS`, `BYMONTH`, `WKST`, `EXDATE` / `RDATE`) | 36 | Haftanın günleri, ay içindeki sıra (`2TU`, `-1FR`) ve saat dilimi sonradan yazıldı; gerisi araştırmada da kapsam dışıydı |
 | Bakiyeye karşı süreli tutma | 11, 21 | Kovalar arası `move` ile elle yazılır; süresi dolan tutma kendiliğinden geri dönmez |
 | Paylaşılan kaydın kullanıcı başına okundu bilgisi | 45 | `ReadTracking` bilgiyi kayıtta tutar ve kullanıcıya ait kaynak ister |
 | Hassas alanın şifrelenmesi veya maskelenerek gösterilmesi | — | `Sensitive` alanı yalnızca yanıtlardan çıkarır; değer veritabanında düz durur |

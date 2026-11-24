@@ -267,4 +267,10 @@
   <data name="Validation.InvalidFormat" xml:space="preserve">
     <value>The {0} field is not in a valid format.</value>
   </data>
+  <data name="Recurrence.ByDayInvalid" xml:space="preserve">
+    <value>The field {0} must list weekdays such as MO,WE,FR; an ordinal such as 2TU or -1FR is allowed only in a monthly or yearly series.</value>
+  </data>
+  <data name="Recurrence.TimeZoneInvalid" xml:space="preserve">
+    <value>The field {0} must be a known time zone name such as Europe/Istanbul.</value>
+  </data>
 </root>

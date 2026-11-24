@@ -267,4 +267,10 @@
   <data name="Validation.InvalidFormat" xml:space="preserve">
     <value>{0} alanının biçimi geçerli değil.</value>
   </data>
+  <data name="Recurrence.ByDayInvalid" xml:space="preserve">
+    <value>{0} alanı haftanın günlerini MO,WE,FR biçiminde saymalıdır; 2TU veya -1FR gibi bir sıra yalnızca aylık veya yıllık seride yazılabilir.</value>
+  </data>
+  <data name="Recurrence.TimeZoneInvalid" xml:space="preserve">
+    <value>{0} alanı Europe/Istanbul gibi bilinen bir saat dilimi adı olmalıdır.</value>
+  </data>
 </root>

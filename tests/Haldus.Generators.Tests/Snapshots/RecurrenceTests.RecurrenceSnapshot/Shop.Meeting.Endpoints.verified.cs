@@ -71,7 +71,7 @@ public static partial class MeetingEndpoints
             .OrderBy(item => item.Id)
             .Skip(page.Skip)
             .Take(page.PageSizeOrDefault)
-            .Select(item => new MeetingResponse { Id = item.Id, Title = item.Title, StartsAt = item.StartsAt, RecurrenceFrequency = item.RecurrenceFrequency, RecurrenceInterval = item.RecurrenceInterval, RecurrenceUntil = item.RecurrenceUntil, RecurrenceCount = item.RecurrenceCount })
+            .Select(item => new MeetingResponse { Id = item.Id, Title = item.Title, StartsAt = item.StartsAt, RecurrenceFrequency = item.RecurrenceFrequency, RecurrenceInterval = item.RecurrenceInterval, RecurrenceUntil = item.RecurrenceUntil, RecurrenceCount = item.RecurrenceCount, RecurrenceByDay = item.RecurrenceByDay, RecurrenceTimeZone = item.RecurrenceTimeZone })
             .ToListAsync(cancellationToken);
 
         return global::Microsoft.AspNetCore.Http.TypedResults.Ok(
@@ -102,7 +102,7 @@ public static partial class MeetingEndpoints
         global::Haldus.IHaldusDbContextProvider contexts,
         global::System.Threading.CancellationToken cancellationToken)
     {
-        var entity = new Meeting { Id = global::System.Guid.CreateVersion7(), Title = request.Title, StartsAt = request.StartsAt, RecurrenceFrequency = request.RecurrenceFrequency, RecurrenceInterval = request.RecurrenceInterval, RecurrenceUntil = request.RecurrenceUntil, RecurrenceCount = request.RecurrenceCount };
+        var entity = new Meeting { Id = global::System.Guid.CreateVersion7(), Title = request.Title, StartsAt = request.StartsAt, RecurrenceFrequency = request.RecurrenceFrequency, RecurrenceInterval = request.RecurrenceInterval, RecurrenceUntil = request.RecurrenceUntil, RecurrenceCount = request.RecurrenceCount, RecurrenceByDay = request.RecurrenceByDay, RecurrenceTimeZone = request.RecurrenceTimeZone };
 
         var context = contexts.For<Meeting>();
         context.Set<Meeting>().Add(entity);
@@ -133,6 +133,8 @@ public static partial class MeetingEndpoints
         entity.RecurrenceInterval = request.RecurrenceInterval;
         entity.RecurrenceUntil = request.RecurrenceUntil;
         entity.RecurrenceCount = request.RecurrenceCount;
+        entity.RecurrenceByDay = request.RecurrenceByDay;
+        entity.RecurrenceTimeZone = request.RecurrenceTimeZone;
 
         await context.SaveChangesAsync(cancellationToken);
 
@@ -182,6 +184,16 @@ public static partial class MeetingEndpoints
         if (((global::Haldus.IHaldusPatch)request).IsSet("RecurrenceCount"))
         {
             entity.RecurrenceCount = request.RecurrenceCount;
+        }
+
+        if (((global::Haldus.IHaldusPatch)request).IsSet("RecurrenceByDay"))
+        {
+            entity.RecurrenceByDay = request.RecurrenceByDay;
+        }
+
+        if (((global::Haldus.IHaldusPatch)request).IsSet("RecurrenceTimeZone"))
+        {
+            entity.RecurrenceTimeZone = request.RecurrenceTimeZone;
         }
 
 
@@ -302,5 +314,5 @@ public static partial class MeetingEndpoints
         return global::Microsoft.AspNetCore.Http.TypedResults.Ok(changed);
     }
 
-    private static MeetingResponse ToResponse(Meeting item) => new() { Id = item.Id, Title = item.Title, StartsAt = item.StartsAt, RecurrenceFrequency = item.RecurrenceFrequency, RecurrenceInterval = item.RecurrenceInterval, RecurrenceUntil = item.RecurrenceUntil, RecurrenceCount = item.RecurrenceCount };
+    private static MeetingResponse ToResponse(Meeting item) => new() { Id = item.Id, Title = item.Title, StartsAt = item.StartsAt, RecurrenceFrequency = item.RecurrenceFrequency, RecurrenceInterval = item.RecurrenceInterval, RecurrenceUntil = item.RecurrenceUntil, RecurrenceCount = item.RecurrenceCount, RecurrenceByDay = item.RecurrenceByDay, RecurrenceTimeZone = item.RecurrenceTimeZone };
 }

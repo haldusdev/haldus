@@ -18,4 +18,12 @@ partial class Meeting : global::Haldus.IRecurring
 
     [global::System.ComponentModel.DataAnnotations.RangeAttribute(1, 1000)]
     public int? RecurrenceCount { get; set; }
+
+    [global::System.ComponentModel.DataAnnotations.MaxLengthAttribute(100)]
+    [global::Haldus.RecurrenceDaysAttribute]
+    public string? RecurrenceByDay { get; set; }
+
+    [global::System.ComponentModel.DataAnnotations.MaxLengthAttribute(100)]
+    [global::Haldus.TimeZoneIdAttribute]
+    public string? RecurrenceTimeZone { get; set; }
 }

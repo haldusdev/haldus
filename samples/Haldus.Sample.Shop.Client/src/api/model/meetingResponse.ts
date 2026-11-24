@@ -18,4 +18,8 @@ export interface MeetingResponse {
   recurrenceUntil: string | null;
   /** @nullable */
   recurrenceCount: number | null;
+  /** @nullable */
+  recurrenceByDay: string | null;
+  /** @nullable */
+  recurrenceTimeZone: string | null;
 }

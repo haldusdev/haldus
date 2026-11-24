@@ -29568,6 +29568,20 @@
               "integer"
             ],
             "format": "int32"
+          },
+          "recurrenceByDay": {
+            "maxLength": 100,
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "recurrenceTimeZone": {
+            "maxLength": 100,
+            "type": [
+              "null",
+              "string"
+            ]
           }
         }
       },
@@ -31149,7 +31163,9 @@
           "recurrenceFrequency",
           "recurrenceInterval",
           "recurrenceUntil",
-          "recurrenceCount"
+          "recurrenceCount",
+          "recurrenceByDay",
+          "recurrenceTimeZone"
         ],
         "type": "object",
         "properties": {
@@ -31191,6 +31207,18 @@
               "integer"
             ],
             "format": "int32"
+          },
+          "recurrenceByDay": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "recurrenceTimeZone": {
+            "type": [
+              "null",
+              "string"
+            ]
           }
         }
       },
@@ -33905,6 +33933,20 @@
               "integer"
             ],
             "format": "int32"
+          },
+          "recurrenceByDay": {
+            "maxLength": 100,
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "recurrenceTimeZone": {
+            "maxLength": 100,
+            "type": [
+              "null",
+              "string"
+            ]
           }
         }
       },
@@ -37051,6 +37093,20 @@
               "integer"
             ],
             "format": "int32"
+          },
+          "recurrenceByDay": {
+            "maxLength": 100,
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "recurrenceTimeZone": {
+            "maxLength": 100,
+            "type": [
+              "null",
+              "string"
+            ]
           }
         }
       },

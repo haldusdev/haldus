@@ -35,4 +35,14 @@ export interface PatchMeetingRequest {
      * @nullable
      */
   recurrenceCount?: number | null;
+  /**
+     * @maxLength 100
+     * @nullable
+     */
+  recurrenceByDay?: string | null;
+  /**
+     * @maxLength 100
+     * @nullable
+     */
+  recurrenceTimeZone?: string | null;
 }

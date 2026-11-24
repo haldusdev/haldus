@@ -486,6 +486,8 @@ kuralı taşıyan yazılabilir alanlar ekler:
 | `recurrenceFrequency` | `None`, `Daily`, `Weekly`, `Monthly`, `Yearly` |
 | `recurrenceInterval` | Kaç aralıkta bir (iki haftada bir için 2); boşsa 1 |
 | `recurrenceUntil`, `recurrenceCount` | Serinin bittiği zaman veya en çok kaç oluşu olduğu; ikisi de boşsa seri açık uçludur |
+| `recurrenceByDay` | Oluşların düştüğü günler, iCalendar'ın `BYDAY` yazımıyla: `MO,WE,FR`. Aylık ve yıllık seride gün bir sıra alabilir: `2TU` ayın ikinci salısı, `-1FR` ayın son cuması. Boşsa oluşlar ilk oluşun gününe düşer |
+| `recurrenceTimeZone` | Serinin saat dilimi (IANA adı, `Europe/Berlin`). Verilirse oluşlar o dilimin duvar saatini korur: yaz saatine geçilince toplantı yine 09.00'dadır. Boşsa oluşlar ilk oluşun UTC farkıyla hesaplanır |
 
 | Uç | Etkisi |
 |---|---|
@@ -495,6 +497,9 @@ kuralı taşıyan yazılabilir alanlar ekler:
 
 Her oluş ilk oluştan sayılarak hesaplanır: ayın 31'inde başlayan aylık seri şubatta ayın son gününe düşer, martta yine
 31'ine döner. Kural değişirse oluşlar da değişir; eski kurala ait istisnalar artık hiçbir oluşa uymaz ve yok sayılır.
+Günler verildiğinde bir hafta veya ay birden çok oluş verebilir; `recurrenceCount` dönemleri değil oluşları sayar ve
+seri ilk oluştan önce başlamaz. Ayda o sıra yoksa (beşinci cuma) o ay oluş yoktur. Bu, iCalendar `RRULE`'unun
+tamamı değildir: `BYMONTHDAY`, `BYSETPOS`, `BYMONTH`, `WKST` (hafta pazartesi başlar) ve `EXDATE` / `RDATE` yoktur.
 
 ## Olay yayını
 

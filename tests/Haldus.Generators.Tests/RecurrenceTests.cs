@@ -76,6 +76,12 @@ public sealed class RecurrenceTests
         Assert.Contains("RangeAttribute(1, 1000)]\n    public int? RecurrenceCount { get; init; }", create);
         Assert.Contains("public required global::System.DateTimeOffset? RecurrenceUntil { get; init; }", dtos);
 
+        // Günler ve saat dilimi de kuralın alanlarıdır; yazımlarını kendi attribute'ları doğrular.
+        Assert.Contains("public string? RecurrenceByDay { get; set; }", entity);
+        Assert.Contains("public string? RecurrenceTimeZone { get; set; }", entity);
+        Assert.Contains("global::Haldus.RecurrenceDaysAttribute]\n    public string? RecurrenceByDay { get; init; }", create);
+        Assert.Contains("global::Haldus.TimeZoneIdAttribute]\n    public string? RecurrenceTimeZone { get; init; }", create);
+
         var endpoints = run.Sources["Shop.Meeting.Endpoints.g.cs"];
         Assert.Contains("""MapGet("/{id:guid}/occurrences", OccurrencesAsync)""", endpoints);
         Assert.Contains("""MapPut("/{id:guid}/occurrences/{start}", ChangeOccurrenceAsync)""", endpoints);

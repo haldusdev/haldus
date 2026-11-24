@@ -151,6 +151,157 @@ public sealed class RecurrenceEndpointTests(ShopFixture fixture)
     }
 
     [Fact]
+    public async Task Occurrences_FallOnTheListedWeekdays()
+    {
+        // Pazartesi, çarşamba ve cuma: bir hafta üç oluş verir; sayı oluşları sayar, haftaları değil.
+        var weekly = await ReadAsync<MeetingResponse>(await SendAsync(HttpMethod.Post, "/meetings", new
+        {
+            title = "Training",
+            durationMinutes = 60,
+            startsAt = Monday,
+            recurrenceFrequency = "Weekly",
+            recurrenceByDay = "MO,WE,FR",
+            recurrenceCount = 6,
+        }));
+
+        Assert.Equal("MO,WE,FR", weekly.RecurrenceByDay);
+
+        var url = $"/meetings/{weekly.Id}/occurrences";
+        var days = await ReadAsync<List<Occurrence>>(await SendAsync(HttpMethod.Get, url));
+        Assert.Equal(
+            new[] { 0, 2, 4, 7, 9, 11 }.Select(day => Monday.AddDays(day)),
+            days.Select(item => item.Start));
+
+        // Uzak bir aralık da aynı sırayı görür: sayı sınırı baştan sayılır.
+        var late = await ReadAsync<List<Occurrence>>(await SendAsync(
+            HttpMethod.Get, $"{url}?from={Escape(Monday.AddDays(8))}&to={Escape(Monday.AddDays(60))}"));
+        Assert.Equal([Monday.AddDays(9), Monday.AddDays(11)], late.Select(item => item.Start));
+
+        // Seri ilk oluştan önce başlamaz: çarşamba başlayan seride o haftanın pazartesisi yoktur.
+        var wednesday = Monday.AddDays(2);
+        var midweek = await ReadAsync<MeetingResponse>(await SendAsync(HttpMethod.Post, "/meetings", new
+        {
+            title = "Midweek",
+            durationMinutes = 30,
+            startsAt = wednesday,
+            recurrenceFrequency = "Weekly",
+            recurrenceInterval = 2,
+            recurrenceByDay = "MO,WE",
+            recurrenceCount = 3,
+        }));
+
+        var biweekly = await ReadAsync<List<Occurrence>>(await SendAsync(HttpMethod.Get, $"/meetings/{midweek.Id}/occurrences"));
+        Assert.Equal([wednesday, Monday.AddDays(14), Monday.AddDays(16)], biweekly.Select(item => item.Start));
+
+        // Günlere düşen tek bir oluş da ertelenebilir ve iptal edilebilir.
+        var cancelled = await ReadAsync<Occurrence>(await SendAsync(HttpMethod.Put, $"{url}/{Escape(Monday.AddDays(2))}", new { cancelled = true }));
+        Assert.True(cancelled.Cancelled);
+        Assert.Equal(HttpStatusCode.NotFound, (await SendAsync(HttpMethod.Put, $"{url}/{Escape(Monday.AddDays(1))}", new { cancelled = true })).StatusCode);
+    }
+
+    [Fact]
+    public async Task Occurrences_FallOnTheNthWeekdayOfTheMonth()
+    {
+        // Ayın ikinci salısı.
+        var secondTuesday = new DateTimeOffset(2027, 1, 12, 10, 0, 0, TimeSpan.Zero);
+        var board = await ReadAsync<MeetingResponse>(await SendAsync(HttpMethod.Post, "/meetings", new
+        {
+            title = "Board",
+            durationMinutes = 90,
+            startsAt = secondTuesday,
+            recurrenceFrequency = "Monthly",
+            recurrenceByDay = "2TU",
+            recurrenceCount = 3,
+        }));
+
+        var tuesdays = await ReadAsync<List<Occurrence>>(await SendAsync(HttpMethod.Get, $"/meetings/{board.Id}/occurrences"));
+        Assert.Equal(
+            [secondTuesday, new(2027, 2, 9, 10, 0, 0, TimeSpan.Zero), new(2027, 3, 9, 10, 0, 0, TimeSpan.Zero)],
+            tuesdays.Select(item => item.Start));
+
+        // Ayın son cuması: eksi sıra sondan sayılır.
+        var lastFriday = new DateTimeOffset(2027, 1, 29, 16, 0, 0, TimeSpan.Zero);
+        var review = await ReadAsync<MeetingResponse>(await SendAsync(HttpMethod.Post, "/meetings", new
+        {
+            title = "Month review",
+            durationMinutes = 45,
+            startsAt = lastFriday,
+            recurrenceFrequency = "Monthly",
+            recurrenceByDay = "-1FR",
+            recurrenceCount = 3,
+        }));
+
+        var fridays = await ReadAsync<List<Occurrence>>(await SendAsync(HttpMethod.Get, $"/meetings/{review.Id}/occurrences"));
+        Assert.Equal(
+            [lastFriday, new(2027, 2, 26, 16, 0, 0, TimeSpan.Zero), new(2027, 3, 26, 16, 0, 0, TimeSpan.Zero)],
+            fridays.Select(item => item.Start));
+
+        // Ayda o sıra yoksa o ay oluş yoktur: beşinci cuma Şubat 2027'de yok.
+        var fifth = await ReadAsync<MeetingResponse>(await SendAsync(HttpMethod.Post, "/meetings", new
+        {
+            title = "Fifth Friday",
+            durationMinutes = 30,
+            startsAt = lastFriday,
+            recurrenceFrequency = "Monthly",
+            recurrenceByDay = "5FR",
+            recurrenceCount = 2,
+        }));
+
+        var rare = await ReadAsync<List<Occurrence>>(await SendAsync(
+            HttpMethod.Get, $"/meetings/{fifth.Id}/occurrences?to={Escape(lastFriday.AddYears(1))}"));
+        Assert.Equal([lastFriday, new(2027, 4, 30, 16, 0, 0, TimeSpan.Zero)], rare.Select(item => item.Start));
+    }
+
+    [Fact]
+    public async Task Occurrences_KeepTheWallClockOfTheirTimeZone()
+    {
+        // Berlin'de 09.00: 28 Mart 2027'de yaz saatine geçilir, toplantı yine 09.00'dadır (UTC'de bir saat erken).
+        var winter = new DateTimeOffset(2027, 3, 22, 8, 0, 0, TimeSpan.Zero);
+        var body = new
+        {
+            title = "Berlin stand-up",
+            durationMinutes = 15,
+            startsAt = winter,
+            recurrenceFrequency = "Weekly",
+            recurrenceCount = 2,
+            recurrenceTimeZone = (string?)"Europe/Berlin",
+        };
+
+        var zoned = await ReadAsync<MeetingResponse>(await SendAsync(HttpMethod.Post, "/meetings", body));
+        Assert.Equal("Europe/Berlin", zoned.RecurrenceTimeZone);
+
+        var local = await ReadAsync<List<Occurrence>>(await SendAsync(HttpMethod.Get, $"/meetings/{zoned.Id}/occurrences"));
+        Assert.Equal([winter, new(2027, 3, 29, 7, 0, 0, TimeSpan.Zero)], local.Select(item => item.Start));
+
+        // Saat dilimi verilmezse oluşlar ilk oluşun UTC farkını korur.
+        var plain = await ReadAsync<MeetingResponse>(await SendAsync(HttpMethod.Post, "/meetings", body with { recurrenceTimeZone = null }));
+        var utc = await ReadAsync<List<Occurrence>>(await SendAsync(HttpMethod.Get, $"/meetings/{plain.Id}/occurrences"));
+        Assert.Equal([winter, winter.AddDays(7)], utc.Select(item => item.Start));
+    }
+
+    [Theory]
+    [InlineData("Weekly", "XX", null, "recurrenceByDay")]
+    [InlineData("Weekly", "MO,,FR", null, "recurrenceByDay")]
+    [InlineData("Weekly", "2TU", null, "recurrenceByDay")]
+    [InlineData("Monthly", "6TU", null, "recurrenceByDay")]
+    [InlineData("Weekly", null, "Mars/Phobos", "recurrenceTimeZone")]
+    public async Task InvalidRules_AreRejectedAtTheField(string frequency, string? byDay, string? timeZone, string field)
+    {
+        var response = await SendAsync(HttpMethod.Post, "/meetings", new
+        {
+            title = "Bad rule",
+            durationMinutes = 30,
+            startsAt = Monday,
+            recurrenceFrequency = frequency,
+            recurrenceByDay = byDay,
+            recurrenceTimeZone = timeZone,
+        });
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Contains($"\"{field}\"", await response.Content.ReadAsStringAsync(CancellationToken));
+    }
+
+    [Fact]
     public async Task DomainLogic_IsWrittenAsAnEntityAction()
     {
         // Kombinatoryal varyant üretimi: seçeneklerin bütün birleşimleri, kaydın satırları olarak.

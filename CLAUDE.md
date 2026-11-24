@@ -274,8 +274,10 @@ Bunlar kullanıcıyla kararlaştırıldı; yeniden sorma.
     tipin entity sınıfı üst tipten gerçekten türer; ayırt edici alan `Kind`'dır (kaynağın kebab-case adı).
 - Kalan satırlar (30. aşama). Kullanıcı sormamamı istedi; yazılan, önerdiğim seçeneklerdir ve ayrıca onaylanmadı:
   - Tekrar serisi araştırmada kapsam dışıydı; satır kapansın diye dar bir biçimiyle yazıldı. `.Recurring()` RRULE
-    değildir: sıklık (günlük / haftalık / aylık / yıllık), aralık ve bitiş (zaman veya sayı). Haftanın günleri, "ayın
-    ikinci salısı" gibi kurallar ve saat dilimi (yaz saati) yoktur; oluşlar ilk oluşun UTC farkıyla hesaplanır.
+    değildir: sıklık (günlük / haftalık / aylık / yıllık), aralık ve bitiş (zaman veya sayı). Planlardan sonra
+    haftanın günleri ve ay içindeki sıra (`RecurrenceByDay`: iCalendar'ın `BYDAY` yazımı, `MO,WE,FR`, `2TU`, `-1FR`)
+    ile saat dilimi (`RecurrenceTimeZone`: IANA adı; oluşlar o dilimin duvar saatini korur) eklendi. Hâlâ `RRULE`'un
+    tamamı değildir: `BYMONTHDAY`, `BYSETPOS`, `BYMONTH`, `WKST`, `EXDATE` / `RDATE` yoktur.
   - Kombinatoryal varyant üretimi ve sepet birleştirme için yeni bir bildirim yazılmadı: araştırma bunları "tek seferlik,
     partial metotla yazılır" saymıştı. İkisi de entity aksiyonuyla ifade edilir; bunun için aksiyon ve geçişlerin
     eklediği gömülü satırlara kimlik ve sıra verilmesi sağlandı. Misafir sepeti `TokenAccess` + `TokenOnly` ile ifade edilir;
@@ -814,10 +816,16 @@ denenmesi, yük ölçümü. Raporun "Bilinen sınırlar" tablosundaki kalemler d
     ondan kimlikle üretilen kaynağı (`CreatedFrom`, `on:` olmadan), bağın ucu olmasını ve aktarılmasını reddeder.
     **Kimlikli bir uç üreten yeni bir bildirim beyaz listeye eklenmemelidir.** Bilinen sınır: oluşturma yanıtının
     `Location` başlığı var olmayan kimlikli adresi gösterir.
-- **Tekrar serisi.** `Traits.Recurring` (`IRecurring`); beş alan `LifecycleReader.RecurrenceFields()` ile, dönemli
+- **Tekrar serisi.** `Traits.Recurring` (`IRecurring`); yedi alan `LifecycleReader.RecurrenceFields()` ile, dönemli
   kayıtlardaki gibi sıradan, yazılabilir alan olarak eklenir. Oluşlar saklanmaz: `HaldusRecurrence.Expand` her okumada
-  kuraldan hesaplar (her oluş ilk oluştan sayılır; günlük ve haftalık seride aralığın başına doğrudan atlanır) ve
-  `HaldusOccurrenceExceptions` tablosundaki istisnalarla birleştirir. İstisna, kuralın verdiği zamanla (UTC) anahtarlanır;
+  kuraldan hesaplar. Hesap dönem dönemdir (`Candidates`: gün, hafta, ay, yıl) ve duvar saatiyle yapılır; dönem ilk
+  oluştan sayılır, gün listesi verildiyse bir dönem birden çok oluş verir, sayı sınırı oluşları sayar. Dönem başına tek
+  oluş varsa veya seri açık uçluysa aralığın başına atlanır (`FirstPeriod`; bir dönem pay bırakır); günleri **ve**
+  sayısı olan seri baştan gezilir (sayı en çok 1000). Hiç oluş vermeyen kural `MaxPeriods` dönemden sonra bırakılır.
+  Gün listesi ve saat dilimi kendi attribute'larıyla doğrulanır (`RecurrenceDaysAttribute`, `TimeZoneIdAttribute`);
+  sıralı gün (`2TU`) aylık ve yıllık olmayan seride reddedilir, ama sıklığı göndermeyen bir `PATCH`'te bu denetlenemez
+  ve sıra yok sayılır. Hesaplanan oluşlar
+  `HaldusOccurrenceExceptions` tablosundaki istisnalarla birleştirilir. İstisna, kuralın verdiği zamanla (UTC) anahtarlanır;
   kuralın vermediği bir zamana istisna yazılamaz (404). `RecurrenceFrequency` enum'u JSON'a her zaman adıyla yazılır
   (dönüştürücü tipin üzerindedir). Uçlar kaydı kendi filtrelerinden geçirerek okur. **Tek bir oluşu değiştirmek serinin
   bir yazmasıdır:** uç, satır komutlarıyla aynı diziden geçer (`ReadIfMatch`, `OwnerGuard`, `ChainGuard`, `StateGuard`,

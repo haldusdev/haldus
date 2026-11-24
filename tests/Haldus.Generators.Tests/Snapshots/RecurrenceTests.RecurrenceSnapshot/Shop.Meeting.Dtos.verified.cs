@@ -12,6 +12,8 @@ public sealed partial record MeetingResponse
     public required int? RecurrenceInterval { get; init; }
     public required global::System.DateTimeOffset? RecurrenceUntil { get; init; }
     public required int? RecurrenceCount { get; init; }
+    public required string? RecurrenceByDay { get; init; }
+    public required string? RecurrenceTimeZone { get; init; }
 }
 
 public sealed partial record CreateMeetingRequest
@@ -30,6 +32,14 @@ public sealed partial record CreateMeetingRequest
 
     [global::System.ComponentModel.DataAnnotations.RangeAttribute(1, 1000)]
     public int? RecurrenceCount { get; init; }
+
+    [global::System.ComponentModel.DataAnnotations.MaxLengthAttribute(100)]
+    [global::Haldus.RecurrenceDaysAttribute]
+    public string? RecurrenceByDay { get; init; }
+
+    [global::System.ComponentModel.DataAnnotations.MaxLengthAttribute(100)]
+    [global::Haldus.TimeZoneIdAttribute]
+    public string? RecurrenceTimeZone { get; init; }
 }
 
 public sealed partial record UpdateMeetingRequest
@@ -48,6 +58,14 @@ public sealed partial record UpdateMeetingRequest
 
     [global::System.ComponentModel.DataAnnotations.RangeAttribute(1, 1000)]
     public int? RecurrenceCount { get; init; }
+
+    [global::System.ComponentModel.DataAnnotations.MaxLengthAttribute(100)]
+    [global::Haldus.RecurrenceDaysAttribute]
+    public string? RecurrenceByDay { get; init; }
+
+    [global::System.ComponentModel.DataAnnotations.MaxLengthAttribute(100)]
+    [global::Haldus.TimeZoneIdAttribute]
+    public string? RecurrenceTimeZone { get; init; }
 }
 
 public sealed partial record PatchMeetingRequest : global::Haldus.IHaldusPatch
@@ -64,6 +82,10 @@ public sealed partial record PatchMeetingRequest : global::Haldus.IHaldusPatch
     private readonly bool _recurrenceUntilSet;
     private readonly int? _recurrenceCount;
     private readonly bool _recurrenceCountSet;
+    private readonly string? _recurrenceByDay;
+    private readonly bool _recurrenceByDaySet;
+    private readonly string? _recurrenceTimeZone;
+    private readonly bool _recurrenceTimeZoneSet;
 
     [global::Haldus.NotNullWhenSetAttribute(AllowEmptyStrings = true)]
     public string? Title
@@ -130,6 +152,30 @@ public sealed partial record PatchMeetingRequest : global::Haldus.IHaldusPatch
         }
     }
 
+    [global::System.ComponentModel.DataAnnotations.MaxLengthAttribute(100)]
+    [global::Haldus.RecurrenceDaysAttribute]
+    public string? RecurrenceByDay
+    {
+        get => _recurrenceByDay;
+        init
+        {
+            _recurrenceByDay = value;
+            _recurrenceByDaySet = true;
+        }
+    }
+
+    [global::System.ComponentModel.DataAnnotations.MaxLengthAttribute(100)]
+    [global::Haldus.TimeZoneIdAttribute]
+    public string? RecurrenceTimeZone
+    {
+        get => _recurrenceTimeZone;
+        init
+        {
+            _recurrenceTimeZone = value;
+            _recurrenceTimeZoneSet = true;
+        }
+    }
+
     bool global::Haldus.IHaldusPatch.IsSet(string propertyName) => propertyName switch
     {
         "Title" => _titleSet,
@@ -138,6 +184,8 @@ public sealed partial record PatchMeetingRequest : global::Haldus.IHaldusPatch
         "RecurrenceInterval" => _recurrenceIntervalSet,
         "RecurrenceUntil" => _recurrenceUntilSet,
         "RecurrenceCount" => _recurrenceCountSet,
+        "RecurrenceByDay" => _recurrenceByDaySet,
+        "RecurrenceTimeZone" => _recurrenceTimeZoneSet,
         _ => false,
     };
 }

@@ -194,6 +194,8 @@ internal static class HaldusValidator
                 HaldusMessageKeys.ValidationMaxLength, name, stringLength.MaximumLength),
             RangeAttribute range => messages.Format(HaldusMessageKeys.ValidationRange, name, range.Minimum, range.Maximum),
             MetadataAttribute => HaldusProblems.MetadataMessage(messages, name),
+            RecurrenceDaysAttribute => messages.Format(HaldusMessageKeys.RecurrenceByDayInvalid, name),
+            TimeZoneIdAttribute => messages.Format(HaldusMessageKeys.RecurrenceTimeZoneInvalid, name),
             EmailAddressAttribute or UrlAttribute or PhoneAttribute or RegularExpressionAttribute =>
                 messages.Format(HaldusMessageKeys.ValidationInvalidFormat, name),
             _ => attribute.FormatErrorMessage(name),
