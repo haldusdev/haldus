@@ -1,0 +1,20 @@
+{
+  "name": "haldus-sample-shop-client",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "description": "Haldus örnek mağazasının orval ile üretilen istemcisi: tipler ve TanStack Query hook'ları.",
+  "scripts": {
+    "generate:api": "orval",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@tanstack/react-query": "^5.108.4",
+    "react": "^19.3.1"
+  },
+  "devDependencies": {
+    "@types/react": "^19.3.0",
+    "orval": "^8.49.0",
+    "typescript": "^7.0.2"
+  }
+}

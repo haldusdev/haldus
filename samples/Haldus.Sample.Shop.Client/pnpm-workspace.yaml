@@ -1,0 +1,3 @@
+# orval, yapılandırma dosyasını okumak için esbuild kullanır; esbuild'in kurulum betiğinin çalışması gerekmez.
+allowBuilds:
+  esbuild: false

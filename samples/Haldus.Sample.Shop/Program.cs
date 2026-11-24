@@ -32,6 +32,11 @@ builder.Services.AddHaldusPostgreSqlJobs<AppDbContext>();
 builder.Services.AddLocalization(options => options.ResourcesPath = "Resources");
 builder.Services.AddOpenApi();
 
+// Sayılar yalnızca sayı olarak okunur. Varsayılan ayar metin içindeki sayıyı da ("5") kabul eder ve bu, şemaya
+// "integer | string" olarak yansır; istemci tipleri (orval) o zaman her sayıyı `number | string` görürdü.
+builder.Services.ConfigureHttpJsonOptions(options =>
+    options.SerializerOptions.NumberHandling = System.Text.Json.Serialization.JsonNumberHandling.Strict);
+
 var app = builder.Build();
 
 app.UseHaldus();

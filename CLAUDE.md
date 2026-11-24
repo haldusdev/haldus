@@ -13,6 +13,10 @@ EF Core yapılandırması üretilir.
   Fark olduğunda test, `Snapshots/` altına `.received.cs` yazar; önce onu incele.
 - Test çalıştırıcısı Microsoft.Testing.Platform'dur (`global.json`); xUnit v3, .NET 10 SDK'da VSTest ile çalışmaz.
 - Örnek uygulamanın `openapi.json` dosyası build sırasında yeniden üretilir.
+- Örnek mağazanın istemcisi (`samples/Haldus.Sample.Shop.Client`): `pnpm install`, `pnpm generate:api`,
+  `pnpm typecheck`. **Örnek mağazada bir uç veya DTO değiştiğinde (üretilen kod değiştiğinde de) backend derlendikten
+  sonra istemci aynı görevde yeniden üretilir ve tip denetimi çalıştırılır;** `openapi.json` ile `src/api` birlikte
+  commit'lenir.
 - Örnek uygulamada üretilen kod `samples/Haldus.Sample.Shop/obj/Generated` altında incelenebilir.
 
 ## Yapı
@@ -26,6 +30,8 @@ EF Core yapılandırması üretilir.
 - `tests/Haldus.Generators.Tests`: generator çıktısı testleri.
 - `tests/Haldus.IntegrationTests`: örnek uygulamaya karşı gerçek PostgreSQL testleri.
 - `samples/Haldus.Sample.Shop`: örnek uygulama ve modelin sınandığı yer.
+- `samples/Haldus.Sample.Shop.Client`: örnek mağazanın `openapi.json` dosyasından orval ile üretilen TypeScript
+  istemcisi (tipler + TanStack Query hook'ları, `fetch`). Uygulama değildir; şemanın tüketilebildiğini kanıtlar.
 - `samples/Haldus.Sample.Modular`: modüler yapının sınandığı küçük uygulama. `Catalog` ve `Sales` kendi
   bağlamına sahip modüllerdir; `Support` modülü ve `Host` ortak bağlamı kullanır.
 - `reports/`, `research_notes/`: archetype/trait taksonomisi araştırması. Tasarım kararlarının dayanağı
@@ -399,8 +405,17 @@ içeriyor (ilişki bildirimleri, `Sensitive`, `PublishesEvents`, `Purgeable`, ye
 
 ## Açık kararlar
 
-- Frontend ve mobil desteğinin kapsamı (backend API şekli oturunca ele alınacak). İkinci planın parçası
-  değildir; kullanıcı isterse araya alınır.
+- **Frontend ve mobil desteğinin kapsamı kapandı (31. aşama; kullanıcı sormamamı istedi, ayrıca onaylanmadı):** Haldus
+  backend'de kalır; frontend ve mobil için kendi kod üretimi yoktur. O tarafa verilen şey sözleşmedir (`openapi.json`)
+  ve onu tüketmenin yolu kullanıcının genel kurallarındaki yoldur: orval, TanStack Query hook'ları, `fetch`. Depoda
+  bunun çalışan örneği vardır (`samples/Haldus.Sample.Shop.Client`) ve şemanın orval'dan hatasız geçtiği `pnpm typecheck`
+  ile doğrulanır.
+  - Tam bir örnek arayüz (web veya mobil uygulama) **yazılmadı**: router, form/validasyon kütüphanesi, i18n kütüphanesi
+    ve test framework'ü kullanıcının genel kurallarına göre sorulması gereken seçimlerdir ve soru sorulamıyordu.
+    Kullanıcı bir örnek arayüz isterse bu dört seçim sorulur; istemci paketi olduğu gibi kullanılır.
+  - Örnek mağaza bu yüzden sayıları katı okur (`JsonNumberHandling.Strict`): varsayılan ayar şemaya `integer | string`
+    yazıyor ve istemci tipleri her sayıyı `number | string` görüyordu. Bu, örnek uygulamanın ayarıdır; Haldus
+    tüketen uygulamaya dayatmaz.
 
 - Süresi dolmuş `Expiring` kayıtları varsayılan olarak silinmez (`HaldusOptions.PurgeExpiredAfter` boş).
   Bu varsayılanı kullanıcı ayrıca onaylamadı; kullanıcı verisini kendiliğinden silmemek için böyle seçildi.

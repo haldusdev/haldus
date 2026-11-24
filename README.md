@@ -714,16 +714,41 @@ Modüllerin ayrıca kaydedilmesi gerekmez; ana projenin başvurduğu modüller k
 başka bir modülün kaydına `.References<T>()` ile bağlanabilir: aynı bağlamdaysa gerçek bir yabancı anahtar
 kısıtı olur, ayrı bağlamlardaysa referans yalnızca kimlikle tutulur ve varlığı yazarken doğrulanır.
 
+## Frontend ve mobil
+
+Haldus bir backend framework'üdür; frontend ve mobil için kendi kod üretimi yoktur. O tarafa verdiği şey sözleşmedir:
+her derlemede üretilen ve commit'lenen `openapi.json`. İstemci tipleri ve [TanStack Query](https://tanstack.com/query)
+hook'ları o dosyadan [orval](https://orval.dev) ile üretilir; React (web) ve React Native (Expo) aynı çıktıyı kullanır.
+
+```ts
+// orval.config.ts
+export default defineConfig({
+  shop: {
+    input: '../Haldus.Sample.Shop/openapi.json',   // backend'in ürettiği dosya; kopyalanmaz
+    output: { mode: 'tags-split', target: 'src/api', schemas: 'src/api/model', client: 'react-query', httpClient: 'fetch', clean: true },
+  },
+});
+```
+
+Bunun çalışan hali [samples/Haldus.Sample.Shop.Client](samples/Haldus.Sample.Shop.Client) klasöründedir: örnek mağazanın
+bütün uçları için üretilmiş istemci (bir uygulama değil), `pnpm generate:api` ile yeniden üretilir ve `pnpm typecheck`
+ile üretilen kodun derlendiği doğrulanır. Üretilen uçların adları (`operationId`) kaynağın ve işlemin adından gelir
+(`ListCars`, `CreateCar`, `CloseTicket`), bu yüzden hook adları öngörülebilirdir (`useListCars`, `useCreateCar`).
+
+Sayıların istemcide `number` olması için uygulamanın JSON ayarında sayılar katı okunmalıdır
+(`JsonNumberHandling.Strict`); ASP.NET Core'un varsayılanı şemaya `integer | string` yazar.
+
 ## Durum
 
-İlk iki plan tamamlandı: ilk sürümün on aşaması ve araştırmanın ikinci sürüm listesini kapatan on bir aşama. Üçüncü
-plan (araştırmanın üçüncü sürüm listesi ve sınamada kalan satırlar) sürüyor. Model, araştırmadaki 59 gerçek varlığa
-karşı sınanıyor: bugün 59'unun tamamı eksiksiz ifade ediliyor (ilk sınamada 19 eksiksiz, 29 kısmi, 11 karşılıksızdı).
-Ayrıntısı [taksonomi sınaması](reports/Haldus%20taksonomi%20sınaması.md) belgesindedir.
+Üç plan da tamamlandı: ilk sürümün on aşaması, araştırmanın ikinci sürüm listesini kapatan on bir aşama ve üçüncü
+sürüm listesiyle sınamada kalan satırları kapatan on bir aşama. Model, araştırmadaki 59 gerçek varlığa karşı sınandı:
+59'unun tamamı eksiksiz ifade ediliyor (ilk sınamada 19 eksiksiz, 29 kısmi, 11 karşılıksızdı). Ayrıntısı
+[taksonomi sınaması](reports/Haldus%20taksonomi%20sınaması.md) belgesindedir.
 
 Tasarım kararları için [CLAUDE.md](CLAUDE.md), kararların dayandığı araştırma için [reports](reports/)
 klasörüne bakın. İki örnek uygulama var: tek projeli [mağaza](samples/Haldus.Sample.Shop) ve
-[modüler](samples/Haldus.Sample.Modular) uygulama.
+[modüler](samples/Haldus.Sample.Modular) uygulama; mağazanın üretilmiş istemcisi de
+[ayrı bir klasördedir](samples/Haldus.Sample.Shop.Client).
 
 ## Geliştirme
 
