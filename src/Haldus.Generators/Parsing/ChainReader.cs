@@ -59,6 +59,7 @@ internal static class ChainReader
         "PublishesEvents",
         "Recurring",
         "Sensitive",
+        "Encrypted",
         "Purgeable",
         "Rerunnable",
         "TokenOnly",

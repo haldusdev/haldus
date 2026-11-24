@@ -14,6 +14,11 @@ export interface CreateContactRequest {
      */
   nationalId?: string | null;
   /**
+     * @maxLength 34
+     * @nullable
+     */
+  iban?: string | null;
+  /**
      * @maxLength 100
      * @nullable
      */

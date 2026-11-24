@@ -183,6 +183,83 @@ public sealed class HousekeepingEndpointTests(ShopFixture fixture)
         Assert.Equal(HttpStatusCode.NotFound, (await SendAsync(HttpMethod.Post, $"/report-exports/{first.Id}/rerun", tenant: Guid.NewGuid())).StatusCode);
     }
 
+    [Fact]
+    public async Task Encrypted_FieldsAreStoredAsCipherTextAndNeverReturned()
+    {
+        const string Iban = "TR330006100519786457841326";
+
+        var created = await SendAsync(HttpMethod.Post, "/contacts", new { name = "Grace", iban = Iban, source = _source });
+        var contact = await ReadAsync<ContactResponse>(created);
+        var url = $"/contacts/{contact.Id}";
+
+        // Veritabanındaki değer şifrelidir; sunucunun kendi kodu alanı açık haliyle okur.
+        var (stored, raw) = await StoredIbanAsync(contact.Id);
+        Assert.Equal(Iban, stored);
+        Assert.NotNull(raw);
+        Assert.DoesNotContain(Iban, raw);
+        Assert.True(raw.Length > Iban.Length);
+
+        // Hiçbir yanıtta görünmez.
+        foreach (var response in new[] { created, await SendAsync(HttpMethod.Get, url), await SendAsync(HttpMethod.Get, $"/contacts?source={_source}") })
+        {
+            var body = await response.Content.ReadAsStringAsync(CancellationToken);
+            Assert.True(response.IsSuccessStatusCode, body);
+            Assert.DoesNotContain("iban", body, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain(Iban, body);
+        }
+
+        // Göndermeyen kısmi güncelleme değere dokunmaz; gönderen yeniden şifreler; null gönderen boşaltır.
+        await ReadAsync<ContactResponse>(await SendAsync(HttpMethod.Patch, url, new { name = "Grace H." }));
+        Assert.Equal((Iban, raw), await StoredIbanAsync(contact.Id));
+
+        await ReadAsync<ContactResponse>(await SendAsync(HttpMethod.Patch, url, new { iban = "DE89370400440532013000" }));
+        var (changed, changedRaw) = await StoredIbanAsync(contact.Id);
+        Assert.Equal("DE89370400440532013000", changed);
+        Assert.DoesNotContain("DE89370400440532013000", changedRaw);
+
+        // Uzunluk sınırı açık metne uygulanır.
+        Assert.Equal(HttpStatusCode.BadRequest, (await SendAsync(HttpMethod.Patch, url, new { iban = new string('1', 35) })).StatusCode);
+
+        using var cleared = new HttpRequestMessage(HttpMethod.Patch, url)
+        {
+            Content = new StringContent("{\"iban\":null}", System.Text.Encoding.UTF8, "application/json"),
+        };
+        Assert.True((await _client.SendAsync(cleared, CancellationToken)).IsSuccessStatusCode);
+        Assert.Equal((null, null), await StoredIbanAsync(contact.Id));
+
+        // Saklanan sürümlerde de yoktur.
+        var snapshots = new List<string>();
+        await fixture.WithDbContextAsync(async context => snapshots = await context.Set<HaldusRevision>()
+            .Where(revision => revision.RecordId == contact.Id.ToString())
+            .Select(revision => revision.Snapshot)
+            .ToListAsync(CancellationToken));
+
+        Assert.NotEmpty(snapshots);
+        Assert.All(snapshots, snapshot =>
+        {
+            Assert.DoesNotContain("Iban", snapshot, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain(Iban, snapshot);
+        });
+    }
+
+    /// <summary>Alanın sunucunun gördüğü (açık) ve veritabanında duran (şifreli) hali.</summary>
+    private async Task<(string? Value, string? Raw)> StoredIbanAsync(Guid id)
+    {
+        (string?, string?) result = default;
+
+        await fixture.WithDbContextAsync(async context =>
+        {
+            var value = (await context.Set<Contact>().AsNoTracking().SingleAsync(contact => contact.Id == id, CancellationToken)).Iban;
+            var raw = await context.Database
+                .SqlQuery<string?>($"SELECT \"Iban\" AS \"Value\" FROM \"Contacts\" WHERE \"Id\" = {id}")
+                .SingleAsync(CancellationToken);
+
+            result = (value, raw);
+        });
+
+        return result;
+    }
+
     private async Task<string?> StoredNationalIdAsync(Guid id)
     {
         string? value = null;

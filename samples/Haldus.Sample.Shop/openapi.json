@@ -28217,6 +28217,13 @@
               "string"
             ]
           },
+          "iban": {
+            "maxLength": 34,
+            "type": [
+              "null",
+              "string"
+            ]
+          },
           "source": {
             "maxLength": 100,
             "type": [
@@ -29235,6 +29242,13 @@
           },
           "nationalId": {
             "maxLength": 20,
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "iban": {
+            "maxLength": 34,
             "type": [
               "null",
               "string"
@@ -33652,6 +33666,13 @@
               "string"
             ]
           },
+          "iban": {
+            "maxLength": 34,
+            "type": [
+              "null",
+              "string"
+            ]
+          },
           "source": {
             "maxLength": 100,
             "type": [
@@ -36808,6 +36829,13 @@
           },
           "nationalId": {
             "maxLength": 20,
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "iban": {
+            "maxLength": 34,
             "type": [
               "null",
               "string"

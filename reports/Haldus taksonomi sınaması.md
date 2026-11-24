@@ -226,7 +226,7 @@ sınırları ayrıca [README](../README.md) ve `CLAUDE.md` dosyalarında, özell
 | `RRULE`'un tamamı (`BYMONTHDAY`, `BYSETPOS`, `BYMONTH`, `WKST`, `EXDATE` / `RDATE`) | 36 | Haftanın günleri, ay içindeki sıra (`2TU`, `-1FR`) ve saat dilimi sonradan yazıldı; gerisi araştırmada da kapsam dışıydı |
 | Bakiyeye karşı süreli tutma | 11, 21 | Kovalar arası `move` ile elle yazılır; süresi dolan tutma kendiliğinden geri dönmez |
 | Paylaşılan kaydın kullanıcı başına okundu bilgisi | 45 | `ReadTracking` bilgiyi kayıtta tutar ve kullanıcıya ait kaynak ister |
-| Hassas alanın şifrelenmesi veya maskelenerek gösterilmesi | — | `Sensitive` alanı yalnızca yanıtlardan çıkarır; değer veritabanında düz durur |
+| Hassas alanın maskelenerek gösterilmesi (son dört karakter) | — | Şifreli saklama sonradan yazıldı (`Encrypted`); şifreli alan hiçbir yanıtta gösterilmez |
 | Çok düzeyli kalıtım ve tek tablo dışındaki eşlemeler | — | `SubtypeOf` tek düzeydir ve tek tablo (TPH) kullanır |
 | İmzalı adres, çok parçalı ve devam ettirilebilir yükleme; nesne deposu paketleri | 32, 49 | Yeni bağımlılık gerektirirdi; `IHaldusFileStorage` uygulanarak eklenir |
 | Mesaj kuyruğu paketi | — | `PublishesEvents` olayı uygulamanın yayıncısına teslim eder; taşımak onun işidir |

@@ -455,6 +455,13 @@ internal static class ModuleEmitter
             statements.Add("global::Haldus.HaldusDb.ConfigureMetadata(entity.Property(item => item.Metadata));");
         }
 
+        foreach (var property in resource.Properties.Where(property => property.IsEncrypted))
+        {
+            // Amaç dizesi kaynağı ve alanı ayırır: bir alanın şifreli değeri başka bir alana kopyalanarak açılamaz.
+            statements.Add(
+                $"global::Haldus.HaldusEncryption.Configure(entity.Property(item => item.{property.Name}), context, \"{resource.QualifiedName.Replace("global::", string.Empty)}.{property.Name}\");");
+        }
+
         if (resource.Has(Traits.Translatable))
         {
             statements.Add("global::Haldus.HaldusDb.ConfigureTranslations(entity.Property(item => item.Translations));");

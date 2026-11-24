@@ -252,8 +252,9 @@ Bunlar kullanıcıyla kararlaştırıldı; yeniden sorma.
     (sürüm kontrollü kaynakta `If-Match` zaten bunu sorar).
 - Hassas alan, ölçüte göre silme, yeniden çalıştırma (27. aşama). Kullanıcı sormamamı istedi; yazılan, önerdiğim
   seçeneklerdir ve ayrıca onaylanmadı:
-  - `.Sensitive(alanlar...)` alanı yalnızca yazılan bir alan yapar; değer veritabanında düz saklanır (şifreleme veya
-    maskeleyerek gösterme yazılmadı).
+  - `.Sensitive(alanlar...)` alanı yalnızca yazılan bir alan yapar; değer veritabanında düz saklanır. Planlardan sonra
+    `.Encrypted(alanlar...)` eklendi: alan ayrıca veritabanında şifreli saklanır (ASP.NET Data Protection; yeni
+    bağımlılık yok). Şifreli alan her zaman yalnızca yazılır; maskeleyerek gösterme (son dört karakter) yazılmadı.
   - `.Purgeable()` (AIP-165): `POST /purge`, ölçüt kaynağın `Filterable` filtresidir, `force` verilmedikçe yalnızca
     sayar. Eşzamanlı (arka plan işi olmayan) ve istek başına 1000 kayıtla sınırlıdır.
   - `MapJob().Rerunnable()`: AIP-152'nin "iş tanımı + çalıştırmalar" modeli yazılmadı; bizde iş kaydı zaten bir
@@ -894,6 +895,15 @@ denenmesi, yük ölçümü. Raporun "Bilinen sınırlar" tablosundaki kalemler d
     eşzamanlı transaction'ların olayları arasında sıra garanti edilmez (aynı kaydınkiler sıralıdır); vazgeçilen
     olaylar kendiliğinden silinmez ve yeniden kuyruğa alınmaz; olayların okunabildiği bir uç yoktur (çekerek izlemek
     için `ChangeFeed` vardır).
+- **Şifreli alanlar.** `.Encrypted(...)` alanı hem `IsInputOnly` hem `IsEncrypted` yapar (yalnızca metin alanları;
+  değilse `HALDUS010`); bu yüzden hassas alanın bütün kuralları ona da uygulanır. Yanıtta görünmesine bilerek izin
+  verilmedi: yanıtı saklayan her yer (olay kutusu, idempotency kaydı, sürümler) onu düz metin olarak saklardı. Model
+  alanı bir değer dönüştürücüsüyle şifreler (`HaldusEncryption.Configure`; izdüşümlerde de çalışır) ve kolonun uzunluk
+  sınırını kaldırır (şifreli metin uzundur; sınır istekte doğrulanmaya devam eder). Koruyucu `IHaldusFieldProtector`
+  servisidir (`AddHaldus` Data Protection uygulamasını kaydeder), model kurulurken bir kez çözülür ve amaç dizesi
+  kaynağı ile alanı ayırır. Sınırlar: anahtar kaybolursa okuma 500 verir; var olan düz veriyi şifrelemez (alan sonradan
+  şifreli yapılırsa eski satırlar okunamaz); kullanıcının filtre sınıfı alanı süzerse şifreli metinle karşılaştırır;
+  uygulamanın kendi kodu alanı bir yanıta koyarsa Haldus engelleyemez.
 - **Hassas alanlar.** `.Sensitive(...)` bağlayıcıda alanı `PropertyModel.IsInputOnly` yapar (içe aktarmanın içeriğiyle
   aynı bayrak): yanıt DTO'suna ve yanıt izdüşümüne (`ResourceEmitter.ResponseAssignments`) girmez, isteklerde kalır.
   İşaretleme arama, sıralama, doğal anahtar ve çeviri çözülmeden önce yapılır ve `FieldCandidates` böyle alanları

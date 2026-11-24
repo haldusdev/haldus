@@ -28,4 +28,7 @@ public sealed class DetailBuilder<TEntity, TDetail>
     /// saklanan sürümlerinde yer almazlar.
     /// </summary>
     public DetailBuilder<TEntity, TDetail> Sensitive(params System.Linq.Expressions.Expression<Func<TDetail, object?>>[] fields) => this;
+
+    /// <summary>Satırın sayılan metin alanları veritabanında şifreli saklanır ve yalnızca yazılır.</summary>
+    public DetailBuilder<TEntity, TDetail> Encrypted(params System.Linq.Expressions.Expression<Func<TDetail, object?>>[] fields) => this;
 }

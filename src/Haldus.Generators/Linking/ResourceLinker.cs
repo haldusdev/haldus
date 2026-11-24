@@ -83,6 +83,24 @@ internal static class ResourceLinker
                 properties[index] = properties[index] with { IsInputOnly = true };
             }
 
+            // Şifreli saklanan alan da yalnızca yazılır: yanıtta görünseydi, yanıtı saklayan her yer (olay kutusu,
+            // idempotency kaydı, sürümler) onu düz metin olarak saklardı.
+            foreach (var request in resource.EncryptedRequests)
+            {
+                var index = request.FieldName is null ? -1 : properties.FindIndex(property => property.Name == request.FieldName);
+
+                if (index < 0 || !properties[index].IsWritable || properties[index].IsEmbedded || properties[index].NullableType != "string?")
+                {
+                    Fail(
+                        "HALDUS010",
+                        request.Location,
+                        $"'{request.Expression}' cannot be encrypted: write it as 'item => item.Property', where the property is a writable string property of '{resource.EntityName}'");
+                    continue;
+                }
+
+                properties[index] = properties[index] with { IsInputOnly = true, IsEncrypted = true };
+            }
+
             var searchFields = ResolveSearchFields(resource, properties, Fail);
             var sortFields = ResolveSortFields(resource, properties, Fail);
             MarkCreateOnly(resource, properties, Fail);

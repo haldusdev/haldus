@@ -121,6 +121,9 @@ internal sealed record ResourceModel(
     /// <summary><c>.Sensitive(...)</c> ile sayılan alanlar; henüz doğrulanmamıştır.</summary>
     public EquatableArray<SearchFieldRequest> SensitiveRequests { get; init; } = EquatableArray<SearchFieldRequest>.Empty;
 
+    /// <summary><c>.Encrypted(...)</c> ile sayılan alanlar; henüz doğrulanmamıştır.</summary>
+    public EquatableArray<SearchFieldRequest> EncryptedRequests { get; init; } = EquatableArray<SearchFieldRequest>.Empty;
+
     /// <summary><c>.Translatable(...)</c> ile sayılan alanlar; henüz doğrulanmamıştır.</summary>
     public EquatableArray<SearchFieldRequest> TranslatableRequests { get; init; } = EquatableArray<SearchFieldRequest>.Empty;
 
@@ -468,6 +471,9 @@ internal sealed record PropertyModel(
 {
     /// <summary>Alan yalnızca istekte yer alır; yanıtta gösterilmez (içe aktarmanın içeriği gibi).</summary>
     public bool IsInputOnly { get; init; }
+
+    /// <summary>Alan veritabanında şifreli saklanır (<c>.Encrypted(...)</c>); böyle bir alan her zaman yalnızca yazılır.</summary>
+    public bool IsEncrypted { get; init; }
 
     public bool IsNonNullable => IsNonNullableReference || IsNonNullableValue;
 

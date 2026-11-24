@@ -70,6 +70,9 @@ public static class EngagementEndpoints
         app.MapCrud<Contact>()
             .Revisioned()
             .Sensitive(contact => contact.NationalId)
+
+            // Banka hesabı veritabanında şifreli durur (Data Protection) ve o da yalnızca yazılır.
+            .Encrypted(contact => contact.Iban)
             .Filterable<ContactFilter>()
             .Batch()
             .Purgeable();

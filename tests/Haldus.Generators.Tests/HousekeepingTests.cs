@@ -78,6 +78,39 @@ public sealed class HousekeepingTests
     }
 
     [Fact]
+    public void Encrypted_FieldsAreStoredThroughAProtectorAndNeverReturned()
+    {
+        var run = Run("app.MapCrud<Contact>().Revisioned().Cloneable().Encrypted(contact => contact.NationalId);").AssertCompiles();
+
+        // Model alanı bir değer dönüştürücüsüyle şifreler; amaç dizesi kaynağı ve alanı ayırır.
+        var module = run.Sources["HaldusModule.g.cs"];
+        Assert.Contains(
+            "global::Haldus.HaldusEncryption.Configure(entity.Property(item => item.NationalId), context, \"Shop.Contact.NationalId\");",
+            module);
+
+        // Şifreli alan da yalnızca yazılır: yanıtta, sürümlerde ve geri yüklemede yoktur; istekte ve kopyada vardır.
+        var dtos = run.Sources["Shop.Contact.Dtos.g.cs"];
+        var response = dtos.Substring(0, dtos.IndexOf("record CreateContactRequest", StringComparison.Ordinal));
+        Assert.DoesNotContain("NationalId", response);
+        Assert.Contains("public string? NationalId { get; init; }", dtos.Substring(response.Length));
+
+        var endpoints = run.Sources["Shop.Contact.Endpoints.g.cs"];
+        Assert.DoesNotContain("NationalId = item.NationalId", endpoints);
+        Assert.Contains("NationalId = source.NationalId", Handler(endpoints, "CloneAsync"));
+        Assert.Contains("global::Haldus.HaldusRevisions.Hide<global::Shop.Contact>(\"NationalId\");", module);
+
+        // Şifrelenmeyen kaynakta dönüştürücü yoktur.
+        Assert.DoesNotContain("HaldusEncryption", Run("app.MapCrud<Contact>().Sensitive(contact => contact.NationalId);").AssertCompiles().Sources["HaldusModule.g.cs"]);
+
+        // Gömülü satırın alanı da şifrelenebilir.
+        var rows = Run("""
+            var reports = app.MapCrud<Report>();
+            reports.MapDetail<Contact>().Encrypted(contact => contact.NationalId);
+            """).AssertCompiles();
+        Assert.Contains("global::Haldus.HaldusEncryption.Configure(entity.Property(item => item.NationalId), context, \"Shop.Contact.NationalId\");", rows.Sources["HaldusModule.g.cs"]);
+    }
+
+    [Fact]
     public void Sensitive_FieldsOfEmbeddedRowsStayOutOfTheSnapshotOfTheOwner()
     {
         var run = Run("""
@@ -154,6 +187,10 @@ public sealed class HousekeepingTests
 
     [Theory]
     [InlineData("app.MapCrud<Contact>().Sensitive(contact => contact.Code);", "HALDUS010", "cannot be sensitive")]
+    [InlineData("app.MapCrud<Report>().Encrypted(report => report.Year);", "HALDUS010", "cannot be encrypted")]
+    [InlineData("app.MapCrud<Contact>().Encrypted(contact => contact.Code);", "HALDUS010", "cannot be encrypted")]
+    [InlineData("app.MapCrud<Contact>().Encrypted(contact => contact.NationalId).Sortable(contact => contact.NationalId);", "HALDUS010", "cannot be sorted")]
+    [InlineData("app.MapCrud<Contact>().Encrypted(contact => contact.NationalId).ChangeSets();", "HALDUS007", "ChangeSets cannot be combined with the sensitive field")]
     [InlineData("app.MapCrud<Contact>().Sensitive(contact => contact.NationalId).Sortable(contact => contact.NationalId);", "HALDUS010", "cannot be sorted")]
     [InlineData("app.MapCrud<Contact>().Sensitive(contact => contact.NationalId).Searchable(contact => contact.NationalId);", "HALDUS005", "NationalId")]
     [InlineData("app.MapCrud<Contact>().Sensitive(contact => contact.Name).NaturalKey(contact => contact.Name);", "HALDUS010", "Name")]

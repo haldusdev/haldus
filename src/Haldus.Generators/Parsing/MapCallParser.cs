@@ -395,6 +395,7 @@ internal static class MapCallParser
         var translatableRequests = new List<SearchFieldRequest>();
         BaseDeclaration? baseDeclaration = null;
         var sensitiveRequests = new List<SearchFieldRequest>();
+        var encryptedRequests = new List<SearchFieldRequest>();
         SearchFieldRequest? naturalKeyRequest = null;
         var effectiveKeyRequests = new List<SearchFieldRequest>();
         TransferModel? transfer = null;
@@ -425,6 +426,9 @@ internal static class MapCallParser
                     break;
                 case { Identifier.ValueText: "Sensitive" }:
                     ReadFieldRequests(callName, call, sensitiveRequests, diagnostics);
+                    break;
+                case { Identifier.ValueText: "Encrypted" }:
+                    ReadFieldRequests(callName, call, encryptedRequests, diagnostics);
                     break;
                 // Alan saymak isteğe bağlıdır: sayılmazsa kapsamın tamamında tek bir dönem dizisi tutulur.
                 case { Identifier.ValueText: "EffectiveDated" } when call.ArgumentList.Arguments.Count > 0:
@@ -711,6 +715,7 @@ internal static class MapCallParser
             TranslatableRequests = translatableRequests.ToEquatableArray(),
             BaseDeclaration = baseDeclaration,
             SensitiveRequests = sensitiveRequests.ToEquatableArray(),
+            EncryptedRequests = encryptedRequests.ToEquatableArray(),
             NaturalKeyRequest = naturalKeyRequest,
             EffectiveKeyRequests = effectiveKeyRequests.ToEquatableArray(),
             ReverseAttachments = reverseAttachments.ToEquatableArray(),
@@ -1086,7 +1091,7 @@ internal static class MapCallParser
             {
                 if (declaration is not ("TokenOnly" or "TokenAccess" or "Only" or "Without" or "Expiring" or "Workflow" or "EditableIn"
                     or "DeletableIn" or "Axis" or "MultiTenant" or "Auditable" or "Idempotent" or "Numbered" or "Embeds" or "References"
-                    or "KeyStrategy" or "Sensitive" or "Metadata" or "PublishesEvents" or "Retention"))
+                    or "KeyStrategy" or "Sensitive" or "Encrypted" or "Metadata" or "PublishesEvents" or "Retention"))
                 {
                     yield return $"{declaration} cannot be combined with TokenOnly: the record would be reachable without its token";
                 }

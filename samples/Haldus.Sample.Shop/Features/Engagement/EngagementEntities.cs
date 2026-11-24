@@ -28,7 +28,10 @@ public partial class Reply
     public int Score { get; set; }
 }
 
-/// <summary>İletişim kaydı. Kimlik numarası yalnızca yazılır; hiçbir yanıtta ve saklanan sürümde yer almaz.</summary>
+/// <summary>
+/// İletişim kaydı. Kimlik numarası yalnızca yazılır; hiçbir yanıtta ve saklanan sürümde yer almaz. Banka hesabı da
+/// öyledir ve ayrıca veritabanında şifreli saklanır.
+/// </summary>
 public partial class Contact
 {
     [Required]
@@ -37,6 +40,9 @@ public partial class Contact
 
     [MaxLength(20)]
     public string? NationalId { get; set; }
+
+    [MaxLength(34)]
+    public string? Iban { get; set; }
 
     [MaxLength(100)]
     public string? Source { get; set; }

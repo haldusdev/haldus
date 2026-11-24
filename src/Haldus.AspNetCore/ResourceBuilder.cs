@@ -78,6 +78,14 @@ public sealed class ResourceBuilder<TEntity>(RouteGroupBuilder group, IEndpointR
     public ResourceBuilder<TEntity> Sensitive(params Expression<Func<TEntity, object?>>[] fields) => this;
 
     /// <summary>
+    /// Sayılan metin alanları veritabanında şifreli saklanır ve, <see cref="Sensitive"/> alanlar gibi, yalnızca yazılır:
+    /// hiçbir yanıtta yer almazlar. Sunucunun kendi kodu alanı açık haliyle okur. Şifreleme ASP.NET Data Protection
+    /// iledir; anahtarların kalıcı ve sunucular arasında ortak olması uygulamanın sorumluluğundadır, yoksa veri
+    /// okunamaz. Böyle bir alana göre aranamaz, sıralanamaz ve süzülemez.
+    /// </summary>
+    public ResourceBuilder<TEntity> Encrypted(params Expression<Func<TEntity, object?>>[] fields) => this;
+
+    /// <summary>
     /// Sayılan metin alanları başka dillere çevrilebilir. Alanın kendisi kaynak dildeki metni taşımaya devam eder;
     /// çeviriler kayıtla birlikte saklanır ve yanıtta <c>translations</c> altında görünür. Bir dilin çevirileri
     /// <c>PUT /{id}/translations/{locale}</c> ile yazılır, <c>DELETE</c> ile kaldırılır. Okurken <c>?locale=tr</c>
