@@ -5,8 +5,10 @@ public static class CatalogEndpoints
     public static void MapCatalog(this IEndpointRouteBuilder app)
     {
         // Kategoriler bir ağaçtır: ParentId alanı üretilir, bir kategori kendi altına taşınamaz.
+        // Kardeşler sıralıdır: Position alanı üretilir ve POST /categories/{id}/move kategoriyi taşır.
         app.MapCrud<Category>()
-            .Hierarchical();
+            .Hierarchical()
+            .Orderable();
 
         // Basit süzme sorgu parametreleriyle, VE/VEYA gerektiren aramalar POST /products/search ile yapılır.
         // Ürün isteğe bağlı olarak bir kategoriye bağlanır; ürünü olan kategori silinemez.

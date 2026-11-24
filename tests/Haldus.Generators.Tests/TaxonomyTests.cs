@@ -85,16 +85,16 @@ public sealed class TaxonomyTests
             var products = app.MapCrud<Product>().SoftDeletable().Auditable().Batch();
             products.MapDetail<ProductVariant>();
             """),
-        new(4, "Category / Collection", Fit.Partial,
+        new(4, "Category / Collection", Fit.Clean,
             "public partial class Category { public string Name { get; set; } = \"\"; }",
-            "app.MapCrud<Category>().Hierarchical().Archivable();"),
+            "app.MapCrud<Category>().Hierarchical().Archivable().Orderable();"),
         new(5, "Cart", Fit.Partial,
             """
             public partial class Cart { public string? Note { get; set; } }
             public partial class CartItem { public string Sku { get; set; } = ""; public int Quantity { get; set; } }
             """,
             """
-            var carts = app.MapCrud<Cart>().OwnedByCurrentUser().Expiring(TimeSpan.FromDays(7), sliding: true);
+            var carts = app.MapCrud<Cart>().OwnedByCurrentUser().Expiring(TimeSpan.FromDays(7), sliding: true).Cloneable();
             carts.MapDetail<CartItem>();
             """),
         new(6, "Checkout Session", Fit.Partial,
@@ -177,7 +177,7 @@ public sealed class TaxonomyTests
             """
             var invoices = app.MapCrud<Invoice>().ConcurrencyChecked().Idempotent()
                 .Workflow<InvoiceStatus>().EditableIn(InvoiceStatus.Draft).DeletableIn(InvoiceStatus.Draft)
-                .Numbered("INV-{yyyy}-{seq:6}", assignOn: InvoiceStatus.Issued);
+                .Numbered("INV-{yyyy}-{seq:6}", assignOn: InvoiceStatus.Issued).Previewable();
             invoices.MapDetail<InvoiceLine>();
             invoices.MapTransition("issue", InvoiceStatus.Draft, InvoiceStatus.Issued);
             invoices.MapTransition("pay", InvoiceStatus.Issued, InvoiceStatus.Paid);
@@ -258,7 +258,7 @@ public sealed class TaxonomyTests
             reservations.MapTransition("confirm", ReservationStatus.Held, ReservationStatus.Confirmed);
             reservations.MapTransition("release", ReservationStatus.Held, ReservationStatus.Released);
             """),
-        new(22, "Transfer", Fit.Partial,
+        new(22, "Transfer", Fit.Clean,
             """
             public enum TransferStatus { Draft, InTransit, Received }
             public partial class Transfer : IComputed
@@ -270,7 +270,7 @@ public sealed class TaxonomyTests
             public partial class TransferLine { public string Sku { get; set; } = ""; public int Quantity { get; set; } }
             """,
             """
-            var transfers = app.MapCrud<Transfer>().Workflow<TransferStatus>().EditableIn(TransferStatus.Draft).Idempotent();
+            var transfers = app.MapCrud<Transfer>().Workflow<TransferStatus>().EditableIn(TransferStatus.Draft).Idempotent().Cloneable();
             transfers.MapDetail<TransferLine>();
             transfers.MapTransition("send", TransferStatus.Draft, TransferStatus.InTransit);
             transfers.MapTransition("receive", TransferStatus.InTransit, TransferStatus.Received);
@@ -508,7 +508,15 @@ public sealed class TaxonomyTests
             app.MapCrud<Product>();
             app.MapAssociation<Favorite, Product>().ForCurrentUser();
             """),
-        new(56, "Ordering / position", Fit.Missing),
+        new(56, "Ordering / position", Fit.Clean,
+            """
+            public partial class Board { public string Name { get; set; } = ""; }
+            public partial class Card { public string Title { get; set; } = ""; }
+            """,
+            """
+            app.MapCrud<Board>();
+            app.MapCrud<Card>().Under<Board>().Orderable();
+            """),
         new(57, "Counter", Fit.Partial,
             """
             public partial class Playlist : IComputed
@@ -579,8 +587,8 @@ public sealed class TaxonomyTests
     public void Tally_MatchesTheWrittenResults()
     {
         // reports/Haldus taksonomi sınaması.md dosyasındaki sayılar; biri değişirse diğeri de güncellenmelidir.
-        Assert.Equal(25, Rows.Count(row => row.Fit == Fit.Clean));
-        Assert.Equal(26, Rows.Count(row => row.Fit == Fit.Partial));
-        Assert.Equal(8, Rows.Count(row => row.Fit == Fit.Missing));
+        Assert.Equal(28, Rows.Count(row => row.Fit == Fit.Clean));
+        Assert.Equal(24, Rows.Count(row => row.Fit == Fit.Partial));
+        Assert.Equal(7, Rows.Count(row => row.Fit == Fit.Missing));
     }
 }

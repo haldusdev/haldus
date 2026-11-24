@@ -161,7 +161,23 @@ internal static class ResourceEmitter
 
         if (resource.Has(Operations.Patch))
         {
-            AppendPatchRequest(builder, resource);
+            // Gömülü detay koleksiyonu da gönderildiyse eşitlenir, gönderilmediyse satırlara dokunulmaz.
+            AppendPatchRequest(
+                builder,
+                $"Patch{resource.EntityName}Request",
+                resource,
+                resource.Properties.Where(property => property.IsUpdatable).Concat(resource.Details.Select(DetailCollection)));
+        }
+
+        if (resource.Has(Traits.Cloneable))
+        {
+            // Kopyalama isteği de kısmidir: gönderilen alanlar kopyada kaynaktakinin yerine geçer. Kopya yeni bir
+            // kayıt olduğu için yalnızca oluştururken yazılan alanlar da verilebilir; satırlar olduğu gibi kopyalanır.
+            AppendPatchRequest(
+                builder,
+                $"Clone{resource.EntityName}Request",
+                resource,
+                resource.Properties.Where(property => property.IsWritable));
         }
 
         if (resource.SearchFields.Length > 0)
@@ -420,17 +436,14 @@ internal static class ResourceEmitter
     /// erişimcisinin yalnızca JSON'da bulunan alanlar için çağrılmasına dayanır; böylece şemada sarmalayıcı
     /// bir tip görünmez.
     /// </summary>
-    private static void AppendPatchRequest(StringBuilder builder, ResourceModel resource)
+    private static void AppendPatchRequest(StringBuilder builder, string name, ResourceModel resource, IEnumerable<PropertyModel> properties)
     {
-        // Gömülü detay koleksiyonu da gönderildiyse eşitlenir, gönderilmediyse satırlara dokunulmaz.
-        var writable = resource.Properties
-            .Where(property => property.IsUpdatable)
-            .Concat(resource.Details.Select(DetailCollection))
+        var writable = properties
             .Concat(resource.Has(Traits.Metadata) ? [MetadataChanges()] : Array.Empty<PropertyModel>())
             .ToArray();
 
         builder.Append('\n');
-        builder.Append($"public sealed partial record Patch{resource.EntityName}Request : global::Haldus.IHaldusPatch\n");
+        builder.Append($"public sealed partial record {name} : global::Haldus.IHaldusPatch\n");
         builder.Append("{\n");
 
         foreach (var property in writable)

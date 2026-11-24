@@ -47,7 +47,10 @@ public static class SalesEndpoints
             .EditableIn(OrderStatus.Draft)
             .DeletableIn(OrderStatus.Draft, OrderStatus.Cancelled)
             .Numbered("ORD-{yyyy}-{seq:6}", assignOn: OrderStatus.Placed)
-            .Idempotent();
+            .Idempotent()
+
+            // Önizleme toplamı hesaplar ama kaydetmez: POST /orders/preview ve POST /orders/{id}/preview
+            .Previewable();
 
         // Satırlar siparişin istek ve yanıtlarına gömülüdür; ayrı uçları yoktur.
         orders.MapDetail<OrderItem>();
@@ -75,8 +78,10 @@ public static class SalesEndpoints
         reservations.MapTransition("release", from: ReservationStatus.Held, to: ReservationStatus.Released);
 
         // Sepet kullanıldıkça yaşar; satırları sepetin isteğine gömülüdür.
+        // Sepet satırlarıyla birlikte kopyalanabilir: POST /carts/{id}/clone
         var carts = app.MapCrud<Cart>()
-            .Expiring(TimeSpan.FromDays(7), sliding: true);
+            .Expiring(TimeSpan.FromDays(7), sliding: true)
+            .Cloneable();
 
         carts.MapDetail<CartItem>();
 
@@ -100,7 +105,10 @@ public static class SalesEndpoints
         var coupons = app.MapCrud<Coupon>()
             .Expiring()
             .NaturalKey(coupon => coupon.Code)
-            .CreateOnly(coupon => coupon.Code, coupon => coupon.Percent);
+            .CreateOnly(coupon => coupon.Code, coupon => coupon.Percent)
+
+            // Kopya yeni bir kod ister: POST /coupons/{id}/clone  { "code": "SPRING-2" }
+            .Cloneable();
 
         // Gövdesiz aksiyon; mantığı lambda'dadır ve reddedilirse hiçbir şey kaydedilmez: POST /coupons/{id}/redeem
         coupons.MapAction("redeem", (coupon, services, _) =>

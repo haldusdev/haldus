@@ -39,6 +39,9 @@ internal static class ChainReader
         "NaturalKey",
         "Metadata",
         "KeyStrategy",
+        "Orderable",
+        "Cloneable",
+        "Previewable",
     ];
 
     /// <summary>Zincirdeki çağrıları, Map çağrısından dışa doğru sırayla verir.</summary>
@@ -103,6 +106,15 @@ internal static class ChainReader
                     break;
                 case "Metadata":
                     traits |= Traits.Metadata;
+                    break;
+                case "Orderable":
+                    traits |= Traits.Orderable;
+                    break;
+                case "Cloneable":
+                    traits |= Traits.Cloneable;
+                    break;
+                case "Previewable":
+                    traits |= Traits.Previewable;
                     break;
                 case "OwnedByCurrentUser":
                     traits |= Traits.Owned;

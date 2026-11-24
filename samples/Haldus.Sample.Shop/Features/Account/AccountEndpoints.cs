@@ -21,8 +21,10 @@ public static class AccountEndpoints
 
         // Listenin altındaki kalemler de onun adresini izler: /me/shopping-lists/{shoppingListId}/shopping-list-items
         // Liste görünmüyorsa kalemleri de görünmez.
+        // Kalemler listenin içinde sıralıdır: POST …/shopping-list-items/{id}/move  { "position": 0 }
         app.MapCrud<ShoppingListItem>()
-            .Under<ShoppingList>();
+            .Under<ShoppingList>()
+            .Orderable();
 
         // underMe: false adresi değiştirmez: /products/{productId}/product-notes
         // Ürünü herkes görür, ama herkes yalnızca kendi notlarını.

@@ -6,16 +6,16 @@ sınamanın sonucudur: her satır, yazılmış olan API ile ifade edilmeye çal�
 
 ## Sonuç
 
-59 satırın 51'i bugünkü API ile yazılıp derleniyor; 8'i için anlamlı bir eşleme yok. (İlk sayım 19 temiz, 29
+59 satırın 52'si bugünkü API ile yazılıp derleniyor; 7'si için anlamlı bir eşleme yok. (İlk sayım 19 temiz, 29
 kısmi, 11 yok idi. Entity aksiyonu yazıldıktan sonra bir satır temize geçti; sahiplik yazıldıktan sonra iki satır
 temize, bir satır yoktan kısmiye geçti; alan eklentileri yazıldıktan sonra üç satır temize, bir satır yoktan
-kısmiye geçti.)
+kısmiye geçti; kayıt işlemleri yazıldıktan sonra üç satır daha temize geçti.)
 
 | Sonuç | Satır | Anlamı |
 |---|---|---|
-| Temiz | 25 | Raporun önerdiği eşleme, yazılmış özelliklerle eksiksiz ifade ediliyor |
-| Kısmi | 26 | Çekirdek ifade ediliyor; önerilen eşlemedeki bir veya daha çok özellik henüz yok |
-| Yok | 8 | Gereken archetype veya trait yazılmadı |
+| Temiz | 28 | Raporun önerdiği eşleme, yazılmış özelliklerle eksiksiz ifade ediliyor |
+| Kısmi | 24 | Çekirdek ifade ediliyor; önerilen eşlemedeki bir veya daha çok özellik henüz yok |
+| Yok | 7 | Gereken archetype veya trait yazılmadı |
 
 Araştırmanın başlangıçtaki düz katalog için kendi sayımı 10 oturuyor, 31 zorlanarak, 18 oturmuyor idi. İki sayım
 aynı ölçüyle yapılmadı (o, araştırmacının hükmüydü; bu, derlenen kod), bu yüzden fark kesin bir iyileşme ölçüsü
@@ -32,7 +32,8 @@ tamamı eksik trait veya archetype'tır.
   hatasız derlendiğini doğrular. Aşağıdaki tablo o dosyadaki verinin aynısıdır; sayılar bir testle bağlıdır.
 - **Çalışma:** Derleme, uçların doğru davrandığını göstermez. Tablodaki birleşimlerin bir kısmı örnek uygulamalarda
   gerçek PostgreSQL'e karşı sınanıyor: sipariş, satırlar, rezervasyon, kupon, iade, sepet, ödeme, yorumlar,
-  ayarlar, stok, iş, toplu işlemler, kullanıcıya ait kaynaklar, favoriler, doğal anahtar, sıralama ve metadata.
+  ayarlar, stok, iş, toplu işlemler, kullanıcıya ait kaynaklar, favoriler, doğal anahtar, sıralama, metadata,
+  kardeşler arası sıra, kopyalama ve önizleme.
   Geri kalan satırlar yalnızca derleme düzeyinde doğrulandı.
 - **Hüküm:** "Temiz" ile "kısmi" arasındaki ayrım benim yorumumdur: önerilen eşlemede adı geçen bir özellik
   yazılmadıysa, aynı sonuç elle (ör. bir handler içinde) elde edilebilse bile satır kısmi sayıldı.
@@ -44,15 +45,15 @@ tamamı eksik trait veya archetype'tır.
 | 1 | Order | Kısmi | `MapCrud` + `Workflow` + `Numbered(assignOn)` + `ConcurrencyChecked` + `Auditable` + `MapDetail` | `CreatedFrom<Cart>`, `MapChangeSet`, birden çok durum ekseni |
 | 2 | OrderItem / LineItem | Temiz | Gömülü `MapDetail` + `IComputed` toplamlar | — |
 | 3 | Product + Variant + Option | Kısmi | `MapCrud` + gömülü `MapDetail` (sırası korunur) + `Batch` | `Publishable`, varyant üretimi |
-| 4 | Category / Collection | Kısmi | `MapCrud` + `Hierarchical` + `Archivable` | Kardeşler arası sıra (`Orderable`) |
-| 5 | Cart | Kısmi | `MapCrud` + `OwnedByCurrentUser` + `MapDetail` + `Expiring(sliding)` | `Cloneable`, sepet birleştirme, anonim oturumun sahipliği |
+| 4 | Category / Collection | Temiz | `MapCrud` + `Hierarchical` + `Archivable` + `Orderable` | — |
+| 5 | Cart | Kısmi | `MapCrud` + `OwnedByCurrentUser` + `MapDetail` + `Expiring(sliding)` + `Cloneable` | Sepet birleştirme, anonim oturumun sahipliği |
 | 6 | Checkout Session | Kısmi | `MapCrud().Without(Delete)` + `Workflow` + `Expiring` + `Idempotent` | `Creates<T>` (handler içinde elle) |
 | 7 | Coupon | Temiz | `MapCrud` + `Expiring()` + `NaturalKey` + `CreateOnly` + `IComputed` | — |
 | 8 | Payment (auth/capture/void) | Temiz | `MapCrud().Without(Delete)` + `Workflow` + `Idempotent`; hareketler `MapAppendOnly().Under<Payment>()` | — |
 | 9 | Refund | Temiz | `MapAppendOnly` + `Workflow` + `Idempotent` + `Metadata`; iptal bir geçiş | — |
 | 10 | FulfillmentOrder | Kısmi | `MapReadOnly` + `Workflow` + geçişler | İkinci durum ekseni, böl/birleştir/taşı |
 | 11 | Inventory level | Kısmi | `MapAppendOnly` hareket + `MapReadOnly` seviye | `MapBalance`, türetme bildirimi |
-| 12 | Invoice | Kısmi | `MapCrud` + `Workflow` + `EditableIn` + `Numbered(assignOn)` + `Idempotent` + `MapDetail` | `Previewable`, türetilmiş `paid` durumu |
+| 12 | Invoice | Kısmi | `MapCrud` + `Workflow` + `EditableIn` + `Numbered(assignOn)` + `Idempotent` + `MapDetail` + `Previewable` | Türetilmiş `paid` durumu |
 | 13 | InvoiceLine | Temiz | Gömülü `MapDetail` | — |
 | 14 | Credit note | Kısmi | `MapAppendOnly` + `References<Invoice>` + `Workflow` (void) + `Numbered` | `Reverses<Invoice>` |
 | 15 | JournalEntry | Kısmi | `MapCrud` + `Workflow` + `MapDetail`; "satırlar dengeli" kuralı geçişte | `Reversible` |
@@ -62,7 +63,7 @@ tamamı eksik trait veya archetype'tır.
 | 19 | Payment (muhasebe) + allocation | Kısmi | `MapAppendOnly` + `References<Invoice>` + `Idempotent` | `Reversible` |
 | 20 | StockMovement / defter kaydı | Temiz | `MapAppendOnly` + `Auditable` | — |
 | 21 | Reservation | Temiz | `MapCrud` + `Workflow` + `Expiring` | — |
-| 22 | Transfer | Kısmi | `MapCrud` + `Workflow` + `MapDetail` + `Idempotent` + `IComputed` | `Cloneable` |
+| 22 | Transfer | Temiz | `MapCrud` + `Workflow` + `MapDetail` + `Idempotent` + `IComputed` + `Cloneable` | — |
 | 23 | Employee | Kısmi | `MapCrud` + `Searchable` + entity aksiyonu; geçmiş `MapDetail().AsSubresource()` | `CustomFields`, `ChangeFeed`, `EffectiveDated` |
 | 24 | LeaveRequest | Kısmi | `MapCrud` + `Under<Employee>` + `Workflow` (onayla/reddet) | `Approvable` (çok adımlı onay) |
 | 25 | Time-off balance | Yok | — | `MapBalance` |
@@ -96,7 +97,7 @@ tamamı eksik trait veya archetype'tır.
 | 53 | Report / aggregation | Temiz | `MapQuery` veya `MapJob` | — |
 | 54 | Search | Temiz | `Searchable` | — |
 | 55 | Favorite / star / vote | Temiz | `MapAssociation<Favorite, Product>().ForCurrentUser()` | — |
-| 56 | Ordering / position | Yok | — | `Orderable` (yalnızca gömülü satırlar sıra tutar) |
+| 56 | Ordering / position | Temiz | `Orderable` (`Position` alanı, `POST /{id}/move`) | — |
 | 57 | Counter | Kısmi | Gömülü satırlardan `IComputed` | Başka kaynaklardan toplama (`Rollup`) |
 | 58 | Bulk operations | Temiz | `Batch` + `MapJob` | — |
 | 59 | Büyük veri export'u | Temiz | `MapJob` + `Idempotent` | — |
@@ -129,14 +130,13 @@ tamamı eksik trait veya archetype'tır.
 | `SecretOnce` / `Rotatable` / `TokenAccess` | 41, 42, 46 |
 | `Publishable` | 3, 27 |
 | `Revisioned` | 27, 29 |
-| `Orderable` | 4, 56 |
-| `Cloneable` | 5, 22 |
+
 | `Creates<T>` / `CreatedFrom<T>` | 1, 6, 41 |
 | `MapBalance` | 11, 25 |
 | `MapFile` / `Attachable` | 32, 49 |
 | `Commentable` | 30, 50 |
 | Birden çok durum ekseni | 1, 10 |
-| Tek satırı etkileyenler | `MapChangeSet` (1), `Previewable` (12), `Approvable` (24), `Translatable` (28), `Supersedes` (35), yüklü ve durumlu bağ (40), bağların topluca değiştirilmesi (31), `Retention` (44), `ReadTracking` (45), `Rollup` (57), `EffectiveDated` ve `ChangeFeed` (23) |
+| Tek satırı etkileyenler | `MapChangeSet` (1), türetilmiş durum (12), sepet birleştirme (5), `Approvable` (24), `Translatable` (28), `Supersedes` (35), yüklü ve durumlu bağ (40), bağların topluca değiştirilmesi (31), `Retention` (44), `ReadTracking` (45), `Rollup` (57), `EffectiveDated` ve `ChangeFeed` (23) |
 
 Araştırma bunların çoğunu zaten ikinci ve üçüncü sürüme bırakmıştı. Bu sınamanın o sıralamaya eklediği tek şey,
 ilk sürümün kapsamındaki satırlarda da gereken entity aksiyonuydu; o artık yazıldı. Dört satırı etkileyen sahiplik

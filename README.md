@@ -236,6 +236,9 @@ app.MapCrud<Customer>()
 | `.CreateOnly(...)` | Sayılan alanlar yalnızca `POST` isteğinde yer alır; sonradan değişmez |
 | `.KeyStrategy(...)` | Anahtarın biçimi: sıralı GUID (varsayılan), rastgele GUID veya önekli kimlik (`ord_01j9…`) |
 | `.Sortable(...)` | Liste sıralanabilir: `?sort=-createdAt,name`; yalnızca sayılan alanlara göre |
+| `.Orderable()` | `Position` alanı; liste bu sırayla döner, `POST /{id}/move` kaydı taşır ve kardeşleri yeniden numaralar |
+| `.Cloneable()` | `POST /{id}/clone`: alanlar ve gömülü satırlar kopyalanır; isteğe bağlı gövde kopyadaki alanları değiştirir |
+| `.Previewable()` | `POST /preview` ve `POST /{id}/preview`: yazmanın sonucunu hesaplar ama kaydetmez |
 | `.Without(...)` / `.Only(...)` | Üretilecek standart işlemleri seçer |
 | `.Filterable<TFilter>()` | Kendi yazdığın filtre sınıfını liste ucunun sorgu parametrelerine bağlar |
 | `.Searchable(...)` | `POST /search`: sayılan alanlarda VE/VEYA koşulları ve sıralama |
@@ -280,7 +283,7 @@ kısıtı olur, ayrı bağlamlardaysa referans yalnızca kimlikle tutulur ve var
 ## Durum
 
 İlk sürümün planlanan on aşaması tamamlandı; eksikleri kapatan ikinci plan sürüyor. Model, araştırmadaki 59
-gerçek varlığa karşı sınanıyor: bugün 25'i temiz, 26'sı kısmen ifade ediliyor, 8'i için gereken özellik henüz
+gerçek varlığa karşı sınanıyor: bugün 28'i temiz, 24'ü kısmen ifade ediliyor, 7'si için gereken özellik henüz
 yok. Ayrıntısı ve eksiklerin listesi [taksonomi sınaması](reports/Haldus%20taksonomi%20sınaması.md)
 belgesindedir.
 

@@ -519,6 +519,18 @@ internal static class MapCallParser
             yield return "CreateOnly has no effect: the resource needs the Create operation and at least one of Update and Patch";
         }
 
+        foreach (var declaration in new[] { "Cloneable", "Previewable" })
+        {
+            // İkisi de bir oluşturma biçimidir; oluşturması kaldırılmış bir kaynakta arka kapı olurlardı.
+            // Archetype'ın kendisi uygun değilse yalnızca o bildirilir.
+            if (chain.Any(call => call.Name == declaration)
+                && (crudLike || (declaration == "Previewable" && archetype == Archetype.AppendOnly))
+                && (operations & Operations.Create) == 0)
+            {
+                yield return $"{declaration} requires the Create operation, which has been removed from this resource";
+            }
+        }
+
         if (unsupportedOperations != Operations.None)
         {
             yield return $"{name} does not have the operation(s) '{unsupportedOperations}'; they cannot be selected with Without or Only";
@@ -593,6 +605,10 @@ internal static class MapCallParser
 
                 // Oluşturma ve güncelleme isteklerinin ayrı olduğu tek şekil budur.
                 "CreateOnly" => crudLike,
+
+                // Sıra ve kopya, istemcinin oluşturup silebildiği koleksiyonlar içindir.
+                "Orderable" or "Cloneable" => crudLike,
+                "Previewable" => crudLike || archetype == Archetype.AppendOnly,
                 _ => true,
             };
 

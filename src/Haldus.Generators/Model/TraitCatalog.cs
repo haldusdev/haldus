@@ -41,6 +41,12 @@ internal static class TraitCatalog
             new("ArchivedAt", DateTimeOffset + "?", InResponse: true, new("ArchivedAt", SearchKind.Range, DateTimeOffset, IsNullable: true)),
         ]),
 
+        // Konumu yalnızca taşıma ucu değiştirir; istek gövdesinden yazılamaz.
+        new(Traits.Orderable, "global::Haldus.IOrderable",
+        [
+            new("Position", "int", InResponse: true, new("Position", SearchKind.Range, "int", IsNullable: false)),
+        ]),
+
         // Çanta yanıtta görünür; isteklerdeki yeri ve yazılma kuralları ayrıca üretilir.
         new(Traits.Metadata, "global::Haldus.IHasMetadata",
         [

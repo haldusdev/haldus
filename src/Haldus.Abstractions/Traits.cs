@@ -13,6 +13,22 @@ public interface IMultiTenant
 /// Kayıt, onu oluşturan kullanıcıya aittir; sorgular geçerli kullanıcıya göre süzülür. Kiracı sınırının
 /// içinde ikinci bir sınırdır: aynı kiracıdaki başka bir kullanıcı da kaydı göremez.
 /// </summary>
+/// <summary>Kayıt, kapsamındaki (aynı kiracı, sahip ve ebeveyn) diğer kayıtlar arasında bir sıra tutar.</summary>
+public interface IOrderable
+{
+    /// <summary>Kaydın kapsamındaki yeri; 0'dan başlar ve boşluksuzdur.</summary>
+    int Position { get; set; }
+}
+
+/// <summary>Sıralı bir kaydı taşıma isteği: <c>POST /{id}/move</c>.</summary>
+public sealed record MoveRequest
+{
+    /// <summary>Kaydın gideceği yer; listenin dışındaysa kayıt sona gider.</summary>
+    [System.ComponentModel.DataAnnotations.Required]
+    [System.ComponentModel.DataAnnotations.Range(0, int.MaxValue)]
+    public int? Position { get; init; }
+}
+
 public interface IOwned
 {
     string OwnerId { get; set; }

@@ -6,6 +6,7 @@ namespace Haldus;
 /// <summary>Üretilen endpoint'lerin döndürdüğü yerelleştirilmiş hata yanıtları.</summary>
 public static class HaldusProblems
 {
+
     public static ProblemHttpResult NotFound(IHaldusMessages messages, string resourceName, object id)
     {
         ArgumentNullException.ThrowIfNull(messages);

@@ -318,6 +318,9 @@ internal static class ResourceLinker
         "restore" or "purge" when resource.Has(Traits.SoftDeletable) => nameof(Traits.SoftDeletable),
         "archive" or "unarchive" when resource.Has(Traits.Archivable) => nameof(Traits.Archivable),
         "expire" when resource.Expiry is not null => "Expiring",
+        "clone" when resource.Has(Traits.Cloneable) => nameof(Traits.Cloneable),
+        "move" when resource.Has(Traits.Orderable) => nameof(Traits.Orderable),
+        "preview" when resource.Has(Traits.Previewable) => nameof(Traits.Previewable),
         "cancel" when resource.Archetype == Archetype.Job => "MapJob",
         _ => null,
     };

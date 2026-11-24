@@ -251,6 +251,15 @@ internal enum Traits
 
     /// <summary>Kayıt serbest bir anahtar-değer çantası taşır.</summary>
     Metadata = 1024,
+
+    /// <summary>Kayıtlar kapsamları içinde bir sıra tutar.</summary>
+    Orderable = 2048,
+
+    /// <summary>Kayıt kopyalanabilir.</summary>
+    Cloneable = 4096,
+
+    /// <summary>Yazmaların kaydetmeyen bir önizlemesi vardır.</summary>
+    Previewable = 8192,
 }
 
 /// <summary>Üretilecek standart işlemler. Üye adları <c>Haldus.CrudOperation</c> ile aynıdır.</summary>

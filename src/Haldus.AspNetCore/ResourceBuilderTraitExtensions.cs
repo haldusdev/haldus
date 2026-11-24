@@ -110,6 +110,30 @@ public static class ResourceBuilderTraitExtensions
     public static ResourceBuilder<TEntity> Metadata<TEntity>(this ResourceBuilder<TEntity> builder)
         where TEntity : class => builder;
 
+    /// <summary>
+    /// Kaydın kopyalanmasını sağlar: <c>POST /{id}/clone</c>. Yazılabilir alanlar ve gömülü satırlar kopyaya taşınır;
+    /// kimlik, durum, numara, zaman damgaları ve sahip yeni bir kayıtta olduğu gibi atanır. İstek, isteğe bağlı
+    /// bir gövdeyle kopyadaki alanları değiştirebilir (benzersiz bir alanın yeni değeri böyle verilir).
+    /// </summary>
+    public static ResourceBuilder<TEntity> Cloneable<TEntity>(this ResourceBuilder<TEntity> builder)
+        where TEntity : class => builder;
+
+    /// <summary>
+    /// Kayıtlara bir sıra verir: <c>Position</c> alanı üretilir (0'dan başlar, boşluksuzdur), liste varsayılan
+    /// olarak bu sırayla döner ve <c>POST /{id}/move</c> kaydı taşır. Sıra, kaydın kapsamı içindedir: aynı kiracı,
+    /// sahip ve ebeveyn (ağaçta aynı üst düğüm).
+    /// </summary>
+    public static ResourceBuilder<TEntity> Orderable<TEntity>(this ResourceBuilder<TEntity> builder)
+        where TEntity : class => builder;
+
+    /// <summary>
+    /// Yazmaların önizlemesini ekler: <c>POST /preview</c> yeni bir kaydın, <c>POST /{id}/preview</c> bir
+    /// güncellemenin sonucunu, doğrulayıp hesaplanan alanlarıyla döndürür ama kaydetmez. Sunucunun kaydederken
+    /// atadığı alanlar (kimlik, numara, zaman damgaları) önizlemede boştur.
+    /// </summary>
+    public static ResourceBuilder<TEntity> Previewable<TEntity>(this ResourceBuilder<TEntity> builder)
+        where TEntity : class => builder;
+
     /// <summary>Sunucunun ürettiği anahtarın biçimini seçer; varsayılanı zamana göre sıralı GUID'dir.</summary>
     /// <param name="strategy">Anahtarın biçimi.</param>
     /// <param name="prefix">

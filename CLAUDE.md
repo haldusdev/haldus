@@ -92,6 +92,15 @@ Bunlar kullanıcıyla kararlaştırıldı; yeniden sorma.
     40, değer 500 karakter.
   - `KeyStrategy` için kullanıcı tercih belirtmedi ("No preference"); önerilen önekli kimlik (`ord_…`) ve rastgele
     GUID (v4) yazıldı. ULID ve istemcinin verdiği kimlik yazılmadı; istenirse eklenir.
+- Kayıt işlemleri (13. aşama, kullanıcı kararları):
+  - `.Cloneable()`: `POST /{id}/clone`. Kopyaya yazılabilir alanlar ve gömülü satırlar taşınır; geri kalanı yeni
+    kayıt gibi atanır (yeni kimlik, başlangıç durumu, numara kendi kuralıyla, zaman damgaları, sahip). İstek
+    `PATCH` biçiminde, isteğe bağlı bir gövde alır: gönderilen alanlar kopyada kaynaktakinin yerine geçer.
+  - `.Orderable()`: sıra tam sayı `Position` alanıyla tutulur (0'dan başlar, boşluksuzdur). Taşıma
+    `POST /{id}/move` ile, gövdede `{ "position": 2 }` verilerek istenir; aynı kapsamdaki kayıtlar tek
+    transaction'da yeniden numaralanır. Araya eklenen sıra anahtarı (rank) reddedildi.
+  - `.Previewable()`: isteği doğrulayıp hesaplanan alanlarla sonucu döndürür ama kaydetmez. Hem oluşturma
+    (`POST /preview`, oluşturma gövdesi) hem güncelleme (`POST /{id}/preview`, güncelleme gövdesi) için üretilir.
 - Eşzamanlılık trait'inin adı `ConcurrencyChecked` (eski adı `Versioned`). Sürüm yanıt gövdesinde değil
   `ETag` başlığında taşınır; güncelleme ve silme `If-Match` ister (eksikse 428, uyuşmazlıkta 412).
 - Güncelleme için hem `PUT` (tam değiştirme) hem `PATCH` (kısmi) üretilir.
@@ -161,8 +170,8 @@ Bunlar kullanıcıyla kararlaştırıldı; yeniden sorma.
 ## Aşamalar
 
 On aşamanın tamamı bitti (3. aşamaya `.Searchable()`, 8. aşamaya fiziksel temizlik de eklendi). 10. aşamanın
-sonucu `reports/Haldus taksonomi sınaması.md` dosyasındadır: araştırmadaki 59 varlığın (bugünkü sayımla) 25'i temiz, 26'sı
-kısmen ifade ediliyor, 8'i için gereken özellik yok. Aynı veri `tests/Haldus.Generators.Tests/TaxonomyTests.cs`
+sonucu `reports/Haldus taksonomi sınaması.md` dosyasındadır: araştırmadaki 59 varlığın (bugünkü sayımla) 28'i temiz, 24'ü
+kısmen ifade ediliyor, 7'si için gereken özellik yok. Aynı veri `tests/Haldus.Generators.Tests/TaxonomyTests.cs`
 içinde derlenir; yeni bir archetype veya trait bir satırı kapatıyorsa ikisini birlikte güncelle.
 
 1. İskelet
@@ -183,7 +192,7 @@ içinde derlenir; yeni bir archetype veya trait bir satırı kapatıyorsa ikisin
 Kullanıcı 2026-11-24'te onayladı. Kapsamı araştırma raporunun v2 listesi, ilk sürümden kalan küçük kalemler
 ve sınamada çıkan küçük eksiklerdir. Raporun v3 listesi (`MapBalance`, `MapChangeSet`, birden çok durum
 ekseni, çeviri, saklama süresi, okundu takibi) ve tekrar serisi bu planın dışındadır. Her aşama testleriyle
-birlikte ayrı commit olur; 11. ve 12. aşamalar bitti, sıradaki 13.
+birlikte ayrı commit olur; 11, 12 ve 13. aşamalar bitti, sıradaki 14.
 
 11. Sahiplik: `OwnedByCurrentUser`, `MapAssociation().ForCurrentUser()`
 12. Alan eklentileri: `Metadata`, yalnızca oluştururken yazılan alan, `NaturalKey`, `KeyStrategy`, liste
@@ -203,7 +212,7 @@ birlikte ayrı commit olur; 11. ve 12. aşamalar bitti, sıradaki 13.
 Her aşamanın başında kullanıcıya sorulacak kararlar (yanıtlandıkça "Tasarım kararları"na taşınır):
 
 
-- 13: Kopyalamada satırlar ve numara nasıl davransın; sıra tam sayı mı, araya eklemeye uygun bir değer mi.
+
 - 14: Karşı kaydı Haldus mu üretsin, kullanıcının handler'ı mı.
 - 15: Sırrın saklanma biçimi (hash algoritması, önek).
 - 17: Onay tek adım mı, zincir mi.
@@ -464,6 +473,33 @@ netleştirilecek.
     gerekmez. Sınırları `MetadataAttribute` doğrular; `PATCH` birleştirdiği için sınır birleşmiş çantaya da
     uygulanır. `PUT` isteğinde çanta gönderilmezse boşaltılır (gömülü satırların aksine zorunlu değildir).
     Yanıt DTO'su bir sözlük taşıdığı için record eşitliği artık içeriği karşılaştırmaz.
+- **Kayıt işlemleri.** Üçü de trait bayrağıdır (`Traits.Orderable`, `Cloneable`, `Previewable`); uçlarının adları
+  (`move`, `clone`, `preview`) geçiş ve aksiyon adı olarak kullanılamaz (`ResourceLinker.ReservedRoute`).
+  - **Sıra.** `IOrderable.Position` trait alanıdır: yanıtta görünür, isteklerde yer almaz, aranabilir ve
+    sıralanabilir. Kapsam, kaydın görünürlüğünü çizen şeylerdir (kiracı ve sahip sorgu filtresinden, ebeveyn
+    adresten) ve ağaçta ayrıca üst düğümdür (`EndpointEmitter.Siblings`). Konumlar boşluksuz kalsın diye kapsamın
+    üyelerini değiştiren her yazma `HaldusOrdering.BeginAsync` kilidinin (PostgreSQL `pg_advisory_xact_lock`;
+    açık transaction yoksa yenisini açar, varsa katılır) altında yapılır: oluşturma ve geri yükleme sona ekler
+    (`OrderAppend`), silme arkadakileri öne alır (`OrderCloseGap`), üst düğümü değiştiren güncelleme ikisini
+    birden yapar (`OrderReparent`), taşıma kapsamı okuyup yeniden numaralar (`HaldusOrdering.MoveAsync`).
+    **Sıralı bir kaynağa kapsamın üyelerini değiştiren yeni bir uç eklerken bu parçaları kullan.** Kilidin
+    anahtarında üst düğüm yoktur (bütün ağaç tek kilittir), çünkü düğüm daldan dala geçerken iki dal birlikte
+    değişir. Liste, başka bir sıra istenmedikçe `Position` ile döner.
+    Sınırlar: süresi dolan (`Expiring`) kayıt gizlenir ama konumunu tutar, bu yüzden görünen sırada boşluk
+    kalabilir; komşuları yeniden numaralamak onların `UpdatedAt` alanını ilerletmez ama sürümlerini (xmin)
+    ilerletir; büyük kapsamlarda taşıma çok satır günceller (kullanıcı bunu bilerek seçti).
+  - **Kopya.** `EmitClone`: kaynak izlenmeden okunur, yeni kayıt `CreateInitializer(source: "source")` ile kurulur
+    (kimlik, ebeveyn, başlangıç durumu ve ömür yeni kayıttaki gibi), isteğin gönderdiği alanlar
+    `PatchAssignments(_writable)` ile üstüne yazılır, satırlar yeni kimliklerle kopyalanır ve kayıt
+    `SaveCreated()` ile kaydedilir (numara ve sıra oluşturmadakiyle aynı yoldan). İstek tipi
+    `Clone{Entity}Request` kısmidir ve yalnızca oluştururken yazılan alanları da taşır; gövde isteğe bağlıdır.
+    Doğal anahtar kopyanın değeri üzerinden denetlenir; değiştirilmediyse 409 döner. Kopyalanan referansların
+    hâlâ görünür olduğu yeniden doğrulanmaz (yalnızca istekte gönderilenler doğrulanır).
+  - **Önizleme.** `EmitPreview`: gerçek ucun kontrol ve hesaplama parçalarını kullanır, kaydetmez. Oluşturma
+    önizlemesinde kimlik üretilmez (`CreateInitializer(preview: true)`); kaydederken atanan alanlar (numara,
+    zaman damgaları, kiracı, sahip, konum) boştur. Güncelleme önizlemesi kaydı izleyerek değiştirir ve sonunda
+    `ChangeTracker.Clear()` çağırır; sürüm (`If-Match`) istemez. Tekil ucun kurallarını paylaşılan parçalara
+    koyma kuralı burada da geçerlidir: doğrudan handler'a yazılan bir kural önizlemede uygulanmaz.
 - **Yanıt izdüşümü tek yerdedir:** `ResourceEmitter.ResponseAssignments`. Bir kaynağın yanıtını döndüren her
   üretici (kendi uçları, bağ listeleri) onu kullanır; elle yazılan bir izdüşüm, yanıta sonradan eklenen zorunlu
   alanlarda (durum, numara, gömülü satırlar) derlenmez.
