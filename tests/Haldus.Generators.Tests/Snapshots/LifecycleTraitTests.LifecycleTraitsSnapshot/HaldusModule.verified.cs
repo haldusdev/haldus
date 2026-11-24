@@ -18,6 +18,7 @@ internal static class HaldusModule
                 entity.HasQueryFilter(global::Haldus.HaldusFilters.Tenant, item => item.TenantId == global::Haldus.HaldusScope.TenantId(context));
                 entity.HasIndex(item => item.TenantId);
                 entity.Property(item => item.Status).HasConversion<string>().HasMaxLength(64);
+                entity.Property(item => item.Status).IsConcurrencyToken();
                 entity.Property(item => item.Number).HasMaxLength(64);
                 entity.HasIndex(item => new { item.TenantId, item.Number }).IsUnique();
             });

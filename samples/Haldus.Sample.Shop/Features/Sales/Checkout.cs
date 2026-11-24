@@ -2,6 +2,13 @@ using System.ComponentModel.DataAnnotations;
 
 namespace Haldus.Sample.Shop.Features.Sales;
 
+public enum ReservationStatus
+{
+    Held,
+    Confirmed,
+    Released,
+}
+
 /// <summary>Stok rezervasyonu: 15 dakika yaşar, süresi dolunca kendiliğinden görünmez olur.</summary>
 public partial class Reservation
 {

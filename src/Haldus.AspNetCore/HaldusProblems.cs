@@ -88,6 +88,20 @@ public static class HaldusProblems
             statusCode: StatusCodes.Status409Conflict);
     }
 
+    /// <summary>
+    /// Kaydın durumu, istek işlenirken başka bir istek tarafından değiştirildi; bu istek eski durumu
+    /// görerek karar verdiği için hiçbir şey kaydedilmedi.
+    /// </summary>
+    public static ProblemHttpResult StateChanged(IHaldusMessages messages)
+    {
+        ArgumentNullException.ThrowIfNull(messages);
+
+        return TypedResults.Problem(
+            title: messages.Format(HaldusMessageKeys.StateConflictTitle),
+            detail: messages.Format(HaldusMessageKeys.StateChangedDetail),
+            statusCode: StatusCodes.Status409Conflict);
+    }
+
     /// <summary>Geçişin iş mantığı geçişi reddetti; açıklama onu reddeden koddan gelir.</summary>
     public static ProblemHttpResult TransitionRejected(IHaldusMessages messages, string reason)
     {

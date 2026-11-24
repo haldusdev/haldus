@@ -222,6 +222,14 @@ internal static class ModuleEmitter
         {
             // Durum adıyla saklanır: enum'a yeni üye eklemek veya üyeleri yeniden sıralamak eski kayıtları bozmaz.
             statements.Add("entity.Property(item => item.Status).HasConversion<string>().HasMaxLength(64);");
+
+            if (!resource.Has(Traits.ConcurrencyChecked))
+            {
+                // Durum kontrolü ile yazma arasında başka bir istek durumu değiştirebilir. Durum eşzamanlılık
+                // belirteci olunca her güncelleme ve silme "durum hâlâ okuduğum gibi mi" koşuluyla yapılır;
+                // sürüm kontrollü kaynakta aynı işi satır sürümü görür.
+                statements.Add("entity.Property(item => item.Status).IsConcurrencyToken();");
+            }
         }
 
         if (resource.Numbering is not null)

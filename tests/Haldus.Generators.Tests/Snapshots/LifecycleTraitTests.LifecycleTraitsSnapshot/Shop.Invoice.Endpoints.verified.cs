@@ -147,7 +147,14 @@ public static partial class InvoiceEndpoints
 
         entity.Customer = request.Customer;
 
-        await context.SaveChangesAsync(cancellationToken);
+        try
+        {
+            await context.SaveChangesAsync(cancellationToken);
+        }
+        catch (global::Microsoft.EntityFrameworkCore.DbUpdateConcurrencyException)
+        {
+            return global::Haldus.HaldusProblems.StateChanged(messages);
+        }
 
         return global::Microsoft.AspNetCore.Http.TypedResults.Ok(ToResponse(entity));
     }
@@ -173,7 +180,14 @@ public static partial class InvoiceEndpoints
         }
 
 
-        await context.SaveChangesAsync(cancellationToken);
+        try
+        {
+            await context.SaveChangesAsync(cancellationToken);
+        }
+        catch (global::Microsoft.EntityFrameworkCore.DbUpdateConcurrencyException)
+        {
+            return global::Haldus.HaldusProblems.StateChanged(messages);
+        }
 
         return global::Microsoft.AspNetCore.Http.TypedResults.Ok(ToResponse(entity));
     }
@@ -193,7 +207,14 @@ public static partial class InvoiceEndpoints
         }
 
         context.Set<Invoice>().Remove(entity);
-        await context.SaveChangesAsync(cancellationToken);
+        try
+        {
+            await context.SaveChangesAsync(cancellationToken);
+        }
+        catch (global::Microsoft.EntityFrameworkCore.DbUpdateConcurrencyException)
+        {
+            return global::Haldus.HaldusProblems.StateChanged(messages);
+        }
 
         return global::Microsoft.AspNetCore.Http.TypedResults.NoContent();
     }
@@ -241,7 +262,14 @@ public static partial class InvoiceEndpoints
             entity.Number = numbering.Number;
         }
 
-        await context.SaveChangesAsync(cancellationToken);
+        try
+        {
+            await context.SaveChangesAsync(cancellationToken);
+        }
+        catch (global::Microsoft.EntityFrameworkCore.DbUpdateConcurrencyException)
+        {
+            return global::Haldus.HaldusProblems.StateChanged(messages);
+        }
 
         if (numbering is not null)
         {

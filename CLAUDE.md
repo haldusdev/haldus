@@ -239,6 +239,12 @@ Bunlar kullanıcıyla kararlaştırıldı; yeniden sorma.
     `Compute`, numara, kaydet. İş mantığı `TransitionRejectedException` fırlatırsa hiçbir şey kaydedilmez
     ve mesajı 422 ile döner; metni üretmek (ve çevirmek) fırlatanın işidir.
   - İstek `ITransition` uygulamıyorsa ve lambda verilmediyse handler eksikliği uygulama açılırken hata olur.
+  - **Durum kontrolü yazmayla birlikte yinelenir.** Kontrol ile kaydetme arasında başka bir istek durumu
+    değiştirebilir. Sürüm kontrollü kaynakta bunu satır sürümü yakalar (412); diğerlerinde `Status`
+    eşzamanlılık belirtecidir (`IsConcurrencyToken`) ve çakışma 409 `StateChanged` olur. Durum makinesi
+    olan bir kaynağa yeni bir yazma ucu eklerken kaydetmeyi `Save()` ile yap; düz `SaveChangesAsync` bu
+    korumayı atlar. Bilinen açık: ayrı uçlu detayın sahip durumu kontrolü (`OwnerGuard`) sahibin satırını
+    kilitlemez; sahip tam o anda durum değiştirirse detay yazması yine de geçebilir.
   - Ayrı uçlu bir detay sahibinin parçasıdır: sahibinde `EditableIn` varsa detayın yazma uçları da sahibin
     durumuna bakar (`OwnerGuardModel`). Serbestçe yazılabilen alt kayıtlar için `MapDetail` yerine
     `.Under<T>()` kullanılır.

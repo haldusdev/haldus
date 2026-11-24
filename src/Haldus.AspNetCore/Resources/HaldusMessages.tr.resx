@@ -51,6 +51,9 @@
   <data name="StateConflict.Detail" xml:space="preserve">
     <value>Kayıt '{1}' durumundayken '{0}' işlemine izin verilmiyor.</value>
   </data>
+  <data name="StateChanged.Detail" xml:space="preserve">
+    <value>Bu istek işlenirken kaydın durumu değişti. Kaydı yeniden yükleyip tekrar deneyin.</value>
+  </data>
   <data name="TransitionRejected.Title" xml:space="preserve">
     <value>İşlem reddedildi</value>
   </data>

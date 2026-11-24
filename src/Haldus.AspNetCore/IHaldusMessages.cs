@@ -27,6 +27,7 @@ public static class HaldusMessageKeys
     public const string InUseDetail = "InUse.Detail";
     public const string StateConflictTitle = "StateConflict.Title";
     public const string StateConflictDetail = "StateConflict.Detail";
+    public const string StateChangedDetail = "StateChanged.Detail";
     public const string TransitionRejectedTitle = "TransitionRejected.Title";
     public const string IdempotencyKeyInvalidTitle = "IdempotencyKeyInvalid.Title";
     public const string IdempotencyKeyInvalidDetail = "IdempotencyKeyInvalid.Detail";

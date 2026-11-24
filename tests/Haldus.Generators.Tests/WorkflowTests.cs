@@ -267,6 +267,31 @@ public sealed class WorkflowTests
     }
 
     [Fact]
+    public void StateChecks_AreRepeatedByTheDatabaseWhenTheRecordIsWritten()
+    {
+        var plain = Run($"""
+            var orders = {Workflow}.EditableIn(OrderStatus.Draft);
+            orders.MapTransition("ship", OrderStatus.Placed, OrderStatus.Shipped);
+            """).AssertCompiles();
+        var versioned = Run($"""
+            var orders = {Workflow}.ConcurrencyChecked();
+            orders.MapTransition("ship", OrderStatus.Placed, OrderStatus.Shipped);
+            """).AssertCompiles();
+
+        // Kontrol ile yazma arasında başka bir istek durumu değiştirebilir; durum, yazmanın koşuludur.
+        Assert.Contains("entity.Property(item => item.Status).IsConcurrencyToken();", plain.Sources["HaldusModule.g.cs"]);
+
+        // PUT, PATCH, silme ve geçiş.
+        var endpoints = plain.Sources["Shop.Order.Endpoints.g.cs"];
+        Assert.Equal(4, CountOccurrences(endpoints, "catch (global::Microsoft.EntityFrameworkCore.DbUpdateConcurrencyException)"));
+        Assert.Equal(4, CountOccurrences(endpoints, "return global::Haldus.HaldusProblems.StateChanged(messages);"));
+
+        // Sürüm kontrollü kaynakta aynı işi satır sürümü görür.
+        Assert.DoesNotContain("IsConcurrencyToken", versioned.Sources["HaldusModule.g.cs"]);
+        Assert.DoesNotContain("StateChanged", versioned.Sources["Shop.Order.Endpoints.g.cs"]);
+    }
+
+    [Fact]
     public void Transition_OnAReadOnlyResource_IsItsOnlyWrite()
     {
         var run = Run("""

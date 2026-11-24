@@ -58,9 +58,14 @@ public static class SalesEndpoints
             to: OrderStatus.Draft,
             (order, _) => order.Reopen());
 
-        app.MapCrud<Reservation>()
+        // Rezervasyon geçici bir tutmadır: onaylanır, bırakılır veya 15 dakika sonra kendiliğinden biter.
+        var reservations = app.MapCrud<Reservation>()
             .MultiTenant()
+            .Workflow<ReservationStatus>(initial: ReservationStatus.Held)
             .Expiring(TimeSpan.FromMinutes(15));
+
+        reservations.MapTransition("confirm", from: ReservationStatus.Held, to: ReservationStatus.Confirmed);
+        reservations.MapTransition("release", from: ReservationStatus.Held, to: ReservationStatus.Released);
 
         app.MapCrud<Cart>()
             .Expiring(TimeSpan.FromDays(7), sliding: true);

@@ -51,6 +51,9 @@
   <data name="StateConflict.Detail" xml:space="preserve">
     <value>'{0}' is not allowed while the record is in the '{1}' state.</value>
   </data>
+  <data name="StateChanged.Detail" xml:space="preserve">
+    <value>The state of the record changed while this request was being processed. Reload it and try again.</value>
+  </data>
   <data name="TransitionRejected.Title" xml:space="preserve">
     <value>The operation was rejected</value>
   </data>

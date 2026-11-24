@@ -256,6 +256,27 @@ public sealed partial class WorkflowEndpointTests(ShopFixture fixture)
         Assert.Equal(1, counters);
     }
 
+    [Fact]
+    public async Task ConcurrentTransitions_FromTheSameState_LetOnlyOneThrough()
+    {
+        // Rezervasyonda sürüm kontrolü yok; durumun kendisi yazmayla birlikte doğrulanır.
+        var reservation = await ReadAsync<ReservationResponse>(
+            await SendAsync(HttpMethod.Post, "/reservations", new { productName = "Keyboard", quantity = 1 }));
+
+        var responses = await Task.WhenAll(Enumerable.Range(0, 8).Select(index =>
+            SendAsync(HttpMethod.Post, $"/reservations/{reservation.Id}/{(index % 2 == 0 ? "confirm" : "release")}")));
+
+        var winner = Assert.Single(responses, response => response.StatusCode == HttpStatusCode.OK);
+        Assert.All(
+            responses.Where(response => response != winner),
+            response => Assert.Equal(HttpStatusCode.Conflict, response.StatusCode));
+
+        // Kayıt, kazanan geçişin durumundadır; kaybedenlerden hiçbiri üzerine yazmadı.
+        var final = await ReadAsync<ReservationResponse>(await SendAsync(HttpMethod.Get, $"/reservations/{reservation.Id}"));
+        Assert.Equal((await ReadAsync<ReservationResponse>(winner)).Status, final.Status);
+        Assert.NotEqual(ReservationStatus.Held, final.Status);
+    }
+
     [GeneratedRegex(@"^ORD-\d{4}-\d{6}$")]
     private static partial Regex NumberPattern();
 

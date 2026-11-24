@@ -1589,11 +1589,11 @@ internal sealed class EndpointEmitter
             return Save();
         }
 
-        var concurrency = _concurrency
+        var concurrency = _concurrency || GuardsState
             ? $$"""
                     catch (global::Microsoft.EntityFrameworkCore.DbUpdateConcurrencyException)
                     {
-                        return {{Problems}}.PreconditionFailed(messages);
+                        return {{Problems}}.{{(_concurrency ? "PreconditionFailed" : "StateChanged")}}(messages);
                     }
 
             """
@@ -1679,7 +1679,13 @@ internal sealed class EndpointEmitter
             """
         : string.Empty;
 
-    private string Save() => _concurrency
+    /// <summary>
+    /// Durum makinesi olan ama sürüm kontrolü olmayan kaynakta durum, eşzamanlılık belirtecidir: kayıt
+    /// okunduktan sonra başka bir istek durumunu değiştirdiyse kaydetme başarısız olur.
+    /// </summary>
+    private bool GuardsState => _resource.Workflow is not null && !_concurrency;
+
+    private string Save() => _concurrency || GuardsState
         ? $$"""
                     try
                     {
@@ -1687,7 +1693,7 @@ internal sealed class EndpointEmitter
                     }
                     catch (global::Microsoft.EntityFrameworkCore.DbUpdateConcurrencyException)
                     {
-                        return {{Problems}}.PreconditionFailed(messages);
+                        return {{Problems}}.{{(_concurrency ? "PreconditionFailed" : "StateChanged")}}(messages);
                     }
 
             """
