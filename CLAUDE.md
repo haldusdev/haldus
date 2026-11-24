@@ -8,7 +8,10 @@ EF Core yapılandırması üretilir.
 
 - Derleme: `dotnet build`
 - Testler: `dotnet test` (entegrasyon testleri Docker ister; Testcontainers PostgreSQL başlatır)
+- Tek test projesi: `dotnet test --project tests/Haldus.Generators.Tests`
+- Test çalıştırıcısı Microsoft.Testing.Platform'dur (`global.json`); xUnit v3, .NET 10 SDK'da VSTest ile çalışmaz.
 - Örnek uygulamanın `openapi.json` dosyası build sırasında yeniden üretilir.
+- Örnek uygulamada üretilen kod `samples/Haldus.Sample.Shop/obj/Generated` altında incelenebilir.
 
 ## Yapı
 
@@ -68,6 +71,8 @@ Bunlar kullanıcıyla kararlaştırıldı; yeniden sorma.
 
 ## Aşamalar
 
+1 ve 2 tamamlandı; sıradaki 3.
+
 1. İskelet
 2. Generator çekirdeği ve `MapCrud`
 3. Temel trait'ler: `MultiTenant`, `Auditable`, `SoftDeletable`, `ConcurrencyChecked`, `Archivable`,
@@ -86,6 +91,19 @@ Bunlar kullanıcıyla kararlaştırıldı; yeniden sorma.
 - Frontend ve mobil desteğinin kapsamı (backend API şekli oturunca ele alınacak).
 - `MapJob` altyapısı (8. aşamada sorulacak).
 - Snapshot test kütüphanesi: Verify 33.x sponsorluk lisansı veya muafiyet beyanı istiyor.
+
+## Generator'ın işleyişi
+
+- `Parsing/MapCallParser` her `Map*` çağrısını ve onu izleyen zinciri `ResourceModel`'e çevirir. Zincir
+  şimdilik yalnızca okunur; trait'ler 3. aşamada bu modelden üretilecek.
+- Üretilen kod çalışma zamanına bir module initializer ile bağlanır: `HaldusEndpointRegistry` (entity →
+  endpoint eşleyici) ve `HaldusModelRegistry` (assembly → model katkısı). `MapCrud<T>()` çalışma
+  zamanında yalnızca bu kayda bakar.
+- Kullanıcı `Id` yazmadıysa `Guid` (v7) üretilir; yazdıysa `Guid`, `int` veya `long` olmalıdır.
+- DTO'lara yalnızca skaler alanlar girer; herkese açık setter'ı olmayan alanlar yalnızca yanıtta yer alır.
+- `AddHaldus<TContext>()` aynı projedeki partial bir bağlamı gösteriyorsa DbSet özellikleri eklenir.
+- Tanılar `HALDUS001`+ kodlarıyla `Diagnostics/HaldusDiagnostics.cs` ve `AnalyzerReleases.Unshipped.md`
+  dosyalarında birlikte tutulur.
 
 ## Kurallar
 

@@ -15,6 +15,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\..\samples\Haldus.Sample.Shop\Haldus.Sample.Shop.csproj" />
   </ItemGroup>
 
