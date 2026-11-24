@@ -294,6 +294,22 @@ internal static class MapCallParser
                         new EquatableArray<string>([$"KeyStrategy.Client cannot be combined with {other}: it creates records whose key no client has given"])));
                 }
             }
+
+            // Anahtar tablo genelinde benzersizdir. Kayıtları herkese görünmeyen bir kaynakta "bu kimlik alınmış"
+            // yanıtı, isteği yapanın göremediği bir kaydın var olduğunu söylerdi.
+            foreach (var scope in new[] { "MultiTenant", "OwnedByCurrentUser", "Under", "AttachedTo" })
+            {
+                if (chain.Any(call => call.Name == scope))
+                {
+                    diagnostics.Add(new DiagnosticInfo(
+                        "HALDUS007",
+                        location,
+                        new EquatableArray<string>(
+                        [
+                            $"KeyStrategy.Client cannot be combined with {scope}: a taken key would reveal a record the caller cannot see; let Haldus generate the key and use Idempotent() for safe retries",
+                        ])));
+                }
+            }
         }
 
         // Anahtarı istemcinin verdiği archetype'larda varsayılan tip metindir; diğerlerinde sunucu Guid üretir.

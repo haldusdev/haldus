@@ -426,6 +426,9 @@ public sealed class FieldExtensionTests
     [InlineData("app.MapCrud<Product>().KeyStrategy(KeyStrategy.Client).Batch();", "KeyStrategy.Client cannot be combined with Batch")]
     [InlineData("app.MapCrud<Product>().KeyStrategy(KeyStrategy.Client).Cloneable();", "KeyStrategy.Client cannot be combined with Cloneable")]
     [InlineData("app.MapCrud<Product>().KeyStrategy(KeyStrategy.Client).Without(CrudOperation.Create);", "KeyStrategy.Client needs the Create operation")]
+    [InlineData("app.MapCrud<Product>().KeyStrategy(KeyStrategy.Client).MultiTenant();", "KeyStrategy.Client cannot be combined with MultiTenant")]
+    [InlineData("app.MapCrud<Product>().KeyStrategy(KeyStrategy.Client).OwnedByCurrentUser();", "KeyStrategy.Client cannot be combined with OwnedByCurrentUser")]
+    [InlineData("app.MapCrud<Category>(); app.MapCrud<Product>().KeyStrategy(KeyStrategy.Client).Under<Category>();", "KeyStrategy.Client cannot be combined with Under")]
     [InlineData("app.MapCrud<Product>().KeyStrategy(KeyStrategy.Ulid, \"ord\");", "A key prefix has no effect")]
     public void KeyStrategy_RejectsCombinationsThatCannotWork(string body, string message)
     {

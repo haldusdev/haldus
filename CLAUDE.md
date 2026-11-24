@@ -725,6 +725,9 @@ denenmesi, yük ölçümü. Raporun "Bilinen sınırlar" tablosundaki kalemler d
     kimlik birincil anahtarın ihlalinden tanınıp 409 olur (ön kontrol yoktur: başka bir kiracının aynı kimliği de
     çakışmadır ve sorgu filtreleri onu göstermezdi). Kayıt oluşturan öteki yollar kimlik veremediği için `Batch`,
     `Cloneable`, `CreatedFrom`, `Reversible`, `Supersedes`, `Document` ve `Publishable` ile birleşmez (`HALDUS007`).
+    Görünürlüğü sınırlı kaynaklarla da birleşmez (`MultiTenant`, `OwnedByCurrentUser`, `Under`, `AttachedTo`): anahtar
+    tablo genelinde benzersizdir ve "alınmış" yanıtı, isteği yapanın göremediği bir kaydın var olduğunu söylerdi
+    (güvenlik incelemesinde çıktı). Öyle kaynaklarda yinelenen isteğe karşı `Idempotent()` kullanılır.
   - **Metadata.** `Traits.Metadata` (`IHasMetadata`). Alan trait alanı gibi üretilir ve yanıtta yer alır;
     isteklerdeki yeri ayrıca üretilir (`ResourceEmitter.AppendRequest`, `MetadataChanges`). Çanta jsonb kolonunda,
     metne çevrilerek saklanır (`HaldusDb.ConfigureMetadata`); böylece Npgsql'in dinamik JSON desteğinin açılması
