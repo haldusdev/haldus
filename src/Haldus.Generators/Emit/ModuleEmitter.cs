@@ -488,6 +488,18 @@ internal static class ModuleEmitter
             }
         }
 
+        foreach (var axis in resource.Axes)
+        {
+            // Ek eksen de asıl durum gibi adıyla saklanır ve aynı nedenle eşzamanlılık belirtecidir: aynı geçişi
+            // birlikte isteyen iki istekten yalnızca biri geçer.
+            statements.Add($"entity.Property(item => item.{axis.Property}).HasConversion<string>().HasMaxLength(64);");
+
+            if (!resource.Has(Traits.ConcurrencyChecked))
+            {
+                statements.Add($"entity.Property(item => item.{axis.Property}).IsConcurrencyToken();");
+            }
+        }
+
         if (resource.Has(Traits.CustomFields))
         {
             statements.Add("global::Haldus.HaldusCustomFieldStore.ConfigureValues(entity.Property(item => item.CustomFields));");

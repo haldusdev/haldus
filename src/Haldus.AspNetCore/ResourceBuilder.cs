@@ -250,6 +250,16 @@ public sealed class ResourceBuilder<TEntity>(RouteGroupBuilder group, IEndpointR
     public ResourceBuilder<TEntity> Workflow<TStatus>(TStatus initial = default)
         where TStatus : struct, Enum => this;
 
+    /// <summary>
+    /// Kayda, asıl durumundan bağımsız ilerleyen ek bir durum ekseni ekler (siparişin kendi durumunun yanında ödeme
+    /// ve sevkiyat durumu gibi). Alan, durum tipinin adını taşır (<c>PaymentStatus</c>), istek gövdesinden yazılamaz
+    /// ve yalnızca durumları o tipten olan <c>MapTransition</c> geçişleriyle değişir. <c>EditableIn</c> ve
+    /// <c>DeletableIn</c> kuralları yalnızca asıl duruma (<c>Workflow</c>) bakar.
+    /// </summary>
+    /// <param name="initial">Yeni kaydın bu eksendeki durumu.</param>
+    public ResourceBuilder<TEntity> Axis<TStatus>(TStatus initial = default)
+        where TStatus : struct, Enum => this;
+
     /// <summary>Güncellemeye (<c>PUT</c>, <c>PATCH</c>) yalnızca sayılan durumlarda izin verir; diğerlerinde 409 döner.</summary>
     public ResourceBuilder<TEntity> EditableIn(params Enum[] states) => this;
 

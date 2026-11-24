@@ -7,12 +7,12 @@ sonunda (10. aşama) ve ikinci planın sonunda (21. aşama); aşağıdaki tablo 
 
 ## Sonuç
 
-59 satırın 58'i bugünkü API ile yazılıp derleniyor; 52'si önerilen eşlemeyi eksiksiz ifade ediyor.
+59 satırın 58'i bugünkü API ile yazılıp derleniyor; 53'ü önerilen eşlemeyi eksiksiz ifade ediyor.
 
 | Sonuç | İlk sınama | Bugün | Anlamı |
 |---|---|---|---|
-| Temiz | 19 | 52 | Raporun önerdiği eşleme, yazılmış özelliklerle eksiksiz ifade ediliyor |
-| Kısmi | 29 | 6 | Çekirdek ifade ediliyor; önerilen eşlemedeki bir özellik yok |
+| Temiz | 19 | 53 | Raporun önerdiği eşleme, yazılmış özelliklerle eksiksiz ifade ediliyor |
+| Kısmi | 29 | 5 | Çekirdek ifade ediliyor; önerilen eşlemedeki bir özellik yok |
 | Yok | 11 | 1 | Gereken archetype veya trait yazılmadı |
 
 Araştırmanın başlangıçtaki düz katalog için kendi sayımı 10 oturuyor, 31 zorlanarak, 18 oturmuyor idi. Üç sayım
@@ -36,6 +36,7 @@ iyileşme ölçüsü olarak değil, yön olarak okunmalıdır.
 | 20. Özel alanlar ve aktarma | `CustomFields`, `Exports`, `Imports` | 2 |
 | 22. Saklama, okundu takibi, toplama | `Retention`, `ReadTracking`, `Counts`, `Sums` | 4 |
 | 23. Yerelleştirilmiş alanlar | `Translatable` | 1 |
+| 24. Durum eksenleri | `Axis` | 1 |
 
 Dört katmanlı model (bir archetype, ilişkiler, en fazla bir durum modeli, trait'ler) iki sınamadan da sağlam çıktı:
 hiçbir satır iki archetype istemedi ve hiçbir satır modelin yeniden açılmasını gerektirmedi. Kapanan bütün boşluklar
@@ -58,7 +59,7 @@ yeni bir trait, ilişki bildirimi veya zincir metoduyla kapandı; kalanlar da ay
 
 | # | Varlık | Sonuç | Bugün nasıl yazılıyor | Eksik olan |
 |---|---|---|---|---|
-| 1 | Order | Kısmi | `MapCrud` + `Workflow` + `Numbered(assignOn)` + `ConcurrencyChecked` + `Auditable` + `MapDetail` + `CreatedFrom<Cart>` | `MapChangeSet`, birden çok durum ekseni |
+| 1 | Order | Kısmi | `MapCrud` + `Workflow` + `Axis<PaymentState>` + `Axis<ShipmentState>` + `Numbered(assignOn)` + `ConcurrencyChecked` + `Auditable` + `MapDetail` + `CreatedFrom<Cart>` | `MapChangeSet` |
 | 2 | OrderItem / LineItem | Temiz | Gömülü `MapDetail` + `IComputed` toplamlar | — |
 | 3 | Product + Variant + Option | Kısmi | `MapCrud` + `Publishable` + gömülü `MapDetail` (sırası korunur) + `Batch` | Varyant üretimi |
 | 4 | Category / Collection | Temiz | `MapCrud` + `Hierarchical` + `Archivable` + `Orderable` | — |
@@ -67,7 +68,7 @@ yeni bir trait, ilişki bildirimi veya zincir metoduyla kapandı; kalanlar da ay
 | 7 | Coupon | Temiz | `MapCrud` + `Expiring()` + `NaturalKey` + `CreateOnly` + `IComputed` | — |
 | 8 | Payment (auth/capture/void) | Temiz | `MapCrud().Without(Delete)` + `Workflow` + `Idempotent`; hareketler `MapAppendOnly().Under<Payment>()` | — |
 | 9 | Refund | Temiz | `MapAppendOnly` + `Workflow` + `Idempotent` + `Metadata`; iptal bir geçiş | — |
-| 10 | FulfillmentOrder | Kısmi | `MapReadOnly` + `Workflow` + geçişler | İkinci durum ekseni, böl/birleştir/taşı |
+| 10 | FulfillmentOrder | Temiz | `MapReadOnly` + `Workflow` + `Axis<FulfillmentRequest>` + geçişler | |
 | 11 | Inventory level | Kısmi | `MapAppendOnly` hareket + `MapReadOnly().DerivedFrom<StockMovement>()` seviye | `MapBalance` (durum kovaları, kovalar arası taşıma) |
 | 12 | Invoice | Temiz | `MapCrud` + `Workflow` + `EditableIn` + `Numbered(assignOn)` + `Idempotent` + `MapDetail` + `Previewable`; ödeme durumu `Sums<InvoicePayment>()` + `IComputed` ile türetilir | |
 | 13 | InvoiceLine | Temiz | Gömülü `MapDetail` | — |
@@ -160,7 +161,7 @@ yeni bir trait, ilişki bildirimi veya zincir metoduyla kapandı; kalanlar da ay
 | Eksik | Satırlar | Neden yazılmadı |
 |---|---|---|
 | `MapBalance` (durum kovaları, bakiyeye karşı atomik kontrol) | 11, 25 | Araştırmanın üçüncü sürüm listesinde; bugün `MapAppendOnly` + `DerivedFrom` ile yaklaşık ifade ediliyor |
-| Birden çok durum ekseni | 1, 10 | Üçüncü sürüm; "en fazla bir durum modeli" kuralını açar |
+
 | `MapChangeSet` | 1 | Üçüncü sürüm |
 
 | Sepet birleştirme, anonim oturumun sahipliği | 5 | Alana özgü; bir handler işi |

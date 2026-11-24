@@ -200,6 +200,69 @@ public sealed class EngagementEndpointTests(ShopFixture fixture)
         Assert.Equal(BillState.Paid, (await ReadAsync<BillResponse>(await SendAsync(HttpMethod.Get, $"/bills/{other.Id}"))).State);
     }
 
+    // ── Durum eksenleri ────────────────────────────────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task Axes_MoveIndependentlyOfTheMainStatus()
+    {
+        var created = await SendAsync(HttpMethod.Post, "/tickets", new { subject = $"Printer {Guid.NewGuid():N}" });
+        var json = await created.Content.ReadAsStringAsync(CancellationToken);
+        var ticket = await ReadAsync<TicketResponse>(created);
+        var url = $"/tickets/{ticket.Id}";
+
+        // İki eksen de başlangıç durumunda doğar ve yanıtta adıyla görünür; istekle yazılamaz.
+        Assert.Equal((TicketStatus.Open, TicketBilling.Unbilled), (ticket.Status, ticket.TicketBilling));
+        Assert.Contains("\"status\":\"Open\"", json);
+        Assert.Contains("\"ticketBilling\":\"Unbilled\"", json);
+
+        var forged = await ReadAsync<TicketResponse>(await SendAsync(HttpMethod.Put, url, new { subject = ticket.Subject, ticketBilling = "Billed", status = "Closed" }));
+        Assert.Equal((TicketStatus.Open, TicketBilling.Unbilled), (forged.Status, forged.TicketBilling));
+
+        // Geçişin ekseni durumlarının tipinden gelir: faturalama asıl durumu değiştirmez.
+        var billed = await ReadAsync<TicketResponse>(await SendAsync(HttpMethod.Post, $"{url}/bill", new { note = "2 hours" }));
+        Assert.Equal((TicketStatus.Open, TicketBilling.Billed, "2 hours"), (billed.Status, billed.TicketBilling, billed.BillingNote));
+        Assert.Equal(HttpStatusCode.Conflict, (await SendAsync(HttpMethod.Post, $"{url}/bill", new { })).StatusCode);
+
+        var closed = await ReadAsync<TicketResponse>(await SendAsync(HttpMethod.Post, $"{url}/close"));
+        Assert.Equal((TicketStatus.Closed, TicketBilling.Billed), (closed.Status, closed.TicketBilling));
+
+        // Düzenleme kuralı yalnızca asıl duruma bakar; öteki eksen kapalı kayıtta da ilerler.
+        Assert.Equal(HttpStatusCode.Conflict, (await SendAsync(HttpMethod.Put, url, new { subject = "Late edit" })).StatusCode);
+        var refunded = await ReadAsync<TicketResponse>(await SendAsync(HttpMethod.Post, $"{url}/refund"));
+        Assert.Equal((TicketStatus.Closed, TicketBilling.Refunded), (refunded.Status, refunded.TicketBilling));
+
+        var reopened = await ReadAsync<TicketResponse>(await SendAsync(HttpMethod.Post, $"{url}/reopen"));
+        Assert.Equal((TicketStatus.Open, TicketBilling.Refunded), (reopened.Status, reopened.TicketBilling));
+
+        // Liste her eksene göre ayrı ayrı süzülür.
+        var matching = await ReadAsync<PagedResult<TicketResponse>>(await SendAsync(HttpMethod.Get, "/tickets?ticketBilling=Refunded&status=Open&pageSize=100"));
+        var others = await ReadAsync<PagedResult<TicketResponse>>(await SendAsync(HttpMethod.Get, "/tickets?ticketBilling=Unbilled&pageSize=100"));
+        Assert.Contains(matching.Items, item => item.Id == ticket.Id);
+        Assert.DoesNotContain(others.Items, item => item.Id == ticket.Id);
+
+        // Bir eksendeki geçiş, o eksenin durumu uymuyorsa reddedilir.
+        var fresh = await ReadAsync<TicketResponse>(await SendAsync(HttpMethod.Post, "/tickets", new { subject = "Fresh" }));
+        Assert.Equal(HttpStatusCode.Conflict, (await SendAsync(HttpMethod.Post, $"/tickets/{fresh.Id}/refund")).StatusCode);
+    }
+
+    [Fact]
+    public async Task Axes_LetOnlyOneOfTwoConcurrentTransitionsThrough()
+    {
+        for (var round = 0; round < 5; round++)
+        {
+            var ticket = await ReadAsync<TicketResponse>(await SendAsync(HttpMethod.Post, "/tickets", new { subject = $"Race {round}" }));
+
+            var responses = await Task.WhenAll(
+                SendAsync(HttpMethod.Post, $"/tickets/{ticket.Id}/bill", new { note = "first" }),
+                SendAsync(HttpMethod.Post, $"/tickets/{ticket.Id}/bill", new { note = "second" }));
+
+            // Durum kontrolü yazmayla birlikte yinelenir: aynı geçişi birlikte isteyen iki istekten biri geçer.
+            Assert.Equal(
+                [HttpStatusCode.OK, HttpStatusCode.Conflict],
+                responses.Select(response => response.StatusCode).Order());
+        }
+    }
+
     /// <summary>Bildirimi sistem yazar: bir isteğin dışında, bildirimin sahibi olarak çalışan kod.</summary>
     private async Task<List<Guid>> NotifyAsync(string user, params string[] titles)
     {

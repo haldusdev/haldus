@@ -25,6 +25,18 @@ public static class EngagementEndpoints
             .Under<Discussion>()
             .SoftDeletable();
 
+        // İki bağımsız durum ekseni: kaydın kendi durumu (Status) ve faturalanması (TicketBilling). Geçişin hangi
+        // eksende olduğunu durumlarının tipi söyler. EditableIn yalnızca asıl duruma bakar; kapalı kayıt da faturalanır.
+        var tickets = app.MapCrud<Ticket>()
+            .Workflow<TicketStatus>(initial: TicketStatus.Open)
+            .EditableIn(TicketStatus.Open)
+            .Axis<TicketBilling>(initial: TicketBilling.Unbilled);
+
+        tickets.MapTransition("close", from: TicketStatus.Open, to: TicketStatus.Closed);
+        tickets.MapTransition("reopen", from: TicketStatus.Closed, to: TicketStatus.Open);
+        tickets.MapTransition<BillTicket>(from: TicketBilling.Unbilled, to: TicketBilling.Billed);
+        tickets.MapTransition("refund", from: TicketBilling.Billed, to: TicketBilling.Refunded);
+
         // Türetilmiş durum: ödenen tutar ödemelerden toplanır, faturanın durumu Compute() içinde ondan hesaplanır.
         app.MapCrud<Bill>()
             .Sums<BillPayment>(payment => payment.Amount, into: "PaidAmount");

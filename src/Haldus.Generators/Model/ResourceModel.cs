@@ -115,6 +115,9 @@ internal sealed record ResourceModel(
     public TokenModel? Token { get; init; }
 
     /// <summary>Kaydın ters çevrilebildiği durumlar; durum makinesi yoksa <c>null</c> (her zaman).</summary>
+    /// <summary>Asıl durumdan bağımsız ek durum eksenleri.</summary>
+    public EquatableArray<AxisModel> Axes { get; init; } = EquatableArray<AxisModel>.Empty;
+
     /// <summary><c>.Translatable(...)</c> ile sayılan alanlar; henüz doğrulanmamıştır.</summary>
     public EquatableArray<SearchFieldRequest> TranslatableRequests { get; init; } = EquatableArray<SearchFieldRequest>.Empty;
 
@@ -672,6 +675,14 @@ internal sealed record WorkflowModel(
     EquatableArray<string>? EditableIn,
     EquatableArray<string>? DeletableIn);
 
+/// <summary>
+/// Kaydın asıl durumundan bağımsız ilerleyen ek bir durum ekseni (<c>.Axis&lt;PaymentStatus&gt;()</c>): siparişin
+/// kendi durumunun yanında ödeme ve sevkiyat durumu gibi.
+/// </summary>
+/// <param name="Property">Üretilen alanın adı; durum tipinin adıdır.</param>
+/// <param name="Initial">Yeni kaydın bu eksendeki durumu.</param>
+internal sealed record AxisModel(string StatusType, string Property, string Initial);
+
 /// <param name="Pattern">Numara deseni.</param>
 /// <param name="Gapless">Numara kayıtla aynı transaction'da bir sayaç satırından mı alınır.</param>
 /// <param name="AssignOn">Numaranın atandığı durum; <c>null</c> ise kayıt oluşturulurken atanır.</param>
@@ -787,6 +798,9 @@ internal sealed record TransitionModel(
     public bool IsImplicit { get; init; }
 
     public string? ResponseType { get; init; }
+
+    /// <summary>Geçiş ek bir durum eksenindeyse o eksen; asıl durumdaysa <c>null</c>.</summary>
+    public AxisModel? Axis { get; init; }
 
     /// <summary>Üretilen eşleyicinin adı; modül kaydı ve uç üretimi aynı adı kullanır.</summary>
     public string MapperName => $"Map{PascalName}{(IsAction ? "Action" : "Transition")}";

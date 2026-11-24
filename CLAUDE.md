@@ -204,6 +204,12 @@ Bunlar kullanıcıyla kararlaştırıldı; yeniden sorma.
     güncelleme isteklerinde taşınmaz.
   - Okuma ancak `?locale=` verilirse çevrilir; `Accept-Language` veriyi değiştirmez (okuduğunu geri yazan istemci
     kaynak metni ezmesin diye). Yanıt çevirilerin tamamını her zaman `translations` altında taşır.
+- Durum eksenleri (24. aşama). Kullanıcı sormamamı istedi; yazılan, önerdiğim seçeneklerdir ve ayrıca onaylanmadı:
+  - "En fazla bir durum modeli" kuralı korunur: asıl durum yine tektir (`Workflow`, `Document`...). Ek eksenler
+    `.Axis<TStatus>()` ile bildirilir, alanı durum tipinin adını alır (`PaymentState`) ve yalnızca geçişlerle değişir.
+  - Geçişin ekseni ayrıca yazılmaz: durumlarının enum tipinden bulunur. `EditableIn`, `DeletableIn`,
+    `Numbered(assignOn:)` ve zincir işlemlerinin durum listeleri yalnızca asıl duruma bakar.
+  - Başka kayıtlardan türeyen durum bir eksen değildir; 22. aşamadaki toplanan alan + `Compute()` ile yazılır.
 - Eşzamanlılık trait'inin adı `ConcurrencyChecked` (eski adı `Versioned`). Sürüm yanıt gövdesinde değil
   `ETag` başlığında taşınır; güncelleme ve silme `If-Match` ister (eksikse 428, uyuşmazlıkta 412).
 - Güncelleme için hem `PUT` (tam değiştirme) hem `PATCH` (kısmi) üretilir.
@@ -274,7 +280,7 @@ Bunlar kullanıcıyla kararlaştırıldı; yeniden sorma.
 
 İlk iki plan bitti: ilk sürümün on aşaması (3. aşamaya `.Searchable()`, 8. aşamaya fiziksel temizlik de eklendi) ve
 ikinci planın on bir aşaması. Üçüncü plan sürüyor (aşağıda). Sınamanın sonucu `reports/Haldus taksonomi sınaması.md`
-dosyasındadır: araştırmadaki 59 varlığın 52'si temiz, 6'sı kısmen ifade ediliyor, 1'i için gereken özellik yok (ilk
+dosyasındadır: araştırmadaki 59 varlığın 53'ü temiz, 5'i kısmen ifade ediliyor, 1'i için gereken özellik yok (ilk
 sınamada 19 / 29 / 11). Aynı veri `tests/Haldus.Generators.Tests/TaxonomyTests.cs` içinde derlenir; yeni bir archetype
 veya trait bir satırı kapatıyorsa ikisini birlikte güncelle. Kalan eksikler raporun "Kalan eksikler" tablosundadır.
 
@@ -331,12 +337,18 @@ aşamalardaki gibi, sorulmadan önerilen seçenekle verildi. Her aşama testleri
 
 22. Saklama, okundu takibi, toplama: `Retention`, `ReadTracking`, `Counts` / `Sums` (türetilmiş durum dahil)
 23. Yerelleştirilmiş alanlar: `Translatable`
-24. Birden çok durum ekseni
+24. Birden çok durum ekseni: `Axis`
 25. `MapBalance`
 26. `MapChangeSet`
-27. Kalan satırlar: sepet, varyant üretimi, tekrar serisi
-28. Frontend ve mobil kapsamı
-29. Sınamanın yinelenmesi: tablo, rapor ve README
+27. `Sensitive` alan, `Purgeable`, yeniden çalıştırılabilir `MapJob`
+28. `PublishesEvents`
+29. `TypedBy`, `RoleOf`, `SubtypeOf`
+30. Kalan satırlar: sepet, varyant üretimi, tekrar serisi
+31. Frontend ve mobil kapsamı
+32. Sınamanın yinelenmesi: tablo, rapor ve README
+
+27–29. aşamalar plana 24. aşamada eklendi: raporun üçüncü sürüm satırı, daha önce bu dosyada sayılanlardan fazlasını
+içeriyor (ilişki bildirimleri, `Sensitive`, `PublishesEvents`, `Purgeable`, yeniden çalıştırılabilir iş).
 
 ## Açık kararlar
 
@@ -678,6 +690,17 @@ aşamalardaki gibi, sorulmadan önerilen seçenekle verildi. Her aşama testleri
     listede olmayan geçişin token adresi yoktur. Token ebeveyn altındaki ve kullanıcıya ait kaynaklarla
     birleşmez (görünürlükleri, token'ı taşıyanın sahip olmadığı bir kimliğe bağlıdır). Bilinen sınır: token
     kullanılınca kendiliğinden geçersiz olmaz; ömrünü `Expiring` ve durum makinesi belirler. Oran sınırlama yoktur.
+- **Durum eksenleri.** `ResourceModel.Axes` (`LifecycleReader`; `ReadWorkflow` ile okunur, alanı `ExtraMembers`'a
+  durum alanı gibi girer). `ResourceLinker.AttachTransitions` geçişin eksenini durumlarının tipinden bulur
+  (`TransitionModel.Axis`; asıl durumdaysa `null`); iki ayrı tipten durum taşıyan geçiş `HALDUS010`'dur. Üretilen
+  geçiş yalnızca kendi eksenini denetler (`AxisGuard`) ve yazar; numara yalnızca asıl durumun geçişinde ayrılır.
+  Eksen de adıyla saklanır ve, kaynak sürüm kontrollü değilse, eşzamanlılık belirtecidir (çakışma 409
+  `StateChanged`); entegrasyon testi aynı geçişi birlikte isteyen iki istekten yalnızca birinin geçtiğini doğrular.
+  Bütün belirteçler her güncellemenin koşuluna girdiği için, farklı eksenlerde tam aynı anda yapılan iki geçişten biri
+  de 409 alabilir (yeniden denenir). Yeni kayıt, kopya dahil, her eksende başlangıç durumunda doğar. Asıl durum
+  olmadan yalnızca eksen de bildirilebilir. Sınırlar: `MapCrud`, `MapReadOnly`, `MapAppendOnly` ile birleşir;
+  `Publishable` ile birleşmez; eksenin `EditableIn` benzeri kuralı, bağlarda (`MapAssociation`) ekseni ve "bu durumda
+  hangi geçişler yapılabilir" listesi (`supportedActions`) yoktur.
 - **Çeviriler.** `Traits.Translatable` (`ITranslatable`; `Translations` trait alanıdır ve yanıtta yer alır), sayılan
   alanlar `ResourceModel.TranslatableFields` (bağlayıcıda çözülür: yazılabilir, gömülü olmayan `string` alanlar).
   Kurallar çalışma zamanındadır (`HaldusTranslations`: etiketin düzeltilmesi, daha genel dile düşme, 50 dil sınırı);

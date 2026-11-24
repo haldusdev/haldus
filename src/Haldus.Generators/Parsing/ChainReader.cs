@@ -27,6 +27,7 @@ internal static class ChainReader
         "AsSubresource",
         "AsCommands",
         "Workflow",
+        "Axis",
         "EditableIn",
         "DeletableIn",
         "Numbered",

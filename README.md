@@ -177,6 +177,29 @@ public sealed class PlaceOrderHandler(IStock stock) : ITransitionHandler<Order, 
 orders.MapTransition<ReopenOrder>(OrderStatus.Cancelled, OrderStatus.Draft, (order, request) => order.Reopen());
 ```
 
+### Birden çok durum ekseni
+
+Bir kaydın birbirinden bağımsız ilerleyen birkaç durumu olabilir: siparişin kendi durumu, ödemesi ve sevkiyatı gibi.
+Asıl durum `Workflow` ile, ötekiler `.Axis<TStatus>()` ile bildirilir; her eksen kendi enum tipini taşır ve alanı o
+tipin adını alır.
+
+```csharp
+var orders = app.MapCrud<Order>()
+    .Workflow<OrderStatus>(initial: OrderStatus.Draft)
+    .EditableIn(OrderStatus.Draft)
+    .Axis<PaymentState>()                     // yanıtta "paymentState": "Unpaid"
+    .Axis<ShipmentState>();
+
+orders.MapTransition("place", from: OrderStatus.Draft, to: OrderStatus.Placed);
+orders.MapTransition("mark-paid", from: PaymentState.Unpaid, to: PaymentState.Paid);
+orders.MapTransition("ship", from: ShipmentState.Pending, to: ShipmentState.Shipped);
+```
+
+Geçişin hangi eksende olduğunu durumlarının tipi söyler; geçiş yalnızca o ekseni denetler ve yazar. `EditableIn`,
+`DeletableIn` ve `Numbered(assignOn:)` yalnızca asıl duruma bakar. Liste her eksene göre ayrı süzülür
+(`?paymentState=Paid`). Başka kayıtlardan **türeyen** bir durum için eksen değil, [toplanan alan](#saklama-okundu-takibi-ve-toplanan-alanlar)
+ve `Compute()` kullanılır.
+
 ## Uzun süren işler
 
 İsteği aşan işler (rapor üretme, içe aktarma) `MapJob` ile bildirilir. Entity işin girdisini ve çıktısını

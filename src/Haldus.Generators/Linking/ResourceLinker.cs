@@ -412,6 +412,7 @@ internal static class ResourceLinker
                 report(new DiagnosticInfo(id, declaration.Location, new[] { message }.ToEquatableArray()));
 
             var kind = declaration.IsAction ? "action" : "transition";
+            AxisModel? axis = null;
 
             if (Find(declaration.OwnerName, declaration.OwnerType, resources, byType) is not { } owner)
             {
@@ -437,7 +438,7 @@ internal static class ResourceLinker
             }
             else
             {
-                if (owner.Workflow is not { } workflow)
+                if (owner.Workflow is null && owner.Axes.Length == 0)
                 {
                     Fail("HALDUS007", $"MapTransition needs a state machine; declare Workflow<TStatus>() on '{owner.EntityName}'");
                     continue;
@@ -449,9 +450,22 @@ internal static class ResourceLinker
                     continue;
                 }
 
-                if (declaration.From.Append(declaration.To!).FirstOrDefault(state => state.Type != workflow.StatusType) is { } foreign)
+                // Geçişin hangi eksende olduğunu durumlarının tipi söyler: asıl durum ya da ek eksenlerden biri.
+                bool Known(StateReference state) =>
+                    state.Type == owner.Workflow?.StatusType || owner.Axes.Any(candidate => candidate.StatusType == state.Type);
+
+                if (declaration.From.Append(declaration.To!).FirstOrDefault(state => !Known(state)) is { } unknown)
                 {
-                    Fail("HALDUS010", $"'{foreign.Name}' is not a state of '{owner.EntityName}'; transitions use the status type declared with Workflow<TStatus>()");
+                    Fail("HALDUS010", $"'{unknown.Name}' is not a state of '{owner.EntityName}'; transitions use a status type declared with Workflow<TStatus>() or Axis<TStatus>()");
+                    continue;
+                }
+
+                var statusType = declaration.To!.Type;
+                axis = owner.Axes.FirstOrDefault(candidate => candidate.StatusType == statusType);
+
+                if (declaration.From.FirstOrDefault(state => state.Type != statusType) is { } foreign)
+                {
+                    Fail("HALDUS010", $"'{foreign.Name}' and '{declaration.To.Name}' belong to different status types; a transition moves a record along one axis");
                     continue;
                 }
             }
@@ -495,6 +509,7 @@ internal static class ResourceLinker
             {
                 IsAction = declaration.IsAction,
                 ResponseType = declaration.ResponseType,
+                Axis = axis,
             });
         }
 
@@ -538,7 +553,7 @@ internal static class ResourceLinker
 
             var result = own.Count == 0 ? resource : resource with { Transitions = own.ToEquatableArray() };
 
-            if (result.Numbering is { AssignOn: { } assignOn } && own.All(transition => transition.To != assignOn))
+            if (result.Numbering is { AssignOn: { } assignOn } && own.All(transition => transition.Axis is not null || transition.To != assignOn))
             {
                 report(new DiagnosticInfo("HALDUS007", resource.Location, new[]
                 {

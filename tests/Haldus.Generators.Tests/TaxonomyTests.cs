@@ -48,7 +48,9 @@ public sealed class TaxonomyTests
         // ── E-ticaret ────────────────────────────────────────────────────────────────────────────────
         new(1, "Order", Fit.Partial,
             """
-            public enum OrderStatus { Draft, Placed, Shipped, Cancelled }
+            public enum OrderStatus { Draft, Placed, Cancelled }
+            public enum PaymentState { Unpaid, Paid, Refunded }
+            public enum ShipmentState { Pending, Shipped, Delivered }
             public partial class Order : IComputed
             {
                 public string CustomerName { get; set; } = "";
@@ -63,11 +65,15 @@ public sealed class TaxonomyTests
             app.MapCrud<Cart>();
             var orders = app.MapCrud<Order>().MultiTenant().Auditable(trackUser: true).ConcurrencyChecked()
                 .Workflow<OrderStatus>(initial: OrderStatus.Draft).EditableIn(OrderStatus.Draft).DeletableIn(OrderStatus.Draft)
+                .Axis<PaymentState>().Axis<ShipmentState>()
                 .Numbered("ORD-{yyyy}-{seq:6}", assignOn: OrderStatus.Placed).Idempotent().CreatedFrom<Cart>();
             orders.MapDetail<OrderItem>();
             orders.MapTransition("place", OrderStatus.Draft, OrderStatus.Placed);
-            orders.MapTransition("ship", OrderStatus.Placed, OrderStatus.Shipped);
             orders.MapTransition<CancelOrder>([OrderStatus.Draft, OrderStatus.Placed], OrderStatus.Cancelled);
+            orders.MapTransition("mark-paid", PaymentState.Unpaid, PaymentState.Paid);
+            orders.MapTransition("refund", PaymentState.Paid, PaymentState.Refunded);
+            orders.MapTransition("ship", ShipmentState.Pending, ShipmentState.Shipped);
+            orders.MapTransition("deliver", ShipmentState.Shipped, ShipmentState.Delivered);
             """),
         new(2, "OrderItem / LineItem", Fit.Clean,
             """
@@ -151,15 +157,19 @@ public sealed class TaxonomyTests
             var refunds = app.MapAppendOnly<Refund>().References<Order>().Workflow<RefundStatus>().Idempotent(required: true).Metadata();
             refunds.MapTransition("cancel", RefundStatus.Pending, RefundStatus.Cancelled);
             """),
-        new(10, "FulfillmentOrder", Fit.Partial,
+        new(10, "FulfillmentOrder", Fit.Clean,
             """
             public enum FulfillmentStatus { Open, OnHold, Closed }
+            public enum FulfillmentRequest { Unsubmitted, Submitted, Accepted, Rejected }
             public partial class FulfillmentOrder { public string Location { get; set; } = ""; }
             """,
             """
-            var fulfillments = app.MapReadOnly<FulfillmentOrder>().Workflow<FulfillmentStatus>();
+            var fulfillments = app.MapReadOnly<FulfillmentOrder>().Workflow<FulfillmentStatus>().Axis<FulfillmentRequest>();
             fulfillments.MapTransition("hold", FulfillmentStatus.Open, FulfillmentStatus.OnHold);
             fulfillments.MapTransition("release", FulfillmentStatus.OnHold, FulfillmentStatus.Open);
+            fulfillments.MapTransition("submit", FulfillmentRequest.Unsubmitted, FulfillmentRequest.Submitted);
+            fulfillments.MapTransition("accept", FulfillmentRequest.Submitted, FulfillmentRequest.Accepted);
+            fulfillments.MapTransition("reject", FulfillmentRequest.Submitted, FulfillmentRequest.Rejected);
             """),
         new(11, "Inventory level", Fit.Partial,
             """
@@ -637,8 +647,8 @@ public sealed class TaxonomyTests
     public void Tally_MatchesTheWrittenResults()
     {
         // reports/Haldus taksonomi sınaması.md dosyasındaki sayılar; biri değişirse diğeri de güncellenmelidir.
-        Assert.Equal(52, Rows.Count(row => row.Fit == Fit.Clean));
-        Assert.Equal(6, Rows.Count(row => row.Fit == Fit.Partial));
+        Assert.Equal(53, Rows.Count(row => row.Fit == Fit.Clean));
+        Assert.Equal(5, Rows.Count(row => row.Fit == Fit.Partial));
         Assert.Equal(1, Rows.Count(row => row.Fit == Fit.Missing));
     }
 }

@@ -28,6 +28,43 @@ public partial class Reply
     public int Score { get; set; }
 }
 
+public enum TicketStatus
+{
+    Open,
+    Closed,
+}
+
+public enum TicketBilling
+{
+    Unbilled,
+    Billed,
+    Refunded,
+}
+
+/// <summary>
+/// Destek kaydı. İki bağımsız durumu vardır: kaydın kendisi açılır ve kapanır; faturalanması ayrı ilerler ve kapalı
+/// bir kayıt da faturalanabilir.
+/// </summary>
+public partial class Ticket
+{
+    [Required]
+    [MaxLength(200)]
+    public string Subject { get; set; } = "";
+
+    public string? BillingNote { get; private set; }
+
+    public void Bill(string? note) => BillingNote = note;
+}
+
+/// <summary>Faturalama geçişinin isteği; kendi etkisini kayda uygular.</summary>
+public sealed class BillTicket : ITransition<Ticket>
+{
+    [MaxLength(200)]
+    public string? Note { get; set; }
+
+    public void Apply(Ticket entity) => entity.Bill(Note);
+}
+
 public enum BillState
 {
     Unpaid,

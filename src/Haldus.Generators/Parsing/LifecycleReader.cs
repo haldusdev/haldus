@@ -37,6 +37,8 @@ internal static class LifecycleReader
 
         public long? RetentionTicks { get; set; }
 
+        public List<AxisModel> Axes { get; } = [];
+
         /// <summary>Kaydın ters çevrilebildiği durumlar; durum makinesi yoksa <c>null</c>.</summary>
         public EquatableArray<string>? ReversibleIn { get; set; }
 
@@ -77,6 +79,23 @@ internal static class LifecycleReader
             {
                 case "Workflow":
                     result.Workflow = ReadWorkflow(semanticModel, name, arguments, entityName, Invalid, cancellationToken);
+                    break;
+
+                case "Axis":
+                    if (ReadWorkflow(semanticModel, name, arguments, entityName, Invalid, cancellationToken) is { } axis)
+                    {
+                        var property = axis.StatusType.Substring(axis.StatusType.LastIndexOfAny(['.', ':']) + 1);
+
+                        if (result.Axes.Any(existing => existing.StatusType == axis.StatusType))
+                        {
+                            Invalid(name, $"'{entityName}' already has an axis of '{property}'; each axis needs a status type of its own");
+                        }
+                        else
+                        {
+                            result.Axes.Add(new AxisModel(axis.StatusType, property, axis.Initial));
+                        }
+                    }
+
                     break;
 
                 case "EditableIn":
@@ -200,6 +219,27 @@ internal static class LifecycleReader
         if (result.Token is not null)
         {
             result.Members.Add(new TraitMember("TokenHash", "string", InResponse: false, Search: null));
+        }
+
+        foreach (var axis in result.Axes)
+        {
+            if (axis.StatusType == result.Workflow?.StatusType || axis.Property == "Status")
+            {
+                diagnostics.Add(new DiagnosticInfo(
+                    "HALDUS007",
+                    LocationInfo.From(mapCall.GetLocation()),
+                    new EquatableArray<string>([$"Axis<{axis.Property}>() repeats the status of '{entityName}'; an axis needs a status type of its own, different from the one given to Workflow"])));
+                continue;
+            }
+
+            // Eksen de asıl durum gibi yanıtta adıyla görünür ve yalnızca geçişlerle değişir.
+            result.Members.Add(new TraitMember(
+                axis.Property,
+                axis.StatusType,
+                InResponse: true,
+                new SearchField(axis.Property, SearchKind.Equality, axis.StatusType, IsNullable: false),
+                ResponseAttribute: "global::System.Text.Json.Serialization.JsonConverter(typeof("
+                    + $"global::System.Text.Json.Serialization.JsonStringEnumConverter<{axis.StatusType}>))"));
         }
 
         result.ReversibleIn = ReadChainStates(semanticModel, reversible, result.Workflow, "reversed", Invalid, cancellationToken);

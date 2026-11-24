@@ -507,8 +507,14 @@ internal sealed partial class EndpointEmitter
             ? _resource.StatusType
             : null;
         var readTracking = _resource.Has(Traits.ReadTracking);
+
+        // Ek eksenler de asıl durum gibi süzülür; kullanıcının filtresi aynı adı taşıyorsa o geçerlidir.
+        var axes = _resource.Axes
+            .Where(axis => _resource.Filter?.Properties.Any(property => property.Name == axis.Property) != true)
+            .ToArray();
         var statusParameter = (status is null ? string.Empty : $"        {status}? status,\n")
             + (EffectiveDated ? "        global::System.DateOnly? asOf,\n" : string.Empty)
+            + string.Concat(axes.Select(axis => $"        {axis.StatusType}? {ResourceEmitter.CamelCase(axis.Property)},\n"))
             + (readTracking ? "        bool? unread,\n" : string.Empty)
             + (Translatable ? "        string? locale,\n" : string.Empty);
 
@@ -543,6 +549,20 @@ internal sealed partial class EndpointEmitter
                         if (includeArchived != true)
                         {
                             query = query.Where(item => item.ArchivedAt == null);
+                        }
+
+                """);
+        }
+
+        foreach (var axis in axes)
+        {
+            var parameter = ResourceEmitter.CamelCase(axis.Property);
+
+            _handlers.Append($$"""
+
+                        if ({{parameter}} is { } {{parameter}}Value)
+                        {
+                            query = query.Where(item => item.{{axis.Property}} == {{parameter}}Value);
                         }
 
                 """);
@@ -868,6 +888,9 @@ internal sealed partial class EndpointEmitter
             // Durum istek gövdesinden gelmez; kayıt her zaman başlangıç durumunda doğar.
             keys.Add($"Status = {workflow.StatusType}.{workflow.Initial}");
         }
+
+        // Ek eksenler de başlangıç durumunda doğar; kopyalanan kayıt kaynağının durumlarını devralmaz.
+        keys.AddRange(_resource.Axes.Select(axis => $"{axis.Property} = {axis.StatusType}.{axis.Initial}"));
 
         if (HasLifetime)
         {
@@ -1942,7 +1965,7 @@ internal sealed partial class EndpointEmitter
         }
 
         // Numara bu duruma geçerken atanıyorsa, kayıtla aynı transaction'da ayrılır; daha önce atanmışsa korunur.
-        var numbered = transition.To is not null && _resource.Numbering is { AssignOn: { } assignOn } && assignOn == transition.To;
+        var numbered = transition is { To: not null, Axis: null } && _resource.Numbering is { AssignOn: { } assignOn } && assignOn == transition.To;
         var allocate = numbered
             ? """
                     await using var numbering = entity.Number is null
@@ -1974,7 +1997,9 @@ internal sealed partial class EndpointEmitter
         var declareResult = response is null ? string.Empty : $"        {response} result;\n";
         var setStatus = transition.To is null
             ? string.Empty
-            : $"        entity.Status = {_resource.Workflow!.StatusType}.{transition.To};\n";
+            : transition.Axis is { } moved
+                ? $"        entity.{moved.Property} = {moved.StatusType}.{transition.To};\n"
+                : $"        entity.Status = {_resource.Workflow!.StatusType}.{transition.To};\n";
 
         _handlers.Append($$"""
 
@@ -1989,7 +2014,7 @@ internal sealed partial class EndpointEmitter
                         return {{NotFound}};
                     }
 
-            {{ChainClosedGuard()}}{{StateGuard(transition.IsAction ? null : transition.From, transition.Route)}}{{ApprovalGate(transition.Route)}}{{ExpectVersion()}}{{declareResult}}        try
+            {{ChainClosedGuard()}}{{(transition.Axis is { } axis ? AxisGuard(axis, transition.From, transition.Route) : StateGuard(transition.IsAction ? null : transition.From, transition.Route))}}{{ApprovalGate(transition.Route)}}{{ExpectVersion()}}{{declareResult}}        try
                     {
             {{logic}}        }
                     catch (global::Haldus.TransitionRejectedException rejection)
@@ -2022,6 +2047,16 @@ internal sealed partial class EndpointEmitter
 
             """;
     }
+
+    /// <summary>Ek bir eksendeki geçişin durum kontrolü; asıl durumunkiyle aynı yanıtı verir.</summary>
+    private string AxisGuard(AxisModel axis, EquatableArray<string> states, string operation) => $$"""
+                if (entity.{{axis.Property}} is not ({{States(axis.StatusType, states)}}))
+                {
+                    return {{Problems}}.StateConflict(messages, "{{operation}}", entity.{{axis.Property}});
+                }
+
+
+        """;
 
     private static string States(string statusType, IEnumerable<string> states) =>
         string.Join(" or ", states.Select(state => $"{statusType}.{state}"));
@@ -4215,7 +4250,7 @@ internal sealed partial class EndpointEmitter
     /// Durum makinesi olan ama sürüm kontrolü olmayan kaynakta durum, eşzamanlılık belirtecidir: kayıt
     /// okunduktan sonra başka bir istek durumunu değiştirdiyse kaydetme başarısız olur.
     /// </summary>
-    private bool GuardsState => (_resource.Workflow is not null || _resource.Approval is not null) && !_concurrency;
+    private bool GuardsState => (_resource.Workflow is not null || _resource.Approval is not null || _resource.Axes.Length > 0) && !_concurrency;
 
     private string Save()
     {

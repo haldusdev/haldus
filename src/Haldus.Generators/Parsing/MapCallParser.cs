@@ -637,6 +637,7 @@ internal static class MapCallParser
             File = file,
             Transfer = archetype == Archetype.Job ? transfer : null,
             RetentionTicks = lifecycle.RetentionTicks,
+            Axes = lifecycle.Axes.ToEquatableArray(),
             Rollups = rollups.ToEquatableArray(),
             ReversibleIn = lifecycle.ReversibleIn,
             SupersedableIn = lifecycle.SupersedableIn,
@@ -885,7 +886,7 @@ internal static class MapCallParser
             foreach (var other in new[]
             {
                 "Workflow", "Document", "Numbered", "Expiring", "SecretOnce", "TokenAccess", "Reversible", "Supersedes", "Approvable", "EffectiveDated",
-                "Retention", "ReadTracking", "Counts", "Sums",
+                "Retention", "ReadTracking", "Counts", "Sums", "Axis",
             })
             {
                 if (chain.Any(call => call.Name == other))
@@ -1024,7 +1025,7 @@ internal static class MapCallParser
             {
                 // Durum makinesi, sunucunun anahtar ürettiği koleksiyonlar içindir; salt-okunur kaynakta
                 // durum yalnızca geçişlerle değişir.
-                "Workflow" => archetype is Archetype.Crud or Archetype.ReadOnly or Archetype.AppendOnly,
+                "Workflow" or "Axis" => archetype is Archetype.Crud or Archetype.ReadOnly or Archetype.AppendOnly,
 
                 // Numara ve ömür kayıt oluşturulurken verilir.
                 "Numbered" or "Expiring" => archetype is Archetype.Crud or Archetype.AppendOnly,
