@@ -58,6 +58,24 @@ public static class HaldusProblems
         return FieldProblem(messages, field, messages.Format(HaldusMessageKeys.DetailNotFound, detailName, id));
     }
 
+    /// <summary>Dönemin bitişi başlangıcından sonra değil.</summary>
+    public static ProblemHttpResult EffectivePeriodInvalid(IHaldusMessages messages)
+    {
+        ArgumentNullException.ThrowIfNull(messages);
+        return FieldProblem(messages, "effectiveTo", messages.Format(HaldusMessageKeys.EffectivePeriodInvalid));
+    }
+
+    /// <summary>Kaydın dönemi, kapsamındaki başka bir kaydın dönemiyle çakışıyor.</summary>
+    public static ProblemHttpResult EffectivePeriodOverlap(IHaldusMessages messages, string resourceName)
+    {
+        ArgumentNullException.ThrowIfNull(messages);
+
+        return TypedResults.Problem(
+            title: messages.Format(HaldusMessageKeys.EffectivePeriodOverlapTitle),
+            detail: messages.Format(HaldusMessageKeys.EffectivePeriodOverlapDetail, resourceName),
+            statusCode: StatusCodes.Status409Conflict);
+    }
+
     /// <summary>Bir düğüm, kendi altındaki bir düğümün çocuğu yapılmak isteniyor.</summary>
     public static ProblemHttpResult HierarchyCycle(IHaldusMessages messages, string field)
     {

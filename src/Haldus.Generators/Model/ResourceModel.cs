@@ -45,6 +45,12 @@ internal sealed record ResourceModel(
     /// <summary><c>.NaturalKey(...)</c> ile gösterilen, henüz doğrulanmamış alan.</summary>
     public SearchFieldRequest? NaturalKeyRequest { get; init; }
 
+    /// <summary>Dönemlerin ayrı ayrı tutulduğu alanlar (<c>.EffectiveDated(...)</c>); henüz doğrulanmamıştır.</summary>
+    public EquatableArray<SearchFieldRequest> EffectiveKeyRequests { get; init; } = EquatableArray<SearchFieldRequest>.Empty;
+
+    /// <summary>Dönemlerin kapsamını daraltan, doğrulanmış alanlar.</summary>
+    public EquatableArray<string> EffectiveKeys { get; init; } = EquatableArray<string>.Empty;
+
     /// <summary>Kaydın doğal anahtarı; bağlama adımı doldurur.</summary>
     public NaturalKeyModel? NaturalKey { get; init; }
 
@@ -307,6 +313,10 @@ internal enum Traits
     Supersedes = 32768,
     Document = 65536,
     Approvable = 131072,
+    Revisioned = 262144,
+    ChangeFeed = 524288,
+    Publishable = 1048576,
+    EffectiveDated = 2097152,
 }
 
 /// <summary>

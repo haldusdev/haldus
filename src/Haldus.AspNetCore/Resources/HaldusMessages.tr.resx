@@ -81,6 +81,15 @@
   <data name="Approval.AlreadyApproved" xml:space="preserve">
     <value>Bu kaydı önceki bir düzeyde zaten onayladınız; sıradaki onayı başka biri vermelidir.</value>
   </data>
+  <data name="EffectivePeriod.Invalid" xml:space="preserve">
+    <value>Dönemin bitişi başlangıcından sonra olmalıdır.</value>
+  </data>
+  <data name="EffectivePeriodOverlap.Title" xml:space="preserve">
+    <value>Dönemler çakışıyor</value>
+  </data>
+  <data name="EffectivePeriodOverlap.Detail" xml:space="preserve">
+    <value>Bu dönemde geçerli başka bir {0} kaydı var.</value>
+  </data>
   <data name="ChainMember.Detail" xml:space="preserve">
     <value>'{1}' kimlikli {0} kaydı, onu ters çeviren ya da yerine geçen (veya kendisinin ters çevirdiği ya da yerine geçtiği) kayda bağlıdır; silinemez.</value>
   </data>

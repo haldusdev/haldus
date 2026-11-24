@@ -36,6 +36,13 @@ public static class SupplyEndpoints
         supplies.MapTransition("approve", from: SupplyStatus.Proposed, to: SupplyStatus.Approved);
         supplies.MapTransition("discontinue", from: [SupplyStatus.Proposed, SupplyStatus.Approved], to: SupplyStatus.Discontinued);
 
+        // Tedarikçinin fiyatı belirli bir dönemde geçerlidir; para birimi başına bir dönem dizisi tutulur. Dönemler
+        // çakışamaz; açık uçlu fiyatın içinde başlayan yeni fiyat, eskisini kendi başladığı gün kapatır.
+        // GET /suppliers/{supplierId}/supplier-rates?asOf=2026-06-01 o gün geçerli olanları döndürür.
+        app.MapCrud<SupplierRate>()
+            .Under<Supplier>()
+            .EffectiveDated(rate => rate.Currency);
+
         // Satın alma talebi iki farklı kişinin sırayla onayına bağlıdır: POST /purchase-requests/{id}/approve ve
         // /reject, kararların listesi GET /purchase-requests/{id}/approvals. Talebi son yazan kişi karar veremez;
         // içerik değişince toplanan onaylar geçersiz olur. "order" geçişi talep onaylanmadan çalışmaz.
@@ -48,6 +55,10 @@ public static class SupplyEndpoints
 
         // Onay istemeyen bir aksiyon içeriği değiştirirse toplanan onaylar düşer; aksiyonu çalıştıran da artık karar veremez.
         requests.MapAction<AdjustPurchase>();
+
+        // Kalemler talebin içeriğidir; onları değiştiren bir aksiyon da onayı düşürür.
+        requests.MapDetail<PurchaseRequestLine>();
+        requests.MapAction("clear-lines", request => request.PurchaseRequestLines.Clear());
 
         // Tek onaylı, durum makinesi olmayan en yalın biçim.
         app.MapCrud<ExpenseClaim>()

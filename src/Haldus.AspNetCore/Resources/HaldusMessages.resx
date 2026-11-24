@@ -81,6 +81,15 @@
   <data name="Approval.AlreadyApproved" xml:space="preserve">
     <value>You have already approved this record at an earlier level; the next approval has to come from someone else.</value>
   </data>
+  <data name="EffectivePeriod.Invalid" xml:space="preserve">
+    <value>The period must end after it starts.</value>
+  </data>
+  <data name="EffectivePeriodOverlap.Title" xml:space="preserve">
+    <value>Periods overlap</value>
+  </data>
+  <data name="EffectivePeriodOverlap.Detail" xml:space="preserve">
+    <value>Another {0} is already effective during this period.</value>
+  </data>
   <data name="ChainMember.Detail" xml:space="preserve">
     <value>{0} '{1}' is linked to the record that reverses or supersedes it (or that it reverses or supersedes) and cannot be deleted.</value>
   </data>

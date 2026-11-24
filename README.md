@@ -331,6 +331,28 @@ Onay alanları (`ApprovalStatus`, `ApprovalLevel`, `RequestedBy`, `Contributors`
 görünür ve istekle yazılamaz. Karar, kararı verenin gördüğü içeriğe bağlıdır: araya giren bir yazma kararı 409 ile
 durdurur (sürüm kontrollü kaynakta karar `If-Match` ister).
 
+## Zaman ve sürüm
+
+```csharp
+var articles = app.MapCrud<Article>()
+    .Revisioned()      // her yazmanın anlık görüntüsü, geri yükleme
+    .Publishable()     // taslak düzenlenirken yayındaki hal durur
+    .ChangeFeed();     // "şundan beri ne değişti"
+
+app.MapCrud<Rate>().Under<Supplier>().EffectiveDated(rate => rate.Currency);
+```
+
+| Bildirim | Etkisi |
+|---|---|
+| `.Revisioned()` | Kaydın her yazmadan sonraki hali saklanır: `GET /{id}/revisions`, `GET /{id}/revisions/{revisionId}` (kaydın o andaki hali, kendi yanıt biçiminde), `POST /{id}/revisions/{revisionId}/rollback` (alanlar ve gömülü satırlar geri yüklenir; bu da yeni bir sürümdür) |
+| `.Publishable()` | Sıradan uçlar taslağı yazar; `POST /{id}/publish` o andaki hali yayına alır, `POST /{id}/unpublish` kaldırır. Yayındaki hal `GET /published` ve `GET /published/{id}` ile okunur. Yayındaki kayıt silinemez |
+| `.EffectiveDated(...)` | `EffectiveFrom` / `EffectiveTo` alanları; bir kapsamda (kiracı, sahip, ebeveyn, sayılan alanlar) dönemler çakışamaz (409). Açık uçlu dönemin içinde başlayan yeni kayıt öncekini kapatır. `?asOf=2026-06-01` o gün geçerli olanı döndürür |
+| `.ChangeFeed()` | `GET /changes?since={imleç}` imleçten sonra değişen kayıtların şimdiki halini ve silinenlerin kimliklerini döndürür; yanıttaki `next` bir sonraki isteğin imlecidir |
+
+Anlık görüntüyü ve değişiklik günlüğünü, kaydı hangi kod yazarsa yazsın (toplu yollar, aksiyonlar, arka plan işleri,
+uygulamanın kendi kodu) Haldus kaydederken alır. Değişiklik akışı varsayılan olarak en yeni değişikliklerin iki
+saniye gerisinde kalır (`HaldusChanges.SafetyLag`); böylece o sırada bitmemiş bir transaction'ın satırları atlanmaz.
+
 ## Sırlar
 
 ```csharp
@@ -380,7 +402,7 @@ kısıtı olur, ayrı bağlamlardaysa referans yalnızca kimlikle tutulur ve var
 ## Durum
 
 İlk sürümün planlanan on aşaması tamamlandı; eksikleri kapatan ikinci plan sürüyor. Model, araştırmadaki 59
-gerçek varlığa karşı sınanıyor: bugün 39'u temiz, 14'ü kısmen ifade ediliyor, 6'sı için gereken özellik henüz
+gerçek varlığa karşı sınanıyor: bugün 41'i temiz, 13'ü kısmen ifade ediliyor, 5'i için gereken özellik henüz
 yok. Ayrıntısı ve eksiklerin listesi [taksonomi sınaması](reports/Haldus%20taksonomi%20sınaması.md)
 belgesindedir.
 

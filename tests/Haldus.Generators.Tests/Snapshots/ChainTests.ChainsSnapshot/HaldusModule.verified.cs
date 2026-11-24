@@ -64,7 +64,11 @@ internal static class HaldusModule
 
         global::Haldus.HaldusEndpointRegistry.Register<global::Shop.Cart>(global::Shop.CartEndpoints.Map);
 
+        global::Haldus.HaldusDetails.Register<global::Shop.Cart, global::Shop.CartItem>("CartId");
+
         global::Haldus.HaldusEndpointRegistry.Register<global::Shop.Order>(global::Shop.OrderEndpoints.Map);
+
+        global::Haldus.HaldusDetails.Register<global::Shop.Order, global::Shop.OrderItem>("OrderId");
 
         global::Haldus.HaldusEndpointRegistry.Register<global::Shop.Movement>(global::Shop.MovementEndpoints.Map);
 

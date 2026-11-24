@@ -168,6 +168,32 @@ public static class ResourceBuilderTraitExtensions
         where TEntity : class => builder;
 
     /// <summary>
+    /// Kaydın her yazmadan sonraki halini saklar: <c>GET /{id}/revisions</c> sürümleri listeler,
+    /// <c>GET /{id}/revisions/{revisionId}</c> kaydın o andaki halini döndürür,
+    /// <c>POST /{id}/revisions/{revisionId}/rollback</c> kaydın alanlarını ve gömülü satırlarını o sürüme geri yükler
+    /// (bu da yeni bir sürümdür). Görüntüyü, kaydı hangi kod yazarsa yazsın, Haldus kaydederken alır.
+    /// </summary>
+    public static ResourceBuilder<TEntity> Revisioned<TEntity>(this ResourceBuilder<TEntity> builder)
+        where TEntity : class => builder;
+
+    /// <summary>
+    /// Kaydı taslak ve yayın olarak ikiye ayırır. Kaynağın sıradan uçları taslağı okur ve yazar;
+    /// <c>POST /{id}/publish</c> taslağın o andaki halini (alanları ve gömülü satırlarıyla) yayına alır,
+    /// <c>POST /{id}/unpublish</c> yayından kaldırır. Yayındaki hal <c>GET /published</c> ve
+    /// <c>GET /published/{id}</c> ile okunur; taslak sonradan değişse de bir sonraki yayına kadar aynı kalır.
+    /// Yayındaki kayıt silinemez; önce yayından kaldırılır.
+    /// </summary>
+    public static ResourceBuilder<TEntity> Publishable<TEntity>(this ResourceBuilder<TEntity> builder)
+        where TEntity : class => builder;
+
+    /// <summary>
+    /// Kaynağa bir değişiklik akışı ekler: <c>GET /changes?since={imleç}</c>, imleçten sonra değişen kayıtların
+    /// şimdiki halini ve silinenlerin kimliklerini döndürür; yanıttaki <c>next</c> bir sonraki isteğin imlecidir.
+    /// </summary>
+    public static ResourceBuilder<TEntity> ChangeFeed<TEntity>(this ResourceBuilder<TEntity> builder)
+        where TEntity : class => builder;
+
+    /// <summary>
     /// Kaydın yerine geçen yeni bir kayıt üretir (düzeltme, yeniden planlama): <c>POST /{id}/supersede</c>. Yeni
     /// kayıt eskisinin kopyası olarak doğar, istekte gönderilen alanlar onun yerine geçer ve eskisine işaret eder
     /// (<c>SupersedesId</c>). Eski kayıt kalır ama artık değiştirilemez.

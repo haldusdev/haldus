@@ -61,6 +61,24 @@ internal static class ResourceLinker
             var sortFields = ResolveSortFields(resource, properties, Fail);
             MarkCreateOnly(resource, properties, Fail);
             var naturalKey = ResolveNaturalKey(resource, properties, Fail);
+            var effectiveKeys = new List<string>();
+
+            foreach (var request in resource.EffectiveKeyRequests)
+            {
+                // Dönemler bu alanların değeri başına ayrı tutulur; alan eşitlikle karşılaştırılabilmelidir.
+                if (properties.FirstOrDefault(candidate => candidate.Name == request.FieldName) is { IsEmbedded: false } key
+                    && key.Name is not ("EffectiveFrom" or "EffectiveTo"))
+                {
+                    effectiveKeys.Add(key.Name);
+                }
+                else
+                {
+                    Fail(
+                        "HALDUS010",
+                        request.Location,
+                        $"'{request.Expression}' cannot separate the periods of '{resource.EntityName}': write it as 'item => item.Property', where the property is a scalar property of the entity");
+                }
+            }
 
             if (!failed)
             {
@@ -71,6 +89,7 @@ internal static class ResourceLinker
                     SearchFields = searchFields.ToEquatableArray(),
                     SortFields = sortFields.ToEquatableArray(),
                     NaturalKey = naturalKey,
+                    EffectiveKeys = effectiveKeys.Distinct().ToEquatableArray(),
                 });
             }
         }
@@ -373,6 +392,8 @@ internal static class ResourceLinker
         "clone" when resource.Has(Traits.Cloneable) => nameof(Traits.Cloneable),
         "reverse" when resource.Has(Traits.Reversible) => nameof(Traits.Reversible),
         "amend" when resource.Has(Traits.Document) => nameof(Traits.Document),
+        "revisions" when resource.Has(Traits.Revisioned) => nameof(Traits.Revisioned),
+        "publish" or "unpublish" when resource.Has(Traits.Publishable) => nameof(Traits.Publishable),
         "approve" or "reject" or "approvals" when resource.Has(Traits.Approvable) => nameof(Traits.Approvable),
         "rotate" when resource.Secret is { Rotatable: true } => "Rotatable",
         _ when resource.Details.Any(detail => detail.IsCommandWritten && Naming.ToKebabCase(detail.CollectionName) == route) => "MapDetail",

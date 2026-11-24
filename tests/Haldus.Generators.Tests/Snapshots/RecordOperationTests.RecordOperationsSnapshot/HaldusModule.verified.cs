@@ -27,5 +27,7 @@ internal static class HaldusModule
         });
 
         global::Haldus.HaldusEndpointRegistry.Register<global::Shop.Order>(global::Shop.OrderEndpoints.Map);
+
+        global::Haldus.HaldusDetails.Register<global::Shop.Order, global::Shop.OrderItem>("OrderId");
     }
 }

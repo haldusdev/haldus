@@ -47,6 +47,17 @@ public partial class SupplierContact
     public string? Email { get; set; }
 }
 
+/// <summary>Tedarikçinin birim fiyatı. Geçerlilik dönemini (EffectiveFrom, EffectiveTo) Haldus ekler.</summary>
+public partial class SupplierRate
+{
+    [Required]
+    [StringLength(3, MinimumLength = 3)]
+    public string Currency { get; set; } = "TRY";
+
+    [Range(0.0, 1_000_000.0)]
+    public decimal UnitPrice { get; set; }
+}
+
 public enum PurchaseRequestStatus
 {
     Open,
@@ -65,6 +76,17 @@ public partial class PurchaseRequest
 
     /// <summary>Sipariş verilirken yazılır.</summary>
     public string? OrderReference { get; internal set; }
+}
+
+/// <summary>Satın alma talebinin kalemi.</summary>
+public partial class PurchaseRequestLine
+{
+    [Required]
+    [MaxLength(200)]
+    public string Item { get; set; } = "";
+
+    [Range(1, 10_000)]
+    public int Quantity { get; set; }
 }
 
 /// <summary>Onaylanmış talebi siparişe çevirir; sipariş referansını kayda yazar.</summary>

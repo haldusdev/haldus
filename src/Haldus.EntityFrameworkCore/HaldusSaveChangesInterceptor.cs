@@ -35,6 +35,9 @@ public sealed class HaldusSaveChangesInterceptor : SaveChangesInterceptor
         var tenants = new Lazy<Guid?>(() => HaldusScope.TenantId(context));
         var users = new Lazy<string?>(() => HaldusScope.UserId(context));
 
+        // Gömülü satır sahibinin parçasıdır: satırı değişen sahip de değişmiş sayılır ve aşağıdaki kurallardan geçer.
+        HaldusDetails.TouchOwners(context);
+
         foreach (var entry in context.ChangeTracker.Entries())
         {
             switch (entry.State)
@@ -74,6 +77,10 @@ public sealed class HaldusSaveChangesInterceptor : SaveChangesInterceptor
                     break;
             }
         }
+
+        // Anlık görüntü ve değişiklik günlüğü, trait alanları yazıldıktan sonra ve kaydı hangi kod yazarsa yazsın alınır.
+        HaldusRevisions.Capture(context, now, users);
+        HaldusChanges.Capture(context, now);
     }
 
     private static void OnAdded(EntityEntry entry, DateTimeOffset now, Lazy<Guid?> tenants, Lazy<string?> users)

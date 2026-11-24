@@ -20,6 +20,12 @@ public static class HaldusFilters
 
     /// <summary>Süresi dolmuş kaydı gizleyen filtre.</summary>
     public const string Expiry = "Haldus.Expiry";
+
+    /// <summary>
+    /// Yayındaki kopyaları gizleyen filtre. Kaynağın sıradan uçları yalnızca taslakları görür; yayın uçları bu
+    /// filtreyi kaldırır ve yalnızca kopyaları okur.
+    /// </summary>
+    public const string Publication = "Haldus.Publication";
 }
 
 /// <summary>Üretilen model yapılandırmasının kullandığı sabitler.</summary>

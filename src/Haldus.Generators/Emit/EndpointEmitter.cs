@@ -60,7 +60,9 @@ internal sealed partial class EndpointEmitter
     private bool HasMetadata => _resource.Has(Traits.Metadata);
 
     /// <summary>Oluşturma bir hata yanıtıyla dönebilir mi: referans bulunamayabilir veya doğal anahtar çakışabilir.</summary>
-    private bool CreateCanFail => ChecksReferences || NaturalKey is not null;
+    private bool CreateCanFail => ChecksReferences || NaturalKey is not null || EffectiveDated;
+
+    private bool EffectiveDated => _resource.Has(Traits.EffectiveDated);
 
     private string OkOrProblem => $"{Task}<{Results}.Results<{Results}.Ok<{_entity}Response>, {Problem}>>";
 
@@ -319,6 +321,21 @@ internal sealed partial class EndpointEmitter
             EmitApprovalList();
         }
 
+        if (_resource.Has(Traits.Revisioned))
+        {
+            EmitRevisions();
+        }
+
+        if (_resource.Has(Traits.ChangeFeed))
+        {
+            EmitChanges();
+        }
+
+        if (_resource.Has(Traits.Publishable))
+        {
+            EmitPublishing();
+        }
+
         if (_resource.Has(Operations.Update) || _resource.Has(Operations.Patch))
         {
             EmitCycleHelper();
@@ -389,7 +406,8 @@ internal sealed partial class EndpointEmitter
         var status = _resource.Filter?.Properties.Any(property => property.Name == "Status") != true
             ? _resource.StatusType
             : null;
-        var statusParameter = status is null ? string.Empty : $"        {status}? status,\n";
+        var statusParameter = (status is null ? string.Empty : $"        {status}? status,\n")
+            + (EffectiveDated ? "        global::System.DateOnly? asOf,\n" : string.Empty);
 
         var paged = $"{Results}.Ok<global::Haldus.PagedResult<{_entity}Response>>";
         var listResult = sortable ? $"{Results}.Results<{paged}, {Problem}>" : paged;
@@ -465,6 +483,19 @@ internal sealed partial class EndpointEmitter
                         if (status is { } statusValue)
                         {
                             query = query.Where(item => item.Status == statusValue);
+                        }
+
+                """);
+        }
+
+        if (EffectiveDated)
+        {
+            // Dönem yarı açıktır: başlangıç günü dahil, bitiş günü hariç.
+            _handlers.Append("""
+
+                        if (asOf is { } day)
+                        {
+                            query = query.Where(item => item.EffectiveFrom <= day && (item.EffectiveTo == null || item.EffectiveTo > day));
                         }
 
                 """);
@@ -805,9 +836,44 @@ internal sealed partial class EndpointEmitter
             save = OrderAppend() + save + "\n" + OrderCommit().TrimEnd('\n');
         }
 
+        save = Effective(save);
+
         return derive && _resource.Derivations.Length > 0
             ? Derive() + save + "\n" + DeriveCommit().TrimEnd('\n')
             : save;
+    }
+
+    /// <summary>
+    /// Dönemli kayıtta kaydetmeyi dönem kuralıyla sarar: kapsam kilitlenir, dönem kapsamdaki öteki kayıtlarla
+    /// sınanır (gerekirse açık uçlu önceki dönem kapatılır) ve hepsi birlikte kalıcı olur. Kural kaydetmenin
+    /// kendisine bağlıdır; böylece kaydı yazan her yol (güncelleme, toplu yollar, kopya, geri yükleme, aksiyonlar)
+    /// ondan geçer.
+    /// </summary>
+    private string Effective(string save)
+    {
+        if (!EffectiveDated)
+        {
+            return save;
+        }
+
+        var siblings = SiblingsOf("entity")
+            + string.Concat(_resource.EffectiveKeys.Select(key => $".Where(item => item.{key} == entity.{key})"));
+
+        return $$"""
+                    // Dönemler kapsam içinde çakışamaz; aynı kapsama aynı anda yazan istekler sıraya girer.
+                    await using var period = {{OrderLock()}};
+
+                    switch (await global::Haldus.HaldusEffectiveDating.ApplyAsync({{siblings}}, entity, cancellationToken))
+                    {
+                        case global::Haldus.EffectiveOutcome.Invalid:
+                            return {{Problems}}.EffectivePeriodInvalid(messages);
+                        case global::Haldus.EffectiveOutcome.Overlap:
+                            return {{Problems}}.EffectivePeriodOverlap(messages, "{{_entity}}");
+                    }
+
+            {{save.TrimEnd('\n')}}
+                    await period.CommitAsync(cancellationToken);
+            """ + (save.EndsWith("\n", StringComparison.Ordinal) ? "\n" : string.Empty);
     }
 
     private void EmitCreate()
@@ -2452,6 +2518,378 @@ internal sealed partial class EndpointEmitter
 
         """));
 
+    // ── Sürümler ve değişiklik akışı ───────────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Kaydın saklanan sürümleri: liste, tek sürüm ve geri yükleme. Anlık görüntüyü interceptor alır; burada
+    /// görüntüden izlenmeyen bir kayıt kurulur (<c>HaldusRevisions.FindAsync</c>) ve yanıt, her yanıt gibi,
+    /// <c>ToResponse</c> ile ondan üretilir. Geri yükleme bir güncellemedir ve onun korumalarından geçer.
+    /// </summary>
+    private void EmitRevisions()
+    {
+        const string Revisions = "global::Haldus.PagedResult<global::Haldus.RevisionInfo>";
+
+        _map.Append($$"""
+                    group.MapGet("{{_keyRoute}}/revisions", ListRevisionsAsync)
+                        .WithName("List{{_entity}}Revisions")
+                        .ProducesProblem(404);
+
+                    group.MapGet("{{_keyRoute}}/revisions/{revisionId:long}", GetRevisionAsync)
+                        .WithName("Get{{_entity}}Revision")
+                        .ProducesProblem(404);
+
+
+            """);
+
+        _handlers.Append($$"""
+
+                private static async {{Task}}<{{Results}}.Results<{{Results}}.Ok<{{Revisions}}>, {{Problem}}>> ListRevisionsAsync(
+            {{ScopeParameter}}{{KeyParameter}}        [{{Http}}.AsParameters] global::Haldus.PageRequest page,
+            {{ContextsParameter}}{{MessagesParameter}}{{CancellationParameter}}    {
+                    var context = contexts.For<{{_entity}}>();
+                    var entity = await context.Set<{{_entity}}>().AsNoTracking().FirstOrDefaultAsync(item => {{Match}}, cancellationToken);
+
+                    if (entity is null)
+                    {
+                        return {{NotFound}};
+                    }
+
+                    return {{Http}}.TypedResults.Ok(await global::Haldus.HaldusRevisions.ListAsync(
+                        context, entity, {{KeyText}}, page.Skip, page.PageOrDefault, page.PageSizeOrDefault, cancellationToken));
+                }
+
+                private static async {{OkOrProblem}} GetRevisionAsync(
+            {{ScopeParameter}}{{KeyParameter}}        long revisionId,
+            {{ContextsParameter}}{{MessagesParameter}}{{CancellationParameter}}    {
+                    var context = contexts.For<{{_entity}}>();
+                    var entity = await context.Set<{{_entity}}>().AsNoTracking().FirstOrDefaultAsync(item => {{Match}}, cancellationToken);
+
+                    if (entity is null)
+                    {
+                        return {{NotFound}};
+                    }
+
+                    // Sürüm yalnızca bu kaydın sürümleri arasında aranır; başka bir kaydın sürümü bulunamaz sayılır.
+                    var revision = await global::Haldus.HaldusRevisions.FindAsync(context, entity, {{KeyText}}, revisionId, cancellationToken);
+
+                    if (revision is null)
+                    {
+                        return {{Problems}}.NotFound(messages, "{{_entity}}Revision", revisionId);
+                    }
+
+                    return {{Http}}.TypedResults.Ok(ToResponse(revision));
+                }
+
+            """);
+
+        if (!_resource.Has(Operations.Update))
+        {
+            return;
+        }
+
+        // Ağaçtaki yer içerik değildir; düğümü eski yerine taşımak döngü kurabilir, bu yüzden geri yüklenmez.
+        var restored = _updatable.Where(property => _resource.References.All(reference =>
+            reference.Kind != ReferenceKind.Self || reference.PropertyName != property.Name));
+        var assignments = string.Concat(restored.Select(property => $"        entity.{property.Name} = revision.{property.Name};\n"))
+            + (HasMetadata ? "        entity.Metadata = new(revision.Metadata);\n" : string.Empty);
+
+        var rows = new StringBuilder();
+
+        foreach (var detail in _resource.Details)
+        {
+            var collection = detail.CollectionName;
+            var local = ResourceEmitter.CamelCase(collection);
+            var fields = string.Concat(detail.Properties
+                .Where(property => property.IsWritable)
+                .Select(property => $"            row.{property.Name} = source.{property.Name};\n"));
+
+            // Satırlar kimlikleriyle geri gelir: duran satır güncellenir, silinmiş olan aynı kimlikle yeniden eklenir,
+            // sürümde bulunmayan silinir.
+            rows.Append($$"""
+
+                        var {{local}} = entity.{{collection}}.ToDictionary(row => row.{{detail.KeyName}});
+                        var {{local}}Position = 0;
+
+                        foreach (var source in revision.{{collection}}.OrderBy(row => row.Position).ThenBy(row => row.{{detail.KeyName}}))
+                        {
+                            if (!{{local}}.Remove(source.{{detail.KeyName}}, out var row))
+                            {
+                                row = new {{detail.QualifiedName}} { {{detail.KeyName}} = source.{{detail.KeyName}}, {{detail.Parent!.PropertyName}} = entity.{{_key}} };
+                                entity.{{collection}}.Add(row);
+                                context.Add(row);
+                            }
+
+                            row.Position = {{local}}Position++;
+                {{fields}}        }
+
+                        foreach (var removed in {{local}}.Values)
+                        {
+                            entity.{{collection}}.Remove(removed);
+                            context.Remove(removed);
+                        }
+
+                """);
+        }
+
+        var touch = _resource.Details.Length == 0
+            ? string.Empty
+            : "\n        // Yalnızca satırlar değişse de bu, kaydın bir yazmasıdır.\n        context.Entry(entity).State = global::Microsoft.EntityFrameworkCore.EntityState.Modified;\n";
+
+        // Geri gelen referansların hedefleri bu arada silinmiş veya görünmez olmuş olabilir; yeniden doğrulanır.
+        var references = ReferenceChecks(patch: false, creating: false, source: "entity");
+
+        _map.Append($$"""
+                    group.MapPost("{{_keyRoute}}/revisions/{revisionId:long}/rollback", RollbackAsync)
+                        .WithName("Rollback{{_entity}}")
+                        .ProducesProblem(400)
+                        .ProducesProblem(404){{StateMetadata(_resource.Workflow?.EditableIn)}}{{ConcurrencyMetadata()}};
+
+
+            """);
+
+        _handlers.Append($$"""
+
+                private static async {{OkOrProblem}} RollbackAsync(
+            {{ScopeParameter}}{{KeyParameter}}        long revisionId,
+            {{HttpContextParameter}}{{(Sliding ? TimeProviderParameter : string.Empty)}}{{ContextsParameter}}{{MessagesParameter}}{{CancellationParameter}}    {
+            {{ReadIfMatch()}}{{OwnerGuard("update")}}        var context = contexts.For<{{_entity}}>();
+                    var entity = await context.Set<{{_entity}}>(){{Includes}}.FirstOrDefaultAsync(item => {{Match}}, cancellationToken);
+
+                    if (entity is null)
+                    {
+                        return {{NotFound}};
+                    }
+
+                    var revision = await global::Haldus.HaldusRevisions.FindAsync(context, entity, {{KeyText}}, revisionId, cancellationToken);
+
+                    if (revision is null)
+                    {
+                        return {{Problems}}.NotFound(messages, "{{_entity}}Revision", revisionId);
+                    }
+
+            {{ChainGuard()}}{{StateGuard(_resource.Workflow?.EditableIn, "update")}}{{ExpectVersion()}}{{assignments}}{{rows}}{{touch}}
+            {{references}}{{Slide()}}{{Compute()}}{{Save()}}
+            {{WriteETag()}}        return {{Http}}.TypedResults.Ok(ToResponse(entity));
+                }
+
+            """);
+    }
+
+    /// <summary>
+    /// Değişiklik akışı. Günlükten yalnızca isteği yapanın görebileceği kayıtların satırları okunur
+    /// (<c>HaldusChanges.ReadAsync</c>); değişen kayıtlar kaynağın kendi filtrelerinden geçerek yüklenir ve artık
+    /// bulunamayanlar silinmiş olarak bildirilir.
+    /// </summary>
+    private void EmitChanges()
+    {
+        var page = $"global::Haldus.ChangeFeedPage<{_entity}Response>";
+        var change = $"global::Haldus.Change<{_entity}Response>";
+        var parse = _resource.IdKind == IdKind.Guid ? "global::System.Guid.Parse(item.RecordId)" : "item.RecordId";
+        var text = _resource.IdKind == IdKind.Guid
+            ? $"record.{_key}.ToString()"
+            : $"record.{_key}";
+        var parent = Parent is null
+            ? "null"
+            : $"global::System.Convert.ToString({ParentParameter}, global::System.Globalization.CultureInfo.InvariantCulture)";
+        var returnType = Parent is null
+            ? $"{Task}<{Results}.Ok<{page}>>"
+            : $"{Task}<{Results}.Results<{Results}.Ok<{page}>, {Problem}>>";
+
+        _map.Append($$"""
+                    group.MapGet("/changes", ChangesAsync)
+                        .WithName("List{{_entity}}Changes"){{(Parent is null ? string.Empty : "\n            .ProducesProblem(404)")}};
+
+
+            """);
+
+        _handlers.Append($$"""
+
+                private static async {{returnType}} ChangesAsync(
+            {{ScopeParameter}}        long? since,
+                    int? pageSize,
+            {{ContextsParameter}}{{(Parent is null ? string.Empty : MessagesParameter)}}{{CancellationParameter}}    {
+            {{ParentCheck()}}        var context = contexts.For<{{_entity}}>();
+                    var window = await global::Haldus.HaldusChanges.ReadAsync<{{_entity}}>(context, since, pageSize, {{parent}}, cancellationToken);
+                    var ids = window.Items.Select(item => {{parse}}).ToList();
+
+                    var records = await context.Set<{{_entity}}>()
+                        .AsNoTracking(){{Includes}}
+                        .Where(item => ids.Contains(item.{{_key}}){{ScopeCondition("item")}})
+                        .ToListAsync(cancellationToken);
+                    var current = records.ToDictionary(record => {{text}});
+
+                    var items = window.Items
+                        .Select(item => current.TryGetValue(item.RecordId, out var record)
+                            ? new {{change}}(item.RecordId, Deleted: false, ToResponse(record), item.ChangedAt)
+                            : new {{change}}(item.RecordId, Deleted: true, null, item.ChangedAt))
+                        .ToList();
+
+                    return {{Http}}.TypedResults.Ok(new {{page}}(items, window.Next, window.HasMore));
+                }
+
+            """);
+    }
+
+    // ── Taslak ve yayın ────────────────────────────────────────────────────────────────────────────────
+
+    /// <summary>Yayındaki kayıt silinemez: yayındaki kopyası sessizce onunla birlikte giderdi. Önce yayından kaldırılır.</summary>
+    private string PublishedGuard() => !_resource.Has(Traits.Publishable)
+        ? string.Empty
+        : $$"""
+                    if (entity.PublishedAt is not null)
+                    {
+                        return {{Problems}}.StateConflict(messages, "delete", "Published");
+                    }
+
+
+            """;
+
+    /// <summary>
+    /// Yayın uçları. Yayındaki hal aynı tabloda, taslağına işaret eden (<c>PublishedOfId</c>) ayrı bir satırdır ve
+    /// modeldeki <c>HaldusFilters.Publication</c> filtresiyle kaynağın bütün sıradan sorgularından gizlenir;
+    /// yalnızca buradaki uçlar o filtreyi (ve yalnızca onu) kaldırır. Kopya, taslağın yazılabilir alanlarını ve
+    /// gömülü satırlarını taşır ve her yayında yeniden kurulur. Dışarıya taslağın kimliğiyle gösterilir.
+    /// </summary>
+    private void EmitPublishing()
+    {
+        const string Publication = "global::Haldus.HaldusFilters.Publication";
+
+        var copies = $"contexts.For<{_entity}>().Set<{_entity}>().AsNoTracking(){Includes}\n            .IgnoreQueryFilters(new[] {{ {Publication} }})";
+        var draftId = _resource.IdKind == IdKind.String ? "copy.PublishedOfId!" : "copy.PublishedOfId!.Value";
+        var paged = $"global::Haldus.PagedResult<{_entity}Response>";
+        var position = Orderable ? ", Position = source.Position" : string.Empty;
+
+        _map.Append($$"""
+                    group.MapGet("/published", ListPublishedAsync)
+                        .WithName("ListPublished{{_plural}}");
+
+                    group.MapGet("/published{{_keyRoute}}", GetPublishedAsync)
+                        .WithName("GetPublished{{_entity}}")
+                        .ProducesProblem(404);
+
+                    group.MapPost("{{_keyRoute}}/publish", PublishAsync)
+                        .WithName("Publish{{_entity}}")
+                        .ProducesProblem(404)
+                        .ProducesProblem(409){{ConcurrencyMetadata()}};
+
+                    group.MapPost("{{_keyRoute}}/unpublish", UnpublishAsync)
+                        .WithName("Unpublish{{_entity}}")
+                        .ProducesProblem(404){{ConcurrencyMetadata()}};
+
+
+            """);
+
+        _handlers.Append($$"""
+
+                /// <summary>Yayındaki kayıtlar: taslakların son yayınlanan halleri, en son yayınlanan başta.</summary>
+                private static async {{Task}}<{{Results}}.Ok<{{paged}}>> ListPublishedAsync(
+            {{ScopeParameter}}        [{{Http}}.AsParameters] global::Haldus.PageRequest page,
+            {{FilterParameters()}}{{ContextsParameter}}{{CancellationParameter}}    {
+                    var query = {{copies}}
+                        .Where(item => item.PublishedOfId != null){{ScopeFilter}};
+            {{ApplyFilter()}}
+                    var totalCount = await query.LongCountAsync(cancellationToken);
+                    var copies = await query
+                        .OrderByDescending(item => item.PublishedAt)
+                        .ThenBy(item => item.{{_key}})
+                        .Skip(page.Skip)
+                        .Take(page.PageSizeOrDefault)
+                        .ToListAsync(cancellationToken);
+
+                    return {{Http}}.TypedResults.Ok(new {{paged}}(
+                        copies.Select(ToPublished).ToList(), page.PageOrDefault, page.PageSizeOrDefault, totalCount));
+                }
+
+                private static async {{OkOrProblem}} GetPublishedAsync(
+            {{ScopeParameter}}{{KeyParameter}}{{ContextsParameter}}{{MessagesParameter}}{{CancellationParameter}}    {
+                    var copy = await {{copies}}
+                        .FirstOrDefaultAsync(item => item.PublishedOfId == {{_keyParameter}}{{ScopeCondition("item")}}, cancellationToken);
+
+                    if (copy is null)
+                    {
+                        return {{NotFound}};
+                    }
+
+                    return {{Http}}.TypedResults.Ok(ToPublished(copy));
+                }
+
+                /// <summary>Kopya, taslağının kimliğiyle gösterilir; kendi anahtarı dışarıya çıkmaz.</summary>
+                private static {{_entity}}Response ToPublished({{_entity}} copy) => ToResponse(copy) with { {{_key}} = {{draftId}} };
+
+                /// <summary>Taslağın şimdiki halini yayına alır; önceki yayın bununla değişir.</summary>
+                private static async {{OkOrProblem}} PublishAsync(
+            {{ScopeParameter}}{{KeyParameter}}{{HttpContextParameter}}{{TimeProviderParameter}}{{ContextsParameter}}{{MessagesParameter}}{{CancellationParameter}}    {
+            {{ReadIfMatch()}}{{OwnerGuard("publish")}}        var context = contexts.For<{{_entity}}>();
+                    var source = await context.Set<{{_entity}}>(){{Includes}}.FirstOrDefaultAsync(item => {{Match}}, cancellationToken);
+
+                    if (source is null)
+                    {
+                        return {{NotFound}};
+                    }
+
+            {{ExpectVersion().Replace("Entry(entity)", "Entry(source)")}}        var previous = await context.Set<{{_entity}}>()
+                        .IgnoreQueryFilters(new[] { {{Publication}} })
+                        .FirstOrDefaultAsync(item => item.PublishedOfId == source.{{_key}}, cancellationToken);
+
+                    if (previous is not null)
+                    {
+                        // Satırları veritabanı onunla birlikte siler.
+                        context.Set<{{_entity}}>().Remove(previous);
+                    }
+
+                    var now = global::Haldus.HaldusTime.UtcNow(timeProvider);
+                    var entity = new {{_entity}} { {{CreateInitializer(source: "source")}}{{position}}, PublishedOfId = source.{{_key}}, PublishedAt = now };
+            {{CopyRows("source")}}{{Compute()}}
+                    source.PublishedAt = now;
+                    context.Set<{{_entity}}>().Add(entity);
+
+                    try
+                    {
+                        await context.SaveChangesAsync(cancellationToken);
+                    }
+                    catch (global::Microsoft.EntityFrameworkCore.DbUpdateConcurrencyException)
+                    {
+                        // Taslak ya da önceki kopya bu sırada başka bir istekle değişti.
+                        return {{Problems}}.{{(_concurrency ? "PreconditionFailed" : "StateChanged")}}(messages);
+                    }
+                    catch (global::Microsoft.EntityFrameworkCore.DbUpdateException taken)
+                        when (global::Haldus.HaldusDb.IsUniqueViolation(taken, "UX_{{_plural}}_PublishedOfId"))
+                    {
+                        // Aynı taslağı aynı anda yayınlayan iki istekten ikincisi: bir taslağın tek kopyası olur.
+                        return {{Problems}}.StateChanged(messages);
+                    }
+
+            {{WriteETag().Replace("entity.Version", "source.Version")}}        return {{Http}}.TypedResults.Ok(ToResponse(source));
+                }
+
+                /// <summary>Kaydı yayından kaldırır; taslak durur. Yayında olmayan kayıtta bir şey değişmez.</summary>
+                private static async {{OkOrProblem}} UnpublishAsync(
+            {{ScopeParameter}}{{KeyParameter}}{{HttpContextParameter}}{{ContextsParameter}}{{MessagesParameter}}{{CancellationParameter}}    {
+            {{ReadIfMatch()}}{{OwnerGuard("unpublish")}}        var context = contexts.For<{{_entity}}>();
+                    var entity = await context.Set<{{_entity}}>(){{Includes}}.FirstOrDefaultAsync(item => {{Match}}, cancellationToken);
+
+                    if (entity is null)
+                    {
+                        return {{NotFound}};
+                    }
+
+            {{ExpectVersion()}}        var copy = await context.Set<{{_entity}}>()
+                        .IgnoreQueryFilters(new[] { {{Publication}} })
+                        .FirstOrDefaultAsync(item => item.PublishedOfId == entity.{{_key}}, cancellationToken);
+
+                    if (copy is not null)
+                    {
+                        context.Set<{{_entity}}>().Remove(copy);
+                    }
+
+                    entity.PublishedAt = null;
+            {{Save()}}
+            {{WriteETag()}}        return {{Http}}.TypedResults.Ok(ToResponse(entity));
+                }
+
+            """);
+    }
+
     // ── Onay ───────────────────────────────────────────────────────────────────────────────────────────
 
     /// <summary>Onaylanmış kaydın içeriği değişmez: onay, onaylayanın gördüğü içeriğe verilmiştir.</summary>
@@ -2593,7 +3031,7 @@ internal sealed partial class EndpointEmitter
     /// Bir çiftin parçası olan kayıt silinemez: silinirse öteki uç hiçbir şeye işaret etmez ya da sonsuza dek
     /// kapalı kalır. Hiçbir çifte girmemiş kayıt (ör. ters çevrilmemiş bir taslak) serbestçe silinir.
     /// </summary>
-    private string ChainDeleteGuard() => string.Concat(ChainOperation.For(_resource).Select(chain => $$"""
+    private string ChainDeleteGuard() => PublishedGuard() + string.Concat(ChainOperation.For(_resource).Select(chain => $$"""
                 if (entity.{{chain.Back}} is not null || entity.{{chain.Forward}} is not null)
                 {
                     return {{Problems}}.ChainLocked(messages, global::Haldus.HaldusMessageKeys.ChainMemberDetail, "{{_entity}}", {{_keyParameter}});
@@ -3240,7 +3678,7 @@ internal sealed partial class EndpointEmitter
 
         var duplicate = DuplicateCatch();
 
-        return concurrency.Length == 0 && duplicate.Length == 0
+        return Effective(concurrency.Length == 0 && duplicate.Length == 0
             ? "        await context.SaveChangesAsync(cancellationToken);\n"
             : $$"""
                         try
@@ -3248,7 +3686,7 @@ internal sealed partial class EndpointEmitter
                             await context.SaveChangesAsync(cancellationToken);
                         }
                 {{concurrency}}{{duplicate}}
-                """;
+                """);
     }
 
     private string WriteETag() => _concurrency

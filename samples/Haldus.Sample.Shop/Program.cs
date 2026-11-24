@@ -6,6 +6,7 @@ using Haldus.Sample.Shop.Features.Integrations;
 using Haldus.Sample.Shop.Features.Platform;
 using Haldus.Sample.Shop.Features.Sales;
 using Haldus.Sample.Shop.Features.Stock;
+using Haldus.Sample.Shop.Features.Content;
 using Haldus.Sample.Shop.Features.Supply;
 using Microsoft.EntityFrameworkCore;
 
@@ -41,6 +42,7 @@ app.MapPlatform();
 app.MapAccount();
 app.MapIntegrations();
 app.MapSupply();
+app.MapContent();
 app.MapDiagnostics();
 
 // Entity'ye bağlı olmayan işlemler: iş mantığı ShippingQuoteHandler ve ApplyDiscountHandler sınıflarında.

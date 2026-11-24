@@ -59,6 +59,8 @@ internal static class HaldusModule
 
         global::Haldus.HaldusEndpointRegistry.Register<global::Shop.Supplier>(global::Shop.SupplierEndpoints.Map);
 
+        global::Haldus.HaldusDetails.Register<global::Shop.Supplier, global::Shop.SupplierCertificate>("SupplierId");
+
         global::Haldus.HaldusEndpointRegistry.Register<global::Shop.SupplierTerms>(global::Shop.SupplierTermsEndpoints.Map);
 
         global::Haldus.HaldusEndpointRegistry.Register<global::Shop.SupplierContact>(global::Shop.SupplierContactEndpoints.Map);

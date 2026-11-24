@@ -295,6 +295,36 @@ internal static class LifecycleReader
 
     public const string DocumentStatus = "global::Haldus.DocumentStatus";
 
+    private const string DateOnly = "global::System.DateOnly";
+
+    /// <summary>Dönemli kaydın (<c>.EffectiveDated()</c>) istemcinin yazdığı iki alanı.</summary>
+    public static IEnumerable<PropertyModel> EffectivePeriod()
+    {
+        yield return new PropertyModel(
+            "EffectiveFrom",
+            DateOnly,
+            NullableType: DateOnly + "?",
+            IsWritable: true,
+            IsNonNullableReference: false,
+            IsNonNullableValue: true,
+            SearchKind.Range,
+            DateOnly,
+            EquatableArray<AttributeModel>.Empty,
+            IsGenerated: true);
+
+        yield return new PropertyModel(
+            "EffectiveTo",
+            DateOnly + "?",
+            NullableType: DateOnly + "?",
+            IsWritable: true,
+            IsNonNullableReference: false,
+            IsNonNullableValue: false,
+            SearchKind.Range,
+            DateOnly,
+            EquatableArray<AttributeModel>.Empty,
+            IsGenerated: true);
+    }
+
     private static ApprovalModel? ReadApproval(
         SemanticModel semanticModel,
         SeparatedSyntaxList<ArgumentSyntax> arguments,

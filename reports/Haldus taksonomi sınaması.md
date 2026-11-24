@@ -6,18 +6,19 @@ sınamanın sonucudur: her satır, yazılmış olan API ile ifade edilmeye çal�
 
 ## Sonuç
 
-59 satırın 53'ü bugünkü API ile yazılıp derleniyor (39'u eksiksiz); 6'sı için anlamlı bir eşleme yok. (İlk sayım 19 temiz, 29
+59 satırın 54'ü bugünkü API ile yazılıp derleniyor (41'i eksiksiz); 5'i için anlamlı bir eşleme yok. (İlk sayım 19 temiz, 29
 kısmi, 11 yok idi. Entity aksiyonu yazıldıktan sonra bir satır temize geçti; sahiplik yazıldıktan sonra iki satır
 temize, bir satır yoktan kısmiye geçti; alan eklentileri yazıldıktan sonra üç satır temize, bir satır yoktan
 kısmiye geçti; kayıt işlemleri yazıldıktan sonra üç satır daha temize geçti; kayıtlar arası zincir yazıldıktan
 sonra beş satır temize, bir satır yoktan kısmiye geçti; sırlar yazıldıktan sonra iki satır daha temize geçti;
-bağlar ve kapsam yazıldıktan sonra üç satır daha, onay yazıldıktan sonra bir satır daha temize geçti.)
+bağlar ve kapsam yazıldıktan sonra üç satır daha, onay yazıldıktan sonra bir satır daha temize geçti; zaman ve
+sürüm yazıldıktan sonra bir satır kısmiden, bir satır yoktan temize geçti.)
 
 | Sonuç | Satır | Anlamı |
 |---|---|---|
-| Temiz | 39 | Raporun önerdiği eşleme, yazılmış özelliklerle eksiksiz ifade ediliyor |
-| Kısmi | 14 | Çekirdek ifade ediliyor; önerilen eşlemedeki bir veya daha çok özellik henüz yok |
-| Yok | 6 | Gereken archetype veya trait yazılmadı |
+| Temiz | 41 | Raporun önerdiği eşleme, yazılmış özelliklerle eksiksiz ifade ediliyor |
+| Kısmi | 13 | Çekirdek ifade ediliyor; önerilen eşlemedeki bir veya daha çok özellik henüz yok |
+| Yok | 5 | Gereken archetype veya trait yazılmadı |
 
 Araştırmanın başlangıçtaki düz katalog için kendi sayımı 10 oturuyor, 31 zorlanarak, 18 oturmuyor idi. İki sayım
 aynı ölçüyle yapılmadı (o, araştırmacının hükmüydü; bu, derlenen kod), bu yüzden fark kesin bir iyileşme ölçüsü
@@ -37,7 +38,8 @@ tamamı eksik trait veya archetype'tır.
   ayarlar, stok, iş, toplu işlemler, kullanıcıya ait kaynaklar, favoriler, doğal anahtar, sıralama, metadata,
   kardeşler arası sıra, kopyalama, önizleme, ters kayıt, yerine geçme, başka bir kayıttan üretme, türetme, bir kez
   gösterilen sır, döndürme, token ile erişim, bağların topluca değiştirilmesi, yük ve durum taşıyan bağ, ebeveyn
-  altında tek kayıt, kısa adres, komutla yazılan satırlar, onay (tek ve çok düzeyli) ve belge.
+  altında tek kayıt, kısa adres, komutla yazılan satırlar, onay (tek ve çok düzeyli), belge, saklanan sürümler ve
+  geri yükleme, değişiklik akışı, dönemli kayıtlar, taslak ve yayın.
   Geri kalan satırlar yalnızca derleme düzeyinde doğrulandı.
 - **Hüküm:** "Temiz" ile "kısmi" arasındaki ayrım benim yorumumdur: önerilen eşlemede adı geçen bir özellik
   yazılmadıysa, aynı sonuç elle (ör. bir handler içinde) elde edilebilse bile satır kısmi sayıldı.
@@ -48,7 +50,7 @@ tamamı eksik trait veya archetype'tır.
 |---|---|---|---|---|
 | 1 | Order | Kısmi | `MapCrud` + `Workflow` + `Numbered(assignOn)` + `ConcurrencyChecked` + `Auditable` + `MapDetail` + `CreatedFrom<Cart>` | `MapChangeSet`, birden çok durum ekseni |
 | 2 | OrderItem / LineItem | Temiz | Gömülü `MapDetail` + `IComputed` toplamlar | — |
-| 3 | Product + Variant + Option | Kısmi | `MapCrud` + gömülü `MapDetail` (sırası korunur) + `Batch` | `Publishable`, varyant üretimi |
+| 3 | Product + Variant + Option | Kısmi | `MapCrud` + `Publishable` + gömülü `MapDetail` (sırası korunur) + `Batch` | Varyant üretimi |
 | 4 | Category / Collection | Temiz | `MapCrud` + `Hierarchical` + `Archivable` + `Orderable` | — |
 | 5 | Cart | Kısmi | `MapCrud` + `OwnedByCurrentUser` + `MapDetail` + `Expiring(sliding)` + `Cloneable` | Sepet birleştirme, anonim oturumun sahipliği |
 | 6 | Checkout Session | Temiz | `MapCrud().Without(Delete)` + `Workflow` + `Expiring` + `Idempotent`; tamamlanınca doğan kayıt `CreatedFrom<CheckoutSession>(on: "complete")` | — |
@@ -68,13 +70,13 @@ tamamı eksik trait veya archetype'tır.
 | 20 | StockMovement / defter kaydı | Temiz | `MapAppendOnly` + `Auditable` | — |
 | 21 | Reservation | Temiz | `MapCrud` + `Workflow` + `Expiring` | — |
 | 22 | Transfer | Temiz | `MapCrud` + `Workflow` + `MapDetail` + `Idempotent` + `IComputed` + `Cloneable` | — |
-| 23 | Employee | Kısmi | `MapCrud` + `Searchable` + entity aksiyonu; geçmiş `MapDetail().AsSubresource()` | `CustomFields`, `ChangeFeed`, `EffectiveDated` |
+| 23 | Employee | Kısmi | `MapCrud` + `Searchable` + `ChangeFeed` + entity aksiyonu; geçmiş `MapCrud().Under<Employee>().EffectiveDated()` | `CustomFields` |
 | 24 | LeaveRequest | Temiz | `MapCrud` + `Under<Employee>` + `Workflow` + `Approvable(levels: 2, "take")` | — |
 | 25 | Time-off balance | Kısmi | `MapAppendOnly` hareket + `MapReadOnly().DerivedFrom<LeaveEntry>()` bakiye | `MapBalance` (bakiyeye karşı atomik kontrol, bekleyen talepler) |
 | 26 | Timesheet / attendance | Temiz | `MapCrud` + `Batch(atomic: false)`; giriş/çıkış birer entity aksiyonu | — |
-| 27 | Post / Entry | Kısmi | `MapCrud` + `SoftDeletable` + `ConcurrencyChecked` + `Workflow` (yayınla) | `Publishable`, `Revisioned` |
+| 27 | Post / Entry | Temiz | `MapCrud` + `Publishable` + `SoftDeletable` + `ConcurrencyChecked` + `Revisioned` | — |
 | 28 | Localized fields | Yok | — | `Translatable` |
-| 29 | Revision / Snapshot | Yok | — | `Revisioned` |
+| 29 | Revision / Snapshot | Temiz | `Revisioned` (liste, tek sürüm, geri yükleme) | — |
 | 30 | Comment (threaded) | Kısmi | `MapCrud` + `Under<T>` + `Hierarchical` + `SoftDeletable` | Her kaynağa takılabilen yorum (`Commentable`) |
 | 31 | Tag / Label | Temiz | `MapLookup` + `MapAssociation` (bağlar `PUT /articles/{id}/tags` ile topluca değişir) | — |
 | 32 | MediaFile / Asset | Yok | — | `MapFile` |
@@ -133,6 +135,11 @@ tamamı eksik trait veya archetype'tır.
   Raporun önerdiği onay zinciri (düzey başına farklı roller, koşullu adımlar) yazılmadı: düzeyler yalnızca
   "birbirinden farklı N kişi" demektir. `.Document()` (taslak → gönder → iptal → düzelt) yeni bir satır kapatmadı,
   çünkü o satırlar (12, 15) zaten `Workflow` ile yazılabiliyordu; aynı şeyin kısa yazımıdır.
+- **Zaman dört ayrı biçimde ortaya çıktı** ve dördü de ayrı yazıldı: kaydın geçmiş halleri (`Revisioned`, 27 ve 29),
+  taslağın yanında yayındaki hal (`Publishable`, 3 ve 27), iş tarafının beyan ettiği geçerlilik dönemi
+  (`EffectiveDated`, 23) ve "şundan beri ne değişti" akışı (`ChangeFeed`, 23). Araştırmanın 27. satır için ayrıca
+  not ettiği zamanlanmış yayın yazılmadı; önerilen eşlemede adı geçmediği için satır temiz sayıldı, bu benim
+  yorumumdur.
 - **Bağın kendisi üç satırda eksikti** (31, 40, 46): bağların topluca değiştirilmesi, üyelik gibi kendi alanı ve
   durumu olan bağ, bir kaydın altındaki tek yapılandırma kaydı. Üçü de yazıldı. Durumu olan bağın geçişleri
   gövdesizdir (iş mantığı taşımaz); mantık gerektiren bir üyelik hâlâ `MapCrud` + iki `References` ile yazılır.
@@ -142,13 +149,12 @@ tamamı eksik trait veya archetype'tır.
 | Eksik | Satırlar |
 |---|---|
 | `CustomFields` | 23, 51 |
-| `Publishable` | 3, 27 |
-| `Revisioned` | 27, 29 |
+
 | `MapBalance` | 11, 25 |
 | `MapFile` / `Attachable` | 32, 49 |
 | `Commentable` | 30, 50 |
 | Birden çok durum ekseni | 1, 10 |
-| Tek satırı etkileyenler | `MapChangeSet` (1), türetilmiş durum (12), sepet birleştirme (5), `Translatable` (28), `Retention` (44), `ReadTracking` (45), `Rollup` (57), `EffectiveDated` ve `ChangeFeed` (23) |
+| Tek satırı etkileyenler | `MapChangeSet` (1), türetilmiş durum (12), sepet birleştirme (5), `Translatable` (28), `Retention` (44), `ReadTracking` (45), `Rollup` (57), varyant üretimi (3) |
 
 Araştırma bunların çoğunu zaten ikinci ve üçüncü sürüme bırakmıştı. Bu sınamanın o sıralamaya eklediği tek şey,
 ilk sürümün kapsamındaki satırlarda da gereken entity aksiyonuydu; o artık yazıldı. Dört satırı etkileyen sahiplik

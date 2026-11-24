@@ -195,7 +195,7 @@ internal sealed partial class EndpointEmitter
                 {{DbContextParameter}}{{SavedParameter}}{{time}}{{ContextsParameter}}{{MessagesParameter}}{{CancellationParameter}}    {
                 {{WriteChecks(patch: false, creating: true)}}        var entity = new {{_entity}} { {{CreateInitializer()}} };
                 {{CreateDetails()}}{{Compute()}}{{Derive()}}{{OrderAppend()}}{{numbering}}        context.Set<{{_entity}}>().Add(entity);
-                {{SaveNew()}}{{OrderCommit()}}{{DeriveCommit()}}        saved.Add(entity);
+                {{Effective(SaveNew())}}{{OrderCommit()}}{{DeriveCommit()}}        saved.Add(entity);
                         return null;
                     }
 

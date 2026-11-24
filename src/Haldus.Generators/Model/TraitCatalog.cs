@@ -61,6 +61,13 @@ internal static class TraitCatalog
             new("DecisionNote", "string?", InResponse: true, Search: null),
         ]),
 
+        // Anlık görüntüyü ve değişiklik günlüğünü interceptor yazar; kayda alan eklemezler.
+        new(Traits.Revisioned, "global::Haldus.IRevisioned", []),
+        new(Traits.ChangeFeed, "global::Haldus.IChangeTracked", []),
+
+        // Dönem alanları istemcinin yazdığı sıradan alanlardır; ayrıca eklenirler.
+        new(Traits.EffectiveDated, "global::Haldus.IEffectiveDated", []),
+
         // Çanta yanıtta görünür; isteklerdeki yeri ve yazılma kuralları ayrıca üretilir.
         new(Traits.Metadata, "global::Haldus.IHasMetadata",
         [

@@ -34,6 +34,9 @@ public static class HaldusMessageKeys
     public const string SupersededDetail = "Superseded.Detail";
     public const string ChainMemberDetail = "ChainMember.Detail";
     public const string AmendedDetail = "Amended.Detail";
+    public const string EffectivePeriodInvalid = "EffectivePeriod.Invalid";
+    public const string EffectivePeriodOverlapTitle = "EffectivePeriodOverlap.Title";
+    public const string EffectivePeriodOverlapDetail = "EffectivePeriodOverlap.Detail";
     public const string ApprovalDeniedTitle = "ApprovalDenied.Title";
     public const string ApprovalUserRequired = "Approval.UserRequired";
     public const string ApprovalOwnRequest = "Approval.OwnRequest";

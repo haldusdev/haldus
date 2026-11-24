@@ -153,6 +153,18 @@ Bunlar kullanıcıyla kararlaştırıldı; yeniden sorma.
     `Cancelled`; yalnızca taslak düzenlenir ve silinir). `submit` ve `cancel` geçişleri kendiliğinden gelir; aynı
     adla yazılan `MapTransition` onların yerine geçer. `POST /{id}/amend` iptal edilmiş belgeden, ona işaret eden
     (`AmendedFromId`) yeni bir taslak üretir; entity `IAmendment<T>` uygularsa kopyadan sonra çağrılır.
+- Zaman ve sürüm (18. aşama). Kullanıcı sormamamı istedi; yazılan, önerdiğim seçeneklerdir ve ayrıca onaylanmadı:
+  - `.Revisioned()` anlık görüntü saklar (fark günlüğü değil): kaydın her yazmadan sonraki hali, gömülü satırlarıyla
+    birlikte. `GET /{id}/revisions`, `GET /{id}/revisions/{revisionId}` (kaydın kendi yanıt biçiminde),
+    `POST /{id}/revisions/{revisionId}/rollback` (bir güncellemedir; yeni bir sürüm oluşturur).
+  - `.Publishable()` çift kopyadır (sürüm tablosu değil): yayındaki hal aynı tabloda, taslağına işaret eden ayrı
+    bir satırdır; böylece yayındaki kayıtlar da süzülür ve sayfalanır. `POST /{id}/publish`, `POST /{id}/unpublish`,
+    `GET /published`, `GET /published/{id}`. Yayındaki kayıt silinemez (409).
+  - `.EffectiveDated(per...)`: `EffectiveFrom` (dahil) ve `EffectiveTo` (hariç; boşsa açık uçlu) istemcinin yazdığı
+    alanlardır. Kapsamda çakışan dönem 409 alır; açık uçlu tek bir dönemin içinde başlayan yeni kayıt öncekini
+    kendi başladığı gün kapatır. Liste `?asOf=` ile süzülür.
+  - `.ChangeFeed()`: `GET /changes?since={imleç}`; imleç günlükteki sıra numarasıdır. Yanıt değişen kayıtların
+    şimdiki halini ve artık bulunamayanları (`deleted: true`) verir.
 - Eşzamanlılık trait'inin adı `ConcurrencyChecked` (eski adı `Versioned`). Sürüm yanıt gövdesinde değil
   `ETag` başlığında taşınır; güncelleme ve silme `If-Match` ister (eksikse 428, uyuşmazlıkta 412).
 - Güncelleme için hem `PUT` (tam değiştirme) hem `PATCH` (kısmi) üretilir.
@@ -222,8 +234,8 @@ Bunlar kullanıcıyla kararlaştırıldı; yeniden sorma.
 ## Aşamalar
 
 On aşamanın tamamı bitti (3. aşamaya `.Searchable()`, 8. aşamaya fiziksel temizlik de eklendi). 10. aşamanın
-sonucu `reports/Haldus taksonomi sınaması.md` dosyasındadır: araştırmadaki 59 varlığın (bugünkü sayımla) 39'u temiz, 14'ü
-kısmen ifade ediliyor, 6'sı için gereken özellik yok. Aynı veri `tests/Haldus.Generators.Tests/TaxonomyTests.cs`
+sonucu `reports/Haldus taksonomi sınaması.md` dosyasındadır: araştırmadaki 59 varlığın (bugünkü sayımla) 41'i temiz, 13'ü
+kısmen ifade ediliyor, 5'i için gereken özellik yok. Aynı veri `tests/Haldus.Generators.Tests/TaxonomyTests.cs`
 içinde derlenir; yeni bir archetype veya trait bir satırı kapatıyorsa ikisini birlikte güncelle.
 
 1. İskelet
@@ -244,7 +256,7 @@ içinde derlenir; yeni bir archetype veya trait bir satırı kapatıyorsa ikisin
 Kullanıcı 2026-11-24'te onayladı. Kapsamı araştırma raporunun v2 listesi, ilk sürümden kalan küçük kalemler
 ve sınamada çıkan küçük eksiklerdir. Raporun v3 listesi (`MapBalance`, `MapChangeSet`, birden çok durum
 ekseni, çeviri, saklama süresi, okundu takibi) ve tekrar serisi bu planın dışındadır. Her aşama testleriyle
-birlikte ayrı commit olur; 11–17. aşamalar bitti, sıradaki 18.
+birlikte ayrı commit olur; 11–18. aşamalar bitti, sıradaki 19.
 
 11. Sahiplik: `OwnedByCurrentUser`, `MapAssociation().ForCurrentUser()`
 12. Alan eklentileri: `Metadata`, yalnızca oluştururken yazılan alan, `NaturalKey`, `KeyStrategy`, liste
@@ -269,7 +281,7 @@ aktarma, yeni paket eklemeden yazılır.
 Aşama başına açık kararlar (uygulandıkça "Tasarım kararları"na taşınır):
 
 
-- 18: Taslak/yayın için çift kopya mı, sürüm tablosu mu; geçmiş anlık görüntü mü, fark günlüğü mü.
+
 - 19: Depolama sağlayıcıları (paketlere ayrılması önerildi; S3 gibi sağlayıcılar yeni bağımlılıktır).
 - 20: Aktarma biçimleri; CSV için bir kütüphane yeni bağımlılık olabilir.
 
@@ -615,6 +627,53 @@ Raporun v1 listesindeki "uzatma kancaları" plana girmedi ve yazılmadı: rapord
     listede olmayan geçişin token adresi yoktur. Token ebeveyn altındaki ve kullanıcıya ait kaynaklarla
     birleşmez (görünürlükleri, token'ı taşıyanın sahip olmadığı bir kimliğe bağlıdır). Bilinen sınır: token
     kullanılınca kendiliğinden geçersiz olmaz; ömrünü `Expiring` ve durum makinesi belirler. Oran sınırlama yoktur.
+- **Satırı değişen sahip.** Gömülü satır sahibinin parçasıdır. Üretilen uçlar satır değişince sahibi `Modified`
+  işaretler; aynı kuralı, satırları başka bir kodun (aksiyonun veya geçişin mantığı, uygulamanın kendi kodu)
+  değiştirdiği durum için interceptor uygular (`HaldusDetails.TouchOwners`; satır tiplerini üretilen modül
+  `HaldusDetails.Register<TOwner, TDetail>(fk)` ile bildirir). Sahibe bağlı her kural (sürüm, `UpdatedAt`, anlık
+  görüntü, onayın düşmesi, değişiklik günlüğü) buna dayanır; güvenlik incelemesinde, yalnızca satırları değiştiren
+  bir aksiyonun onayı düşürmediği görülünce eklendi.
+- **Sürümler ve değişiklik akışı.** İkisini de interceptor yazar (`HaldusRevisions.Capture`, `HaldusChanges.Capture`),
+  trait alanları yazıldıktan sonra ve kaydı hangi kod yazarsa yazsın; üretilen uçlarda yakalama kodu yoktur. İkisi
+  de anahtarın kaydetmeden önce bilinmesini ister (veritabanının ürettiği anahtarla birleşmezler) ve yayın
+  kopyalarını atlar. Kayıtları tipin tam adı, anahtar ve (varsa) kiracı ile eşlenir.
+  - **Anlık görüntü** EF modelinden okunur: gölge olmayan bütün skaler alanlar, complex property'ler ve kayıtlı
+    satır koleksiyonları (`HaldusRevisions.Register<T>(koleksiyonlar)`), jsonb olarak. Okurken görüntüden izlenmeyen
+    bir kayıt kurulur (`FindAsync`) ve yanıt her yanıt gibi `ToResponse` ile üretilir; bu yüzden yanıtta olmayan
+    hiçbir alan dışarı çıkmaz. Görüntü yine de bütün alanları sakladığı için `SecretOnce` / `TokenAccess` ile
+    birleşmez. Hiçbir şeyi değiştirmeyen yazma sürüm oluşturmaz (EF kaydı `Modified` saymaz).
+  - **Geri yükleme** bir güncellemedir (`EmitRevisions`): güncellenebilir alanlar ve gömülü satırlar (kimlikleriyle:
+    duran güncellenir, silinmiş olan aynı kimlikle eklenir, sürümde olmayan silinir) geri yazılır, geri gelen
+    referanslar kayıttan okunarak yeniden doğrulanır, güncelleme korumaları (`ChainGuard`, `EditableIn`, `If-Match`)
+    geçerlidir. Ağaçtaki yer (`ParentId`) geri yüklenmez. Sınırlar: kayıt silinince sürümleri kalır; satırın kendi
+    referansı (varsa) yeniden doğrulanmaz; ayrı uçlu detay görüntüye girmez.
+  - **Akış.** Günlük satırı kaydın kimin olduğunu da taşır (kiracı, sahip, ebeveyn): silinen kayıt sonradan
+    sorulamaz, akışı okuyanın onu görüp göremeyeceği günlükten anlaşılır. Uç önce günlüğü isteği yapanın kapsamıyla
+    okur (`HaldusChanges.ReadAsync`), sonra değişen kayıtları kaynağın kendi filtrelerinden geçirerek yükler;
+    bulunamayan (silinmiş, yumuşak silinmiş, süresi dolmuş) kayıt `deleted` olarak döner. Ebeveyn altındaki
+    kaynakta önce ebeveynin görünürlüğü doğrulanır (`ParentCheck`); kısa adresli (`shallow`) kaynakla birleşmez.
+    İmleç günlükteki kimliktir; kimlik eklenirken, görünürlük transaction bitince belirlendiği için akış
+    `HaldusChanges.SafetyLag` (varsayılan 2 sn) kadar geriden gelir ve yeterince eskimemiş ilk satırda durur.
+    Bundan uzun süren bir transaction'ın satırları yine atlanabilir (bilinen sınır). `ExecuteUpdate` /
+    `ExecuteDelete` gibi değişiklik izleyicisini atlayan yazmalar günlüğe ve sürümlere girmez.
+- **Dönemli kayıtlar.** `Traits.EffectiveDated` (`IEffectiveDated`); iki alan `LifecycleReader.EffectivePeriod()` ile
+  sıradan, yazılabilir alan olarak eklenir. Kural kaydetmenin kendisine bağlıdır: `EndpointEmitter.Effective(save)`
+  `Save()`, `SaveCreated()` ve toplu oluşturmanın kaydetmesini sarar; kapsam kilitlenir (`OrderLock`, sıra ile aynı
+  kilit), `HaldusEffectiveDating.ApplyAsync` dönemi kapsamdaki öteki kayıtlarla sınar ve hepsi birlikte kalıcı
+  olur. **Dönemli bir kaynağı kaydeden yeni bir yol bu sarmalayıcıdan geçmelidir** (generator testi toplu
+  oluşturmanın atlandığını yakalamıştı). Kapsam `SiblingsOf` + sayılan alanlardır. Veritabanı kısıtı yoktur
+  (çakışmasız aralık kısıtı `btree_gist` eklentisi isterdi); koruma kilittir ve entegrasyon testi eşzamanlı
+  yazmalarla doğrular. Silme serbesttir (araya boşluk bırakır).
+- **Taslak ve yayın.** `Traits.Publishable`; `PublishedOfId` (yanıtta yok) ve `PublishedAt` `ExtraMembers`'tadır.
+  Kopyaları gizleyen `HaldusFilters.Publication` filtresi modeldedir; kaynağa dokunan her sorgu yalnızca taslakları
+  görür ve yalnızca yayın uçları (`EmitPublishing`) o filtreyi adıyla kaldırır. Kopya her yayında yeniden kurulur
+  (önceki silinir, yenisi `CreateInitializer(source)` + `CopyRows` + `Compute` ile eklenir) ve dışarıya taslağın
+  kimliğiyle gösterilir (`ToPublished`). Eşzamanlı iki yayından ikincisi benzersiz indekse
+  (`UX_{Tablo}_PublishedOfId`) takılır ve 409 alır. Doğal anahtarın indeksi kısmidir (`PublishedOfId IS NULL`).
+  Sınırlar: kopya yalnızca yazılabilir alanları ve gömülü satırları taşır (Haldus'un yönettiği alanları değil),
+  bu yüzden `Workflow`, `Document`, `Numbered`, `Expiring`, sırlar, zincir işlemleri, `Approvable` ve
+  `EffectiveDated` ile birleşmez; yayındaki kayıtlar `Filterable` filtresiyle süzülür ama aranamaz (`/search`) ve
+  sıralanamaz; ayrı uçlu detaylar kopyaya girmez; zamanlanmış yayın yoktur.
 - **Onay.** `Traits.Approvable` (`IApprovable`; alanları `TraitCatalog`'dadır), kuralları `ResourceModel.Approval`
   (`LifecycleReader.ReadApproval`). Kimin karar verebileceği ve kararın kayda nasıl yazıldığı çalışma zamanındadır
   (`HaldusApprovals.DecideAsync`); üretilen uç kaydı bulur, yazma kurallarından geçirir (`If-Match`, kapanmış kayıt

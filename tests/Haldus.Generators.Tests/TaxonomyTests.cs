@@ -84,7 +84,7 @@ public sealed class TaxonomyTests
             public partial class ProductVariant { public string Sku { get; set; } = ""; public decimal Price { get; set; } }
             """,
             """
-            var products = app.MapCrud<Product>().SoftDeletable().Auditable().Batch();
+            var products = app.MapCrud<Product>().SoftDeletable().Auditable().Batch().Publishable();
             products.MapDetail<ProductVariant>();
             """),
         new(4, "Category / Collection", Fit.Clean,
@@ -289,12 +289,12 @@ public sealed class TaxonomyTests
         new(23, "Employee", Fit.Partial,
             """
             public partial class Employee { public string Name { get; set; } = ""; }
-            public partial class EmploymentRecord { public string Title { get; set; } = ""; public DateOnly StartsOn { get; set; } }
+            public partial class EmploymentRecord { public string Title { get; set; } = ""; }
             """,
             """
-            var employees = app.MapCrud<Employee>().MultiTenant().Searchable(employee => employee.Name);
-            employees.MapDetail<EmploymentRecord>().AsSubresource();
+            var employees = app.MapCrud<Employee>().MultiTenant().Searchable(employee => employee.Name).ChangeFeed();
             employees.MapAction("terminate", employee => employee.Name = employee.Name.Trim());
+            app.MapCrud<EmploymentRecord>().Under<Employee>().EffectiveDated();
             """),
         new(24, "LeaveRequest", Fit.Clean,
             """
@@ -338,18 +338,13 @@ public sealed class TaxonomyTests
             """),
 
         // ── İçerik yönetimi ──────────────────────────────────────────────────────────────────────────
-        new(27, "Post / Entry", Fit.Partial,
-            """
-            public enum PostStatus { Draft, Published }
-            public partial class Post { public string Title { get; set; } = ""; public string? Body { get; set; } }
-            """,
-            """
-            var posts = app.MapCrud<Post>().SoftDeletable().ConcurrencyChecked().Workflow<PostStatus>();
-            posts.MapTransition("publish", PostStatus.Draft, PostStatus.Published);
-            posts.MapTransition("unpublish", PostStatus.Published, PostStatus.Draft);
-            """),
+        new(27, "Post / Entry", Fit.Clean,
+            "public partial class Post { public string Title { get; set; } = \"\"; public string? Body { get; set; } }",
+            "app.MapCrud<Post>().Publishable().SoftDeletable().ConcurrencyChecked().Revisioned();"),
         new(28, "Localized fields", Fit.Missing),
-        new(29, "Revision / Snapshot", Fit.Missing),
+        new(29, "Revision / Snapshot", Fit.Clean,
+            "public partial class Page { public string Title { get; set; } = \"\"; public string? Body { get; set; } }",
+            "app.MapCrud<Page>().Revisioned();"),
         new(30, "Comment (threaded)", Fit.Partial,
             """
             public partial class Post { public string Title { get; set; } = ""; }
@@ -619,8 +614,8 @@ public sealed class TaxonomyTests
     public void Tally_MatchesTheWrittenResults()
     {
         // reports/Haldus taksonomi sınaması.md dosyasındaki sayılar; biri değişirse diğeri de güncellenmelidir.
-        Assert.Equal(39, Rows.Count(row => row.Fit == Fit.Clean));
-        Assert.Equal(14, Rows.Count(row => row.Fit == Fit.Partial));
-        Assert.Equal(6, Rows.Count(row => row.Fit == Fit.Missing));
+        Assert.Equal(41, Rows.Count(row => row.Fit == Fit.Clean));
+        Assert.Equal(13, Rows.Count(row => row.Fit == Fit.Partial));
+        Assert.Equal(5, Rows.Count(row => row.Fit == Fit.Missing));
     }
 }

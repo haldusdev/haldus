@@ -75,6 +75,15 @@ public sealed class ResourceBuilder<TEntity>(RouteGroupBuilder group) : IEndpoin
     public ResourceBuilder<TEntity> NaturalKey(Expression<Func<TEntity, object?>> field) => this;
 
     /// <summary>
+    /// Kaydı belirli bir dönemde geçerli kılar: <c>EffectiveFrom</c> (zorunlu) ve <c>EffectiveTo</c> (boşsa hâlâ
+    /// geçerli) alanları üretilir. Bir kapsamda (kiracı, sahip, ebeveyn ve sayılan alanlar) iki kaydın dönemi
+    /// çakışamaz (409); açık uçlu bir dönemin içinde başlayan yeni kayıt, öncekini kendi başlangıç gününde kapatır.
+    /// Liste <c>?asOf=2026-01-01</c> ile o gün geçerli olan kayıtlara süzülür.
+    /// </summary>
+    /// <param name="per">Dönemlerin ayrı ayrı tutulduğu alanlar (ör. para birimi başına bir fiyat).</param>
+    public ResourceBuilder<TEntity> EffectiveDated(params Expression<Func<TEntity, object?>>[] per) => this;
+
+    /// <summary>
     /// Başka bir kaynağa kimlikle referans verir: yabancı anahtar alanı (ör. <c>CategoryId</c>) üretilir ve
     /// yazılırken hedefin var olduğu doğrulanır.
     /// </summary>

@@ -59,6 +59,16 @@ internal static class ModuleEmitter
                 model.Append("            global::Haldus.HaldusApprovals.Configure(modelBuilder);\n");
             }
 
+            if (resources.Any(entry => entry.Resource.Has(Traits.Revisioned)))
+            {
+                model.Append("            global::Haldus.HaldusRevisions.Configure(modelBuilder);\n");
+            }
+
+            if (resources.Any(entry => entry.Resource.Has(Traits.ChangeFeed)))
+            {
+                model.Append("            global::Haldus.HaldusChanges.Configure(modelBuilder);\n");
+            }
+
             foreach (var association in associations)
             {
                 model.Append(AssociationEmitter.EmitModel(association));
@@ -92,6 +102,27 @@ internal static class ModuleEmitter
                     .Select(ResourceEmitter.Literal);
 
                 blocks.Add($"        global::Haldus.HaldusApprovals.Register<{entity}>({string.Join(", ", content)});\n");
+            }
+
+            foreach (var detail in resource.Details)
+            {
+                // Satırı değişen sahip de değişmiş sayılır; satırları hangi kod değiştirirse değiştirsin.
+                blocks.Add(
+                    $"        global::Haldus.HaldusDetails.Register<{entity}, {detail.QualifiedName}>({ResourceEmitter.Literal(detail.Parent!.PropertyName)});\n");
+            }
+
+            if (resource.Has(Traits.Revisioned))
+            {
+                // Gömülü satırlar sahibin anlık görüntüsüne girer.
+                var details = resource.Details.Select(detail => ResourceEmitter.Literal(detail.CollectionName));
+                blocks.Add($"        global::Haldus.HaldusRevisions.Register<{entity}>({string.Join(", ", details)});\n");
+            }
+
+            if (resource.Has(Traits.ChangeFeed))
+            {
+                // Silinen kaydın hangi ebeveyne ait olduğu günlükten okunur.
+                var parent = resource.Parent is { } under ? ResourceEmitter.Literal(under.PropertyName) : "null";
+                blocks.Add($"        global::Haldus.HaldusChanges.Register<{entity}>({parent});\n");
             }
 
             if (resource.Archetype == Archetype.Job)
@@ -360,7 +391,9 @@ internal static class ModuleEmitter
                 ? $"item => item.{columns[0]}"
                 : $"item => new {{ {string.Join(", ", columns.Select(column => $"item.{column}"))} }}";
 
-            statements.Add($"entity.HasIndex({key}).IsUnique().HasDatabaseName(\"{ResourceEmitter.NaturalKeyIndex(resource)}\");");
+            // Yayındaki kopya taslağın doğal anahtarını da taşır; benzersizlik taslaklar arasındadır.
+            var drafts = resource.Has(Traits.Publishable) ? ".HasFilter(\"\\\"PublishedOfId\\\" IS NULL\")" : string.Empty;
+            statements.Add($"entity.HasIndex({key}).IsUnique().HasDatabaseName(\"{ResourceEmitter.NaturalKeyIndex(resource)}\"){drafts};");
         }
 
         if (resource.Workflow is not null)
@@ -375,6 +408,21 @@ internal static class ModuleEmitter
                 // sürüm kontrollü kaynakta aynı işi satır sürümü görür.
                 statements.Add("entity.Property(item => item.Status).IsConcurrencyToken();");
             }
+        }
+
+        if (resource.Has(Traits.Publishable))
+        {
+            // Kopya taslağıyla birlikte silinir ve bir taslağın en çok bir kopyası olur. Kopyaları gizleyen filtre
+            // modeldedir; böylece kaynağa dokunan her sorgu (referans doğrulaması, bağlar, arama) yalnızca taslakları görür.
+            statements.Add($"entity.HasOne<{entity}>().WithMany().HasForeignKey(item => item.PublishedOfId).OnDelete(global::Microsoft.EntityFrameworkCore.DeleteBehavior.Cascade);");
+            statements.Add($"entity.HasIndex(item => item.PublishedOfId).IsUnique().HasDatabaseName(\"UX_{Naming.Pluralize(resource.EntityName)}_PublishedOfId\");");
+            statements.Add("entity.HasQueryFilter(global::Haldus.HaldusFilters.Publication, item => item.PublishedOfId == null);");
+        }
+
+        if (resource.Has(Traits.EffectiveDated))
+        {
+            // "Bu gün geçerli olan" sorgusu ve çakışma kontrolü başlangıç gününe göre arar.
+            statements.Add("entity.HasIndex(item => item.EffectiveFrom);");
         }
 
         if (resource.Has(Traits.Approvable))
