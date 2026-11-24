@@ -298,6 +298,31 @@ public sealed class RecordOperationTests
         Assert.Contains("new global::Haldus.HaldusIdempotencyFilter<Order>(typeof(CloneOrderRequest)", endpoints);
     }
 
+    /// <summary>
+    /// Kopya referanslarını kaynaktan devralır. Kaynağı görebilen biri, onun referans verdiği kaydı göremiyor
+    /// olabilir; kopya da oluşturma ucunun kabul etmeyeceği bir referansla doğmamalıdır.
+    /// </summary>
+    [Fact]
+    public void Cloneable_ValidatesEveryReferenceOfTheCopyNotOnlyTheOverriddenOnes()
+    {
+        var clone = Handler(
+            Run("""
+                app.MapCrud<Board>().MultiTenant();
+                app.MapCrud<Todo>().References<Board>().References<Coupon>(required: false).Cloneable();
+                app.MapCrud<Coupon>();
+                """).AssertCompiles().Sources["Shop.Todo.Endpoints.g.cs"],
+            "CloneAsync");
+
+        // Kontrol istekten değil, alanları yerine oturmuş kopyadan okur ve hedefin filtrelerinden geçer.
+        Assert.Contains("AnyAsync(target => target.Id == entity.BoardId, cancellationToken)", clone);
+        Assert.Contains("entity.CouponId is { } couponIdReference", clone);
+        Assert.Contains("""ReferenceNotFound(messages, "boardId", "Board", entity.BoardId)""", clone);
+
+        // İsteğin gönderdiği alanlar kontrolden önce yazılmış olmalıdır.
+        Assert.True(clone.IndexOf("""IsSet("BoardId")""", StringComparison.Ordinal) < clone.IndexOf("target.Id == entity.BoardId", StringComparison.Ordinal));
+        Assert.True(clone.IndexOf("target.Id == entity.BoardId", StringComparison.Ordinal) < clone.IndexOf("SaveChangesAsync", StringComparison.Ordinal));
+    }
+
     [Fact]
     public void Cloneable_ChecksTheNaturalKeyOfTheCopy()
     {

@@ -35,8 +35,10 @@ public static class SalesEndpoints
         app.MapCrud<AddressNote>()
             .Under<Address>();
 
+        // Kopya da bağlandığı adresi görebilmelidir; kaynağı görmek, referans verdiği kaydı görmek demek değildir.
         app.MapCrud<Delivery>()
-            .References<Address>();
+            .References<Address>()
+            .Cloneable();
 
         // Sipariş bir durum makinesidir: yalnızca taslakken düzenlenir, numarasını verilirken alır.
         var orders = app.MapCrud<Order>()

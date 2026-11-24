@@ -333,6 +333,37 @@ public sealed class RelationEndpointTests(ShopFixture fixture)
         Assert.Equal(["addressId"], problem.Errors.Keys);
     }
 
+    /// <summary>
+    /// Kopya, referanslarını kaynaktan devralır. Kaynağı görebilmek, onun referans verdiği kaydı görebilmek
+    /// demek değildir; kopya da oluşturma ucunun kabul etmeyeceği bir referansla doğamaz.
+    /// </summary>
+    [Fact]
+    public async Task Clone_CannotInheritAReferenceTheCallerCouldNotHaveSet()
+    {
+        var tenant = Guid.NewGuid();
+        var intruder = Guid.NewGuid();
+        var address = await ReadAsync<AddressResponse>(await SendAsync(
+            HttpMethod.Post, $"/customers/{(await CreateCustomerAsync(tenant, "Ada")).Id}/addresses", tenant,
+            new CreateAddressRequest { Line = "1 Main St", City = "Izmir" }));
+        var ownAddress = await ReadAsync<AddressResponse>(await SendAsync(
+            HttpMethod.Post, $"/customers/{(await CreateCustomerAsync(intruder, "Eve")).Id}/addresses", intruder,
+            new CreateAddressRequest { Line = "9 Side St", City = "Ankara" }));
+        var delivery = await ReadAsync<DeliveryResponse>(await SendAsync(
+            HttpMethod.Post, "/deliveries", tenant, new CreateDeliveryRequest { Carrier = "Fast", AddressId = address.Id }));
+
+        // Teslimat kiracıya bağlı değildir, adresi ise öyledir: başka bir kiracı teslimatı görür ama adresi göremez.
+        var inherited = await SendAsync(HttpMethod.Post, $"/deliveries/{delivery.Id}/clone", intruder);
+        var redirected = await SendAsync(HttpMethod.Post, $"/deliveries/{delivery.Id}/clone", intruder, new { addressId = ownAddress.Id });
+        var own = await SendAsync(HttpMethod.Post, $"/deliveries/{delivery.Id}/clone", tenant);
+
+        Assert.Equal(HttpStatusCode.BadRequest, inherited.StatusCode);
+        Assert.Equal(["addressId"], (await inherited.Content.ReadFromJsonAsync<ValidationProblemDetails>(CancellationToken))!.Errors.Keys);
+
+        // Kendi görebildiği bir adres verirse kopyalayabilir; adresin sahibi kiracı da olduğu gibi kopyalayabilir.
+        Assert.Equal(ownAddress.Id, (await ReadAsync<DeliveryResponse>(redirected)).AddressId);
+        Assert.Equal(address.Id, (await ReadAsync<DeliveryResponse>(own)).AddressId);
+    }
+
     private async Task<int> CountAddressRowsAsync(Guid customerId)
     {
         var count = -1;

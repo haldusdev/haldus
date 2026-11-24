@@ -1767,7 +1767,11 @@ internal sealed partial class EndpointEmitter
     /// Kayıt oluşturuluyor mu. Güncellemede, yalnızca oluştururken yazılan referanslar istekte yer almaz ve
     /// yeniden doğrulanmaz.
     /// </param>
-    private string ReferenceChecks(bool patch, bool creating = true)
+    /// <param name="source">
+    /// Referansların okunduğu nesne. İstek yerine kaydın kendisi verilirse (kopya gibi, alanları başka bir kayıttan
+    /// gelen yeni kayıtlarda) kayıttaki her referans doğrulanır; yalnızca istekte gönderilenler değil.
+    /// </param>
+    private string ReferenceChecks(bool patch, bool creating = true, string source = "request")
     {
         var builder = new StringBuilder();
 
@@ -1794,13 +1798,13 @@ internal sealed partial class EndpointEmitter
             }
             else if (reference.IsRequired)
             {
-                value = $"request.{property}";
+                value = $"{source}.{property}";
                 condition = string.Empty;
             }
             else
             {
                 value = $"{field}Reference";
-                condition = $"request.{property} is {{ }} {value}\n            && ";
+                condition = $"{source}.{property} is {{ }} {value}\n            && ";
             }
 
             builder.Append($$"""
@@ -2275,9 +2279,9 @@ internal sealed partial class EndpointEmitter
                         return {{NotFound}};
                     }
 
-            {{ReferenceChecks(patch: true)}}        var entity = new {{_entity}} { {{CreateInitializer(source: "source")}} };
+                    var entity = new {{_entity}} { {{CreateInitializer(source: "source")}} };
 
-            {{PatchAssignments(_writable)}}{{rows}}{{Compute()}}{{duplicate}}{{SaveCreated()}}
+            {{PatchAssignments(_writable)}}{{ReferenceChecks(patch: false, source: "entity")}}{{rows}}{{Compute()}}{{duplicate}}{{SaveCreated()}}
 
             {{WriteETag()}}        return {{Http}}.TypedResults.Created(global::Haldus.HaldusRoutes.Sibling(httpContext, entity.{{_key}}), ToResponse(entity));
                 }

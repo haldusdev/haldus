@@ -493,8 +493,11 @@ netleştirilecek.
     `PatchAssignments(_writable)` ile üstüne yazılır, satırlar yeni kimliklerle kopyalanır ve kayıt
     `SaveCreated()` ile kaydedilir (numara ve sıra oluşturmadakiyle aynı yoldan). İstek tipi
     `Clone{Entity}Request` kısmidir ve yalnızca oluştururken yazılan alanları da taşır; gövde isteğe bağlıdır.
-    Doğal anahtar kopyanın değeri üzerinden denetlenir; değiştirilmediyse 409 döner. Kopyalanan referansların
-    hâlâ görünür olduğu yeniden doğrulanmaz (yalnızca istekte gönderilenler doğrulanır).
+    Doğal anahtar kopyanın değeri üzerinden denetlenir; değiştirilmediyse 409 döner. Kopyanın bütün referansları
+    (kaynaktan devralınanlar dahil) kayıttan okunarak doğrulanır (`ReferenceChecks(source: "entity")`): kaynağı
+    görebilmek, referans verdiği kaydı görebilmek demek değildir (güvenlik incelemesinde çıktı). **Alanlarını
+    istekten değil başka bir kayıttan alan her yeni kayıt (kopya, yerine geçen, ters kayıt, üretilen kayıt)
+    referanslarını böyle doğrulamalıdır.**
   - **Önizleme.** `EmitPreview`: gerçek ucun kontrol ve hesaplama parçalarını kullanır, kaydetmez. Oluşturma
     önizlemesinde kimlik üretilmez (`CreateInitializer(preview: true)`); kaydederken atanan alanlar (numara,
     zaman damgaları, kiracı, sahip, konum) boştur. Güncelleme önizlemesi kaydı izleyerek değiştirir ve sonunda
