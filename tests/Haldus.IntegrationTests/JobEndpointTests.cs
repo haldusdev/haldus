@@ -1,5 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
+using Hangfire;
+using Hangfire.InMemory;
 using Haldus.Sample.Shop;
 using Haldus.Sample.Shop.Features.Platform;
 using Haldus.Sample.Shop.Features.Sales;
@@ -206,17 +208,10 @@ public sealed class JobEndpointTests(ShopFixture fixture)
     [Fact]
     public async Task InMemoryInfrastructure_RunsJobsWithoutAQueueTable()
     {
-        // Aynı uygulama, bu kez bellek içi kuyrukla: PostgreSQL kuyruğunun yürütücüsü çıkarılır.
+        // Aynı uygulama, bu kez bellek içi kuyrukla.
         using var client = fixture.CreateClient(services =>
         {
-            foreach (var worker in services
-                .Where(service => service.ServiceType == typeof(IHostedService)
-                    && service.ImplementationType?.Assembly == typeof(PostgreSqlJobOptions).Assembly)
-                .ToList())
-            {
-                services.Remove(worker);
-            }
-
+            RemovePostgreSqlWorker(services);
             services.AddHaldusInMemoryJobs();
         });
 
@@ -228,6 +223,76 @@ public sealed class JobEndpointTests(ShopFixture fixture)
 
         Assert.Equal(100, finished.Progress);
         Assert.Equal(0, await CountQueueEntriesAsync(accepted.Id));
+    }
+
+    [Fact]
+    public async Task HangfireInfrastructure_RunsJobsThroughTheSameRunner()
+    {
+        // Aynı uygulama, bu kez Hangfire ile. Depolamayı ve sunucuyu gerçek bir uygulama AddHangfire ve
+        // AddHangfireServer ile kurar; burada ikisi de elle kurulur.
+        using var storage = new InMemoryStorage();
+        using var client = fixture.CreateClient(services =>
+        {
+            RemovePostgreSqlWorker(services);
+            services.AddSingleton<IBackgroundJobClient>(new BackgroundJobClient(storage));
+            services.AddHostedService(provider => new HangfireServer(storage, provider));
+            services.AddHaldusHangfireJobs();
+        });
+
+        await CreateOrdersAsync(1, _tenant);
+        using var request = new HttpRequestMessage(HttpMethod.Post, "/report-exports") { Content = JsonContent.Create(new { year = 2026 }) };
+        request.Headers.Add(DemoIdentity.TenantHeader, _tenant.ToString());
+        var accepted = await ReadAsync<ReportExportResponse>(await client.SendAsync(request, CancellationToken));
+
+        var finished = await WaitForAsync<ReportExportResponse>($"/report-exports/{accepted.Id}", job => job.Status == JobStatus.Succeeded);
+
+        // İş yine onu başlatan kiracının kimliğiyle çalıştı ve kuyruk tablosuna hiç dokunulmadı.
+        Assert.Equal(1, finished.OrderCount);
+        Assert.Equal(0, await CountQueueEntriesAsync(accepted.Id));
+    }
+
+    private static void RemovePostgreSqlWorker(IServiceCollection services)
+    {
+        foreach (var worker in services
+            .Where(service => service.ServiceType == typeof(IHostedService)
+                && service.ImplementationType?.Assembly == typeof(PostgreSqlJobOptions).Assembly)
+            .ToList())
+        {
+            services.Remove(worker);
+        }
+    }
+
+    /// <summary>Hangfire sunucusunu, işleri uygulamanın servislerinden çözen bir etkinleştiriciyle çalıştırır.</summary>
+    private sealed class HangfireServer(JobStorage storage, IServiceProvider services) : IHostedService
+    {
+        private BackgroundJobServer? _server;
+
+        public Task StartAsync(CancellationToken cancellationToken)
+        {
+            _server = new BackgroundJobServer(
+                new BackgroundJobServerOptions { Activator = new ServiceActivator(services), WorkerCount = 2 },
+                storage);
+
+            return Task.CompletedTask;
+        }
+
+        public Task StopAsync(CancellationToken cancellationToken)
+        {
+            _server?.Dispose();
+            return Task.CompletedTask;
+        }
+
+        private sealed class ServiceActivator(IServiceProvider services) : JobActivator
+        {
+            public override JobActivatorScope BeginScope(JobActivatorContext context) => new Scope(services.CreateScope());
+
+            private sealed class Scope(IServiceScope scope) : JobActivatorScope
+            {
+                public override object Resolve(Type type) => ActivatorUtilities.GetServiceOrCreateInstance(scope.ServiceProvider, type);
+
+                public override void DisposeScope() => scope.Dispose();
+            }
+        }
     }
 
     private async Task CreateOrdersAsync(int count, Guid tenant)

@@ -185,6 +185,7 @@ public sealed class ReportExportHandler(AppDbContext db) : IJobHandler<ReportExp
 |---|---|
 | `Haldus.Jobs.PostgreSql` | Uygulamanın veritabanında; iş kaydıyla aynı transaction'da yazılır, sunucular paylaşır |
 | `Haldus.Jobs.InMemory` | Sürecin belleğinde; geliştirme ve tek sunucu için, yeniden başlatmada işler kaybolur |
+| `Haldus.Jobs.Hangfire` | Hangfire'da; depolamayı, sunucuyu ve paneli uygulama kurar (`AddHaldusHangfireJobs()`) |
 
 ## Trait'ler ve süzme
 

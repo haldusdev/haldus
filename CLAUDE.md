@@ -21,8 +21,8 @@ EF Core yapılandırması üretilir.
 - `src/Haldus.Generators`: Roslyn incremental generator (netstandard2.0, Roslyn 5.0.0'a sabit).
 - `src/Haldus.EntityFrameworkCore`: model kayıt defteri, interceptor'lar, sorgu filtreleri.
 - `src/Haldus.AspNetCore`: `AddHaldus`, `Map*` giriş noktaları, validasyon, hata yanıtları, `.resx`.
-- `src/Haldus.Jobs.InMemory`, `src/Haldus.Jobs.PostgreSql`: `MapJob` işlerini yürütücüye ulaştıran
-  altyapı paketleri. Çekirdek yalnızca `IHaldusJobDispatcher` arayüzünü bilir.
+- `src/Haldus.Jobs.InMemory`, `src/Haldus.Jobs.PostgreSql`, `src/Haldus.Jobs.Hangfire`: `MapJob` işlerini
+  yürütücüye ulaştıran altyapı paketleri. Çekirdek yalnızca `IHaldusJobDispatcher` arayüzünü bilir.
 - `tests/Haldus.Generators.Tests`: generator çıktısı testleri.
 - `tests/Haldus.IntegrationTests`: örnek uygulamaya karşı gerçek PostgreSQL testleri.
 - `samples/Haldus.Sample.Shop`: örnek uygulama ve modelin sınandığı yer.
@@ -91,9 +91,9 @@ Bunlar kullanıcıyla kararlaştırıldı; yeniden sorma.
 - `Numbered` sayacı varsayılan olarak boşluksuzdur: numara kayıtla aynı transaction'da, kapsam başına
   (kaynak, kiracı, desendeki tarih parçaları) kilitlenen bir sayaç satırından alınır. `gapless: false` ile
   veritabanı sequence'ine geçilir; ikisi de desteklenir (kullanıcı kararı).
-- `MapJob` altyapısı paketlerle seçilir ve üçü de desteklenecek (kullanıcı kararı): bellek içi kuyruk
+- `MapJob` altyapısı paketlerle seçilir ve üçü de desteklenir (kullanıcı kararı): bellek içi kuyruk
   (`AddHaldusInMemoryJobs()`), kendi PostgreSQL kuyruğumuz (`AddHaldusPostgreSqlJobs<TContext>()`) ve
-  Hangfire. İlk ikisi yazıldı; Hangfire paketi yeni bağımlılık getirdiği için onay bekliyor.
+  Hangfire (`AddHaldusHangfireJobs()`).
 - `Batch` işlem başına ayrı uçlarla sunulur (`POST /products/batch-get`, `batch-create`, `batch-update`,
   `batch-delete`) ve varsayılan olarak atomiktir; `.Batch(atomic: false)` ile kısmi başarıya (207, öğe
   başına sonuç) geçilir. İkisi de desteklenir (kullanıcı kararı).
@@ -128,8 +128,7 @@ Bunlar kullanıcıyla kararlaştırıldı; yeniden sorma.
 
 ## Aşamalar
 
-1–7 tamamlandı (3. aşamaya `.Searchable()` da eklendi). 8. aşama sürüyor: `MapJob` (bellek içi ve
-PostgreSQL altyapılarıyla), `Batch` ve fiziksel temizlik bitti; kalan tek parça Hangfire paketi.
+1–8 tamamlandı (3. aşamaya `.Searchable()`, 8. aşamaya fiziksel temizlik de eklendi); sıradaki 9.
 
 1. İskelet
 2. Generator çekirdeği ve `MapCrud`
@@ -147,7 +146,7 @@ PostgreSQL altyapılarıyla), `Batch` ve fiziksel temizlik bitti; kalan tek par�
 ## Açık kararlar
 
 - Frontend ve mobil desteğinin kapsamı (backend API şekli oturunca ele alınacak).
-- Hangfire paketinin bağımlılıkları (`Hangfire.Core`; testlerde bir depolama sağlayıcısı) için onay.
+
 - Süresi dolmuş `Expiring` kayıtları varsayılan olarak silinmez (`HaldusOptions.PurgeExpiredAfter` boş).
   Bu varsayılanı kullanıcı ayrıca onaylamadı; kullanıcı verisini kendiliğinden silmemek için böyle seçildi.
 
@@ -301,6 +300,11 @@ PostgreSQL altyapılarıyla), `Batch` ve fiziksel temizlik bitti; kalan tek par�
     kayıt henüz görünmüyorsa (transaction bitmemiş olabilir) kısa aralıklarla yeniden bakar.
   - PostgreSQL kuyruğu `FOR UPDATE SKIP LOCKED` ile alınır, çalışırken kirası uzatılır, iş sonuçlanınca
     silinir. Bellek içi kuyrukta süreç yeniden başlarsa bekleyen işler kaybolur.
+  - Hangfire paketi yalnızca `Hangfire.Core`'a bağlıdır: işi `IBackgroundJobClient` ile kuyruğa koyar ve
+    Hangfire çalıştırmak istediğinde `HaldusHangfireJob` yürütücüyü çağırır. Depolamayı, sunucuyu ve paneli
+    uygulama kurar. Kuyruğa koyma iş kaydıyla aynı transaction'da değildir. Hangfire'ın istediği en düşük
+    `Newtonsoft.Json` sürümünde bilinen bir güvenlik açığı olduğu için o paket yamalı sürüme sabitlenir
+    (`Directory.Packages.props`); Hangfire'ı yükseltirken bu satırın hâlâ gerekli olup olmadığına bak.
   - Build sırasındaki şema üretimi arka plan servislerini de başlatır; iş altyapıları
     `HaldusJobs.IsGeneratingOpenApiDocument` ile o sırada veritabanına bağlanmaz. Yeni bir arka plan
     servisi eklerken aynı kontrolü yap.
@@ -336,3 +340,5 @@ PostgreSQL altyapılarıyla), `Batch` ve fiziksel temizlik bitti; kalan tek par�
 - Üretilen kodda ve kütüphanelerde kod İngilizce, yorumlar Türkçe.
 - Generator testleri üretilen çıktının hatasız derlendiğini de doğrulamalıdır.
 - .NET 11 yayınlandı ama LTS değil; paketler 10.x hattında tutulur.
+- Derleme uyarıları hatadır; buna NuGet'in güvenlik açığı uyarıları da dahildir. Dolaylı bir bağımlılık
+  yüzünden derleme durursa uyarıyı kapatma, paketi yamalı sürüme sabitle.
