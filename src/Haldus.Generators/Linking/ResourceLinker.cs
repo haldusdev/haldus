@@ -239,7 +239,10 @@ internal static class ResourceLinker
         // Hassas (yalnızca yazılan) alanlar devralınmaz: tipin gizli bir değeri, kaydın yanıtında okunur hale gelirdi.
         // Hassasiyet tipin kendi bağlanmasında işaretlenir; burada bildirimlerinden okunur.
         var sensitive = new HashSet<string>(
-            type.SensitiveRequests.Concat(resource.SensitiveRequests).Select(request => request.FieldName).OfType<string>());
+            // Şifreli alan da yalnızca yazılır; o da iki yönde devralınmaz.
+            type.SensitiveRequests.Concat(type.EncryptedRequests)
+                .Concat(resource.SensitiveRequests).Concat(resource.EncryptedRequests)
+                .Select(request => request.FieldName).OfType<string>());
 
         var fields = properties
             .Where(property => property is { IsWritable: true, IsNonNullable: false, IsEmbedded: false, IsGenerated: false, IsInputOnly: false }

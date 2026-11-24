@@ -48,6 +48,7 @@ internal static class ChainReader
         "Supersedes",
         "Document",
         "Approvable",
+        "ApprovalRoles",
         "Revisioned",
         "ChangeFeed",
         "Publishable",

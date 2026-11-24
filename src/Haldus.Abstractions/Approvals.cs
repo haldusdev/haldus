@@ -45,6 +45,15 @@ public interface IApprovable
     string? DecisionNote { get; set; }
 }
 
+/// <summary>
+/// Kaç düzey onay gerektiği kayda göre değişen kaynak (koşullu adım): küçük tutarlı harcama tek onayla, büyüğü iki
+/// onayla geçer. Değer, <c>.Approvable(levels: n)</c> ile bildirilen sayıyı aşamaz ve birden küçük olamaz.
+/// </summary>
+public interface IApprovalLevels
+{
+    int RequiredApprovalLevels { get; }
+}
+
 /// <summary>Onay ve ret uçlarının isteğe bağlı gövdesi.</summary>
 public sealed record ApprovalDecisionRequest
 {

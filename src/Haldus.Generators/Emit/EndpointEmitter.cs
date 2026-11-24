@@ -3773,7 +3773,7 @@ internal sealed partial class EndpointEmitter
                     }
 
             {{ChainClosedGuard()}}{{ExpectVersion()}}        var outcome = await global::Haldus.HaldusApprovals.DecideAsync(
-                        context, entity, {{KeyText}}, approve: {{(approve ? "true" : "false")}}, request?.Note, levels: {{_resource.Approval!.Levels}}, cancellationToken);
+                        context, entity, {{KeyText}}, approve: {{(approve ? "true" : "false")}}, request?.Note, levels: {{_resource.Approval!.Levels}}, {{ApprovalRoles()}}cancellationToken);
 
                     if (outcome != global::Haldus.ApprovalOutcome.Recorded)
                     {
@@ -3786,6 +3786,11 @@ internal sealed partial class EndpointEmitter
 
             """);
     }
+
+    /// <summary>Düzeyler rollere bağlıysa karara eklenen argümanlar: roller ve kullanıcının rolünü soran işlev.</summary>
+    private string ApprovalRoles() => _resource.Approval is { Roles.Length: > 0 } approval
+        ? $"roles: new[] {{ {string.Join(", ", approval.Roles.Select(ResourceEmitter.Literal))} }}, isInRole: role => global::Haldus.HaldusRoles.IsInRole(httpContext, role), "
+        : string.Empty;
 
     /// <summary>Kayıt için verilmiş kararların listesi; kayıt isteği yapana görünür değilse 404 döner.</summary>
     private void EmitApprovalList()

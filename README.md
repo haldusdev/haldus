@@ -397,6 +397,7 @@ app.MapCrud<Contract>().Document();           // taslak → gönder → iptal �
 | Bildirim | Etkisi |
 |---|---|
 | `.Approvable(levels, ...)` | `POST /{id}/approve` ve `/reject` (isteğe bağlı `{ "note": "..." }`), kararların listesi `GET /{id}/approvals`. Kaydın içeriğini yazmış hiç kimse karar veremez (403); içerik hangi yoldan değişirse değişsin toplanan onaylar geçersiz olur; onaylanmış kayıt güncelleme uçlarından değiştirilemez, reddedilmiş kayıt düzenlenince yeniden karar bekler. Sayılan geçişler ve aksiyonlar kayıt onaylanmadan çalışmaz |
+| `.ApprovalRoles("manager", "finance")` | Onay zinciri: n. rol, n. düzeyin kararını (onay veya ret) verebilecek kullanıcıları belirler; rolde olmayan 403 alır. Roller `ICurrentUserRoles` servisine sorulur (varsayılanı token'daki rol claim'leri). Kaç düzey gerektiği kayda göre değişecekse entity `IApprovalLevels` uygular (küçük tutar tek onayla geçer) |
 | `.Document()` | Sabit durumlar (`DocumentStatus`): taslak düzenlenir ve silinir, gönderilen belge kilitlidir. `POST /{id}/submit` ve `/cancel` kendiliğinden gelir (aynı adla yazılan `MapTransition` onların yerine geçer); `POST /{id}/amend` iptal edilmiş belgenin kopyası olan, ona işaret eden yeni bir taslak oluşturur |
 
 Onay alanları (`ApprovalStatus`, `ApprovalLevel`, `RequestedBy`, `Contributors`, `DecidedBy`, `DecidedAt`, `DecisionNote`) yanıtta

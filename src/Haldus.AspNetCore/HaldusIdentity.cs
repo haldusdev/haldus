@@ -49,6 +49,24 @@ internal sealed class ClaimsCurrentUser(IHttpContextAccessor accessor, IOptions<
     public string? UserId => accessor.HttpContext?.User.FindFirstValue(options.Value.UserClaimType);
 }
 
+/// <summary>Kullanıcının rollerini kimlik doğrulamanın kurduğu kimlikten (rol claim'leri) okur.</summary>
+internal sealed class ClaimsCurrentUserRoles(IHttpContextAccessor accessor) : ICurrentUserRoles
+{
+    public bool IsInRole(string role) => accessor.HttpContext?.User.IsInRole(role) == true;
+}
+
+/// <summary>Üretilen uçların kimlikle ilgili soruları.</summary>
+public static class HaldusRoles
+{
+    /// <summary>Geçerli isteğin kullanıcısı verilen rolde mi.</summary>
+    public static bool IsInRole(HttpContext httpContext, string role)
+    {
+        ArgumentNullException.ThrowIfNull(httpContext);
+
+        return httpContext.RequestServices.GetService(typeof(ICurrentUserRoles)) is ICurrentUserRoles roles && roles.IsInRole(role);
+    }
+}
+
 /// <summary>Kiracıya bağlı kaynakların endpoint'lerinde, kiracısı çözülemeyen isteği reddeder.</summary>
 public sealed class HaldusTenantRequiredFilter(ITenantProvider tenants, IHaldusMessages messages) : IEndpointFilter
 {

@@ -161,8 +161,10 @@ Bunlar kullanıcıyla kararlaştırıldı; yeniden sorma.
     `PUT` / `DELETE /{id}/order-items/{rowId}` ile tek tek yazılır.
   - Raporun v1 listesindeki "uzatma kancaları" yazılmadı: raporda tanımı yok ve kullanıcı istemedi.
 - Onay ve belge (17. aşama). Kullanıcı sormamamı istedi; yazılan, önerdiğim seçeneklerdir ve ayrıca onaylanmadı:
-  - Onay tek adımdır; `.Approvable(levels: n)` ile birbirinden farklı n kişinin sırayla onayı istenir. Düzey başına
-    rol veya koşul (onay zinciri) yazılmadı.
+  - Onay tek adımdır; `.Approvable(levels: n)` ile birbirinden farklı n kişinin sırayla onayı istenir. Planlardan
+    sonra onay zinciri eklendi: `.ApprovalRoles("manager", "finance")` düzeyleri rollere bağlar (rol sayısı düzey
+    sayısına eşit olmalıdır) ve entity `IApprovalLevels` uygularsa kaç düzey gerektiğini kayıt söyler (koşullu adım).
+    Roller `ICurrentUserRoles` servisine sorulur; varsayılanı rol claim'leridir.
   - `POST /{id}/approve`, `POST /{id}/reject` (isteğe bağlı `{ "note" }`), `GET /{id}/approvals`. Kaydın içeriğini
     şimdiye kadar yazmış hiç kimse (`Contributors`; yalnızca son yazan değil) karar veremez (403); aynı kişi iki
     düzeyi onaylayamaz (403); herhangi bir düzeydeki ret kaydı reddeder.
@@ -1176,6 +1178,13 @@ denenmesi, yük ölçümü. Raporun "Bilinen sınırlar" tablosundaki kalemler d
     kaydetmediği için kuralı kendisi uygular (`ResetIfChanged`). Onaylanmış kaydın güncelleme uçlarındaki kilidi
     `ChainGuard()` içindedir (`ApprovalLock`); geçişlerin onay koşulu `ApprovalGate`'tir ve geçen işlemi
     `HaldusApprovals.Exempt` ile işaretler ki o işlemin yazdığı alanlar onayı düşürmesin.
+  - **Onay zinciri.** `ApprovalModel.Roles` (`LifecycleReader`; zincirdeki yeri önemli değildir). Üretilen uç rolleri
+    ve `HaldusRoles.IsInRole(httpContext, role)` işlevini `DecideAsync`'e verir; karar (onay da ret de) sıradaki
+    düzeyin rolüne sorulur ve rol sorulamıyorsa (servis yoksa) karar verilemez: bildirilmiş bir kural, denetlenemediği
+    için atlanmaz. Rol, "içeriği yazan karar veremez" ve "aynı kişi iki düzeyi onaylayamaz" kurallarının yerine
+    geçmez; onlardan sonra denetlenir. `IApprovalLevels.RequiredApprovalLevels` bildirilen düzey sayısına kırpılır ve
+    her kararda kayıttan yeniden okunur (içerik değişince onay zaten düşer). Sınırlar: bir düzeyin birden çok rolü,
+    paralel onay ("iki kişiden biri"), vekâlet ve düzeyin atlanması yoktur.
   - "Kendi yazdığını onaylayamaz" kuralı `Contributors` listesine bakar (içeriği yazmış herkes; kayıt boyunca
     birikir). Yalnızca son yazana bakmak, ikinci bir kişinin küçük bir düzenlemesinden sonra ilk yazanın kendi
     içeriğini onaylamasına izin veriyordu.

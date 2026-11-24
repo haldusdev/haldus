@@ -194,7 +194,17 @@ public sealed class ModelingTests
             app.MapCrud<Device>().TypedBy<DeviceModel>().Sensitive(device => device.Manual);
             """).AssertCompiles().Sources["Shop.Device.Endpoints.g.cs"];
 
-        foreach (var endpoints in new[] { typeSecret, recordSecret })
+        // Şifreli saklanan alan da yalnızca yazılır; o da iki yönde devralınmaz.
+        var typeCipher = Run("""
+            app.MapCrud<DeviceModel>().Encrypted(model => model.Manual);
+            app.MapCrud<Device>().TypedBy<DeviceModel>();
+            """).AssertCompiles().Sources["Shop.Device.Endpoints.g.cs"];
+        var recordCipher = Run("""
+            app.MapCrud<DeviceModel>();
+            app.MapCrud<Device>().TypedBy<DeviceModel>().Encrypted(device => device.Manual);
+            """).AssertCompiles().Sources["Shop.Device.Endpoints.g.cs"];
+
+        foreach (var endpoints in new[] { typeSecret, recordSecret, typeCipher, recordCipher })
         {
             Assert.Contains("entity.WarrantyMonths ??= typeDefaults.WarrantyMonths;", endpoints);
             Assert.DoesNotContain("typeDefaults.Manual", endpoints);

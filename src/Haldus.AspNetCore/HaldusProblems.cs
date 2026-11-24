@@ -408,9 +408,12 @@ public static class HaldusProblems
                 statusCode: StatusCodes.Status401Unauthorized),
             _ => TypedResults.Problem(
                 title: messages.Format(HaldusMessageKeys.ApprovalDeniedTitle),
-                detail: messages.Format(outcome == ApprovalOutcome.OwnRequest
-                    ? HaldusMessageKeys.ApprovalOwnRequest
-                    : HaldusMessageKeys.ApprovalAlreadyApproved),
+                detail: messages.Format(outcome switch
+                {
+                    ApprovalOutcome.OwnRequest => HaldusMessageKeys.ApprovalOwnRequest,
+                    ApprovalOutcome.RoleRequired => HaldusMessageKeys.ApprovalRoleRequired,
+                    _ => HaldusMessageKeys.ApprovalAlreadyApproved,
+                }),
                 statusCode: StatusCodes.Status403Forbidden),
         };
     }

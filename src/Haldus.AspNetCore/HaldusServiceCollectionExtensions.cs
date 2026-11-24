@@ -86,6 +86,7 @@ public static class HaldusServiceCollectionExtensions
         services.TryAddSingleton<IHaldusFieldProtector, DataProtectionFieldProtector>();
         services.TryAddSingleton<ITenantProvider, ClaimsTenantProvider>();
         services.TryAddSingleton<ICurrentUser, ClaimsCurrentUser>();
+        services.TryAddSingleton<ICurrentUserRoles, ClaimsCurrentUserRoles>();
         services.TryAddSingleton(TimeProvider.System);
         services.TryAddSingleton<IHaldusMessages, ResourceHaldusMessages>();
 

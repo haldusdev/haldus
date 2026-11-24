@@ -808,7 +808,11 @@ internal sealed record FileModel(long MaxBytes, EquatableArray<string> ContentTy
 
 /// <param name="Levels">Kaydın onaylanması için gereken, birbirinden farklı kişilerin vereceği onay sayısı.</param>
 /// <param name="RequiredFor">Kayıt onaylanmadan çalışmayan geçişlerin ve aksiyonların adları.</param>
-internal sealed record ApprovalModel(int Levels, EquatableArray<string> RequiredFor);
+internal sealed record ApprovalModel(int Levels, EquatableArray<string> RequiredFor)
+{
+    /// <summary><c>.ApprovalRoles(...)</c>: düzey başına, o düzeyin kararını verebilen rol; boşsa düzeyler role bağlı değildir.</summary>
+    public EquatableArray<string> Roles { get; init; } = EquatableArray<string>.Empty;
+}
 
 /// <param name="Atomic">Bir öğe başarısızsa hiçbir şey kaydedilmez mi; değilse geçerli öğeler kaydedilir.</param>
 /// <param name="MaxItems">Bir istekte kabul edilen en çok öğe.</param>

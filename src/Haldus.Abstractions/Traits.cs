@@ -90,6 +90,15 @@ public interface ICurrentUser
     string? UserId { get; }
 }
 
+/// <summary>
+/// Geçerli isteğin kullanıcısının rolleri. Düzeyi bir role bağlanan onaylarda (<c>.ApprovalRoles(...)</c>) sorulur.
+/// Varsayılan uygulama token'daki rol claim'lerine bakar; kendi kimlik modelini kullanan uygulama servisi değiştirir.
+/// </summary>
+public interface ICurrentUserRoles
+{
+    bool IsInRole(string role);
+}
+
 /// <summary>Referans verilen kayıt silindiğinde, ona referans veren kayıtlara ne olacağı.</summary>
 public enum OnDelete
 {

@@ -41,6 +41,7 @@ public static class HaldusMessageKeys
     public const string BalanceMoveSame = "Balance.Move.Same";
     public const string TranslationLimit = "Translation.Limit";
     public const string MetadataInvalid = "Metadata.Invalid";
+    public const string ApprovalRoleRequired = "Approval.RoleRequired";
     public const string RecurrenceByDayInvalid = "Recurrence.ByDayInvalid";
     public const string RecurrenceTimeZoneInvalid = "Recurrence.TimeZoneInvalid";
     public const string ChainLockedTitle = "ChainLocked.Title";

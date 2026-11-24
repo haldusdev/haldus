@@ -22,6 +22,7 @@ builder.Services.AddDbContext<AppDbContext>(options =>
 builder.Services.AddSingleton<DemoIdentity>();
 builder.Services.AddSingleton<ITenantProvider>(services => services.GetRequiredService<DemoIdentity>());
 builder.Services.AddSingleton<ICurrentUser>(services => services.GetRequiredService<DemoIdentity>());
+builder.Services.AddSingleton<ICurrentUserRoles>(services => services.GetRequiredService<DemoIdentity>());
 
 builder.Services.AddHaldus<AppDbContext>();
 

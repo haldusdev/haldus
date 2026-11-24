@@ -152,7 +152,30 @@ public sealed class ApprovalTests
         Assert.DoesNotContain("Approval", Handler(endpoints, "TransitionReopenAsync"));
     }
 
+    [Fact]
+    public void ApprovalRoles_TieEachLevelToARole()
+    {
+        var run = Run("app.MapCrud<Expense>().ApprovalRoles(\"manager\", \"finance\").Approvable(levels: 2);").AssertCompiles();
+        var endpoints = run.Sources["Shop.Expense.Endpoints.g.cs"];
+
+        // Onay da ret de sıradaki düzeyin rolüne sorulur; rolü çalışma zamanındaki servis söyler.
+        foreach (var name in new[] { "ApproveAsync", "RejectAsync" })
+        {
+            var handler = Handler(endpoints, name);
+            Assert.Contains("levels: 2, roles: new[] { \"manager\", \"finance\" }, isInRole: role => global::Haldus.HaldusRoles.IsInRole(httpContext, role), cancellationToken);", handler);
+        }
+
+        // Rol bildirilmediyse karar role bağlı değildir.
+        var plain = Run("app.MapCrud<Expense>().Approvable(levels: 2);").AssertCompiles().Sources["Shop.Expense.Endpoints.g.cs"];
+        Assert.Contains("levels: 2, cancellationToken);", Handler(plain, "ApproveAsync"));
+        Assert.DoesNotContain("isInRole", plain);
+    }
+
     [Theory]
+    [InlineData("app.MapCrud<Expense>().ApprovalRoles(\"manager\");", "HALDUS010", "declare Approvable(levels: ...) as well")]
+    [InlineData("app.MapCrud<Expense>().Approvable(levels: 2).ApprovalRoles(\"manager\");", "HALDUS010", "lists 1 role(s), but Approvable declares 2 level(s)")]
+    [InlineData("app.MapCrud<Expense>().Approvable().ApprovalRoles(\"\");", "HALDUS010", "non-empty string constants")]
+    [InlineData("app.MapStore<Expense>().ApprovalRoles(\"manager\");", "HALDUS007", "ApprovalRoles cannot be combined with MapStore")]
     [InlineData("app.MapCrud<Expense>().Approvable(levels: 0);", "HALDUS010", "between 1 and 10 levels")]
     [InlineData("app.MapCrud<Expense>().Approvable(1, \"ship\");", "HALDUS010", "has no transition or action with that name")]
     [InlineData("app.MapStore<Expense>().Approvable();", "HALDUS007", "Approvable cannot be combined with MapStore")]

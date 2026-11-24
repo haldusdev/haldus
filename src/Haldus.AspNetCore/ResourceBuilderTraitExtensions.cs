@@ -220,6 +220,15 @@ public static class ResourceBuilderTraitExtensions
         where TEntity : class => builder;
 
     /// <summary>
+    /// Onayın düzeylerini rollere bağlar (onay zinciri): n. rol, n. düzeyin kararını (onay veya ret) verebilecek
+    /// kullanıcıları belirler; rolde olmayan kullanıcı 403 alır. Rol sayısı <c>Approvable(levels: n)</c> ile bildirilen
+    /// düzey sayısına eşit olmalıdır. Roller <see cref="ICurrentUserRoles"/> servisine sorulur; varsayılanı token'daki
+    /// rol claim'leridir. Kaç düzey gerektiği kayda göre değişecekse entity <see cref="IApprovalLevels"/> uygular.
+    /// </summary>
+    public static ResourceBuilder<TEntity> ApprovalRoles<TEntity>(this ResourceBuilder<TEntity> builder, params string[] roles)
+        where TEntity : class => builder;
+
+    /// <summary>
     /// Kaydın her yazmadan sonraki halini saklar: <c>GET /{id}/revisions</c> sürümleri listeler,
     /// <c>GET /{id}/revisions/{revisionId}</c> kaydın o andaki halini döndürür,
     /// <c>POST /{id}/revisions/{revisionId}/rollback</c> kaydın alanlarını ve gömülü satırlarını o sürüme geri yükler

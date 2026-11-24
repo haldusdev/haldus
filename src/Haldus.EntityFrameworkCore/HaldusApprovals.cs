@@ -47,6 +47,9 @@ public enum ApprovalOutcome
 
     /// <summary>Bu kullanıcı, bu içerik için önceki bir düzeyde zaten onay verdi.</summary>
     AlreadyApproved,
+
+    /// <summary>Sıradaki düzeyin kararını yalnızca o düzeyin rolündeki bir kullanıcı verebilir.</summary>
+    RoleRequired,
 }
 
 /// <summary>
@@ -158,7 +161,7 @@ public static class HaldusApprovals
     /// Kayıt son düzey de onaylayınca onaylanmış olur; herhangi bir düzeydeki ret kaydı reddeder.
     /// </summary>
     /// <param name="levels">Kaydın onaylanması için gereken, birbirinden farklı kişilerin vereceği onay sayısı.</param>
-    public static async Task<ApprovalOutcome> DecideAsync<TEntity>(
+    public static Task<ApprovalOutcome> DecideAsync<TEntity>(
         DbContext context,
         TEntity record,
         string recordId,
@@ -166,10 +169,36 @@ public static class HaldusApprovals
         string? note,
         int levels,
         CancellationToken cancellationToken)
+        where TEntity : class, IApprovable =>
+        DecideAsync(context, record, recordId, approve, note, levels, roles: null, isInRole: null, cancellationToken);
+
+    /// <summary>
+    /// Düzeyleri rollere bağlı onay (onay zinciri): <paramref name="roles"/> içindeki n. rol, n. düzeyin kararını
+    /// verebilecek kullanıcıları belirler. Kaç düzey gerektiği kayda göre değişebilir (<see cref="IApprovalLevels"/>).
+    /// </summary>
+    /// <param name="levels">Kaydın onaylanması için gereken en çok onay sayısı.</param>
+    /// <param name="roles">Düzey başına rol; boşsa düzeyler role bağlı değildir.</param>
+    /// <param name="isInRole">Geçerli kullanıcının bir rolde olup olmadığı.</param>
+    public static async Task<ApprovalOutcome> DecideAsync<TEntity>(
+        DbContext context,
+        TEntity record,
+        string recordId,
+        bool approve,
+        string? note,
+        int levels,
+        IReadOnlyList<string>? roles,
+        Func<string, bool>? isInRole,
+        CancellationToken cancellationToken)
         where TEntity : class, IApprovable
     {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(record);
+
+        // Koşullu adım: kaç onay gerektiğini kaydın kendisi söyleyebilir; bildirilen sayıyı aşamaz.
+        if (record is IApprovalLevels conditional)
+        {
+            levels = Math.Clamp(conditional.RequiredApprovalLevels, 1, Math.Max(levels, 1));
+        }
 
         if (HaldusScope.UserId(context) is not { Length: > 0 } userId)
         {
@@ -205,6 +234,13 @@ public static class HaldusApprovals
 
         var now = HaldusScope.UtcNow(context);
         var level = record.ApprovalLevel + 1;
+
+        // Karar (onay da ret de) sıradaki düzeyin rolündeki bir kullanıcının işidir. Rol sorulamıyorsa karar verilemez:
+        // bildirilmiş bir kural, denetlenemediği için atlanmamalıdır.
+        if (roles is { Count: > 0 } && level <= roles.Count && isInRole?.Invoke(roles[level - 1]) != true)
+        {
+            return ApprovalOutcome.RoleRequired;
+        }
 
         if (approve)
         {

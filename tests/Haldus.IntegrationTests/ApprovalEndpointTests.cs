@@ -293,14 +293,86 @@ public sealed class ApprovalEndpointTests(ShopFixture fixture)
         Assert.NotEqual(cancelled.Number, submitted.Number);
     }
 
+    // ── Onay zinciri ────────────────────────────────────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task ApprovalChain_EachLevelIsDecidedByItsRole()
+    {
+        var request = await ReadAsync<BudgetRequestResponse>(await SendAsync(
+            HttpMethod.Post, "/budget-requests", _maker, new { purpose = "New warehouse", amount = 250_000m }));
+        var url = $"/budget-requests/{request.Id}";
+
+        // Birinci düzey yöneticinindir: rolü olmayan da, yalnızca finans rolündeki de karar veremez.
+        Assert.Equal(HttpStatusCode.Forbidden, (await SendAsync(HttpMethod.Post, $"{url}/approve", _first)).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await SendAsync(HttpMethod.Post, $"{url}/approve", _first, roles: "finance")).StatusCode);
+
+        var denied = await SendAsync(HttpMethod.Post, $"{url}/reject", _first, roles: "finance", language: "tr");
+        Assert.Equal(HttpStatusCode.Forbidden, denied.StatusCode);
+        Assert.Contains("role sahip", (await denied.Content.ReadFromJsonAsync<ProblemDetails>(CancellationToken))!.Detail);
+
+        var first = await ReadAsync<BudgetRequestResponse>(await SendAsync(HttpMethod.Post, $"{url}/approve", _first, roles: "manager"));
+        Assert.Equal((ApprovalStatus.Pending, 1), (first.ApprovalStatus, first.ApprovalLevel));
+
+        // İkinci düzey finansındır: yönetici rolündeki başka biri veremez; iki rolü de taşıyan ilk onaylayan da veremez.
+        Assert.Equal(HttpStatusCode.Forbidden, (await SendAsync(HttpMethod.Post, $"{url}/approve", _second, roles: "manager")).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await SendAsync(HttpMethod.Post, $"{url}/approve", _first, roles: "manager,finance")).StatusCode);
+
+        var second = await ReadAsync<BudgetRequestResponse>(await SendAsync(HttpMethod.Post, $"{url}/approve", _second, roles: "finance"));
+        Assert.Equal((ApprovalStatus.Approved, 2), (second.ApprovalStatus, second.ApprovalLevel));
+
+        var decisions = await ReadAsync<List<ApprovalDecision>>(await SendAsync(HttpMethod.Get, $"{url}/approvals", _maker));
+        Assert.Equal([(1, _first), (2, _second)], decisions.Select(decision => (decision.Level, decision.UserId)));
+
+        // Rol, "kendi yazdığını onaylayamaz" kuralının yerine geçmez.
+        var own = await ReadAsync<BudgetRequestResponse>(await SendAsync(
+            HttpMethod.Post, "/budget-requests", _maker, new { purpose = "Own", amount = 5m }));
+        Assert.Equal(
+            HttpStatusCode.Forbidden,
+            (await SendAsync(HttpMethod.Post, $"/budget-requests/{own.Id}/approve", _maker, roles: "manager")).StatusCode);
+    }
+
+    [Fact]
+    public async Task ApprovalChain_NeedsAsManyLevelsAsTheRecordSays()
+    {
+        // Küçük tutar yalnızca yöneticinin onayıyla geçer; finans düzeyi hiç istenmez.
+        var small = await ReadAsync<BudgetRequestResponse>(await SendAsync(
+            HttpMethod.Post, "/budget-requests", _maker, new { purpose = "Stationery", amount = 400m }));
+        var url = $"/budget-requests/{small.Id}";
+
+        var approved = await ReadAsync<BudgetRequestResponse>(await SendAsync(HttpMethod.Post, $"{url}/approve", _first, roles: "manager"));
+        Assert.Equal((ApprovalStatus.Approved, 1), (approved.ApprovalStatus, approved.ApprovalLevel));
+
+        // Tutar eşiği aşacak biçimde değişemez: onaylanmış kayıt kilitlidir. Reddedilen kayıt ise düzenlenince
+        // yeniden karar bekler ve artık iki düzey ister.
+        Assert.Equal(HttpStatusCode.Conflict, (await SendAsync(HttpMethod.Patch, url, _maker, new { amount = 50_000m })).StatusCode);
+
+        var other = await ReadAsync<BudgetRequestResponse>(await SendAsync(
+            HttpMethod.Post, "/budget-requests", _maker, new { purpose = "Travel", amount = 900m }));
+        var otherUrl = $"/budget-requests/{other.Id}";
+
+        await ReadAsync<BudgetRequestResponse>(await SendAsync(HttpMethod.Post, $"{otherUrl}/reject", _first, new { note = "Too vague" }, roles: "manager"));
+        await ReadAsync<BudgetRequestResponse>(await SendAsync(HttpMethod.Patch, otherUrl, _maker, new { amount = 90_000m }));
+
+        var first = await ReadAsync<BudgetRequestResponse>(await SendAsync(HttpMethod.Post, $"{otherUrl}/approve", _first, roles: "manager"));
+        Assert.Equal((ApprovalStatus.Pending, 1), (first.ApprovalStatus, first.ApprovalLevel));
+
+        var second = await ReadAsync<BudgetRequestResponse>(await SendAsync(HttpMethod.Post, $"{otherUrl}/approve", _second, roles: "finance"));
+        Assert.Equal(ApprovalStatus.Approved, second.ApprovalStatus);
+    }
+
     private async Task<HttpResponseMessage> SendAsync(
-        HttpMethod method, string url, string? user, object? body = null, string? language = null)
+        HttpMethod method, string url, string? user, object? body = null, string? language = null, string? roles = null)
     {
         using var request = new HttpRequestMessage(method, url);
 
         if (user is not null)
         {
             request.Headers.Add(DemoIdentity.UserHeader, user);
+        }
+
+        if (roles is not null)
+        {
+            request.Headers.Add(DemoIdentity.RolesHeader, roles);
         }
 
         if (language is not null)

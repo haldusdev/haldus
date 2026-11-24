@@ -35,6 +35,10 @@ internal static class LifecycleReader
 
         public bool TokenOnly { get; set; }
 
+        public List<string>? ApprovalRoles { get; set; }
+
+        public SyntaxNode? ApprovalRolesNode { get; set; }
+
         public ApprovalModel? Approval { get; set; }
 
         public long? RetentionTicks { get; set; }
@@ -182,6 +186,27 @@ internal static class LifecycleReader
                     result.Approval = ReadApproval(semanticModel, arguments, Invalid, cancellationToken);
                     break;
 
+                case "ApprovalRoles":
+                    result.ApprovalRolesNode = name;
+                    result.ApprovalRoles = [];
+
+                    foreach (var argument in arguments)
+                    {
+                        if (semanticModel.GetConstantValue(argument.Expression, cancellationToken) is { HasValue: true, Value: string role } && role.Trim().Length > 0)
+                        {
+                            result.ApprovalRoles.Add(role);
+                        }
+                        else
+                        {
+                            // Hangi rolün hangi düzeye karar verdiği derleme zamanında bilinmelidir.
+                            Invalid(argument, "The arguments of ApprovalRoles must be non-empty string constants: one role for each approval level");
+                            result.ApprovalRoles = null;
+                            break;
+                        }
+                    }
+
+                    break;
+
                 case "AllowNegative":
                     result.AllowNegative = true;
                     break;
@@ -257,6 +282,23 @@ internal static class LifecycleReader
             {
                 result.Members.Add(new TraitMember("PreviousSecretHash", "string?", InResponse: false, Search: null));
                 result.Members.Add(new TraitMember("PreviousSecretExpiresAt", DateTimeOffset + "?", InResponse: false, Search: null));
+            }
+        }
+
+        if (result.ApprovalRoles is { } roles && result.ApprovalRolesNode is { } rolesNode)
+        {
+            // Zincirde hangisi önce yazılırsa yazılsın, roller onayın bir özelliğidir.
+            if (result.Approval is null)
+            {
+                Invalid(rolesNode, "ApprovalRoles assigns roles to the levels of an approval; declare Approvable(levels: ...) as well");
+            }
+            else if (roles.Count != result.Approval.Levels)
+            {
+                Invalid(rolesNode, $"ApprovalRoles lists {roles.Count} role(s), but Approvable declares {result.Approval.Levels} level(s); write one role for each level");
+            }
+            else
+            {
+                result.Approval = result.Approval with { Roles = roles.ToEquatableArray() };
             }
         }
 

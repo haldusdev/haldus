@@ -74,6 +74,12 @@ public static class SupplyEndpoints
         app.MapCrud<ExpenseClaim>()
             .Approvable();
 
+        // Onay zinciri: birinci düzeye yönetici, ikinciye finans karar verir; rolde olmayan 403 alır. Kaç düzey
+        // gerektiğini kayıt söyler (BudgetRequest.RequiredApprovalLevels): küçük tutar yalnızca yöneticiyle geçer.
+        app.MapCrud<BudgetRequest>()
+            .Approvable(levels: 2)
+            .ApprovalRoles("manager", "finance");
+
         // Belge: taslak → gönder → iptal → düzelt. Taslak düzenlenir ve silinir, gönderilen sözleşme kilitlidir.
         // POST /supply-contracts/{id}/submit ve /cancel kendiliğinden üretilir; POST /{id}/amend iptal edilmiş
         // sözleşmenin kopyası olan yeni bir taslak oluşturur. Numara sözleşme gönderilirken atanır.

@@ -273,4 +273,7 @@
   <data name="Recurrence.TimeZoneInvalid" xml:space="preserve">
     <value>The field {0} must be a known time zone name such as Europe/Istanbul.</value>
   </data>
+  <data name="Approval.RoleRequired" xml:space="preserve">
+    <value>This level of the approval must be decided by a user who holds the role declared for it.</value>
+  </data>
 </root>

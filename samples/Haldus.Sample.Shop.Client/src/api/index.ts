@@ -7,6 +7,7 @@ export * from './baskets/baskets';
 export * from './bill-payments/bill-payments';
 export * from './bills/bills';
 export * from './brands/brands';
+export * from './budget-requests/budget-requests';
 export * from './cars/cars';
 export * from './carts/carts';
 export * from './catalog-recounts/catalog-recounts';

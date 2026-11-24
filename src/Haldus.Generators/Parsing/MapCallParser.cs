@@ -1276,7 +1276,7 @@ internal static class MapCallParser
                 "ChangeFeed" => crudLike || archetype is Archetype.AppendOnly or Archetype.ReadOnly,
 
                 // Karar, anahtarıyla adreslenen bir kayda verilir.
-                "Approvable" => crudLike || archetype is Archetype.AppendOnly or Archetype.ReadOnly,
+                "Approvable" or "ApprovalRoles" => crudLike || archetype is Archetype.AppendOnly or Archetype.ReadOnly,
                 "Previewable" => crudLike || archetype == Archetype.AppendOnly,
                 _ => true,
             };

@@ -120,6 +120,24 @@ public partial class ExpenseClaim
     public decimal Amount { get; set; }
 }
 
+/// <summary>
+/// Bütçe talebi; onayı bir zincirdir: önce yönetici, sonra finans. Kaç düzey gerektiği tutara bağlıdır: küçük talep
+/// yöneticinin onayıyla geçer, büyüğü finansın onayını da ister.
+/// </summary>
+public partial class BudgetRequest : IApprovalLevels
+{
+    public const decimal FinanceThreshold = 10_000m;
+
+    [Required]
+    [MaxLength(200)]
+    public string Purpose { get; set; } = "";
+
+    [Range(0.0, 10_000_000.0)]
+    public decimal Amount { get; set; }
+
+    public int RequiredApprovalLevels => Amount > FinanceThreshold ? 2 : 1;
+}
+
 /// <summary>Tedarik sözleşmesi. Düzeltildiğinde yeni taslağın revizyonu bir artar.</summary>
 public partial class SupplyContract : IAmendment<SupplyContract>
 {
