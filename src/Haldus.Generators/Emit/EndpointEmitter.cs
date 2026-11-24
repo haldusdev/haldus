@@ -62,6 +62,11 @@ internal sealed class EndpointEmitter
             EmitList();
         }
 
+        if (_resource.SearchFields.Length > 0)
+        {
+            EmitSearch();
+        }
+
         if (_resource.Has(Operations.Get))
         {
             EmitGet();
@@ -144,7 +149,7 @@ internal sealed class EndpointEmitter
 
                 private static async {{Task}}<{{Results}}.Ok<global::Haldus.PagedResult<{{_entity}}Response>>> ListAsync(
                     [{{Http}}.AsParameters] global::Haldus.PageRequest page,
-            {{(softDelete ? "        bool? includeDeleted,\n" : string.Empty)}}{{(archive ? "        bool? includeArchived,\n" : string.Empty)}}{{ContextsParameter}}{{CancellationParameter}}    {
+            {{(softDelete ? "        bool? includeDeleted,\n" : string.Empty)}}{{(archive ? "        bool? includeArchived,\n" : string.Empty)}}{{FilterParameters()}}{{ContextsParameter}}{{CancellationParameter}}    {
                     var query = contexts.For<{{_entity}}>().Set<{{_entity}}>().AsNoTracking();
 
             """);
@@ -172,6 +177,8 @@ internal sealed class EndpointEmitter
 
                 """);
         }
+
+        _handlers.Append(ApplyFilter());
 
         _handlers.Append($$"""
 
@@ -435,6 +442,178 @@ internal sealed class EndpointEmitter
             {{ExpectVersion()}}        {{statement}}
             {{Save()}}
             {{WriteETag()}}        return {{Http}}.TypedResults.Ok(ToResponse(entity));
+                }
+
+            """);
+    }
+
+    /// <summary>
+    /// Filtrenin her özelliği ayrı bir sorgu parametresi olarak bağlanır. Böylece parametre adları
+    /// camelCase olur ve hepsi isteğe bağlıdır; gönderilmeyen özellik filtredeki varsayılan değerini korur.
+    /// </summary>
+    private string FilterParameters() => _resource.Filter is null
+        ? string.Empty
+        : string.Concat(_resource.Filter.Properties.Select(property =>
+            $"        [global::Microsoft.AspNetCore.Mvc.FromQuery(Name = \"{ResourceEmitter.CamelCase(property.Name)}\")] "
+            + $"{property.NullableType} filter{property.Name},\n"));
+
+    private string ApplyFilter()
+    {
+        if (_resource.Filter is null)
+        {
+            return string.Empty;
+        }
+
+        var builder = new StringBuilder();
+        builder.Append($"\n        var filter = new {_resource.Filter.Type}();\n");
+
+        foreach (var property in _resource.Filter.Properties)
+        {
+            // Gönderilmeyen dizi parametresi boş dizi olarak bağlanır; o da "gönderilmedi" sayılır.
+            var pattern = property.IsArray ? "{ Length: > 0 }" : "{ }";
+
+            builder.Append($$"""
+                        if (filter{{property.Name}} is {{pattern}} {{ResourceEmitter.CamelCase(property.Name)}}Value)
+                        {
+                            filter.{{property.Name}} = {{ResourceEmitter.CamelCase(property.Name)}}Value;
+                        }
+
+
+                """);
+        }
+
+        builder.Append("        query = filter.Apply(query);\n");
+        return builder.ToString();
+    }
+
+    private void EmitSearch()
+    {
+        var softDelete = _resource.Has(Traits.SoftDeletable);
+        var archive = _resource.Has(Traits.Archivable);
+
+        _map.Append($$"""
+                    group.MapPost("/search", SearchAsync)
+                        .WithName("Search{{_plural}}")
+                        .ProducesProblem(400);
+
+
+            """);
+
+        _handlers.Append($$"""
+
+                private static async {{Task}}<{{Results}}.Results<{{Results}}.Ok<global::Haldus.PagedResult<{{_entity}}Response>>, {{Problem}}>> SearchAsync(
+                    {{_entity}}SearchRequest request,
+            {{ContextsParameter}}{{MessagesParameter}}{{CancellationParameter}}    {
+                    var budget = new global::Haldus.SearchBudget();
+                    budget.CountSortFields(request.Sort?.Count ?? 0);
+                    var predicate = BuildPredicate(request.Where, budget);
+
+                    if (budget.Exceeded)
+                    {
+                        return {{Problems}}.SearchTooComplex(messages);
+                    }
+
+                    var query = contexts.For<{{_entity}}>().Set<{{_entity}}>().AsNoTracking();
+
+            """);
+
+        if (softDelete)
+        {
+            _handlers.Append("""
+
+                        if (request.IncludeDeleted == true)
+                        {
+                            query = query.IgnoreQueryFilters(new[] { global::Haldus.HaldusFilters.SoftDelete });
+                        }
+
+                """);
+        }
+
+        if (archive)
+        {
+            _handlers.Append("""
+
+                        if (request.IncludeArchived != true)
+                        {
+                            query = query.Where(item => item.ArchivedAt == null);
+                        }
+
+                """);
+        }
+
+        var conditions = string.Concat(_resource.SearchFields.Select(field =>
+        {
+            var method = (field.Kind, field.IsNullable) switch
+            {
+                (SearchKind.String, _) => $"String<{_entity}>",
+                (SearchKind.Range, false) => $"Range<{_entity}, {field.ValueType}>",
+                (SearchKind.Range, true) => $"NullableRange<{_entity}, {field.ValueType}>",
+                (_, false) => $"Equality<{_entity}, {field.ValueType}>",
+                (_, true) => $"NullableEquality<{_entity}, {field.ValueType}>",
+            };
+
+            return $"            global::Haldus.HaldusSearch.{method}(item => item.{field.Name}, where.{field.Name}, budget),\n";
+        }));
+
+        var sortCases = string.Concat(_resource.SearchFields.Select(field =>
+            $"                {_entity}SearchField.{field.Name} => "
+            + $"global::Haldus.HaldusSearch.OrderBy(query, ordered, item => item.{field.Name}, entry.Descending),\n"));
+
+        _handlers.Append($$"""
+
+                    if (predicate is not null)
+                    {
+                        query = query.Where(predicate);
+                    }
+
+                    var page = new global::Haldus.PageRequest(request.Page, request.PageSize);
+                    var totalCount = await query.LongCountAsync(cancellationToken);
+                    var items = await ApplySort(query, request.Sort)
+                        .Skip(page.Skip)
+                        .Take(page.PageSizeOrDefault)
+                        .Select(item => new {{_entity}}Response { {{ResponseAssignments}} })
+                        .ToListAsync(cancellationToken);
+
+                    return {{Http}}.TypedResults.Ok(
+                        new global::Haldus.PagedResult<{{_entity}}Response>(items, page.PageOrDefault, page.PageSizeOrDefault, totalCount));
+                }
+
+                private static global::System.Linq.Expressions.Expression<global::System.Func<{{_entity}}, bool>>? BuildPredicate(
+                    {{_entity}}Where? where,
+                    global::Haldus.SearchBudget budget)
+                {
+                    if (where is null || !budget.TryEnter())
+                    {
+                        return null;
+                    }
+
+                    var predicate = global::Haldus.HaldusSearch.All(new[]
+                    {
+            {{conditions}}            global::Haldus.HaldusSearch.All(where.And?.Select(child => BuildPredicate(child, budget)).ToList()),
+                        global::Haldus.HaldusSearch.Any(where.Or?.Select(child => BuildPredicate(child, budget)).ToList()),
+                        global::Haldus.HaldusSearch.Not(BuildPredicate(where.Not, budget)),
+                    });
+
+                    budget.Exit();
+                    return predicate;
+                }
+
+                private static global::System.Linq.IOrderedQueryable<{{_entity}}> ApplySort(
+                    global::System.Linq.IQueryable<{{_entity}}> query,
+                    global::System.Collections.Generic.IReadOnlyList<{{_entity}}Sort>? sort)
+                {
+                    global::System.Linq.IOrderedQueryable<{{_entity}}>? ordered = null;
+
+                    foreach (var entry in sort ?? global::System.Array.Empty<{{_entity}}Sort>())
+                    {
+                        ordered = entry.Field switch
+                        {
+            {{sortCases}}                _ => ordered,
+                        };
+                    }
+
+                    // Sayfalama kararlı olsun diye sıralama her zaman kimlikle tamamlanır.
+                    return global::Haldus.HaldusSearch.OrderBy(query, ordered, item => item.Id, descending: false);
                 }
 
             """);

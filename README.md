@@ -26,6 +26,31 @@ Bu iki parçadan Haldus şunları üretir:
   `DELETE /products/{id}`,
 - EF Core model kaydı.
 
+## Trait'ler ve süzme
+
+Davranışlar `Map*` çağrısının devamına zincirlenir:
+
+```csharp
+app.MapCrud<Customer>()
+    .MultiTenant()
+    .Auditable(trackUser: true)
+    .SoftDeletable()
+    .ConcurrencyChecked()
+    .Filterable<CustomerFilter>()
+    .Searchable(customer => customer.Name, customer => customer.CreatedAt);
+```
+
+| Zincir metodu | Etkisi |
+|---|---|
+| `.MultiTenant()` | `TenantId` alanı; sorgular kiracıya göre süzülür |
+| `.Auditable()` | Oluşturulma ve değiştirilme zamanı, isteğe bağlı kullanıcı |
+| `.SoftDeletable()` | Silme geri alınabilir; `restore` ve `purge` uçları |
+| `.ConcurrencyChecked()` | `ETag` / `If-Match` ile iyimser eşzamanlılık |
+| `.Archivable()` | `archive` ve `unarchive` uçları; arşivlenenler listede gizlenir |
+| `.Without(...)` / `.Only(...)` | Üretilecek standart işlemleri seçer |
+| `.Filterable<TFilter>()` | Kendi yazdığın filtre sınıfını liste ucunun sorgu parametrelerine bağlar |
+| `.Searchable(...)` | `POST /search`: sayılan alanlarda VE/VEYA koşulları ve sıralama |
+
 ## Durum
 
 Geliştirme aşamasında. Tasarım kararları ve aşamalar için [CLAUDE.md](CLAUDE.md), kararların

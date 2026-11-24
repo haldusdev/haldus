@@ -9,6 +9,13 @@ public static class SalesEndpoints
             .Auditable(trackUser: true)
             .SoftDeletable()
             .Archivable()
-            .ConcurrencyChecked();
+            .ConcurrencyChecked()
+            .Searchable(
+                customer => customer.Id,
+                customer => customer.Name,
+                customer => customer.Email,
+                customer => customer.LoyaltyPoints,
+                customer => customer.CreatedAt,
+                customer => customer.UpdatedAt);
     }
 }

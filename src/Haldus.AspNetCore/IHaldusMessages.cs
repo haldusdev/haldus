@@ -20,6 +20,8 @@ public static class HaldusMessageKeys
     public const string PreconditionRequiredDetail = "PreconditionRequired.Detail";
     public const string PreconditionFailedTitle = "PreconditionFailed.Title";
     public const string PreconditionFailedDetail = "PreconditionFailed.Detail";
+    public const string SearchTooComplexTitle = "SearchTooComplex.Title";
+    public const string SearchTooComplexDetail = "SearchTooComplex.Detail";
     public const string TenantRequiredTitle = "TenantRequired.Title";
     public const string TenantRequiredDetail = "TenantRequired.Detail";
     public const string ValidationTitle = "Validation.Title";

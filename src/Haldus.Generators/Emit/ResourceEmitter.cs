@@ -97,7 +97,92 @@ internal static class ResourceEmitter
             AppendPatchRequest(builder, resource);
         }
 
+        if (resource.SearchFields.Length > 0)
+        {
+            AppendSearchTypes(builder, resource);
+        }
+
         return builder.ToString();
+    }
+
+    public static string ConditionType(SearchField field) => field.Kind switch
+    {
+        SearchKind.String => "global::Haldus.StringCondition",
+        SearchKind.Range => $"global::Haldus.RangeCondition<{field.ValueType}>",
+        _ => $"global::Haldus.EqualityCondition<{field.ValueType}>",
+    };
+
+    public static string CamelCase(string name) => char.ToLowerInvariant(name[0]) + name.Substring(1);
+
+    /// <summary>
+    /// Arama gövdesinin tipleri. Yalnızca <c>.Searchable(...)</c> ile sayılan alanlar koşul ve sıralama
+    /// alanı olur; sıralama alanı enum olduğu için bilinmeyen bir ad istek okunurken reddedilir.
+    /// </summary>
+    private static void AppendSearchTypes(StringBuilder builder, ResourceModel resource)
+    {
+        const string Json = "global::System.Text.Json.Serialization";
+        const string List = "global::System.Collections.Generic.IReadOnlyList";
+        var entity = resource.EntityName;
+
+        // Bilinmeyen bir alan adı sessizce yok sayılırsa yanlış yazılmış bir koşul süzülmemiş sonuç döndürür.
+        var strict = $"[{Json}.JsonUnmappedMemberHandling({Json}.JsonUnmappedMemberHandling.Disallow)]\n";
+
+        builder.Append('\n');
+        builder.Append(strict);
+        builder.Append($"public sealed partial record {entity}Where\n");
+        builder.Append("{\n");
+
+        foreach (var field in resource.SearchFields)
+        {
+            builder.Append($"    public {ConditionType(field)}? {field.Name} {{ get; init; }}\n\n");
+        }
+
+        builder.Append($"    public {List}<{entity}Where>? And {{ get; init; }}\n\n");
+        builder.Append($"    public {List}<{entity}Where>? Or {{ get; init; }}\n\n");
+        builder.Append($"    public {entity}Where? Not {{ get; init; }}\n");
+        builder.Append("}\n");
+
+        builder.Append('\n');
+        builder.Append($"[{Json}.JsonConverter(typeof({Json}.JsonStringEnumConverter<{entity}SearchField>))]\n");
+        builder.Append($"public enum {entity}SearchField\n");
+        builder.Append("{\n");
+
+        foreach (var field in resource.SearchFields)
+        {
+            builder.Append($"    [{Json}.JsonStringEnumMemberName(\"{CamelCase(field.Name)}\")]\n");
+            builder.Append($"    {field.Name},\n");
+        }
+
+        builder.Append("}\n");
+
+        builder.Append('\n');
+        builder.Append(strict);
+        builder.Append($"public sealed partial record {entity}Sort\n");
+        builder.Append("{\n");
+        builder.Append($"    public required {entity}SearchField Field {{ get; init; }}\n\n");
+        builder.Append("    public bool Descending { get; init; }\n");
+        builder.Append("}\n");
+
+        builder.Append('\n');
+        builder.Append(strict);
+        builder.Append($"public sealed partial record {entity}SearchRequest\n");
+        builder.Append("{\n");
+        builder.Append($"    public {entity}Where? Where {{ get; init; }}\n\n");
+        builder.Append($"    public {List}<{entity}Sort>? Sort {{ get; init; }}\n\n");
+        builder.Append("    public int? Page { get; init; }\n\n");
+        builder.Append("    public int? PageSize { get; init; }\n");
+
+        if (resource.Has(Traits.SoftDeletable))
+        {
+            builder.Append("\n    public bool? IncludeDeleted { get; init; }\n");
+        }
+
+        if (resource.Has(Traits.Archivable))
+        {
+            builder.Append("\n    public bool? IncludeArchived { get; init; }\n");
+        }
+
+        builder.Append("}\n");
     }
 
     private static void AppendRequest(StringBuilder builder, string name, ResourceModel resource)

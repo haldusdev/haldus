@@ -3,35 +3,37 @@ namespace Haldus.Generators.Model;
 /// <summary>Her trait'in entity'ye eklediği arayüz ve alanlar.</summary>
 internal static class TraitCatalog
 {
+    private const string DateTimeOffset = "global::System.DateTimeOffset";
+
     public static readonly TraitDefinition[] All =
     [
         new(Traits.MultiTenant, "global::Haldus.IMultiTenant",
         [
-            new("TenantId", "global::System.Guid", InResponse: false),
+            new("TenantId", "global::System.Guid", InResponse: false, Search: null),
         ]),
         new(Traits.Auditable, "global::Haldus.IAuditable",
         [
-            new("CreatedAt", "global::System.DateTimeOffset", InResponse: true),
-            new("UpdatedAt", "global::System.DateTimeOffset?", InResponse: true),
+            new("CreatedAt", DateTimeOffset, InResponse: true, new("CreatedAt", SearchKind.Range, DateTimeOffset, IsNullable: false)),
+            new("UpdatedAt", DateTimeOffset + "?", InResponse: true, new("UpdatedAt", SearchKind.Range, DateTimeOffset, IsNullable: true)),
         ]),
         new(Traits.AuditUser, "global::Haldus.IUserAuditable",
         [
-            new("CreatedBy", "string?", InResponse: true),
-            new("UpdatedBy", "string?", InResponse: true),
+            new("CreatedBy", "string?", InResponse: true, new("CreatedBy", SearchKind.String, "string", IsNullable: true)),
+            new("UpdatedBy", "string?", InResponse: true, new("UpdatedBy", SearchKind.String, "string", IsNullable: true)),
         ]),
         new(Traits.SoftDeletable, "global::Haldus.ISoftDeletable",
         [
-            new("DeletedAt", "global::System.DateTimeOffset?", InResponse: true),
+            new("DeletedAt", DateTimeOffset + "?", InResponse: true, new("DeletedAt", SearchKind.Range, DateTimeOffset, IsNullable: true)),
         ]),
 
         // Sürüm yanıt gövdesinde değil ETag başlığında taşınır.
         new(Traits.ConcurrencyChecked, "global::Haldus.IConcurrencyChecked",
         [
-            new("Version", "uint", InResponse: false),
+            new("Version", "uint", InResponse: false, Search: null),
         ]),
         new(Traits.Archivable, "global::Haldus.IArchivable",
         [
-            new("ArchivedAt", "global::System.DateTimeOffset?", InResponse: true),
+            new("ArchivedAt", DateTimeOffset + "?", InResponse: true, new("ArchivedAt", SearchKind.Range, DateTimeOffset, IsNullable: true)),
         ]),
     ];
 
@@ -44,4 +46,5 @@ internal static class TraitCatalog
 
 internal sealed record TraitDefinition(Traits Trait, string Interface, TraitMember[] Members);
 
-internal sealed record TraitMember(string Name, string Type, bool InResponse);
+/// <param name="Search">Alan aranabiliyorsa arama modeli; kiracı ve sürüm gibi iç alanlarda <c>null</c>.</param>
+internal sealed record TraitMember(string Name, string Type, bool InResponse, SearchField? Search);

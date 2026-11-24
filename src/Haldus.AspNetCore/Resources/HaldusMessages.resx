@@ -30,6 +30,12 @@
   <data name="PreconditionFailed.Detail" xml:space="preserve">
     <value>The resource was modified after you last read it. Reload it and try again.</value>
   </data>
+  <data name="SearchTooComplex.Title" xml:space="preserve">
+    <value>Search is too complex</value>
+  </data>
+  <data name="SearchTooComplex.Detail" xml:space="preserve">
+    <value>A search may nest at most {0} levels and contain at most {1} conditions, {2} values per list and {3} sort fields.</value>
+  </data>
   <data name="TenantRequired.Title" xml:space="preserve">
     <value>Tenant required</value>
   </data>

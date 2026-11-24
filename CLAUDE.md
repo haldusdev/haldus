@@ -48,6 +48,13 @@ Bunlar kullanıcıyla kararlaştırıldı; yeniden sorma.
 - Eşzamanlılık trait'inin adı `ConcurrencyChecked` (eski adı `Versioned`). Sürüm yanıt gövdesinde değil
   `ETag` başlığında taşınır; güncelleme ve silme `If-Match` ister (eksikse 428, uyuşmazlıkta 412).
 - Güncelleme için hem `PUT` (tam değiştirme) hem `PATCH` (kısmi) üretilir.
+- Süzme iki yolla yapılır ve ikisi birlikte kullanılabilir. Kullanıcı, otomatik üretilen alan başına
+  sorgu parametrelerini (`?priceMin=100`) ve tek `filter` ifadesini (AIP-160 tarzı) reddetti:
+  - `.Filterable<TFilter>()`: kullanıcının yazdığı `IFilter<T>` sınıfı `GET` listesine bağlanır; skaler
+    özellikleri camelCase, isteğe bağlı sorgu parametresi olur.
+  - `.Searchable(item => item.Name, ...)`: `POST /{kaynak}/search`; tipli gövdede alan koşulları,
+    `and` / `or` / `not` ve sıralama. Yalnızca sayılan alanlar aranabilir; varsayılan olarak hiçbiri
+    aranamaz. Bilinmeyen alan veya operatör isteği reddeder; boyut `SearchBudget` ile sınırlıdır.
 - Geçiş endpoint'leri `/orders/{id}/cancel` biçimindedir.
 - `MultiTenant` kiracıyı token'daki claim'den okur.
 
@@ -78,7 +85,7 @@ Bunlar kullanıcıyla kararlaştırıldı; yeniden sorma.
 
 ## Aşamalar
 
-1 ve 2 tamamlandı. 3. aşamada `Filterable` dışındaki her şey tamamlandı; sıradaki 4.
+1, 2 ve 3 tamamlandı (3. aşamaya `.Searchable()` da eklendi); sıradaki 4.
 
 1. İskelet
 2. Generator çekirdeği ve `MapCrud`
@@ -95,8 +102,6 @@ Bunlar kullanıcıyla kararlaştırıldı; yeniden sorma.
 
 ## Açık kararlar
 
-- `Filterable` sözdizimi: kullanıcı hem alan başına sorgu parametresini (`?priceMin=100`) hem tek
-  `filter` ifadesini (AIP-160 tarzı) reddetti ve başka bir yöntem istedi. Karar verilene kadar üretilmez.
 - Frontend ve mobil desteğinin kapsamı (backend API şekli oturunca ele alınacak).
 - `MapJob` altyapısı (8. aşamada sorulacak).
 
@@ -113,6 +118,13 @@ Bunlar kullanıcıyla kararlaştırıldı; yeniden sorma.
 - Kiracı filtresi modelin kurulduğu bağlamı yakalar (`HaldusScope.TenantId(context)`); EF Core bu
   başvuruyu her sorguda geçerli bağlamla değiştirir. Entegrasyon testleri bunu iki kiracıyla doğrular.
 - Zaman damgaları `HaldusTime.UtcNow` ile mikrosaniyeye kırpılır; PostgreSQL daha hassasını saklamaz.
+- `Filterable` ve `Searchable` uzantı değil `ResourceBuilder<T>` üyesidir; C# uzantı metodunda tip
+  argümanlarının bir kısmını çıkarsayamadığı için `.Filterable<ProductFilter>()` ancak böyle yazılır.
+- Arama koşulları `HaldusSearch` ile ifade ağacına çevrilir; değerler ifadeye sabit olarak değil bir
+  nesnenin özelliği olarak konur ki EF Core onları SQL parametresi yapsın. Bir alanın koşul tipi
+  (`StringCondition`, `RangeCondition<T>`, `EqualityCondition<T>`) `MapCallParser.TryClassify` ile seçilir.
+- Eşzamanlılık kontrollü kaynakta durum değiştiren her uç (`restore`, `purge`, `archive` dahil) `If-Match`
+  ister; yeni bir uç eklerken `ReadIfMatch` / `ExpectVersion` / `Save` üçlüsünü kullan.
 - Üretilen kod çalışma zamanına bir module initializer ile bağlanır: `HaldusEndpointRegistry` (entity →
   endpoint eşleyici) ve `HaldusModelRegistry` (assembly → model katkısı). `MapCrud<T>()` çalışma
   zamanında yalnızca bu kayda bakar.

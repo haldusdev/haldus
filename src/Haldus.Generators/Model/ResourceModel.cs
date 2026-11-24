@@ -17,6 +17,8 @@ internal sealed record ResourceModel(
     Traits Traits,
     Operations Operations,
     EquatableArray<string> DeclaredTraitMembers,
+    FilterModel? Filter,
+    EquatableArray<SearchField> SearchFields,
     EquatableArray<ChainCall> Chain,
     EquatableArray<DiagnosticInfo> Diagnostics,
     LocationInfo Location)
@@ -68,10 +70,33 @@ internal sealed record PropertyModel(
     bool IsWritable,
     bool IsNonNullableReference,
     bool IsNonNullableValue,
+    SearchKind SearchKind,
+    string ValueType,
     EquatableArray<AttributeModel> ValidationAttributes)
 {
     public bool IsNonNullable => IsNonNullableReference || IsNonNullableValue;
 }
+
+/// <summary><c>.Filterable&lt;TFilter&gt;()</c> ile bağlanan filtre sınıfı ve sorgu parametresi olacak özellikleri.</summary>
+internal sealed record FilterModel(string Type, EquatableArray<FilterProperty> Properties);
+
+internal sealed record FilterProperty(string Name, string NullableType, bool IsArray);
+
+/// <summary>Bir alanın arama gövdesinde hangi koşul tipini aldığı.</summary>
+internal enum SearchKind
+{
+    /// <summary>Metin: eşitlik, içerme, önek/sonek.</summary>
+    String,
+
+    /// <summary>Sıralanabilir değer (sayı, tarih): eşitlik ve aralık.</summary>
+    Range,
+
+    /// <summary>Yalnızca eşitlik (Guid, bool, enum).</summary>
+    Equality,
+}
+
+/// <summary><c>.Searchable(...)</c> ile aranabilir ve sıralanabilir kılınan bir alan.</summary>
+internal sealed record SearchField(string Name, SearchKind Kind, string ValueType, bool IsNullable);
 
 /// <summary>Entity'den istek DTO'larına kopyalanan bir validasyon attribute'u.</summary>
 internal sealed record AttributeModel(string Rendered, bool IsRequired);

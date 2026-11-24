@@ -66,7 +66,7 @@ public sealed class HaldusGenerator : IIncrementalGenerator
 
         if (ChainReader.IsRootedAtMapCall(invocation)
             || context.SemanticModel.GetSymbolInfo(invocation, cancellationToken).Symbol is not IMethodSymbol method
-            || method.ContainingType?.ToDisplayString() != "Haldus.ResourceBuilderTraitExtensions")
+            || !IsDeclarationHost(method.ContainingType))
         {
             return null;
         }
@@ -78,6 +78,11 @@ public sealed class HaldusGenerator : IIncrementalGenerator
             LocationInfo.From(name.GetLocation()),
             new EquatableArray<string>([name.Identifier.ValueText]));
     }
+
+    /// <summary>Zincir bildirimleri ya uzantı sınıfında ya da doğrudan <c>ResourceBuilder</c> üzerinde tanımlıdır.</summary>
+    private static bool IsDeclarationHost(INamedTypeSymbol? type) =>
+        type?.ToDisplayString() == "Haldus.ResourceBuilderTraitExtensions"
+        || type?.OriginalDefinition.ToDisplayString() == "Haldus.ResourceBuilder<TEntity>";
 
     private static void Emit(
         SourceProductionContext context,

@@ -38,6 +38,22 @@ public static class HaldusProblems
             statusCode: StatusCodes.Status412PreconditionFailed);
     }
 
+    /// <summary>Arama isteği izin verilen derinliği, koşul sayısını veya liste uzunluğunu aştı.</summary>
+    public static ProblemHttpResult SearchTooComplex(IHaldusMessages messages)
+    {
+        ArgumentNullException.ThrowIfNull(messages);
+
+        return TypedResults.Problem(
+            title: messages.Format(HaldusMessageKeys.SearchTooComplexTitle),
+            detail: messages.Format(
+                HaldusMessageKeys.SearchTooComplexDetail,
+                SearchBudget.MaxDepth,
+                SearchBudget.MaxConditions,
+                SearchBudget.MaxListValues,
+                SearchBudget.MaxSortFields),
+            statusCode: StatusCodes.Status400BadRequest);
+    }
+
     /// <summary>Kiracıya bağlı bir kaynağa, kiracısı çözülemeyen bir istekle erişildi.</summary>
     public static ProblemHttpResult TenantRequired(IHaldusMessages messages)
     {

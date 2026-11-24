@@ -13,18 +13,20 @@ internal static class MapCallParser
     private const string MapExtensionsType = "Haldus.HaldusEndpointRouteBuilderExtensions";
     private const string ValidationAttributeType = "System.ComponentModel.DataAnnotations.ValidationAttribute";
     private const string RequiredAttributeType = "System.ComponentModel.DataAnnotations.RequiredAttribute";
+    private const string GuidType = "global::System.Guid";
 
     private static readonly SymbolDisplayFormat TypeFormat = SymbolDisplayFormat.FullyQualifiedFormat
         .AddMiscellaneousOptions(SymbolDisplayMiscellaneousOptions.IncludeNullableReferenceTypeModifier);
 
-    private static readonly HashSet<string> ScalarTypeNames =
-    [
-        "System.Guid",
-        "System.DateTimeOffset",
-        "System.DateOnly",
-        "System.TimeOnly",
-        "System.TimeSpan",
-    ];
+    /// <summary>Özel tipi olmayan ama skaler sayılan tipler ve sıralanabilir olup olmadıkları.</summary>
+    private static readonly Dictionary<string, SearchKind> KnownScalarTypes = new()
+    {
+        ["System.Guid"] = SearchKind.Equality,
+        ["System.DateTimeOffset"] = SearchKind.Range,
+        ["System.DateOnly"] = SearchKind.Range,
+        ["System.TimeOnly"] = SearchKind.Range,
+        ["System.TimeSpan"] = SearchKind.Range,
+    };
 
     public static bool IsCandidate(SyntaxNode node) =>
         node is InvocationExpressionSyntax
@@ -35,6 +37,12 @@ internal static class MapCallParser
             },
         }
         && ArchetypeOf(name.Identifier.ValueText) is not null;
+
+    public static string? ArchetypeOf(string methodName) => methodName switch
+    {
+        "MapCrud" => "Crud",
+        _ => null,
+    };
 
     public static ResourceModel? Parse(GeneratorSyntaxContext context, CancellationToken cancellationToken)
     {
@@ -52,37 +60,39 @@ internal static class MapCallParser
         var location = LocationInfo.From(name.GetLocation());
         var chain = ChainReader.Read(invocation);
         var (traits, operations) = ChainReader.Interpret(chain);
+        var diagnostics = new List<DiagnosticInfo>();
+
+        string entityName;
+        string? entityNamespace;
+        INamedTypeSymbol? entity = null;
 
         if (type is null or IErrorTypeSymbol)
         {
-            // Entity hiç yazılmamış: Haldus tamamını üretir.
-            return typeSyntax is IdentifierNameSyntax identifier
-                ? new ResourceModel(
-                    archetype,
-                    identifier.Identifier.ValueText,
-                    Namespace: null,
-                    EntityDeclared: false,
-                    IdType: "global::System.Guid",
-                    IdKind.Guid,
-                    IdDeclared: false,
-                    EquatableArray<PropertyModel>.Empty,
-                    traits,
-                    operations,
-                    EquatableArray<string>.Empty,
-                    chain,
-                    EquatableArray<DiagnosticInfo>.Empty,
-                    location)
-                : null;
+            // Entity hiç yazılmamış: Haldus tamamını üretir ve projenin kök namespace'ine koyar.
+            if (typeSyntax is not IdentifierNameSyntax identifier)
+            {
+                return null;
+            }
+
+            entityName = identifier.Identifier.ValueText;
+            entityNamespace = null;
         }
-
-        var entityNamespace = type.ContainingNamespace is { IsGlobalNamespace: false } containingNamespace
-            ? containingNamespace.ToDisplayString()
-            : string.Empty;
-
-        if (type is not INamedTypeSymbol { TypeKind: TypeKind.Class, IsRecord: false, ContainingType: null } entity
-            || !IsPartialInSource(entity, cancellationToken))
+        else
         {
-            return Invalid(archetype, type.Name, entityNamespace, chain, location, "HALDUS001", type.Name);
+            entityName = type.Name;
+            entityNamespace = type.ContainingNamespace is { IsGlobalNamespace: false } containingNamespace
+                ? containingNamespace.ToDisplayString()
+                : string.Empty;
+
+            if (type is INamedTypeSymbol { TypeKind: TypeKind.Class, IsRecord: false, ContainingType: null } declared
+                && IsPartialInSource(declared, cancellationToken))
+            {
+                entity = declared;
+            }
+            else
+            {
+                diagnostics.Add(new DiagnosticInfo("HALDUS001", location, new EquatableArray<string>([entityName])));
+            }
         }
 
         var properties = new List<PropertyModel>();
@@ -91,57 +101,69 @@ internal static class MapCallParser
             TraitCatalog.For(traits).SelectMany(definition => definition.Members).Select(member => member.Name));
         IPropertySymbol? id = null;
 
-        foreach (var property in PublicInstanceProperties(entity))
+        foreach (var property in entity is null ? [] : PublicInstanceProperties(entity))
         {
             if (property.Name == "Id")
             {
                 id = property;
-                continue;
             }
-
-            // Trait alanını kullanıcı kendi yazdıysa yeniden üretilmez; istek DTO'larına da girmez.
-            if (traitMemberNames.Contains(property.Name))
+            else if (traitMemberNames.Contains(property.Name))
             {
+                // Trait alanını kullanıcı kendi yazdıysa yeniden üretilmez; istek DTO'larına da girmez.
                 declaredTraitMembers.Add(property.Name);
-                continue;
             }
-
-            if (IsScalar(property.Type))
+            else if (TryClassify(property.Type, out var kind, out var valueType))
             {
-                properties.Add(ToModel(property));
+                properties.Add(ToModel(property, kind, valueType));
             }
         }
 
         var idKind = IdKind.Guid;
         if (id is not null && !TryGetIdKind(id.Type, out idKind))
         {
-            return Invalid(
-                archetype, entity.Name, entityNamespace, chain, location,
-                "HALDUS003", entity.Name, id.Type.ToDisplayString());
+            diagnostics.Add(new DiagnosticInfo(
+                "HALDUS003", location, new EquatableArray<string>([entityName, id.Type.ToDisplayString()])));
+        }
+
+        var idType = id?.Type.ToDisplayString(TypeFormat) ?? GuidType;
+
+        FilterModel? filter = null;
+        var searchFields = new List<SearchField>();
+
+        foreach (var (callName, call) in ChainReader.Nodes(invocation))
+        {
+            switch (callName)
+            {
+                case GenericNameSyntax { Identifier.ValueText: "Filterable", TypeArgumentList.Arguments: { Count: 1 } typeArguments }:
+                    filter = ReadFilter(context.SemanticModel, typeArguments[0], cancellationToken);
+                    break;
+                case { Identifier.ValueText: "Searchable" }:
+                    ReadSearchFields(
+                        callName, call, entityName,
+                        SearchCandidates(idType, idKind, properties, traits),
+                        searchFields, diagnostics);
+                    break;
+            }
         }
 
         return new ResourceModel(
             archetype,
-            entity.Name,
+            entityName,
             entityNamespace,
-            EntityDeclared: true,
-            IdType: id?.Type.ToDisplayString(TypeFormat) ?? "global::System.Guid",
+            EntityDeclared: entity is not null,
+            idType,
             idKind,
             IdDeclared: id is not null,
             properties.ToEquatableArray(),
             traits,
             operations,
             declaredTraitMembers.ToEquatableArray(),
+            filter,
+            searchFields.ToEquatableArray(),
             chain,
-            EquatableArray<DiagnosticInfo>.Empty,
+            diagnostics.ToEquatableArray(),
             location);
     }
-
-    public static string? ArchetypeOf(string methodName) => methodName switch
-    {
-        "MapCrud" => "Crud",
-        _ => null,
-    };
 
     private static bool IsHaldusCall(
         SemanticModel semanticModel,
@@ -181,18 +203,18 @@ internal static class MapCallParser
         return true;
     }
 
-    private static IEnumerable<IPropertySymbol> PublicInstanceProperties(INamedTypeSymbol entity)
+    private static IEnumerable<IPropertySymbol> PublicInstanceProperties(INamedTypeSymbol type)
     {
         var hierarchy = new Stack<INamedTypeSymbol>();
-        for (var current = entity; current is { SpecialType: not SpecialType.System_Object }; current = current.BaseType)
+        for (var current = type; current is { SpecialType: not SpecialType.System_Object }; current = current.BaseType)
         {
             hierarchy.Push(current);
         }
 
         var seen = new HashSet<string>();
-        foreach (var type in hierarchy)
+        foreach (var level in hierarchy)
         {
-            foreach (var property in type.GetMembers().OfType<IPropertySymbol>())
+            foreach (var property in level.GetMembers().OfType<IPropertySymbol>())
             {
                 if (property is { IsStatic: false, IsIndexer: false, DeclaredAccessibility: Accessibility.Public, GetMethod: not null }
                     && seen.Add(property.Name))
@@ -203,32 +225,43 @@ internal static class MapCallParser
         }
     }
 
-    private static bool IsScalar(ITypeSymbol type)
+    /// <summary>Tip skaler ise hangi arama koşulunu aldığını ve nullable sarmalayıcısı çıkarılmış adını verir.</summary>
+    private static bool TryClassify(ITypeSymbol type, out SearchKind kind, out string valueType)
     {
         if (type is INamedTypeSymbol { OriginalDefinition.SpecialType: SpecialType.System_Nullable_T } nullable)
         {
             type = nullable.TypeArguments[0];
         }
 
+        valueType = type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+
         if (type.TypeKind == TypeKind.Enum)
         {
+            kind = SearchKind.Equality;
             return true;
         }
 
-        return type.SpecialType switch
+        switch (type.SpecialType)
         {
-            SpecialType.System_Boolean
-                or SpecialType.System_Byte
-                or SpecialType.System_Int16
-                or SpecialType.System_Int32
-                or SpecialType.System_Int64
-                or SpecialType.System_Single
-                or SpecialType.System_Double
-                or SpecialType.System_Decimal
-                or SpecialType.System_String
-                or SpecialType.System_DateTime => true,
-            _ => ScalarTypeNames.Contains(type.ToDisplayString()),
-        };
+            case SpecialType.System_String:
+                kind = SearchKind.String;
+                return true;
+            case SpecialType.System_Boolean:
+                kind = SearchKind.Equality;
+                return true;
+            case SpecialType.System_Byte:
+            case SpecialType.System_Int16:
+            case SpecialType.System_Int32:
+            case SpecialType.System_Int64:
+            case SpecialType.System_Single:
+            case SpecialType.System_Double:
+            case SpecialType.System_Decimal:
+            case SpecialType.System_DateTime:
+                kind = SearchKind.Range;
+                return true;
+            default:
+                return KnownScalarTypes.TryGetValue(type.ToDisplayString(), out kind);
+        }
     }
 
     private static bool TryGetIdKind(ITypeSymbol type, out IdKind kind)
@@ -247,7 +280,7 @@ internal static class MapCallParser
         }
     }
 
-    private static PropertyModel ToModel(IPropertySymbol property)
+    private static PropertyModel ToModel(IPropertySymbol property, SearchKind searchKind, string valueType)
     {
         var attributes = new List<AttributeModel>();
         var hasRequired = false;
@@ -280,11 +313,102 @@ internal static class MapCallParser
         return new PropertyModel(
             property.Name,
             type,
-            NullableType: type.EndsWith("?", StringComparison.Ordinal) ? type : type + "?",
+            NullableType: AsNullable(type),
             IsWritable: property.SetMethod is { DeclaredAccessibility: Accessibility.Public, IsInitOnly: false },
             isNonNullableReference,
             isNonNullableValue,
+            searchKind,
+            valueType,
             attributes.ToEquatableArray());
+    }
+
+    private static string AsNullable(string type) => type.EndsWith("?", StringComparison.Ordinal) ? type : type + "?";
+
+    private static FilterModel? ReadFilter(SemanticModel semanticModel, TypeSyntax syntax, CancellationToken cancellationToken)
+    {
+        if (semanticModel.GetTypeInfo(syntax, cancellationToken).Type is not INamedTypeSymbol { TypeKind: not TypeKind.Error } filter)
+        {
+            return null;
+        }
+
+        var properties = PublicInstanceProperties(filter)
+            .Where(property => property.SetMethod is { DeclaredAccessibility: Accessibility.Public, IsInitOnly: false })
+            .Where(property => TryClassify(
+                property.Type is IArrayTypeSymbol array ? array.ElementType : property.Type, out _, out _))
+            .Select(property => new FilterProperty(
+                property.Name,
+                AsNullable(property.Type.ToDisplayString(TypeFormat)),
+                IsArray: property.Type is IArrayTypeSymbol));
+
+        return new FilterModel(filter.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat), properties.ToEquatableArray());
+    }
+
+    /// <summary>Aranabilecek alanlar: kimlik, kullanıcının skaler alanları ve etkin trait'lerin açık alanları.</summary>
+    private static Dictionary<string, SearchField> SearchCandidates(
+        string idType,
+        IdKind idKind,
+        List<PropertyModel> properties,
+        Traits traits)
+    {
+        var candidates = new Dictionary<string, SearchField>
+        {
+            ["Id"] = new("Id", idKind == IdKind.Guid ? SearchKind.Equality : SearchKind.Range, idType, IsNullable: false),
+        };
+
+        foreach (var property in properties)
+        {
+            candidates[property.Name] = new SearchField(
+                property.Name, property.SearchKind, property.ValueType, IsNullable: !property.IsNonNullable);
+        }
+
+        foreach (var member in TraitCatalog.For(traits).SelectMany(definition => definition.Members))
+        {
+            if (member.Search is not null)
+            {
+                candidates[member.Name] = member.Search;
+            }
+        }
+
+        return candidates;
+    }
+
+    private static void ReadSearchFields(
+        SimpleNameSyntax callName,
+        InvocationExpressionSyntax call,
+        string entityName,
+        Dictionary<string, SearchField> candidates,
+        List<SearchField> fields,
+        List<DiagnosticInfo> diagnostics)
+    {
+        if (call.ArgumentList.Arguments.Count == 0)
+        {
+            diagnostics.Add(new DiagnosticInfo(
+                "HALDUS006", LocationInfo.From(callName.GetLocation()), new EquatableArray<string>([entityName])));
+            return;
+        }
+
+        foreach (var argument in call.ArgumentList.Arguments)
+        {
+            // Beklenen biçim: item => item.Name
+            var fieldName = argument.Expression is LambdaExpressionSyntax { Body: MemberAccessExpressionSyntax member }
+                ? member.Name.Identifier.ValueText
+                : null;
+
+            if (fieldName is not null && candidates.TryGetValue(fieldName, out var field))
+            {
+                if (fields.All(existing => existing.Name != field.Name))
+                {
+                    fields.Add(field);
+                }
+            }
+            else
+            {
+                diagnostics.Add(new DiagnosticInfo(
+                    "HALDUS005",
+                    LocationInfo.From(argument.GetLocation()),
+                    new EquatableArray<string>([argument.Expression.ToString(), entityName])));
+            }
+        }
     }
 
     private static bool InheritsFrom(INamedTypeSymbol type, string baseTypeName)
@@ -332,28 +456,4 @@ internal static class MapCallParser
             _ => constant.ToCSharpString(),
         };
     }
-
-    private static ResourceModel Invalid(
-        string archetype,
-        string entityName,
-        string entityNamespace,
-        EquatableArray<ChainCall> chain,
-        LocationInfo location,
-        string diagnosticId,
-        params string[] arguments) =>
-        new(
-            archetype,
-            entityName,
-            entityNamespace,
-            EntityDeclared: true,
-            IdType: "global::System.Guid",
-            IdKind.Guid,
-            IdDeclared: false,
-            EquatableArray<PropertyModel>.Empty,
-            Traits.None,
-            Operations.All,
-            EquatableArray<string>.Empty,
-            chain,
-            new EquatableArray<DiagnosticInfo>([new DiagnosticInfo(diagnosticId, location, arguments.ToEquatableArray())]),
-            location);
 }

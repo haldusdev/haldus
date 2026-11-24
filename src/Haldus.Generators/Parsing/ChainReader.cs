@@ -18,31 +18,33 @@ internal static class ChainReader
         "Archivable",
         "Without",
         "Only",
+        "Filterable",
+        "Searchable",
     ];
 
-    public static EquatableArray<ChainCall> Read(InvocationExpressionSyntax mapCall)
+    /// <summary>Zincirdeki çağrıları, Map çağrısından dışa doğru sırayla verir.</summary>
+    public static IEnumerable<(SimpleNameSyntax Name, InvocationExpressionSyntax Invocation)> Nodes(InvocationExpressionSyntax mapCall)
     {
-        var calls = new List<ChainCall>();
         SyntaxNode current = mapCall;
 
         while (current.Parent is MemberAccessExpressionSyntax memberAccess
             && memberAccess.Expression == current
             && memberAccess.Parent is InvocationExpressionSyntax outer)
         {
-            var typeArguments = memberAccess.Name is GenericNameSyntax generic
-                ? generic.TypeArgumentList.Arguments.Select(argument => argument.ToString())
-                : [];
-
-            calls.Add(new ChainCall(
-                memberAccess.Name.Identifier.ValueText,
-                typeArguments.ToEquatableArray(),
-                outer.ArgumentList.Arguments.Select(argument => argument.Expression.ToString()).ToEquatableArray()));
-
+            yield return (memberAccess.Name, outer);
             current = outer;
         }
-
-        return calls.ToEquatableArray();
     }
+
+    public static EquatableArray<ChainCall> Read(InvocationExpressionSyntax mapCall) =>
+        Nodes(mapCall)
+            .Select(node => new ChainCall(
+                node.Name.Identifier.ValueText,
+                (node.Name is GenericNameSyntax generic
+                    ? generic.TypeArgumentList.Arguments.Select(argument => argument.ToString())
+                    : []).ToEquatableArray(),
+                node.Invocation.ArgumentList.Arguments.Select(argument => argument.Expression.ToString()).ToEquatableArray()))
+            .ToEquatableArray();
 
     public static (Traits Traits, Operations Operations) Interpret(EquatableArray<ChainCall> chain)
     {

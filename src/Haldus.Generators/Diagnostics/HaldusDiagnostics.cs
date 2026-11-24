@@ -38,8 +38,26 @@ internal static class HaldusDiagnostics
         DiagnosticSeverity.Error,
         isEnabledByDefault: true);
 
+    public static readonly DiagnosticDescriptor FieldCannotBeSearched = new(
+        "HALDUS005",
+        "Field cannot be searched",
+        "'{0}' cannot be searched: write it as 'item => item.Property', where the property is the Id, a scalar property or a trait field of '{1}'",
+        Category,
+        DiagnosticSeverity.Error,
+        isEnabledByDefault: true);
+
+    public static readonly DiagnosticDescriptor SearchableNeedsFields = new(
+        "HALDUS006",
+        "Searchable needs at least one field",
+        "List the fields of '{0}' that may be searched and sorted, for example Searchable(item => item.Name); nothing is searchable by default",
+        Category,
+        DiagnosticSeverity.Error,
+        isEnabledByDefault: true);
+
     public static DiagnosticDescriptor Get(string id) => id switch
     {
+        "HALDUS005" => FieldCannotBeSearched,
+        "HALDUS006" => SearchableNeedsFields,
         "HALDUS001" => EntityMustBePartialClass,
         "HALDUS002" => EntityMappedMoreThanOnce,
         "HALDUS003" => UnsupportedIdType,
