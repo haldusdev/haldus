@@ -1,0 +1,15 @@
+<Solution>
+  <Folder Name="/samples/">
+    <Project Path="samples/Haldus.Sample.Shop/Haldus.Sample.Shop.csproj" />
+  </Folder>
+  <Folder Name="/src/">
+    <Project Path="src/Haldus.Abstractions/Haldus.Abstractions.csproj" />
+    <Project Path="src/Haldus.AspNetCore/Haldus.AspNetCore.csproj" />
+    <Project Path="src/Haldus.EntityFrameworkCore/Haldus.EntityFrameworkCore.csproj" />
+    <Project Path="src/Haldus.Generators/Haldus.Generators.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Haldus.Generators.Tests/Haldus.Generators.Tests.csproj" />
+    <Project Path="tests/Haldus.IntegrationTests/Haldus.IntegrationTests.csproj" />
+  </Folder>
+</Solution>

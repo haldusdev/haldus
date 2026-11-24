@@ -1,0 +1,44 @@
+# Haldus
+
+Archetype ve trait'lerle tekrarlayan backend kodunu derleme zamanında üreten .NET 10 framework'ü.
+
+```csharp
+builder.Services.AddHaldus<AppDbContext>();
+
+app.UseHaldus();
+app.MapCrud<Product>();
+```
+
+```csharp
+public partial class Product
+{
+    [MaxLength(200)]
+    public string Name { get; set; } = "";
+    public decimal Price { get; set; }
+}
+```
+
+Bu iki parçadan Haldus şunları üretir:
+
+- `Product` sınıfının `Id` alanını taşıyan diğer yarısı,
+- `ProductResponse`, `CreateProductRequest`, `UpdateProductRequest`,
+- `GET /products`, `GET /products/{id}`, `POST /products`, `PUT /products/{id}`,
+  `DELETE /products/{id}`,
+- EF Core model kaydı.
+
+## Durum
+
+Geliştirme aşamasında. Tasarım kararları ve aşamalar için [CLAUDE.md](CLAUDE.md), kararların
+dayandığı araştırma için [reports](reports/) klasörüne bakın.
+
+## Geliştirme
+
+```bash
+dotnet build
+```
+
+```bash
+dotnet test
+```
+
+Entegrasyon testleri Docker gerektirir.
