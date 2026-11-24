@@ -45,10 +45,26 @@ public sealed class HaldusGenerator : IIncrementalGenerator
             .Where(static handler => handler is not null)
             .Select(static (handler, _) => handler!);
 
+        var associations = context.SyntaxProvider
+            .CreateSyntaxProvider(
+                static (node, _) => OperationParser.IsAssociationCandidate(node),
+                static (syntaxContext, cancellationToken) => OperationParser.ParseAssociation(syntaxContext, cancellationToken))
+            .Where(static association => association is not null)
+            .Select(static (association, _) => association!);
+
         context.RegisterSourceOutput(
-            resources.Collect().Combine(dbContexts.Collect()).Combine(queries.Collect()).Combine(handlers.Collect()),
+            resources.Collect()
+                .Combine(dbContexts.Collect())
+                .Combine(queries.Collect())
+                .Combine(handlers.Collect())
+                .Combine(associations.Collect()),
             static (productionContext, data) => Emit(
-                productionContext, data.Left.Left.Left, data.Left.Left.Right, data.Left.Right, data.Right));
+                productionContext,
+                data.Left.Left.Left.Left,
+                data.Left.Left.Left.Right,
+                data.Left.Left.Right,
+                data.Left.Right,
+                data.Right));
 
         // Zincir derleme zamanında okunduğu için bir Map çağrısına kesintisiz bağlı olmayan bildirimler
         // sessizce yok sayılırdı; bunun yerine hata verilir.
@@ -95,7 +111,8 @@ public sealed class HaldusGenerator : IIncrementalGenerator
         ImmutableArray<ResourceModel> resources,
         ImmutableArray<DbContextModel> dbContexts,
         ImmutableArray<QueryModel> queries,
-        ImmutableArray<HandlerModel> handlers)
+        ImmutableArray<HandlerModel> handlers,
+        ImmutableArray<AssociationDeclaration> associationDeclarations)
     {
         var valid = new List<(ResourceModel Resource, string Namespace)>();
         var seen = new HashSet<string>();
@@ -130,6 +147,9 @@ public sealed class HaldusGenerator : IIncrementalGenerator
                 .Link([.. valid.Select(entry => entry.Resource)], diagnostic => Report(context, diagnostic))
                 .Select(resource => (resource, resource.Namespace)),
         ];
+
+        var associations = ResourceLinker.LinkAssociations(
+            associationDeclarations, [.. valid.Select(entry => entry.Resource)], diagnostic => Report(context, diagnostic));
 
         // Aynı istek tipi birden çok rotaya eşlenebilir; endpoint kodu bir kez üretilir.
         var validQueries = new List<QueryModel>();
@@ -177,11 +197,21 @@ public sealed class HaldusGenerator : IIncrementalGenerator
             AddSource(context, $"{hintPrefix}.Endpoints.g.cs", EndpointEmitter.Emit(resource, entityNamespace));
         }
 
-        AddSource(context, "HaldusModule.g.cs", ModuleEmitter.EmitModule(valid, distinctHandlers, validQueries));
+        foreach (var association in associations)
+        {
+            var hintPrefix = association.Namespace.Length == 0
+                ? association.LinkName
+                : $"{association.Namespace}.{association.LinkName}";
+
+            AddSource(context, $"{hintPrefix}.Entity.g.cs", AssociationEmitter.EmitEntity(association));
+            AddSource(context, $"{hintPrefix}.Endpoints.g.cs", AssociationEmitter.EmitEndpoints(association));
+        }
+
+        AddSource(context, "HaldusModule.g.cs", ModuleEmitter.EmitModule(valid, distinctHandlers, validQueries, associations));
 
         foreach (var dbContext in dbContexts.Distinct())
         {
-            if (ModuleEmitter.EmitDbContext(dbContext, valid) is { } source)
+            if (ModuleEmitter.EmitDbContext(dbContext, valid, associations) is { } source)
             {
                 AddSource(context, $"{dbContext.Name}.DbSets.g.cs", source);
             }

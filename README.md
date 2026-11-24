@@ -58,6 +58,27 @@ public sealed class ShippingQuoteHandler(AppDbContext db)
 
 Kısa işler için lambda da verilebilir: `app.MapQuery<EchoRequest, EchoResponse>((request, _) => ...)`.
 
+## İlişkiler
+
+```csharp
+app.MapCrud<Category>().Hierarchical();
+app.MapCrud<Product>().References<Category>(required: false);
+app.MapCrud<Address>().Under<Customer>();
+app.MapCrud<Plan>().Embeds<Money>();
+app.MapAssociation<Product, Tag>();
+```
+
+| Bildirim | Etkisi |
+|---|---|
+| `.References<T>()` | Yabancı anahtar alanı (`CategoryId`); yazılırken hedefin varlığı doğrulanır |
+| `.Under<T>()` | Kaynak ebeveynin adresi altında yaşar: `/customers/{customerId}/addresses` |
+| `.Hierarchical()` | `ParentId` ile ağaç; bir düğüm kendi altına taşınamaz |
+| `.Embeds<T>()` | O tipteki alanlar iç içe değer nesnesi olur, sahibinin kolonlarında saklanır |
+| `MapAssociation<TLeft, TRight>()` | Çoktan-çoğa bağ: `PUT` / `DELETE /products/{id}/tags/{tagId}`, iki yönlü liste |
+
+Bir kaynağın görünürlüğü başka bir kayıttan geliyorsa (ebeveyni kiracıya bağlı bir kaynak gibi), o
+kaynağa dokunan her sorgu bunu kendiliğinden uygular.
+
 ## Trait'ler ve süzme
 
 Davranışlar `Map*` çağrısının devamına zincirlenir:

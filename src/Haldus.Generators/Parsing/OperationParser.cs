@@ -56,6 +56,40 @@ internal static class OperationParser
             LocationInfo.From(name.GetLocation()));
     }
 
+    public static bool IsAssociationCandidate(SyntaxNode node) =>
+        node is InvocationExpressionSyntax
+        {
+            Expression: MemberAccessExpressionSyntax
+            {
+                Name: GenericNameSyntax { Identifier.ValueText: "MapAssociation", TypeArgumentList.Arguments.Count: 2 },
+            },
+        };
+
+    public static AssociationDeclaration? ParseAssociation(GeneratorSyntaxContext context, CancellationToken cancellationToken)
+    {
+        var invocation = (InvocationExpressionSyntax)context.Node;
+        var name = (GenericNameSyntax)((MemberAccessExpressionSyntax)invocation.Expression).Name;
+
+        // Uçlardan biri henüz üretilmemiş bir entity ise derleyici çağrıyı bağlayamaz; o durumda ad yeterlidir.
+        var symbolInfo = context.SemanticModel.GetSymbolInfo(invocation, cancellationToken);
+        var method = symbolInfo.Symbol as IMethodSymbol ?? symbolInfo.CandidateSymbols.OfType<IMethodSymbol>().FirstOrDefault();
+
+        if (method is not null && method.ContainingType?.ToDisplayString() != "Haldus.HaldusEndpointRouteBuilderExtensions")
+        {
+            return null;
+        }
+
+        var (leftName, leftType) = Describe(name.TypeArgumentList.Arguments[0], context.SemanticModel, cancellationToken);
+        var (rightName, rightType) = Describe(name.TypeArgumentList.Arguments[1], context.SemanticModel, cancellationToken);
+
+        return new AssociationDeclaration(leftName, leftType, rightName, rightType, LocationInfo.From(name.GetLocation()));
+    }
+
+    private static (string Name, string? Type) Describe(TypeSyntax syntax, SemanticModel semanticModel, CancellationToken cancellationToken) =>
+        semanticModel.GetTypeInfo(syntax, cancellationToken).Type is INamedTypeSymbol { TypeKind: not TypeKind.Error } type
+            ? (type.Name, type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat))
+            : (syntax.ToString(), null);
+
     public static bool IsHandlerCandidate(SyntaxNode node) => node is ClassDeclarationSyntax { BaseList: not null };
 
     public static HandlerModel? ParseHandler(GeneratorSyntaxContext context, CancellationToken cancellationToken)

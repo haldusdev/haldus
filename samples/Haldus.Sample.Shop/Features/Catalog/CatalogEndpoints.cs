@@ -19,6 +19,11 @@ public static class CatalogEndpoints
                 product => product.Description,
                 product => product.CategoryId);
 
+        // Ürünler ve etiketler çoktan-çoğa bağlanır: PUT /products/{productId}/tags/{tagId}
+        // Bağ kayıtlarının entity'si (ProductTag) üretilir.
+        app.MapCrud<Tag>();
+        app.MapAssociation<Product, Tag>();
+
         // Marka silinmez, yalnızca arşivlenir.
         app.MapCrud<Brand>()
             .Archivable()

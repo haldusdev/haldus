@@ -48,4 +48,14 @@ public static class HaldusEndpointRouteBuilderExtensions
     public static ResourceBuilder<TEntity> MapSingleton<TEntity>(this IEndpointRouteBuilder endpoints)
         where TEntity : class =>
         new(HaldusEndpointRegistry.Map<TEntity>(endpoints, nameof(MapSingleton)));
+
+    /// <summary>
+    /// İki kaynak arasında çoktan-çoğa bağ: <c>PUT</c> ile kur, <c>DELETE</c> ile kaldır, iki yönden de
+    /// listele (<c>/products/{id}/tags</c> ve <c>/tags/{id}/products</c>). Bağ kayıtlarının entity'si
+    /// (<c>ProductTag</c>) üretilir; iki uç da bir <c>Map*</c> çağrısıyla eşlenmiş olmalıdır.
+    /// </summary>
+    public static RouteGroupBuilder MapAssociation<TLeft, TRight>(this IEndpointRouteBuilder endpoints)
+        where TLeft : class
+        where TRight : class =>
+        HaldusEndpointRegistry.MapAssociation<TLeft, TRight>(endpoints);
 }

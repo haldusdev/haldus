@@ -30,5 +30,9 @@ public static class SalesEndpoints
 
         app.MapCrud<Delivery>()
             .References<Address>();
+
+        // Müşteri kiracıya bağlı olduğu için bağlar da öyledir: başka bir kiracı ne bağı görebilir
+        // ne de etiketin altında bu müşteriyi listeleyebilir.
+        app.MapAssociation<Customer, Catalog.Tag>();
     }
 }

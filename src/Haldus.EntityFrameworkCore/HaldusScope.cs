@@ -11,6 +11,9 @@ public static class HaldusFilters
 
     /// <summary>Ebeveyn altındaki kaydı, ebeveyni isteği yapana görünür değilse gizleyen filtre.</summary>
     public const string Parent = "Haldus.Parent";
+
+    /// <summary>Çoktan-çoğa bir bağı, iki ucundan biri isteği yapana görünür değilse gizleyen filtre.</summary>
+    public const string Association = "Haldus.Association";
 }
 
 /// <summary>Üretilen model yapılandırmasının kullandığı sabitler.</summary>

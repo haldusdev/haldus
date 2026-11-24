@@ -54,6 +54,18 @@ Bunlar kullanıcıyla kararlaştırıldı; yeniden sorma.
   lambda'dadır; ikisi de desteklenir (kullanıcı kararı). Lambda bağımlılık enjeksiyonu almaz; gerekirse
   `IServiceProvider` alan biçimi kullanılır.
 - Yazılmamış bir entity, `Map*` çağrısının bulunduğu namespace'e üretilir.
+- İlişkiler zincirde bildirilir:
+  - `.References<T>()`: yabancı anahtar alanı üretilir (`CategoryId`; adı hedefin adı + anahtar adıdır)
+    ve her yazmada hedefin var olduğu doğrulanır; bulunamazsa alan düzeyinde 400 döner. Varsayılan silme
+    davranışı `Restrict`'tir; referans verilen kaydın silinmesi 409 döner.
+  - `.Under<T>()`: kaynak ebeveynin adresi altına yerleşir (`/projects/{projectId}/tasks`); ebeveyn
+    adresten gelir, istek gövdesinde yer almaz. Varsayılan silme davranışı `Cascade`'dir.
+  - `.Hierarchical()`: isteğe bağlı `ParentId`; bir düğüm kendi altına taşınamaz, çocuğu olan düğüm
+    silinemez.
+  - `.Embeds<T>()`: o tipteki alanlar gömülü değer nesnesi olur (DTO'da iç içe nesne, EF'de complex
+    property). Alan kullanıcının partial sınıfında yazılır; nullable olamaz.
+  - `MapAssociation<TLeft, TRight>()`: bağ entity'si (`ProductTag`) üretilir; bağ iki yönden listelenir,
+    `PUT` ile kurulur, `DELETE` ile kaldırılır. İki uç da bir `Map*` çağrısıyla eşlenmiş olmalıdır.
 - `MapDetail` varsayılan olarak üst kaydın isteğinde gömülü yazılır; `.AsSubresource()` ile ayrı
   endpoint'lere geçer.
 - Eşzamanlılık trait'inin adı `ConcurrencyChecked` (eski adı `Versioned`). Sürüm yanıt gövdesinde değil
@@ -96,7 +108,7 @@ Bunlar kullanıcıyla kararlaştırıldı; yeniden sorma.
 
 ## Aşamalar
 
-1–4 tamamlandı (3. aşamaya `.Searchable()` da eklendi); sıradaki 5.
+1–5 tamamlandı (3. aşamaya `.Searchable()` da eklendi); sıradaki 6.
 
 1. İskelet
 2. Generator çekirdeği ve `MapCrud`
@@ -134,6 +146,17 @@ Bunlar kullanıcıyla kararlaştırıldı; yeniden sorma.
 - Arama koşulları `HaldusSearch` ile ifade ağacına çevrilir; değerler ifadeye sabit olarak değil bir
   nesnenin özelliği olarak konur ki EF Core onları SQL parametresi yapsın. Bir alanın koşul tipi
   (`StringCondition`, `RangeCondition<T>`, `EqualityCondition<T>`) `MapCallParser.TryClassify` ile seçilir.
+- Her `Map*` çağrısı tek başına ayrıştırılır; başka kaynaklara bağlı her şey (referans hedefinin anahtar
+  tipi, üretilen yabancı anahtar alanları, aranabilir alanların doğrulanması, bağların uçları)
+  `Linking/ResourceLinker` içinde, tüm kaynaklar bilindikten sonra çözülür.
+- **Görünürlük modele konur, tek tek sorgulara değil.** Bir kaynağın görünürlüğü başka bir kayıttan
+  geliyorsa (ebeveyn altındaki kaynak, çoktan-çoğa bağ) bunu adlandırılmış bir sorgu filtresi sağlar
+  (`HaldusFilters.Parent`, `HaldusFilters.Association`). Böylece o kaynağa referans veren, onun altına
+  yerleşen veya onu listeleyen her sorgu kendiliğinden korunur. Filtreyi kaldıran uçlar yalnızca kendi
+  filtresini adıyla kaldırmalıdır (`IgnoreQueryFilters(new[] { HaldusFilters.SoftDelete })`); parametresiz
+  `IgnoreQueryFilters()` kiracı ve ebeveyn korumasını da kaldırır ve üretilen kodda kullanılmaz.
+- Üretilen kod, tüketen projede örtük `using`'ler kapalıyken de derlenmelidir; generator testleri bunu
+  doğrular (örnek uygulama doğrulamaz, çünkü onda örtük `using`'ler açıktır).
 - Yeni bir archetype eklemek: `Model/ResourceModel.cs` içindeki `Archetype` enum'u ve uzantıları (temel
   işlemler, anahtar adı), `MapCallParser.ArchetypeOf` ve `Conflicts`, `EndpointEmitter`,
   `ModuleEmitter.AppendModel` ve çalışma zamanındaki `Map*` metodu.
@@ -155,6 +178,8 @@ Bunlar kullanıcıyla kararlaştırıldı; yeniden sorma.
 
 ## Kurallar
 
+- Commit'ten önce `dotnet test` çalıştır ve commit'i sonucuna bağla; test çıktısına bakmadan zincirleme
+  commit atma. Bekleyen `.received.cs` dosyası varken de commit atma.
 - Üretilen kodda ve kütüphanelerde kod İngilizce, yorumlar Türkçe.
 - Generator testleri üretilen çıktının hatasız derlendiğini de doğrulamalıdır.
 - .NET 11 yayınlandı ama LTS değil; paketler 10.x hattında tutulur.

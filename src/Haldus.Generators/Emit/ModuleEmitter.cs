@@ -10,7 +10,8 @@ internal static class ModuleEmitter
     public static string EmitModule(
         IReadOnlyList<(ResourceModel Resource, string Namespace)> resources,
         IReadOnlyList<HandlerModel> handlers,
-        IReadOnlyList<QueryModel> queries)
+        IReadOnlyList<QueryModel> queries,
+        IReadOnlyList<AssociationModel> associations)
     {
         var builder = new StringBuilder();
         builder.Append(ResourceEmitter.Header).Append('\n');
@@ -36,6 +37,11 @@ internal static class ModuleEmitter
                 AppendModel(model, resource, ResourceEmitter.QualifiedName(resource, entityNamespace));
             }
 
+            foreach (var association in associations)
+            {
+                model.Append(AssociationEmitter.EmitModel(association));
+            }
+
             model.Append("        });\n");
             blocks.Add(model.ToString());
         }
@@ -44,6 +50,13 @@ internal static class ModuleEmitter
         {
             var entity = ResourceEmitter.QualifiedName(resource, entityNamespace);
             blocks.Add($"        global::Haldus.HaldusEndpointRegistry.Register<{entity}>({entity}Endpoints.Map);\n");
+        }
+
+        foreach (var association in associations)
+        {
+            blocks.Add(
+                $"        global::Haldus.HaldusEndpointRegistry.RegisterAssociation<{association.Left.QualifiedName}, "
+                + $"{association.Right.QualifiedName}>({association.QualifiedLinkName}Endpoints.Map);\n");
         }
 
         if (handlers.Count > 0)
@@ -86,10 +99,24 @@ internal static class ModuleEmitter
     }
 
     /// <summary>Eklenecek DbSet yoksa <c>null</c> döner.</summary>
-    public static string? EmitDbContext(DbContextModel dbContext, IReadOnlyList<(ResourceModel Resource, string Namespace)> resources)
+    public static string? EmitDbContext(
+        DbContextModel dbContext,
+        IReadOnlyList<(ResourceModel Resource, string Namespace)> resources,
+        IReadOnlyList<AssociationModel> associations)
     {
         var existing = new HashSet<string>(dbContext.MemberNames);
         var builder = new StringBuilder();
+
+        foreach (var association in associations)
+        {
+            var setName = Naming.Pluralize(association.LinkName);
+            if (existing.Add(setName))
+            {
+                builder.Append(
+                    $"    public global::Microsoft.EntityFrameworkCore.DbSet<{association.QualifiedLinkName}> {setName} "
+                    + $"=> Set<{association.QualifiedLinkName}>();\n");
+            }
+        }
 
         foreach (var (resource, entityNamespace) in resources)
         {

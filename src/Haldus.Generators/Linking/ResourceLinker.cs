@@ -62,6 +62,63 @@ internal static class ResourceLinker
         return [.. linked.Select(resource => resource with { IsReferenced = restricted.Contains(resource.QualifiedName) })];
     }
 
+    /// <summary>Çoktan-çoğa bağların iki ucunu da eşlenmiş kaynaklara çözer.</summary>
+    public static List<AssociationModel> LinkAssociations(
+        IEnumerable<AssociationDeclaration> declarations,
+        IReadOnlyList<ResourceModel> resources,
+        Action<DiagnosticInfo> report)
+    {
+        var byType = resources.ToDictionary(resource => resource.QualifiedName);
+        var associations = new List<AssociationModel>();
+
+        foreach (var declaration in declarations)
+        {
+            void Fail(string id, params string[] arguments) =>
+                report(new DiagnosticInfo(id, declaration.Location, arguments.ToEquatableArray()));
+
+            var left = Find(declaration.LeftName, declaration.LeftType, resources, byType);
+            var right = Find(declaration.RightName, declaration.RightType, resources, byType);
+
+            if (left is null || right is null)
+            {
+                // Bağın iki ucu da Map çağrısıyla eşlenmiş olmalı; yanıt tipleri ve anahtarlar oradan gelir.
+                Fail("HALDUS009", left is null ? declaration.LeftName : declaration.RightName, "MapAssociation");
+            }
+            else if (left.QualifiedName == right.QualifiedName)
+            {
+                Fail("HALDUS007", $"'{left.EntityName}' cannot be associated with itself");
+            }
+            else if (new[] { left, right }.FirstOrDefault(end => !HasSingleColumnKey(end)) is { } unsupported)
+            {
+                Fail("HALDUS007", $"'{unsupported.EntityName}' cannot take part in an association: it has no single-column key (it is a singleton or a tenant-scoped store)");
+            }
+            else if (associations.All(existing => existing.LinkName != left.EntityName + right.EntityName))
+            {
+                associations.Add(new AssociationModel(left, right));
+            }
+        }
+
+        return associations;
+    }
+
+    private static bool HasSingleColumnKey(ResourceModel resource) =>
+        resource.Archetype != Archetype.Singleton && !(resource.Archetype.HasClientKey() && resource.Has(Traits.MultiTenant));
+
+    private static ResourceModel? Find(
+        string name,
+        string? type,
+        IReadOnlyList<ResourceModel> resources,
+        Dictionary<string, ResourceModel> byType)
+    {
+        if (type is not null)
+        {
+            return byType.TryGetValue(type, out var exact) ? exact : null;
+        }
+
+        var named = resources.Where(resource => resource.EntityName == name).ToList();
+        return named.Count == 1 ? named[0] : null;
+    }
+
     private static ResolvedReference? Resolve(
         ResourceModel resource,
         ReferenceDeclaration declaration,

@@ -191,6 +191,29 @@ internal sealed record ResolvedReference(
     string TargetRoute,
     OnDeleteBehavior OnDelete);
 
+/// <summary>Zincirsiz bir <c>MapAssociation&lt;TLeft, TRight&gt;()</c> çağrısı; uçları henüz çözülmemiştir.</summary>
+internal sealed record AssociationDeclaration(
+    string LeftName,
+    string? LeftType,
+    string RightName,
+    string? RightType,
+    LocationInfo Location);
+
+/// <summary>İki ucu da bilinen kaynaklara çözülmüş çoktan-çoğa bağ.</summary>
+internal sealed record AssociationModel(ResourceModel Left, ResourceModel Right)
+{
+    /// <summary>Bağ kayıtlarını tutan, Haldus'un ürettiği entity: <c>ProductTag</c>.</summary>
+    public string LinkName => Left.EntityName + Right.EntityName;
+
+    public string Namespace => Left.Namespace;
+
+    public string QualifiedLinkName => Namespace.Length == 0 ? $"global::{LinkName}" : $"global::{Namespace}.{LinkName}";
+
+    public string LeftKey => Left.EntityName + Left.KeyName;
+
+    public string RightKey => Right.EntityName + Right.KeyName;
+}
+
 /// <summary><c>.Searchable(...)</c> içinde sayılan, henüz doğrulanmamış bir alan.</summary>
 internal sealed record SearchFieldRequest(string? FieldName, string Expression, LocationInfo Location);
 

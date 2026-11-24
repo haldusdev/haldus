@@ -14,6 +14,32 @@ public static class HaldusEndpointRegistry
         Mappers[typeof(TEntity)] = map;
     }
 
+    private static readonly ConcurrentDictionary<(Type Left, Type Right), Func<IEndpointRouteBuilder, RouteGroupBuilder>> Associations = new();
+
+    public static void RegisterAssociation<TLeft, TRight>(Func<IEndpointRouteBuilder, RouteGroupBuilder> map)
+        where TLeft : class
+        where TRight : class
+    {
+        ArgumentNullException.ThrowIfNull(map);
+        Associations[(typeof(TLeft), typeof(TRight))] = map;
+    }
+
+    internal static RouteGroupBuilder MapAssociation<TLeft, TRight>(IEndpointRouteBuilder endpoints)
+        where TLeft : class
+        where TRight : class
+    {
+        ArgumentNullException.ThrowIfNull(endpoints);
+
+        if (!Associations.TryGetValue((typeof(TLeft), typeof(TRight)), out var map))
+        {
+            throw new InvalidOperationException(
+                $"No Haldus association was generated for '{typeof(TLeft).Name}' and '{typeof(TRight).Name}'. " +
+                "Both must be mapped with a Map call in the project that calls MapAssociation.");
+        }
+
+        return map(endpoints);
+    }
+
     internal static RouteGroupBuilder Map<TEntity>(IEndpointRouteBuilder endpoints, string archetype) where TEntity : class
     {
         ArgumentNullException.ThrowIfNull(endpoints);
