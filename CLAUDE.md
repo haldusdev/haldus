@@ -443,8 +443,14 @@ aşaması değildir ve kararları yine sorulmadan verildi:
 - Örnek yönetim paneli (`samples/Haldus.Sample.Shop.Web`) ve mobil uygulama (`samples/Haldus.Sample.Shop.Mobile`);
   seçimleri "Açık kararlar"dadır.
 
-Bilerek yapılmayanlar: gerçek kimlik doğrulama örneği, arayüzler için otomatik test, mobil uygulamanın cihazda
-denenmesi, yük ölçümü. Raporun "Bilinen sınırlar" tablosundaki kalemler de yazılmadı; hiçbiri bir plana girmemişti.
+- Raporun "Bilinen sınırlar" tablosundan yeni bağımlılık gerektirmeyenler: tekrar serisinde haftanın günleri ve saat
+  dilimi, `Encrypted`, onay zinciri (`ApprovalRoles`, `IApprovalLevels`), `ReadReceipts`, `ScheduledPublishing`,
+  `KeyStrategy.Ulid` / `Client`, bakiyede `Holds`, dosyada multipart yükleme ve `SignedLinks`.
+- Örnekte gerçek kimlik doğrulama (aşağıda, "Açık kararlar").
+
+Yapılmayanlar ve nedenleri: arayüzler için otomatik test (genel kural: test altyapısı kendiliğinden kurulmaz), mobil
+uygulamanın cihazda denenmesi (bu makinede emülatör yok), yeni bağımlılık gerektiren paketler (nesne deposu, mesaj
+kuyruğu). Raporun "Bilinen sınırlar" tablosunda kalan satırlar bilerek dar bırakılanlardır.
 ## Açık kararlar
 
 - **Frontend ve mobil desteğinin kapsamı kapandı (31. aşama; kullanıcı sormamamı istedi, ayrıca onaylanmadı):** Haldus
@@ -465,8 +471,24 @@ denenmesi, yük ölçümü. Raporun "Bilinen sınırlar" tablosundaki kalemler d
       `pnpm typecheck`, `pnpm lint`, `pnpm build` ile ve çalışan backend'e karşı tarayıcıda elle doğrulandı.
     - Bunlar yeni bağımlılıklardır (`react-router`, `i18next`, `react-i18next`) ve onayı alınmadı. Geri kalan
       bağımlılıklar genel kurallarda adı geçen araçlardan ve onların CLI'ından gelir.
-  - Paneldeki kimlik bir demodur: örnek backend'in `DemoIdentity`'si gibi kullanıcıyı ve kiracıyı başlıklarla
-    gönderir, parola yoktur. Gerçek bir kimlik doğrulama örneği yazılmadı.
+  - Kimlik doğrulama (planlardan sonra; kimlik sağlayıcı seçimi sorulamadığı için yeni bağımlılık gerektirmeyen yol
+    seçildi, **ayrıca onaylanmadı**): örnek mağaza e-posta + parola ile giriş yapar ve ASP.NET Core'un yerleşik
+    taşıyıcı token şemasını kullanır (`AddBearerToken`; `Features/Auth/AuthEndpoints.cs`). Hesap (`ShopAccount`) elle
+    yazılmış bir tablodur, Haldus kaynağı değildir; her hesap kendi kiracısıyla doğar. Parola `PasswordHasher<T>` ile
+    özetlenir; ikisi de paylaşılan çatıdadır, paket eklenmedi. ASP.NET Core Identity ve OpenID Connect kullanılmadı.
+    - Haldus'ta hiçbir şey değişmedi: kullanıcıyı ve kiracıyı zaten claim'lerden okuyordu.
+    - `Shop:DemoIdentity` açıksa kimlik, doğrulanmadan, başlıklardan okunur (`X-User-Id`, `X-Tenant-Id`,
+      `X-User-Roles`). Varsayılan olarak kapalıdır; entegrasyon testleri açar (`ShopFixture`), kimlik doğrulama
+      testleri kapalı haliyle ikinci bir uygulama açar (`CreateAuthenticatedAppClient`).
+    - `UseRejectedTokenChallenge`: reddedilen bir token sunan istek her kaynakta 401 alır (`AllowAnonymous` uçlar
+      hariç). İlk yazımda yoktu; panel tarayıcıda denenirken çıktı: geçersiz token'lı istek anonim sayılıyor,
+      kiracıya ait kaynakta 403 alıyor ve istemci oturumu yenilemiyordu.
+    - İstemciler token'ı `Authorization` başlığında taşır, 401'de bir kez yeniler (eşzamanlı istekler tek yenilemeyi
+      bekler) ve giriş/kayıt/yenileme uçlarına token eklemez. Web'de token'lar `localStorage` içindedir (XSS'e açık;
+      örnek için kabul edilmiş ödünleşim), mobilde güvenli depoda, her biri ayrı anahtarda.
+    - Bilinen sınırlar: çıkış sunucuda iptal değildir (yenileme token'ı süresi dolana kadar geçerlidir); e-posta
+      doğrulaması, parola sıfırlama, hesap kilidi ve hız sınırı yoktur. Token'lar Data Protection anahtarlarına
+      bağlıdır; anahtarların kalıcılığı ve paylaşımı (birden çok sunucu) uygulamanın işidir.
   - Arayüzün dili `Accept-Language` ile backend'e de gider; backend'in mesajları o dilde döner.
   - Mobil uygulamada (aynı gerekçeyle, **ayrıca onaylanmadı**): yönlendirme genel kurallardaki Expo Router'dır; i18n
     web'deki gibi i18next + react-i18next, cihazın dili `expo-localization` ile okunur; oturum ve dil seçimi
@@ -474,8 +496,9 @@ denenmesi, yük ölçümü. Raporun "Bilinen sınırlar" tablosundaki kalemler d
     `expo-localization` ve `expo-secure-store` da onayı alınmamış yeni bağımlılıklardır.
   - Mobil uygulama yalnızca Expo'nun **web** hedefinde, çalışan backend'e karşı doğrulandı (bu makinede emülatör
     yoktu). Android ve iOS'ta çalıştırılmadı; "mobilde çalışıyor" denmeden önce bir cihazda denenmelidir.
-  - Örnek backend iki ayar kazandı, ikisi de varsayılan olarak kapalıdır: `Shop:CreateDatabase` (tabloları açılışta
-    oluşturur; yalnızca arayüzleri denemek için) ve `Shop:CorsOrigins` (sayılan kaynaklara CORS izni).
+  - Örnek backend üç ayar kazandı, üçü de varsayılan olarak kapalıdır: `Shop:CreateDatabase` (tabloları açılışta
+    oluşturur; yalnızca arayüzleri denemek için), `Shop:CorsOrigins` (sayılan kaynaklara CORS izni) ve
+    `Shop:DemoIdentity` (kimliği başlıklardan okur; testler için).
   - Örnek mağaza bu yüzden sayıları katı okur (`JsonNumberHandling.Strict`): varsayılan ayar şemaya `integer | string`
     yazıyor ve istemci tipleri her sayıyı `number | string` görüyordu. Bu, örnek uygulamanın ayarıdır; Haldus
     tüketen uygulamaya dayatmaz.

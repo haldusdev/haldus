@@ -234,7 +234,7 @@ sınırları ayrıca [README](../README.md) ve `CLAUDE.md` dosyalarında, özell
 | "İş tanımı + çalıştırmalar" modeli (AIP-152) | — | İş kaydı zaten bir çalıştırmadır; yeniden çalıştırma yeni bir iş kaydıdır |
 | İstemcinin verdiği metin kimlik (slug) | — | ULID ve istemcinin verdiği `Guid` kimlik sonradan yazıldı; anlamlı metin anahtar için `NaturalKey` veya `MapStore` vardır |
 | "Uzatma kancaları" | — | Araştırmanın ilk sürüm listesinde adı geçiyor, tanımı yok |
-| Gerçek kimlik doğrulamalı bir örnek arayüz | — | Örnek panel ve mobil uygulama demo kimliğiyle (başlıklar) çalışır; kimlik sağlayıcı seçimi sorulması gereken bir karardır |
+| Kimlik sağlayıcılı (OpenID Connect) örnek; sunucuda çıkış, parola sıfırlama, hesap kilidi | — | Gerçek kimlik doğrulama sonradan yazıldı: örnek mağaza parola ile giriş yapar ve ASP.NET Core'un yerleşik taşıyıcı token'ını kullanır, iki arayüz de onu taşır ve yeniler. Ayrı bir kimlik sağlayıcı yeni bağımlılık ve sorulması gereken bir seçimdir |
 | Arayüzler için otomatik test | — | Frontend test framework'ü sorulması gereken bir seçimdi; arayüzler tip denetimi, derleme ve elle doğrulandı |
 
 ## Bu sınamanın söylemediği

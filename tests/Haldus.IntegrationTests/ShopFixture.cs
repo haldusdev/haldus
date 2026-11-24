@@ -21,6 +21,19 @@ public sealed class ShopFixture : IAsyncLifetime
     /// </summary>
     public HttpClient CreateClient(Action<IServiceCollection> configureServices) => CreateFactory(configureServices).CreateClient();
 
+    /// <summary>
+    /// Aynı veritabanına bağlanan, gerçek kimlik doğrulamayla çalışan ikinci bir uygulama: kimlik başlıklardan değil,
+    /// giriş yapılarak alınan token'dan okunur.
+    /// </summary>
+    public HttpClient CreateAuthenticatedAppClient()
+    {
+        _authenticatedFactory ??= new WebApplicationFactory<ShopMessages>().WithWebHostBuilder(builder =>
+            builder.UseSetting("ConnectionStrings:Default", _database.GetConnectionString()));
+
+        return _authenticatedFactory.CreateClient();
+    }
+
+    private WebApplicationFactory<ShopMessages>? _authenticatedFactory;
     public WebApplicationFactory<ShopMessages> CreateFactory(Action<IServiceCollection> configureServices) =>
         (_factory ?? throw new InvalidOperationException("The fixture has not been initialized."))
             .WithWebHostBuilder(builder => builder.ConfigureTestServices(configureServices));
@@ -42,8 +55,10 @@ public sealed class ShopFixture : IAsyncLifetime
     {
         await _database.StartAsync();
 
-        _factory = new WebApplicationFactory<ShopMessages>().WithWebHostBuilder(builder =>
-            builder.UseSetting("ConnectionStrings:Default", _database.GetConnectionString()));
+        // Testler kimliği başlıklarla verir; kimlik doğrulamanın kendisi AuthEndpointTests'te ayrı bir uygulamayla sınanır.
+        _factory = new WebApplicationFactory<ShopMessages>().WithWebHostBuilder(builder => builder
+            .UseSetting("ConnectionStrings:Default", _database.GetConnectionString())
+            .UseSetting("Shop:DemoIdentity", "true"));
 
         await using var scope = _factory.Services.CreateAsyncScope();
         await scope.ServiceProvider.GetRequiredService<AppDbContext>().Database.EnsureCreatedAsync();
@@ -51,6 +66,11 @@ public sealed class ShopFixture : IAsyncLifetime
 
     public async ValueTask DisposeAsync()
     {
+        if (_authenticatedFactory is not null)
+        {
+            await _authenticatedFactory.DisposeAsync();
+        }
+
         if (_factory is not null)
         {
             await _factory.DisposeAsync();

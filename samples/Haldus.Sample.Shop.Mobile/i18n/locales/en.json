@@ -17,14 +17,18 @@
   },
   "signIn": {
     "title": "Sign in",
-    "heading": "Sign in to the demo",
-    "description": "The sample backend reads the user and the tenant from request headers. There is no password; pick any name.",
-    "userId": "User name",
-    "userIdRequired": "Enter a user name.",
-    "tenantId": "Tenant ID",
-    "tenantIdInvalid": "Enter a valid GUID.",
-    "newTenant": "Generate a new tenant",
-    "submit": "Sign in"
+    "heading": "Sign in",
+    "description": "Enter the e-mail and password of your account.",
+    "registerHeading": "Create an account",
+    "registerDescription": "Your favorites and your basket belong to your account.",
+    "email": "E-mail",
+    "password": "Password",
+    "passwordHelp": "At least 8 characters.",
+    "submit": "Sign in",
+    "registerSubmit": "Create account",
+    "submitting": "Please wait…",
+    "switchToRegister": "Don't have an account? Create one",
+    "switchToSignIn": "Already have an account? Sign in"
   },
   "products": {
     "searchPlaceholder": "Search products",

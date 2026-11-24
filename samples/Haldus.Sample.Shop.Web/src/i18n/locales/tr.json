@@ -50,16 +50,20 @@
     "tr": "Türkçe"
   },
   "login": {
-    "title": "Demoya giriş yap",
-    "description": "Örnek backend kullanıcıyı ve kiracıyı istek başlıklarından okur. Parola yoktur; istediğiniz adı yazın.",
-    "userId": "Kullanıcı adı",
-    "userIdHelp": "X-User-Id başlığında gönderilir.",
-    "userIdRequired": "Bir kullanıcı adı yazın.",
-    "tenantId": "Kiracı kimliği",
-    "tenantIdHelp": "X-Tenant-Id başlığında gönderilir. Siparişler yalnızca kendi kiracısında görünür.",
-    "tenantIdInvalid": "Geçerli bir GUID yazın.",
-    "newTenant": "Yeni kiracı üret",
-    "submit": "Giriş yap"
+    "title": "Giriş yap",
+    "description": "Hesabınızın e-postasını ve parolasını yazın.",
+    "registerTitle": "Hesap oluştur",
+    "registerDescription": "Her hesap kendi kiracısıyla başlar; siparişler yalnızca o kiracıda görünür.",
+    "email": "E-posta",
+    "password": "Parola",
+    "passwordHelp": "En az 8 karakter.",
+    "submit": "Giriş yap",
+    "registerSubmit": "Hesap oluştur",
+    "submitting": "Lütfen bekleyin…",
+    "noAccount": "Hesabınız yok mu?",
+    "haveAccount": "Zaten hesabınız var mı?",
+    "switchToRegister": "Oluşturun",
+    "switchToSignIn": "Giriş yapın"
   },
   "products": {
     "title": "Ürünler",

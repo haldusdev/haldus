@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button"
 import { Toaster } from "@/components/ui/sonner"
 import { TooltipProvider } from "@/components/ui/tooltip"
 import { problemStatus } from "@/lib/problem"
+import { getSession, subscribeSession } from "@/lib/session"
 import { CategoriesPage } from "@/pages/categories"
 import { LoginPage } from "@/pages/login"
 import { OrderDetailPage } from "@/pages/order-detail"
@@ -28,6 +29,18 @@ const queryClient = new QueryClient({
   },
 })
 
+// Önbellekteki veri onu okuyan hesaba aittir; hesap değişince (çıkış, başka hesapla giriş) boşaltılır.
+// Token'ın yenilenmesi hesabı değiştirmez.
+let cachedFor = getSession()?.accountId
+
+subscribeSession(() => {
+  const accountId = getSession()?.accountId
+
+  if (accountId !== cachedFor) {
+    cachedFor = accountId
+    queryClient.clear()
+  }
+})
 function NotFoundPage() {
   const { t } = useTranslation()
 

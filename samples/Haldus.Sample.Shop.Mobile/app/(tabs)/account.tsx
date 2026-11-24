@@ -34,7 +34,7 @@ export default function AccountScreen() {
 
   return (
     <ScrollView className="flex-1 bg-background" contentContainerClassName="p-4">
-      <Row label={t('account.user')} value={session?.userId ?? ''} />
+      <Row label={t('account.user')} value={session?.email ?? ''} />
       <Separator />
       <Row label={t('account.tenant')} value={session?.tenantId ?? ''} />
       <Separator />

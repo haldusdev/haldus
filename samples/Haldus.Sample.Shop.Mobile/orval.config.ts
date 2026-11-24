@@ -7,7 +7,7 @@ export default defineConfig({
     input: {
       target: '../Haldus.Sample.Shop/openapi.json',
       // Uygulama yalnızca kullandığı kaynakların istemcisini taşır.
-      filters: { tags: ['Products', 'Favorites', 'Baskets'] },
+      filters: { tags: ['Auth', 'Products', 'Favorites', 'Baskets'] },
     },
     output: {
       mode: 'tags-split',
@@ -17,7 +17,7 @@ export default defineConfig({
       httpClient: 'fetch',
       clean: true,
       override: {
-        // Her istek bu sarmalayıcıdan geçer: backend'in adresi, kimlik başlıkları, dil ve hata davranışı orada.
+        // Her istek bu sarmalayıcıdan geçer: backend'in adresi, oturumun token'ı, dil ve hata davranışı orada.
         mutator: { path: './lib/api-fetch.ts', name: 'apiFetch' },
         // Hook'lar yalnızca başarılı yanıtı döndürür; başarısız yanıt hata olarak fırlatılır.
         fetch: { forceSuccessResponse: true },

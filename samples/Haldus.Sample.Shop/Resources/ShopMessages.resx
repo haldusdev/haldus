@@ -24,4 +24,13 @@
   <data name="GuestBasketNotFound" xml:space="preserve">
     <value>The guest basket was not found or has expired.</value>
   </data>
+  <data name="InvalidCredentials" xml:space="preserve">
+    <value>The e-mail address or the password is incorrect.</value>
+  </data>
+  <data name="SessionExpired" xml:space="preserve">
+    <value>Your session has expired; please sign in again.</value>
+  </data>
+  <data name="EmailTaken" xml:space="preserve">
+    <value>An account with this e-mail address already exists.</value>
+  </data>
 </root>

@@ -1,31 +1,67 @@
 import i18n from "@/i18n"
-import { getSession } from "@/lib/session"
+import { getSession, renewTokens, signOut } from "@/lib/session"
+import type { Session } from "@/lib/session"
 
 /** Backend'in adresi. Geliştirmede Vite bu öneki örnek backend'e yönlendirir (vite.config.ts). */
 const API_BASE: string = import.meta.env.VITE_API_BASE ?? "/api"
 
+const CREDENTIAL_ROUTES = ["/auth/login", "/auth/register", "/auth/refresh"]
+
+type Tokens = { accessToken: string; refreshToken: string }
+
 /**
- * orval'ın ürettiği her istek buradan geçer (orval.config.ts: `override.mutator`). Üç şey ekler:
- * demo kimliğinin başlıkları, arayüzün dili (backend mesajlarını o dilde döndürür) ve hata davranışı.
+ * Yenileme isteğini yapan işlev. Üretilen istemci bu dosyayı içe aktardığı için burada doğrudan çağrılamaz
+ * (döngüsel bağımlılık olurdu); `lib/auth.ts` onu açılışta buraya verir.
+ */
+type Refresher = (refreshToken: string) => Promise<Tokens>
+
+let refresher: Refresher | undefined
+let renewal: Promise<boolean> | undefined
+
+export function setSessionRefresher(next: Refresher) {
+  refresher = next
+}
+
+/**
+ * orval'ın ürettiği her istek buradan geçer (orval.config.ts: `override.mutator`). Üç şey ekler: oturumun
+ * token'ı, arayüzün dili (backend mesajlarını o dilde döndürür) ve hata davranışı.
  *
  * Başarısız yanıtta gövde (ProblemDetails) fırlatılır; böylece TanStack Query isteği hatalı sayar ve
  * üretilen hook'ların hata tipi (`ProblemDetails | HttpValidationProblemDetails`) gerçekten gelen değerle eşleşir.
  */
-export const apiFetch = async <T>(
+export const apiFetch = <T>(url: string, options: RequestInit): Promise<T> =>
+  request<T>(url, options, true)
+
+async function request<T>(
   url: string,
-  options: RequestInit
-): Promise<T> => {
+  options: RequestInit,
+  mayRenew: boolean
+): Promise<T> {
   const headers = new Headers(options.headers)
   headers.set("Accept-Language", i18n.language)
 
   const session = getSession()
+  // Giriş, kayıt ve yenileme token istemez; süresi dolmuş bir token onlara eklenmez.
+  const credentialRoute = CREDENTIAL_ROUTES.some((route) => url.startsWith(route))
 
-  if (session) {
-    headers.set("X-User-Id", session.userId)
-    headers.set("X-Tenant-Id", session.tenantId)
+  if (session && !credentialRoute && !headers.has("Authorization")) {
+    headers.set("Authorization", `Bearer ${session.accessToken}`)
   }
 
   const response = await fetch(`${API_BASE}${url}`, { ...options, headers })
+
+  // Erişim token'ının süresi dolmuş olabilir: bir kez yenilenir ve istek yinelenir. Giriş ve yenileme uçlarının kendi
+  // 401 yanıtı (yanlış parola, geçersiz yenileme token'ı) yenileme nedeni değildir.
+  if (
+    response.status === 401 &&
+    mayRenew &&
+    session &&
+    !credentialRoute &&
+    (await renew(session))
+  ) {
+    return request<T>(url, options, false)
+  }
+
   const text = [204, 205, 304].includes(response.status)
     ? ""
     : await response.text()
@@ -39,6 +75,45 @@ export const apiFetch = async <T>(
   }
 
   return { data, status: response.status, headers: response.headers } as T
+}
+
+/** Aynı anda 401 alan istekler tek bir yenilemeyi bekler; yenileme token'ı bir kez kullanılır. */
+function renew(sent: Session): Promise<boolean> {
+  const current = getSession()
+
+  if (!current) {
+    return Promise.resolve(false)
+  }
+
+  if (current.accessToken !== sent.accessToken) {
+    // Başka bir istek bu arada yeniledi.
+    return Promise.resolve(true)
+  }
+
+  renewal ??= refresh(current.refreshToken).finally(() => {
+    renewal = undefined
+  })
+
+  return renewal
+}
+
+async function refresh(refreshToken: string): Promise<boolean> {
+  if (!refresher) {
+    return false
+  }
+
+  try {
+    const tokens = await refresher(refreshToken)
+    renewTokens(tokens.accessToken, tokens.refreshToken)
+    return true
+  } catch (error) {
+    // Backend yenilemeyi reddettiyse oturum bitmiştir; ağ hatasında oturum korunur ve istek hatasıyla döner.
+    if (typeof error === "object" && error !== null && "status" in error) {
+      signOut()
+    }
+
+    return false
+  }
 }
 
 function parse(text: string): unknown {

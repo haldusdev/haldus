@@ -17,14 +17,18 @@
   },
   "signIn": {
     "title": "Giriş",
-    "heading": "Demoya giriş yap",
-    "description": "Örnek backend kullanıcıyı ve kiracıyı istek başlıklarından okur. Parola yoktur; istediğiniz adı yazın.",
-    "userId": "Kullanıcı adı",
-    "userIdRequired": "Bir kullanıcı adı yazın.",
-    "tenantId": "Kiracı kimliği",
-    "tenantIdInvalid": "Geçerli bir GUID yazın.",
-    "newTenant": "Yeni kiracı üret",
-    "submit": "Giriş yap"
+    "heading": "Giriş yap",
+    "description": "Hesabınızın e-postasını ve parolasını yazın.",
+    "registerHeading": "Hesap oluştur",
+    "registerDescription": "Favorileriniz ve sepetiniz hesabınıza aittir.",
+    "email": "E-posta",
+    "password": "Parola",
+    "passwordHelp": "En az 8 karakter.",
+    "submit": "Giriş yap",
+    "registerSubmit": "Hesap oluştur",
+    "submitting": "Lütfen bekleyin…",
+    "switchToRegister": "Hesabınız yok mu? Oluşturun",
+    "switchToSignIn": "Zaten hesabınız var mı? Giriş yapın"
   },
   "products": {
     "searchPlaceholder": "Ürün ara",

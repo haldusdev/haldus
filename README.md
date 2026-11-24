@@ -761,8 +761,17 @@ kullandığı kaynaklar için üretir:
 | [Mobil uygulama](samples/Haldus.Sample.Shop.Mobile) | Expo, Expo Router, React Native Reusables, NativeWind | Sayfa sayfa yüklenen ürün listesi, favoriler (`/me/favorites`), kullanıcının sepeti (`/me/baskets`) |
 
 İkisi de doğrulamayı backend'e bırakır (alan hataları yanıttan okunur) ve arayüzün dilini `Accept-Language` ile
-backend'e taşır; backend'in mesajları o dilde döner. Kimlik bir demodur: örnek backend kullanıcıyı ve kiracıyı
-başlıklardan okur. Mobil uygulama Expo'nun web hedefinde doğrulandı; Android ve iOS'ta çalıştırılmadı.
+backend'e taşır; backend'in mesajları o dilde döner. Mobil uygulama Expo'nun web hedefinde doğrulandı; Android ve
+iOS'ta çalıştırılmadı.
+
+Kimlik doğrulama gerçektir ama küçüktür: örnek mağaza e-posta ve parola ile giriş yapar (`/auth/register`,
+`/auth/login`, `/auth/refresh`, `/auth/me`) ve ASP.NET Core'un yerleşik taşıyıcı token şemasını kullanır; ayrı bir
+kimlik sağlayıcı veya paket yoktur. Haldus bunun yalnızca sonucunu görür: kullanıcıyı ve kiracıyı token'daki
+claim'lerden okur. İki arayüz de token'ı `Authorization` başlığında taşır ve süresi dolunca yeniler. Reddedilen bir
+token sunan istek, vardığı kaynak ne olursa olsun 401 alır (`UseRejectedTokenChallenge`); bu olmadan aynı istek
+kullanıcıya ait kaynakta 401, kiracıya ait kaynakta 403, herkese açık kaynakta 200 alırdı ve istemci oturumunu
+yenilemesi gerektiğini anlayamazdı. Entegrasyon testleri kimliği başlıklardan okuyan eski yolu kullanmaya devam eder
+(`Shop:DemoIdentity`; varsayılan olarak kapalıdır).
 
 ## Durum
 

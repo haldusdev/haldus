@@ -1,9 +1,10 @@
 namespace Haldus.Sample.Shop;
 
 /// <summary>
-/// Yalnızca örnek içindir: kiracıyı ve kullanıcıyı istek başlıklarından okur. Başlıkları istemci
-/// belirlediği için güvenli değildir; gerçek bir uygulamada Haldus'un varsayılanı olan claim tabanlı
-/// çözümleme (kimlik doğrulamayla birlikte) kullanılmalıdır.
+/// Yalnızca testler ve yerel denemeler içindir (<c>Shop:DemoIdentity</c>): kiracıyı ve kullanıcıyı istek
+/// başlıklarından okur. Başlıkları istemci belirlediği için güvenli değildir ve varsayılan olarak kapalıdır; örnek
+/// uygulama normalde Haldus'un varsayılanı olan claim tabanlı çözümlemeyi, gerçek kimlik doğrulamayla
+/// (<c>Features/Auth</c>) birlikte kullanır.
 /// </summary>
 public sealed class DemoIdentity(IHttpContextAccessor accessor) : ITenantProvider, ICurrentUser, ICurrentUserRoles
 {

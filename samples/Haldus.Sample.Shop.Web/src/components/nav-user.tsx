@@ -41,7 +41,7 @@ export function NavUser() {
   }
 
   const tenant = t("nav.tenant", { tenant: session.tenantId.slice(0, 8) })
-  const initials = session.userId.slice(0, 2).toUpperCase()
+  const initials = session.email.slice(0, 2).toUpperCase()
 
   const identity = (
     <>
@@ -49,7 +49,7 @@ export function NavUser() {
         <AvatarFallback className="rounded-lg">{initials}</AvatarFallback>
       </Avatar>
       <div className="grid flex-1 text-left text-sm leading-tight">
-        <span className="truncate font-medium">{session.userId}</span>
+        <span className="truncate font-medium">{session.email}</span>
         <span className="truncate text-xs">{tenant}</span>
       </div>
     </>

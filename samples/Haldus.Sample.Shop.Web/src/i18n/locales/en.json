@@ -50,16 +50,20 @@
     "tr": "Türkçe"
   },
   "login": {
-    "title": "Sign in to the demo",
-    "description": "The sample backend reads the user and the tenant from request headers. There is no password; pick any name.",
-    "userId": "User name",
-    "userIdHelp": "Sent as the X-User-Id header.",
-    "userIdRequired": "Enter a user name.",
-    "tenantId": "Tenant ID",
-    "tenantIdHelp": "Sent as the X-Tenant-Id header. Orders are visible only within their tenant.",
-    "tenantIdInvalid": "Enter a valid GUID.",
-    "newTenant": "Generate a new tenant",
-    "submit": "Sign in"
+    "title": "Sign in",
+    "description": "Enter the e-mail and password of your account.",
+    "registerTitle": "Create an account",
+    "registerDescription": "Every account starts with its own tenant; orders are visible only within it.",
+    "email": "E-mail",
+    "password": "Password",
+    "passwordHelp": "At least 8 characters.",
+    "submit": "Sign in",
+    "registerSubmit": "Create account",
+    "submitting": "Please wait…",
+    "noAccount": "Don't have an account?",
+    "haveAccount": "Already have an account?",
+    "switchToRegister": "Create one",
+    "switchToSignIn": "Sign in"
   },
   "products": {
     "title": "Products",

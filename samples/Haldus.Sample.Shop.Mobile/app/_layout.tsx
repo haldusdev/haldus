@@ -11,8 +11,9 @@ import * as React from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { restoreLanguage } from '@/i18n';
+import '@/lib/auth';
 import { problemStatus } from '@/lib/problem';
-import { restoreSession, useSession } from '@/lib/session';
+import { getSession, restoreSession, subscribeSession, useSession } from '@/lib/session';
 import { NAV_THEME } from '@/lib/theme';
 
 export {
@@ -36,6 +37,18 @@ const queryClient = new QueryClient({
   },
 });
 
+// Önbellekteki veri onu okuyan hesaba aittir; hesap değişince (çıkış, süresi dolan oturum, başka hesapla giriş)
+// boşaltılır. Token'ın yenilenmesi hesabı değiştirmez.
+let cachedFor = getSession()?.accountId;
+
+subscribeSession(() => {
+  const accountId = getSession()?.accountId;
+
+  if (accountId !== cachedFor) {
+    cachedFor = accountId;
+    queryClient.clear();
+  }
+});
 export default function RootLayout() {
   const { colorScheme } = useColorScheme();
   const { t } = useTranslation();

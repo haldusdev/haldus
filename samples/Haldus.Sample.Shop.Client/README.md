@@ -48,7 +48,8 @@ function Cars() {
 ```
 
 Adresler görelidir (`/cars`). Başka bir sunucuya gidecekse temel adres orval yapılandırmasında (`output.baseUrl`) ya da
-özel bir `fetch` sarmalayıcısıyla (`output.override.mutator`) verilir; kimlik başlıkları da orada eklenir.
+özel bir `fetch` sarmalayıcısıyla (`output.override.mutator`) verilir; oturumun token'ı (`Authorization`) da orada
+eklenir. Çalışan örneği yönetim panelinde ve mobil uygulamadadır.
 
 ## Bilinmesi gerekenler
 

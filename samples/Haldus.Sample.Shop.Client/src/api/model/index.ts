@@ -5,6 +5,8 @@
  * OpenAPI spec version: 1.0.0
  */
 
+export * from './accessTokenResponse';
+export * from './accountInfo';
 export * from './addBasketItem';
 export * from './addressNoteResponse';
 export * from './addressResponse';
@@ -279,6 +281,7 @@ export * from './listTicketsParams';
 export * from './listTrucksParams';
 export * from './listVehiclesParams';
 export * from './listWebhookEndpointsParams';
+export * from './loginRequest';
 export * from './machineResponse';
 export * from './machineResponseCustomFields';
 export * from './maintenanceNoticeResponse';
@@ -461,9 +464,11 @@ export * from './readAllResult';
 export * from './readState';
 export * from './receiptResponse';
 export * from './recurrenceFrequency';
+export * from './refreshRequest';
 export * from './refundResponse';
 export * from './refundResponseMetadata';
 export * from './refundStatus';
+export * from './registerRequest';
 export * from './reopenOrder';
 export * from './replyResponse';
 export * from './reportExportResponse';

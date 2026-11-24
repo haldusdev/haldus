@@ -1,7 +1,9 @@
 import { useState } from "react"
+import { useMutation } from "@tanstack/react-query"
 import { useTranslation } from "react-i18next"
 import { cn } from "cn"
 
+import { login, register } from "@/api/auth/auth"
 import { Button } from "@/components/ui/button"
 import {
   Card,
@@ -18,100 +20,145 @@ import {
   FieldLabel,
 } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
-import { isGuid, signIn } from "@/lib/session"
+import { openSession } from "@/lib/auth"
+import { fieldErrors, problemMessage, toFieldErrors } from "@/lib/problem"
 
-// Her kurulumda aynı örnek kiracı önerilir; böylece yeniden girişte önceki siparişler görünür.
-const DEMO_TENANT = "11111111-1111-4111-8111-111111111111"
+type Mode = "signIn" | "register"
 
+const copy = {
+  signIn: {
+    title: "login.title",
+    description: "login.description",
+    submit: "login.submit",
+    prompt: "login.noAccount",
+    switch: "login.switchToRegister",
+  },
+  register: {
+    title: "login.registerTitle",
+    description: "login.registerDescription",
+    submit: "login.registerSubmit",
+    prompt: "login.haveAccount",
+    switch: "login.switchToSignIn",
+  },
+} as const
+
+/**
+ * Giriş ve kayıt formu (shadcn login-01). Doğrulama backend'dedir: alan hataları yanıttaki
+ * `HttpValidationProblemDetails.errors` içinden, öteki hatalar (yanlış parola, alınmış e-posta) `detail` alanından okunur.
+ */
 export function LoginForm({
   className,
   ...props
 }: React.ComponentProps<"div">) {
   const { t } = useTranslation()
-  const [userId, setUserId] = useState("demo")
-  const [tenantId, setTenantId] = useState(DEMO_TENANT)
-  const [submitted, setSubmitted] = useState(false)
+  const [mode, setMode] = useState<Mode>("signIn")
+  const [email, setEmail] = useState("")
+  const [password, setPassword] = useState("")
 
-  const userIdError =
-    userId.trim().length === 0 ? t("login.userIdRequired") : undefined
-  const tenantIdError = isGuid(tenantId.trim())
-    ? undefined
-    : t("login.tenantIdInvalid")
+  // Giriş ve oturumun açılması tek adımdır: token alınır, hesabın kimliği sorulur ve oturum yazılır.
+  const submission = useMutation({
+    mutationFn: async (credentials: { email: string; password: string }) => {
+      const tokens =
+        mode === "register"
+          ? await register(credentials)
+          : await login(credentials)
+
+      await openSession(tokens.data)
+    },
+  })
+
+  const errors = fieldErrors(submission.error)
+  const hasFieldErrors = Object.keys(errors).length > 0
+  const text = copy[mode]
 
   function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    setSubmitted(true)
+    submission.mutate({ email: email.trim(), password })
+  }
 
-    if (!userIdError && !tenantIdError) {
-      signIn({ userId: userId.trim(), tenantId: tenantId.trim() })
-    }
+  function switchMode() {
+    setMode(mode === "signIn" ? "register" : "signIn")
+    submission.reset()
   }
 
   return (
     <div className={cn("flex flex-col gap-6", className)} {...props}>
       <Card>
         <CardHeader>
-          <CardTitle>{t("login.title")}</CardTitle>
-          <CardDescription>{t("login.description")}</CardDescription>
+          <CardTitle>{t(text.title)}</CardTitle>
+          <CardDescription>{t(text.description)}</CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={submit} noValidate>
             <FieldGroup>
-              <Field data-invalid={submitted && userIdError ? true : undefined}>
-                <FieldLabel htmlFor="userId">{t("login.userId")}</FieldLabel>
+              {submission.error && !hasFieldErrors ? (
+                <p
+                  role="alert"
+                  className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive"
+                >
+                  {problemMessage(
+                    submission.error,
+                    t("common.unexpectedError")
+                  )}
+                </p>
+              ) : null}
+              <Field data-invalid={errors.email ? true : undefined}>
+                <FieldLabel htmlFor="email">{t("login.email")}</FieldLabel>
                 <Input
-                  id="userId"
-                  value={userId}
-                  onChange={(event) => setUserId(event.target.value)}
-                  autoComplete="username"
-                  aria-invalid={submitted && userIdError ? true : undefined}
-                  aria-describedby="userId-help"
+                  id="email"
+                  type="email"
+                  value={email}
+                  onChange={(event) => setEmail(event.target.value)}
+                  autoComplete="email"
+                  inputMode="email"
+                  spellCheck={false}
+                  aria-invalid={errors.email ? true : undefined}
                   required
                 />
-                <FieldDescription id="userId-help">
-                  {t("login.userIdHelp")}
-                </FieldDescription>
-                {submitted && userIdError ? (
-                  <FieldError>{userIdError}</FieldError>
-                ) : null}
+                <FieldError errors={toFieldErrors(errors.email)} />
               </Field>
-              <Field
-                data-invalid={submitted && tenantIdError ? true : undefined}
-              >
-                <div className="flex items-center">
-                  <FieldLabel htmlFor="tenantId">
-                    {t("login.tenantId")}
-                  </FieldLabel>
+              <Field data-invalid={errors.password ? true : undefined}>
+                <FieldLabel htmlFor="password">
+                  {t("login.password")}
+                </FieldLabel>
+                <Input
+                  id="password"
+                  type="password"
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
+                  autoComplete={
+                    mode === "register" ? "new-password" : "current-password"
+                  }
+                  aria-invalid={errors.password ? true : undefined}
+                  aria-describedby={
+                    mode === "register" ? "password-help" : undefined
+                  }
+                  required
+                />
+                {mode === "register" ? (
+                  <FieldDescription id="password-help">
+                    {t("login.passwordHelp")}
+                  </FieldDescription>
+                ) : null}
+                <FieldError errors={toFieldErrors(errors.password)} />
+              </Field>
+              <Field>
+                <Button type="submit" disabled={submission.isPending}>
+                  {submission.isPending
+                    ? t("login.submitting")
+                    : t(text.submit)}
+                </Button>
+                <FieldDescription className="text-center">
+                  {t(text.prompt)}{" "}
                   <Button
                     type="button"
                     variant="link"
-                    size="sm"
-                    className="ml-auto h-auto p-0"
-                    onClick={() => setTenantId(crypto.randomUUID())}
+                    className="h-auto p-0"
+                    onClick={switchMode}
                   >
-                    {t("login.newTenant")}
+                    {t(text.switch)}
                   </Button>
-                </div>
-                <Input
-                  id="tenantId"
-                  value={tenantId}
-                  onChange={(event) => setTenantId(event.target.value)}
-                  autoComplete="off"
-                  spellCheck={false}
-                  className="font-mono"
-                  aria-invalid={submitted && tenantIdError ? true : undefined}
-                  aria-describedby="tenantId-help"
-                  required
-                />
-                <FieldDescription id="tenantId-help">
-                  {t("login.tenantIdHelp")}
                 </FieldDescription>
-                {submitted && tenantIdError ? (
-                  <FieldError>{tenantIdError}</FieldError>
-                ) : null}
-              </Field>
-              <Field>
-                <Button type="submit">{t("login.submit")}</Button>
               </Field>
             </FieldGroup>
           </form>

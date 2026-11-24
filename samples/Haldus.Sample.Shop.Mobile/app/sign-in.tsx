@@ -1,31 +1,64 @@
+import { useMutation } from '@tanstack/react-query';
 import * as React from 'react';
 import { useTranslation } from 'react-i18next';
 import { KeyboardAvoidingView, Platform, ScrollView, View } from 'react-native';
+import type { TextInput } from 'react-native';
 
+import { login, register } from '@/api/auth/auth';
+import { ErrorBanner } from '@/components/screen-state';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Text } from '@/components/ui/text';
-import { isGuid, newTenantId, signIn } from '@/lib/session';
+import { openSession } from '@/lib/auth';
+import { fieldErrors } from '@/lib/problem';
 
-// Her kurulumda aynı örnek kiracı önerilir; yönetim paneli de aynısını önerir.
-const DEMO_TENANT = '11111111-1111-4111-8111-111111111111';
+type Mode = 'signIn' | 'register';
 
+const copy = {
+  signIn: {
+    heading: 'signIn.heading',
+    description: 'signIn.description',
+    submit: 'signIn.submit',
+    switch: 'signIn.switchToRegister',
+  },
+  register: {
+    heading: 'signIn.registerHeading',
+    description: 'signIn.registerDescription',
+    submit: 'signIn.registerSubmit',
+    switch: 'signIn.switchToSignIn',
+  },
+} as const;
+
+/**
+ * Giriş ve kayıt ekranı. Doğrulama backend'dedir: alan hataları yanıttaki `errors` içinden, öteki hatalar
+ * (yanlış parola, alınmış e-posta) `detail` alanından okunur.
+ */
 export default function SignInScreen() {
   const { t } = useTranslation();
-  const [userId, setUserId] = React.useState('demo');
-  const [tenantId, setTenantId] = React.useState(DEMO_TENANT);
-  const [submitted, setSubmitted] = React.useState(false);
+  const [mode, setMode] = React.useState<Mode>('signIn');
+  const [email, setEmail] = React.useState('');
+  const [password, setPassword] = React.useState('');
+  const passwordInput = React.useRef<TextInput>(null);
 
-  const userIdError = userId.trim().length === 0 ? t('signIn.userIdRequired') : undefined;
-  const tenantIdError = isGuid(tenantId.trim()) ? undefined : t('signIn.tenantIdInvalid');
+  // Giriş ve oturumun açılması tek adımdır: token alınır, hesabın kimliği sorulur ve oturum saklanır.
+  const submission = useMutation({
+    mutationFn: async (credentials: { email: string; password: string }) => {
+      const tokens =
+        mode === 'register' ? await register(credentials) : await login(credentials);
+
+      await openSession(tokens.data);
+    },
+  });
+
+  const errors = fieldErrors(submission.error);
+  const hasFieldErrors = Object.keys(errors).length > 0;
+  const text = copy[mode];
 
   function submit() {
-    setSubmitted(true);
-
-    if (!userIdError && !tenantIdError) {
-      void signIn({ userId: userId.trim(), tenantId: tenantId.trim() });
+    if (!submission.isPending) {
+      submission.mutate({ email: email.trim(), password });
     }
   }
 
@@ -38,61 +71,78 @@ export default function SignInScreen() {
         keyboardShouldPersistTaps="handled">
         <Card className="w-full max-w-sm self-center">
           <CardHeader>
-            <CardTitle>{t('signIn.heading')}</CardTitle>
-            <CardDescription>{t('signIn.description')}</CardDescription>
+            <CardTitle>{t(text.heading)}</CardTitle>
+            <CardDescription>{t(text.description)}</CardDescription>
           </CardHeader>
           <CardContent className="gap-4">
+            {hasFieldErrors ? null : (
+              <View className="-mx-4 -mt-3">
+                <ErrorBanner error={submission.error} />
+              </View>
+            )}
             <View className="gap-1.5">
-              <Label nativeID="userId-label" htmlFor="userId">
-                {t('signIn.userId')}
+              <Label nativeID="email-label" htmlFor="email">
+                {t('signIn.email')}
               </Label>
               <Input
-                id="userId"
-                aria-labelledby="userId-label"
-                aria-invalid={submitted && userIdError !== undefined}
-                value={userId}
-                onChangeText={setUserId}
+                id="email"
+                aria-labelledby="email-label"
+                aria-invalid={errors.email !== undefined}
+                value={email}
+                onChangeText={setEmail}
                 autoCapitalize="none"
                 autoCorrect={false}
-                autoComplete="username"
+                autoComplete="email"
+                keyboardType="email-address"
+                textContentType="emailAddress"
                 returnKeyType="next"
+                onSubmitEditing={() => passwordInput.current?.focus()}
               />
-              {submitted && userIdError ? (
-                <Text className="text-sm text-destructive" role="alert">
-                  {userIdError}
+              {errors.email?.map((message) => (
+                <Text key={message} className="text-sm text-destructive" role="alert">
+                  {message}
                 </Text>
-              ) : null}
+              ))}
             </View>
             <View className="gap-1.5">
-              <Label nativeID="tenantId-label" htmlFor="tenantId">
-                {t('signIn.tenantId')}
+              <Label nativeID="password-label" htmlFor="password">
+                {t('signIn.password')}
               </Label>
               <Input
-                id="tenantId"
-                aria-labelledby="tenantId-label"
-                aria-invalid={submitted && tenantIdError !== undefined}
-                value={tenantId}
-                onChangeText={setTenantId}
+                ref={passwordInput}
+                id="password"
+                aria-labelledby="password-label"
+                aria-invalid={errors.password !== undefined}
+                value={password}
+                onChangeText={setPassword}
+                secureTextEntry
                 autoCapitalize="none"
                 autoCorrect={false}
-                autoComplete="off"
+                autoComplete={mode === 'register' ? 'new-password' : 'current-password'}
+                textContentType={mode === 'register' ? 'newPassword' : 'password'}
                 returnKeyType="done"
                 onSubmitEditing={submit}
               />
-              {submitted && tenantIdError ? (
-                <Text className="text-sm text-destructive" role="alert">
-                  {tenantIdError}
-                </Text>
+              {mode === 'register' ? (
+                <Text className="text-sm text-muted-foreground">{t('signIn.passwordHelp')}</Text>
               ) : null}
-              <Button
-                variant="link"
-                className="h-11 self-start px-0"
-                onPress={() => setTenantId(newTenantId())}>
-                <Text>{t('signIn.newTenant')}</Text>
-              </Button>
+              {errors.password?.map((message) => (
+                <Text key={message} className="text-sm text-destructive" role="alert">
+                  {message}
+                </Text>
+              ))}
             </View>
-            <Button size="lg" onPress={submit}>
-              <Text>{t('signIn.submit')}</Text>
+            <Button size="lg" onPress={submit} disabled={submission.isPending}>
+              <Text>{submission.isPending ? t('signIn.submitting') : t(text.submit)}</Text>
+            </Button>
+            <Button
+              variant="link"
+              className="h-11"
+              onPress={() => {
+                setMode(mode === 'signIn' ? 'register' : 'signIn');
+                submission.reset();
+              }}>
+              <Text>{t(text.switch)}</Text>
             </Button>
           </CardContent>
         </Card>

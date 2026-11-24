@@ -1,20 +1,28 @@
 import { useSyncExternalStore } from "react"
 
 /**
- * Demo kimliği. Örnek backend kullanıcıyı ve kiracıyı istek başlıklarından okur (DemoIdentity); parola veya token
- * yoktur. Gerçek bir uygulamada burada kimlik sağlayıcının oturumu durur.
+ * Oturum: backend'in verdiği token'lar ve hesabın kimliği. Erişim token'ı her istekte `Authorization` başlığında
+ * gider; süresi dolunca yenileme token'ı ile yenisi alınır (api-fetch.ts).
+ *
+ * Token'lar `localStorage` içinde durur; bu, sayfaya sızan bir betiğin onları okuyabileceği anlamına gelir. Örnek
+ * için kabul edilmiş bir ödünleşimdir; üretimde `HttpOnly` çerez veya bir kimlik sağlayıcının akışı tercih edilir.
  */
 export type Session = {
-  userId: string
+  accessToken: string
+  refreshToken: string
+  accountId: string
+  email: string
   tenantId: string
 }
 
 const STORAGE_KEY = "haldus-shop.session"
-const GUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
-
-export function isGuid(value: string): boolean {
-  return GUID.test(value)
-}
+const FIELDS = [
+  "accessToken",
+  "refreshToken",
+  "accountId",
+  "email",
+  "tenantId",
+] as const
 
 function read(): Session | null {
   try {
@@ -22,17 +30,21 @@ function read(): Session | null {
       localStorage.getItem(STORAGE_KEY) ?? "null"
     )
 
+    if (typeof parsed !== "object" || parsed === null) {
+      return null
+    }
+
+    const record: Record<string, unknown> = { ...parsed }
+    const values = FIELDS.map((field) => record[field])
+
     if (
-      typeof parsed === "object" &&
-      parsed !== null &&
-      "userId" in parsed &&
-      "tenantId" in parsed &&
-      typeof parsed.userId === "string" &&
-      typeof parsed.tenantId === "string" &&
-      parsed.userId.length > 0 &&
-      isGuid(parsed.tenantId)
+      values.every(
+        (value): value is string =>
+          typeof value === "string" && value.length > 0
+      )
     ) {
-      return { userId: parsed.userId, tenantId: parsed.tenantId }
+      const [accessToken, refreshToken, accountId, email, tenantId] = values
+      return { accessToken, refreshToken, accountId, email, tenantId }
     }
   } catch {
     // Bozuk kayıt oturum yok sayılır.
@@ -46,6 +58,13 @@ const listeners = new Set<() => void>()
 
 function publish(next: Session | null) {
   current = next
+
+  if (next) {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(next))
+  } else {
+    localStorage.removeItem(STORAGE_KEY)
+  }
+
   listeners.forEach((listener) => listener())
 }
 
@@ -54,20 +73,27 @@ export function getSession(): Session | null {
 }
 
 export function signIn(session: Session) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(session))
   publish(session)
 }
 
+/** Yenilenen token'ları yazar; hesap aynı kalır. */
+export function renewTokens(accessToken: string, refreshToken: string) {
+  if (current) {
+    publish({ ...current, accessToken, refreshToken })
+  }
+}
+
 export function signOut() {
-  localStorage.removeItem(STORAGE_KEY)
   publish(null)
 }
 
-function subscribe(listener: () => void) {
+export function subscribeSession(listener: () => void) {
   listeners.add(listener)
-  return () => listeners.delete(listener)
+  return () => {
+    listeners.delete(listener)
+  }
 }
 
 export function useSession(): Session | null {
-  return useSyncExternalStore(subscribe, getSession)
+  return useSyncExternalStore(subscribeSession, getSession)
 }

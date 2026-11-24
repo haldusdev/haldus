@@ -4,6 +4,7 @@ export * from './announcements/announcements';
 export * from './api-keys/api-keys';
 export * from './articles/articles';
 export * from './attachments/attachments';
+export * from './auth/auth';
 export * from './baskets/baskets';
 export * from './bill-payments/bill-payments';
 export * from './bills/bills';

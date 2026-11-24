@@ -44,8 +44,25 @@ pnpm dev
 ```
 
 Geliştirme sunucusu `/api` ile başlayan istekleri `http://localhost:5080` adresine yönlendirir (başka bir adres için
-`SHOP_API_URL` ortam değişkeni). Giriş ekranında parola yoktur: örnek backend kullanıcıyı ve kiracıyı istek
-başlıklarından okur (`DemoIdentity`), bu yüzden istediğiniz adı yazarsınız. Bu, örneğe özgüdür ve güvenli değildir.
+`SHOP_API_URL` ortam değişkeni). Giriş ekranında "Hesap oluştur" ile bir hesap açılır; her hesap kendi kiracısıyla
+başlar.
+
+## Kimlik doğrulama
+
+Örnek backend e-posta ve parola ile giriş yapar ve ASP.NET Core'un yerleşik taşıyıcı (bearer) token şemasını kullanır
+(`/auth/register`, `/auth/login`, `/auth/refresh`, `/auth/me`). Haldus kullanıcıyı ve kiracıyı token'daki claim'lerden
+okur; panelin bununla ilgili tek kodu `src/lib` altındadır:
+
+- `session.ts`: token'lar ve hesabın kimliği. `localStorage` içinde durur; bu, sayfaya sızan bir betiğin onları
+  okuyabileceği anlamına gelir. Örnek için kabul edilmiş bir ödünleşimdir; üretimde `HttpOnly` çerez veya bir kimlik
+  sağlayıcının (OpenID Connect) akışı tercih edilir.
+- `api-fetch.ts`: erişim token'ını `Authorization` başlığına koyar. Backend 401 dönerse yenileme token'ı ile yeni
+  bir oturum alır ve isteği bir kez yineler; aynı anda 401 alan istekler tek bir yenilemeyi bekler. Yenileme de
+  reddedilirse oturum kapanır ve giriş ekranına dönülür.
+- `auth.ts`: giriş yanıtından oturumu açar ve yenileme isteğini `api-fetch.ts`'e bağlar.
+
+Bilinen sınırlar: çıkış yalnızca token'ları tarayıcıdan siler (sunucuda iptal yoktur; yenileme token'ı süresi dolana
+kadar geçerlidir), e-posta doğrulaması, parola sıfırlama ve deneme sınırı (hesap kilidi, hız sınırı) yoktur.
 
 ## Komutlar
 
@@ -67,7 +84,7 @@ commit'lenir.
 - Kaynak, backend'in build sırasında ürettiği `../Haldus.Sample.Shop/openapi.json` dosyasıdır; kopyalanmaz.
 - Örnek mağazanın yetmişten çok kaynağı vardır. Panel yalnızca kullandıklarını üretir (`orval.config.ts` içinde
   `filters.tags`); bütün uçların istemcisi [Haldus.Sample.Shop.Client](../Haldus.Sample.Shop.Client) klasöründedir.
-- Her istek `src/lib/api-fetch.ts` içindeki sarmalayıcıdan geçer: kimlik başlıkları, dil ve hata davranışı oradadır.
+- Her istek `src/lib/api-fetch.ts` içindeki sarmalayıcıdan geçer: oturumun token'ı, dil ve hata davranışı oradadır.
   Başarısız yanıtta gövde (`ProblemDetails`) fırlatılır; hook'ların hata tipi de odur.
 
 ```tsx
@@ -97,4 +114,5 @@ Bu seçimler kullanıcıya sorulmadan, önerilen seçenekle verildi (deponun `CL
 - **i18n:** i18next + react-i18next; diller en (varsayılan) ve tr.
 - **Formlar:** ayrı bir form kütüphanesi yok. Formlar shadcn `Field` bileşenleri ve bileşen durumuyla yazılır;
   doğrulama backend'dedir.
+- **Kimlik doğrulama:** backend'in kendi parola girişi ve taşıyıcı token'ı; ayrı bir kimlik sağlayıcı yok.
 - **Test:** test altyapısı kurulmadı.

@@ -40,8 +40,20 @@ Backend'in adresi `EXPO_PUBLIC_API_URL` ortam değişkeniyle verilir; verilmezse
 Tarayıcıda çalıştırırken uygulama backend'den farklı bir kaynaktadır; backend'e bu kaynak için izin verilmelidir
 (`Shop__CorsOrigins__0=http://localhost:8081`). Cihazda ve emülatörde buna gerek yoktur.
 
-Giriş ekranında parola yoktur: örnek backend kullanıcıyı ve kiracıyı istek başlıklarından okur (`DemoIdentity`).
-Bu, örneğe özgüdür ve güvenli değildir.
+## Kimlik doğrulama
+
+Giriş e-posta ve parola iledir; ilk açılışta giriş ekranından bir hesap oluşturulur. Örnek backend ASP.NET Core'un
+yerleşik taşıyıcı (bearer) token şemasını kullanır ve Haldus kullanıcıyı (favoriler ve sepet onundur) token'daki
+claim'den okur.
+
+- Token'lar cihazda işletim sisteminin güvenli deposunda durur (`lib/session.ts`, `lib/storage.ts`); güvenli depo
+  büyük değerleri her platformda kabul etmediği için her token ayrı bir anahtardadır.
+- `lib/api-fetch.ts` erişim token'ını `Authorization` başlığına koyar. Backend 401 dönerse yenileme token'ı ile yeni
+  bir oturum alır ve isteği bir kez yineler; aynı anda 401 alan istekler tek bir yenilemeyi bekler. Yenileme de
+  reddedilirse oturum kapanır.
+
+Bilinen sınırlar: çıkış yalnızca token'ları cihazdan siler (sunucuda iptal yoktur), e-posta doğrulaması, parola
+sıfırlama ve biyometrik kilit yoktur.
 
 ## Komutlar
 
@@ -60,7 +72,7 @@ commit'lenir.
 
 - Kaynak, backend'in build sırasında ürettiği `../Haldus.Sample.Shop/openapi.json` dosyasıdır; kopyalanmaz.
 - Uygulama yalnızca kullandığı kaynakları üretir (`orval.config.ts` içinde `filters.tags`).
-- Her istek `lib/api-fetch.ts` içindeki sarmalayıcıdan geçer: backend'in adresi, kimlik başlıkları, dil ve hata
+- Her istek `lib/api-fetch.ts` içindeki sarmalayıcıdan geçer: backend'in adresi, oturumun token'ı, dil ve hata
   davranışı oradadır.
 - `lib/basket.ts` ve `lib/favorites.ts` üretilen hook'ları birleştirir; kendi isteklerini veya tiplerini yazmazlar.
 
@@ -80,9 +92,10 @@ içinde saklanır.
 
 ## Nasıl doğrulandı
 
-`pnpm typecheck` ile ve Expo'nun **web** hedefinde, çalışan backend'e karşı elle: giriş, ürün listesi, favori ekleme,
-sepete ekleme ve adet değiştirme, dil değişimi. **Android ve iOS'ta çalıştırılmadı** (geliştirildiği makinede emülatör
-yoktu); o hedeflere özgü davranış (güvenli depo, klavye, güvenli alanlar) sınanmadı.
+`pnpm typecheck` ile ve Expo'nun **web** hedefinde, çalışan backend'e karşı elle: hesap oluşturma (alan hatası
+dahil), giriş, sayfa yenilenince oturumun geri gelmesi, geçersiz erişim token'ının yenilenmesi, ürün listesi, favori
+ekleme, sepete ekleme ve adet değiştirme, dil değişimi. **Android ve iOS'ta çalıştırılmadı** (geliştirildiği makinede
+emülatör yoktu); o hedeflere özgü davranış (güvenli depo, klavye, güvenli alanlar) sınanmadı.
 
 ## Bu örnek için verilen kararlar
 
@@ -90,5 +103,6 @@ Bu seçimler kullanıcıya sorulmadan, önerilen seçenekle verildi (deponun `CL
 
 - **i18n:** i18next + react-i18next; cihazın dili `expo-localization` ile okunur. Diller en (varsayılan) ve tr.
 - **Kalıcı depo:** `expo-secure-store`.
-- **Formlar:** ayrı bir form kütüphanesi yok; tek form giriş ekranıdır.
+- **Formlar:** ayrı bir form kütüphanesi yok; tek form giriş ekranıdır ve doğrulaması backend'dedir.
+- **Kimlik doğrulama:** backend'in kendi parola girişi ve taşıyıcı token'ı; ayrı bir kimlik sağlayıcı yok.
 - **Test:** test altyapısı kurulmadı.
