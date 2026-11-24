@@ -46,6 +46,14 @@ public sealed class ResourceBuilder<TEntity>(RouteGroupBuilder group, IEndpointR
     public ResourceBuilder<TEntity> Sortable(params Expression<Func<TEntity, object?>>[] fields) => this;
 
     /// <summary>
+    /// Sayılan metin alanları başka dillere çevrilebilir. Alanın kendisi kaynak dildeki metni taşımaya devam eder;
+    /// çeviriler kayıtla birlikte saklanır ve yanıtta <c>translations</c> altında görünür. Bir dilin çevirileri
+    /// <c>PUT /{id}/translations/{locale}</c> ile yazılır, <c>DELETE</c> ile kaldırılır. Okurken <c>?locale=tr</c>
+    /// verilirse çevrilmiş alanlar o dildeki metinle döner (çevirisi olmayan alan kaynak dildeki metinle).
+    /// </summary>
+    public ResourceBuilder<TEntity> Translatable(params Expression<Func<TEntity, object?>>[] fields) => this;
+
+    /// <summary>
     /// Sayılan alanlar yalnızca kayıt oluşturulurken yazılır: <c>POST</c> isteğinde yer alırlar, <c>PUT</c> ve
     /// <c>PATCH</c> isteklerinde yer almazlar ve sonradan değişmezler.
     /// </summary>

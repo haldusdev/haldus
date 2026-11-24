@@ -86,10 +86,31 @@ internal static class ResourceLinker
                 }
             }
 
+            var translatable = new List<string>();
+
+            foreach (var request in resource.TranslatableRequests)
+            {
+                // Çevrilen alan, istemcinin yazdığı bir metindir; çevirisi de aynı kurallarla doğrulanır.
+                if (properties.FirstOrDefault(candidate => candidate.Name == request.FieldName)
+                    is { IsWritable: true, IsEmbedded: false, IsGenerated: false, NullableType: "string?" } text)
+                {
+                    translatable.Add(text.Name);
+                }
+                else
+                {
+                    Fail(
+                        "HALDUS010",
+                        request.Location,
+                        $"'{request.Expression}' cannot be translated: write it as 'item => item.Property', where the property is a writable string property of '{resource.EntityName}'");
+                }
+            }
+
+
             if (!failed)
             {
                 linked.Add(resource with
                 {
+                    TranslatableFields = translatable.Distinct().ToEquatableArray(),
                     Properties = properties.ToEquatableArray(),
                     References = references.ToEquatableArray(),
                     SearchFields = searchFields.ToEquatableArray(),
@@ -578,6 +599,7 @@ internal static class ResourceLinker
         "restore" or "purge" when resource.Has(Traits.SoftDeletable) => nameof(Traits.SoftDeletable),
         "archive" or "unarchive" when resource.Has(Traits.Archivable) => nameof(Traits.Archivable),
         "read" or "unread" when resource.Has(Traits.ReadTracking) => nameof(Traits.ReadTracking),
+        "translations" when resource.Has(Traits.Translatable) => nameof(Traits.Translatable),
         "expire" when resource.Expiry is not null => "Expiring",
         "clone" when resource.Has(Traits.Cloneable) => nameof(Traits.Cloneable),
         "reverse" when resource.Has(Traits.Reversible) => nameof(Traits.Reversible),

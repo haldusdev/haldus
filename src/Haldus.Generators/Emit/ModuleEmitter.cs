@@ -123,6 +123,7 @@ internal static class ModuleEmitter
                 var content = resource.Properties.Select(property => property.Name)
                     .Concat(resource.Has(Traits.Metadata) ? ["Metadata"] : [])
                     .Concat(resource.Has(Traits.CustomFields) ? ["CustomFields"] : [])
+                    .Concat(resource.Has(Traits.Translatable) ? ["Translations"] : [])
                     .Select(ResourceEmitter.Literal);
 
                 blocks.Add($"        global::Haldus.HaldusApprovals.Register<{entity}>({string.Join(", ", content)});\n");
@@ -403,6 +404,11 @@ internal static class ModuleEmitter
         if (resource.Has(Traits.Metadata))
         {
             statements.Add("global::Haldus.HaldusDb.ConfigureMetadata(entity.Property(item => item.Metadata));");
+        }
+
+        if (resource.Has(Traits.Translatable))
+        {
+            statements.Add("global::Haldus.HaldusDb.ConfigureTranslations(entity.Property(item => item.Translations));");
         }
 
         if (resource.Secret is { } secret)

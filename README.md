@@ -399,6 +399,29 @@ app.MapJob<ProductImport>().Imports<Product>();
 CSV yeni bir bağımlılık olmadan okunur ve yazılır (RFC 4180). Dışa aktarılan metinlerden `=`, `+`, `-` veya `@` ile
 başlayanların önüne kesme işareti konur; böylece dosya bir tablolama programında açıldığında formül olarak çalışmaz.
 
+## Çevrilebilen alanlar
+
+```csharp
+app.MapCrud<Article>()
+    .Publishable()
+    .Translatable(article => article.Title, article => article.Body);
+```
+
+Sayılan metin alanları başka dillere çevrilebilir. Alanın kendisi kaynak dildeki metni taşımaya devam eder; çeviriler
+kayıtla birlikte saklanır ve yanıtta `translations` altında görünür (`{ "tr": { "title": "…" } }`).
+
+| Uç | Etkisi |
+|---|---|
+| `PUT /articles/{id}/translations/{locale}` | O dilin çevirilerini gövdedekilerle değiştirir. Alanlar, çevirdikleri alanın kurallarını (uzunluk vb.) taşır ama hiçbiri zorunlu değildir; boş bırakılan alan çevrilmemiş sayılır |
+| `DELETE /articles/{id}/translations/{locale}` | O dilin çevirilerini kaldırır |
+| `GET /articles/{id}?locale=tr`, `GET /articles?locale=tr` | Çevrilmiş alanları o dildeki metinle döndürür. Tam eşleşme yoksa daha genel dile düşülür (`pt-BR` → `pt`); çevirisi olmayan alan kaynak dildeki metinle döner |
+
+Okuma, `?locale=` verilmedikçe kaynak dildedir; `Accept-Language` başlığı veriyi değiştirmez. Böylece okuduğunu geri
+yazan bir istemci (ör. Türkçe tarayıcıda açılmış bir yönetim paneli) kaynak metnin üzerine çeviri yazmaz. Çeviri yazmak
+kaydın bir yazmasıdır: güncelleme ucunun korumalarından (`If-Match`, düzenlenebilir durum, onaylanmış kayıt) geçer,
+sürümü saklanır ve onayı düşürür. Kopya ve yayındaki hal çevirileri taşır; `GET /articles/published?locale=tr` de
+çalışır. Bir kayıt en çok 50 dile çevrilebilir.
+
 ## Saklama, okundu takibi ve toplanan alanlar
 
 ```csharp
@@ -493,7 +516,7 @@ kısıtı olur, ayrı bağlamlardaysa referans yalnızca kimlikle tutulur ve var
 
 İlk iki plan tamamlandı: ilk sürümün on aşaması ve araştırmanın ikinci sürüm listesini kapatan on bir aşama. Üçüncü
 plan (araştırmanın üçüncü sürüm listesi ve sınamada kalan satırlar) sürüyor. Model, araştırmadaki 59 gerçek varlığa
-karşı sınanıyor: bugün 51'i eksiksiz, 6'sı kısmen ifade ediliyor, 2'si için gereken özellik yok (ilk sınamada bu
+karşı sınanıyor: bugün 52'si eksiksiz, 6'sı kısmen ifade ediliyor, 1'i için gereken özellik yok (ilk sınamada bu
 sayılar 19, 29 ve 11 idi). Ayrıntısı [taksonomi sınaması](reports/Haldus%20taksonomi%20sınaması.md) belgesindedir.
 
 Tasarım kararları için [CLAUDE.md](CLAUDE.md), kararların dayandığı araştırma için [reports](reports/)

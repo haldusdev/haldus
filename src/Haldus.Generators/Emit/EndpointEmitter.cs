@@ -59,6 +59,8 @@ internal sealed partial class EndpointEmitter
 
     private bool HasMetadata => _resource.Has(Traits.Metadata);
 
+    private bool Translatable => _resource.TranslatableFields.Length > 0;
+
     /// <summary>Oluşturma bir hata yanıtıyla dönebilir mi: referans bulunamayabilir veya doğal anahtar çakışabilir.</summary>
     private bool CreateCanFail => ChecksReferences || NaturalKey is not null || EffectiveDated || HasCustomFields;
 
@@ -318,6 +320,11 @@ internal sealed partial class EndpointEmitter
             EmitArchive("Unarchive", "unarchive", "entity.ArchivedAt = null;");
         }
 
+        if (Translatable)
+        {
+            EmitTranslations();
+        }
+
         if (_resource.Has(Traits.ReadTracking))
         {
             // Okundu bilgisi içerik değildir; kaydı yazamayan archetype'ta da değişir.
@@ -502,7 +509,8 @@ internal sealed partial class EndpointEmitter
         var readTracking = _resource.Has(Traits.ReadTracking);
         var statusParameter = (status is null ? string.Empty : $"        {status}? status,\n")
             + (EffectiveDated ? "        global::System.DateOnly? asOf,\n" : string.Empty)
-            + (readTracking ? "        bool? unread,\n" : string.Empty);
+            + (readTracking ? "        bool? unread,\n" : string.Empty)
+            + (Translatable ? "        string? locale,\n" : string.Empty);
 
         var paged = $"{Results}.Ok<global::Haldus.PagedResult<{_entity}Response>>";
         var listResult = sortable ? $"{Results}.Results<{paged}, {Problem}>" : paged;
@@ -638,7 +646,7 @@ internal sealed partial class EndpointEmitter
                         .Select(item => new {{_entity}}Response { {{ResponseAssignments}} })
                         .ToListAsync(cancellationToken);
 
-                    return {{Http}}.TypedResults.Ok(
+            {{(Translatable ? "        items = items.ConvertAll(item => Localize(item, locale));\n\n" : string.Empty)}}        return {{Http}}.TypedResults.Ok(
                         new global::Haldus.PagedResult<{{_entity}}Response>(items, page.PageOrDefault, page.PageSizeOrDefault, totalCount));
                 }
 
@@ -807,7 +815,7 @@ internal sealed partial class EndpointEmitter
         _handlers.Append($$"""
 
                 private static async {{OkOrProblem}} GetAsync(
-            {{ScopeParameter}}{{KeyParameter}}{{(_concurrency ? HttpContextParameter : string.Empty)}}{{ContextsParameter}}{{MessagesParameter}}{{CancellationParameter}}    {
+            {{ScopeParameter}}{{KeyParameter}}{{(Translatable ? "        string? locale,\n" : string.Empty)}}{{(_concurrency ? HttpContextParameter : string.Empty)}}{{ContextsParameter}}{{MessagesParameter}}{{CancellationParameter}}    {
                     var entity = await contexts.For<{{_entity}}>().Set<{{_entity}}>()
                         .AsNoTracking(){{Includes}}
                         .FirstOrDefaultAsync(item => {{Match}}, cancellationToken);
@@ -817,7 +825,7 @@ internal sealed partial class EndpointEmitter
                         return {{NotFound}};
                     }
 
-            {{WriteETag()}}        return {{Http}}.TypedResults.Ok(ToResponse(entity));
+            {{WriteETag()}}        return {{Http}}.TypedResults.Ok({{(Translatable ? "Localize(ToResponse(entity), locale)" : "ToResponse(entity)")}});
                 }
 
             """);
@@ -877,6 +885,12 @@ internal sealed partial class EndpointEmitter
         if (HasMetadata && metadata)
         {
             keys.Add($"Metadata = global::Haldus.HaldusMetadata.Create({source}.Metadata)");
+        }
+
+        if (Translatable && source != "request" && only is null)
+        {
+            // Aynı kaynağın başka bir kaydından doğan kayıt (kopya, yayın, düzeltme) çevirileri de taşır.
+            keys.Add($"Translations = global::Haldus.HaldusTranslations.Copy({source}.Translations)");
         }
 
         if (HasCustomFields && source == "request")
@@ -1311,6 +1325,97 @@ internal sealed partial class EndpointEmitter
 
                     return {{Http}}.TypedResults.NoContent();
                 }
+
+            """);
+    }
+
+    /// <summary>
+    /// Bir dilin çevirilerini yazan ve kaldıran uçlar. İkisi de kaydın birer yazmasıdır ve güncelleme ucunun
+    /// korumalarından (sürüm, durum, kapanmış kayıt) geçer. Okurken çeviri yalnızca <c>?locale=</c> ile istenirse
+    /// alanın yerine geçer; istenmedikçe alan kaynak dildeki metni taşır, böylece okuduğunu geri yazan bir istemci
+    /// kaynak metnin üzerine çeviri yazmaz.
+    /// </summary>
+    private void EmitTranslations()
+    {
+        var metadata = $"\n            .ProducesValidationProblem()\n            .ProducesProblem(404){StateMetadata(_resource.Workflow?.EditableIn)}{ConcurrencyMetadata()}";
+        var texts = string.Join(
+            ", ",
+            _resource.TranslatableFields.Select(field => $"new({ResourceEmitter.Literal(ResourceEmitter.CamelCase(field))}, request.{field})"));
+
+        _map.Append($$"""
+                    group.MapPut("{{_keyRoute}}/translations/{locale}", TranslateAsync)
+                        .WithName("Translate{{_entity}}")
+                        .AddEndpointFilter<global::Haldus.HaldusValidationFilter<Translate{{_entity}}Request>>(){{metadata}};
+
+                    group.MapDelete("{{_keyRoute}}/translations/{locale}", RemoveTranslationAsync)
+                        .WithName("Remove{{_entity}}Translation"){{metadata}};
+
+
+            """);
+
+        string Command(string method, string parameters, string change) => $$"""
+
+                private static async {{OkOrProblem}} {{method}}Async(
+            {{ScopeParameter}}{{KeyParameter}}        string locale,
+            {{parameters}}{{(_concurrency ? HttpContextParameter : string.Empty)}}{{(Sliding ? TimeProviderParameter : string.Empty)}}{{ContextsParameter}}{{MessagesParameter}}{{CancellationParameter}}    {
+                    if (global::Haldus.HaldusTranslations.Normalize(locale) is not { } language)
+                    {
+                        return {{Problems}}.LocaleInvalid(messages, locale);
+                    }
+
+            {{ReadIfMatch()}}{{OwnerGuard("update")}}        var context = contexts.For<{{_entity}}>();
+                    var entity = await context.Set<{{_entity}}>(){{Includes}}.FirstOrDefaultAsync(item => {{Match}}, cancellationToken);
+
+                    if (entity is null)
+                    {
+                        return {{NotFound}};
+                    }
+
+            {{ChainGuard()}}{{StateGuard(_resource.Workflow?.EditableIn, "update")}}{{ExpectVersion()}}{{change}}
+            {{Slide()}}{{Save()}}
+            {{WriteETag()}}        return {{Http}}.TypedResults.Ok(ToResponse(entity));
+                }
+
+            """;
+
+        _handlers.Append(Command(
+            "Translate",
+            $"        Translate{_entity}Request request,\n",
+            $$"""
+                    var translations = global::Haldus.HaldusTranslations.Set(
+                        entity.Translations,
+                        language,
+                        new global::System.Collections.Generic.KeyValuePair<string, string?>[] { {{texts}} });
+
+                    if (translations.Count > global::Haldus.HaldusTranslations.MaxLocales)
+                    {
+                        return {{Problems}}.TranslationLimit(messages);
+                    }
+
+                    entity.Translations = translations;
+
+            """));
+
+        _handlers.Append(Command(
+            "RemoveTranslation",
+            string.Empty,
+            """
+                    entity.Translations = global::Haldus.HaldusTranslations.Remove(entity.Translations, language);
+
+            """));
+
+        var picks = string.Join(
+            ", ",
+            _resource.TranslatableFields.Select(field =>
+                $"{field} = global::Haldus.HaldusTranslations.Pick(response.Translations, language, {ResourceEmitter.Literal(ResourceEmitter.CamelCase(field))}) ?? response.{field}"));
+
+        _handlers.Append($$"""
+
+                /// <summary>Çevrilebilen alanları istenen dildeki metinle değiştirir; çevirisi olmayan alan olduğu gibi kalır.</summary>
+                private static {{_entity}}Response Localize({{_entity}}Response response, string? locale) =>
+                    global::Haldus.HaldusTranslations.Normalize(locale) is { } language
+                        ? response with { {{picks}} }
+                        : response;
 
             """);
     }
@@ -2804,7 +2909,8 @@ internal sealed partial class EndpointEmitter
             reference.Kind != ReferenceKind.Self || reference.PropertyName != property.Name));
         var assignments = string.Concat(restored.Select(property => $"        entity.{property.Name} = revision.{property.Name};\n"))
             + (HasMetadata ? "        entity.Metadata = new(revision.Metadata);\n" : string.Empty)
-            + (HasCustomFields ? "        entity.CustomFields = new(revision.CustomFields);\n" : string.Empty);
+            + (HasCustomFields ? "        entity.CustomFields = new(revision.CustomFields);\n" : string.Empty)
+            + (Translatable ? "        entity.Translations = global::Haldus.HaldusTranslations.Copy(revision.Translations);\n" : string.Empty);
 
         var rows = new StringBuilder();
 
@@ -3231,7 +3337,7 @@ internal sealed partial class EndpointEmitter
                 /// <summary>Yayındaki kayıtlar: taslakların son yayınlanan halleri, en son yayınlanan başta.</summary>
                 private static async {{Task}}<{{Results}}.Ok<{{paged}}>> ListPublishedAsync(
             {{ScopeParameter}}        [{{Http}}.AsParameters] global::Haldus.PageRequest page,
-            {{FilterParameters()}}{{ContextsParameter}}{{CancellationParameter}}    {
+            {{(Translatable ? "        string? locale,\n" : string.Empty)}}{{FilterParameters()}}{{ContextsParameter}}{{CancellationParameter}}    {
                     var query = {{copies}}
                         .Where(item => item.PublishedOfId != null){{ScopeFilter}};
             {{ApplyFilter()}}
@@ -3244,11 +3350,11 @@ internal sealed partial class EndpointEmitter
                         .ToListAsync(cancellationToken);
 
                     return {{Http}}.TypedResults.Ok(new {{paged}}(
-                        copies.Select(ToPublished).ToList(), page.PageOrDefault, page.PageSizeOrDefault, totalCount));
+                        copies.Select(ToPublished){{(Translatable ? ".Select(item => Localize(item, locale))" : string.Empty)}}.ToList(), page.PageOrDefault, page.PageSizeOrDefault, totalCount));
                 }
 
                 private static async {{OkOrProblem}} GetPublishedAsync(
-            {{ScopeParameter}}{{KeyParameter}}{{ContextsParameter}}{{MessagesParameter}}{{CancellationParameter}}    {
+            {{ScopeParameter}}{{KeyParameter}}{{(Translatable ? "        string? locale,\n" : string.Empty)}}{{ContextsParameter}}{{MessagesParameter}}{{CancellationParameter}}    {
                     var copy = await {{copies}}
                         .FirstOrDefaultAsync(item => item.PublishedOfId == {{_keyParameter}}{{ScopeCondition("item")}}, cancellationToken);
 
@@ -3257,7 +3363,7 @@ internal sealed partial class EndpointEmitter
                         return {{NotFound}};
                     }
 
-                    return {{Http}}.TypedResults.Ok(ToPublished(copy));
+                    return {{Http}}.TypedResults.Ok({{(Translatable ? "Localize(ToPublished(copy), locale)" : "ToPublished(copy)")}});
                 }
 
                 /// <summary>Kopya, taslağının kimliğiyle gösterilir; kendi anahtarı dışarıya çıkmaz.</summary>

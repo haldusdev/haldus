@@ -340,6 +340,7 @@ internal static class MapCallParser
         var searchRequests = new List<SearchFieldRequest>();
         var sortRequests = new List<SearchFieldRequest>();
         var createOnlyRequests = new List<SearchFieldRequest>();
+        var translatableRequests = new List<SearchFieldRequest>();
         SearchFieldRequest? naturalKeyRequest = null;
         var effectiveKeyRequests = new List<SearchFieldRequest>();
         TransferModel? transfer = null;
@@ -364,6 +365,9 @@ internal static class MapCallParser
                     break;
                 case { Identifier.ValueText: "CreateOnly" }:
                     ReadFieldRequests(callName, call, createOnlyRequests, diagnostics);
+                    break;
+                case { Identifier.ValueText: "Translatable" }:
+                    ReadFieldRequests(callName, call, translatableRequests, diagnostics);
                     break;
                 // Alan saymak isteğe bağlıdır: sayılmazsa kapsamın tamamında tek bir dönem dizisi tutulur.
                 case { Identifier.ValueText: "EffectiveDated" } when call.ArgumentList.Arguments.Count > 0:
@@ -616,6 +620,7 @@ internal static class MapCallParser
             IsCommandWritten = chain.Any(call => call.Name == "AsCommands"),
             SortRequests = sortRequests.ToEquatableArray(),
             CreateOnlyRequests = createOnlyRequests.ToEquatableArray(),
+            TranslatableRequests = translatableRequests.ToEquatableArray(),
             NaturalKeyRequest = naturalKeyRequest,
             EffectiveKeyRequests = effectiveKeyRequests.ToEquatableArray(),
             ReverseAttachments = reverseAttachments.ToEquatableArray(),
@@ -855,6 +860,12 @@ internal static class MapCallParser
             yield return "ChangeFeed cannot be combined with Under<T>(shallow: true): the feed could not tell whose deleted records it is listing";
         }
 
+        if ((traits & Traits.Translatable) != 0 && (operations & (Operations.Update | Operations.Patch)) == 0)
+        {
+            // Çeviri yazmak kaydı güncellemektir.
+            yield return "Translatable requires the Update or Patch operation, which have been removed from this resource";
+        }
+
         if ((traits & Traits.ReadTracking) != 0 && (traits & Traits.Owned) == 0)
         {
             // Okundu bilgisi kaydın kendisinde durur; kayıt tek bir kullanıcıya ait olmalıdır.
@@ -1056,6 +1067,9 @@ internal static class MapCallParser
 
                 // Saklama süresi, okundu takibi ve toplanan alanlar, anahtarıyla adreslenen koleksiyonlar içindir.
                 "Retention" or "ReadTracking" or "Counts" or "Sums" => crudLike || archetype is Archetype.AppendOnly or Archetype.ReadOnly,
+
+                // Çeviriler, istemcinin yazıp değiştirdiği kayıtlar içindir.
+                "Translatable" => crudLike,
 
                 // Özel alanlar, istemcinin yazıp değiştirdiği kayıtlar içindir.
                 "CustomFields" => crudLike,

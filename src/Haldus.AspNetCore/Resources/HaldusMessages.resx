@@ -48,6 +48,12 @@
   <data name="Sort.Invalid" xml:space="preserve">
     <value>Cannot sort by '{0}'. Sortable fields: {1}.</value>
   </data>
+  <data name="Locale.Invalid" xml:space="preserve">
+    <value>'{0}' is not a language tag; write it like 'tr' or 'pt-BR'.</value>
+  </data>
+  <data name="Translation.Limit" xml:space="preserve">
+    <value>A record can be translated into at most {0} languages.</value>
+  </data>
   <data name="Metadata.Invalid" xml:space="preserve">
     <value>The field {0} may hold at most {1} entries; keys must be 1 to {2} characters and values at most {3} characters.</value>
   </data>

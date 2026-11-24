@@ -7,13 +7,13 @@ sonunda (10. aşama) ve ikinci planın sonunda (21. aşama); aşağıdaki tablo 
 
 ## Sonuç
 
-59 satırın 57'si bugünkü API ile yazılıp derleniyor; 51'i önerilen eşlemeyi eksiksiz ifade ediyor.
+59 satırın 58'i bugünkü API ile yazılıp derleniyor; 52'si önerilen eşlemeyi eksiksiz ifade ediyor.
 
 | Sonuç | İlk sınama | Bugün | Anlamı |
 |---|---|---|---|
-| Temiz | 19 | 51 | Raporun önerdiği eşleme, yazılmış özelliklerle eksiksiz ifade ediliyor |
+| Temiz | 19 | 52 | Raporun önerdiği eşleme, yazılmış özelliklerle eksiksiz ifade ediliyor |
 | Kısmi | 29 | 6 | Çekirdek ifade ediliyor; önerilen eşlemedeki bir özellik yok |
-| Yok | 11 | 2 | Gereken archetype veya trait yazılmadı |
+| Yok | 11 | 1 | Gereken archetype veya trait yazılmadı |
 
 Araştırmanın başlangıçtaki düz katalog için kendi sayımı 10 oturuyor, 31 zorlanarak, 18 oturmuyor idi. Üç sayım
 aynı ölçüyle yapılmadı (ilki araştırmacının hükmüydü; sonraki ikisi derlenen kod), bu yüzden fark kesin bir
@@ -35,6 +35,7 @@ iyileşme ölçüsü olarak değil, yön olarak okunmalıdır.
 | 19. Dosyalar ve takılabilirler | `MapFile`, `AttachedTo`, `Attachable`, `Commentable`, `Taggable` | 4 |
 | 20. Özel alanlar ve aktarma | `CustomFields`, `Exports`, `Imports` | 2 |
 | 22. Saklama, okundu takibi, toplama | `Retention`, `ReadTracking`, `Counts`, `Sums` | 4 |
+| 23. Yerelleştirilmiş alanlar | `Translatable` | 1 |
 
 Dört katmanlı model (bir archetype, ilişkiler, en fazla bir durum modeli, trait'ler) iki sınamadan da sağlam çıktı:
 hiçbir satır iki archetype istemedi ve hiçbir satır modelin yeniden açılmasını gerektirmedi. Kapanan bütün boşluklar
@@ -84,7 +85,7 @@ yeni bir trait, ilişki bildirimi veya zincir metoduyla kapandı; kalanlar da ay
 | 25 | Time-off balance | Kısmi | `MapAppendOnly` hareket + `MapReadOnly().DerivedFrom<LeaveEntry>()` bakiye | `MapBalance` (bakiyeye karşı atomik kontrol, bekleyen talepler) |
 | 26 | Timesheet / attendance | Temiz | `MapCrud` + `Batch(atomic: false)`; giriş/çıkış birer entity aksiyonu | — |
 | 27 | Post / Entry | Temiz | `MapCrud` + `Publishable` + `SoftDeletable` + `ConcurrencyChecked` + `Revisioned` | — |
-| 28 | Localized fields | Yok | — | `Translatable` |
+| 28 | Localized fields | Temiz | `Translatable(...)`; yayındaki hal çevirileri taşır (`Publishable`) | |
 | 29 | Revision / Snapshot | Temiz | `Revisioned` (liste, tek sürüm, geri yükleme) | — |
 | 30 | Comment (threaded) | Temiz | `MapCrud` + `Hierarchical` + `SoftDeletable`; hedeflerde `Commentable<Comment>()` | — |
 | 31 | Tag / Label | Temiz | `MapLookup` + `MapAssociation` (bağlar `PUT /articles/{id}/tags` ile topluca değişir) | — |
@@ -161,7 +162,7 @@ yeni bir trait, ilişki bildirimi veya zincir metoduyla kapandı; kalanlar da ay
 | `MapBalance` (durum kovaları, bakiyeye karşı atomik kontrol) | 11, 25 | Araştırmanın üçüncü sürüm listesinde; bugün `MapAppendOnly` + `DerivedFrom` ile yaklaşık ifade ediliyor |
 | Birden çok durum ekseni | 1, 10 | Üçüncü sürüm; "en fazla bir durum modeli" kuralını açar |
 | `MapChangeSet` | 1 | Üçüncü sürüm |
-| `Translatable` | 28 | Üçüncü sürüm |
+
 | Sepet birleştirme, anonim oturumun sahipliği | 5 | Alana özgü; bir handler işi |
 | Kombinatoryal varyant üretimi | 3 | Alana özgü; bir aksiyon işi |
 | Tekrar serisi | 36 | Araştırmada bilinçli olarak kapsam dışı |

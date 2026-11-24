@@ -46,6 +46,26 @@ public static class HaldusDb
     }
 
     /// <summary>
+    /// Çevirileri (dil → alan → metin) jsonb kolonunda saklar; metadata çantasıyla aynı yoldan, metne çevirerek.
+    /// </summary>
+    public static PropertyBuilder<Dictionary<string, Dictionary<string, string>>> ConfigureTranslations(
+        PropertyBuilder<Dictionary<string, Dictionary<string, string>>> property)
+    {
+        ArgumentNullException.ThrowIfNull(property);
+
+        return property
+            .HasConversion(
+                value => JsonSerializer.Serialize(value, (JsonSerializerOptions?)null),
+                json => JsonSerializer.Deserialize<Dictionary<string, Dictionary<string, string>>>(json, (JsonSerializerOptions?)null)
+                    ?? new Dictionary<string, Dictionary<string, string>>(),
+                new ValueComparer<Dictionary<string, Dictionary<string, string>>>(
+                    (left, right) => SameTranslations(left, right),
+                    value => value.Count,
+                    value => HaldusTranslations.Copy(value)))
+            .HasColumnType("jsonb");
+    }
+
+    /// <summary>
     /// Önekli anahtarı, değeri verilmeden eklenen kayıtlar için de üretir. Üretilen uçlar anahtarı kendileri atar;
     /// bu, kaydı uygulamanın kendi kodunun eklediği durumlar (ör. salt-okunur bir kaynak) içindir.
     /// </summary>
@@ -66,6 +86,15 @@ public static class HaldusDb
 
         public override string Next(EntityEntry entry) => HaldusKeys.NewPrefixed(prefix);
     }
+
+    private static bool SameTranslations(
+        Dictionary<string, Dictionary<string, string>>? left,
+        Dictionary<string, Dictionary<string, string>>? right) =>
+        ReferenceEquals(left, right)
+        || (left is not null
+            && right is not null
+            && left.Count == right.Count
+            && left.All(entry => right.TryGetValue(entry.Key, out var texts) && SameEntries(entry.Value, texts)));
 
     private static bool SameEntries(Dictionary<string, string>? left, Dictionary<string, string>? right) =>
         ReferenceEquals(left, right)

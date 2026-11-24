@@ -144,6 +144,20 @@ public static class HaldusProblems
         return FieldProblem(messages, "sort", messages.Format(HaldusMessageKeys.SortInvalid, requested, sortable));
     }
 
+    /// <summary>Dil etiketi (<c>tr</c>, <c>pt-BR</c>) biçimine uymuyor.</summary>
+    public static ProblemHttpResult LocaleInvalid(IHaldusMessages messages, string? locale)
+    {
+        ArgumentNullException.ThrowIfNull(messages);
+        return FieldProblem(messages, "locale", messages.Format(HaldusMessageKeys.LocaleInvalid, locale));
+    }
+
+    /// <summary>Kayıt daha fazla dile çevrilemez.</summary>
+    public static ProblemHttpResult TranslationLimit(IHaldusMessages messages)
+    {
+        ArgumentNullException.ThrowIfNull(messages);
+        return FieldProblem(messages, "locale", messages.Format(HaldusMessageKeys.TranslationLimit, HaldusTranslations.MaxLocales));
+    }
+
     /// <summary>Metadata çantası, birleştirildikten sonra sınırlarını aşıyor.</summary>
     public static ProblemHttpResult MetadataInvalid(IHaldusMessages messages)
     {

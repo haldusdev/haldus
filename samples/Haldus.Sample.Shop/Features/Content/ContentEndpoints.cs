@@ -18,6 +18,10 @@ public static class ContentEndpoints
             .Publishable()
             .NaturalKey(article => article.Slug)
 
+            // Başlık ve gövde başka dillere çevrilebilir: PUT /articles/{id}/translations/tr  { "title": "…" }
+            // GET /articles/{id}?locale=tr çevrilmiş alanları o dilde döndürür; yayındaki hal de çevirileri taşır.
+            .Translatable(article => article.Title, article => article.Body)
+
             // Makaleye dosya eklenebilir, yorum yazılabilir ve makale etiketlenebilir; üçü de başka kaynaklarla paylaşılır.
             .Attachable<Attachment>()
             .Commentable<Comment>()

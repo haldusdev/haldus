@@ -355,7 +355,9 @@ public sealed class TaxonomyTests
         new(27, "Post / Entry", Fit.Clean,
             "public partial class Post { public string Title { get; set; } = \"\"; public string? Body { get; set; } }",
             "app.MapCrud<Post>().Publishable().SoftDeletable().ConcurrencyChecked().Revisioned();"),
-        new(28, "Localized fields", Fit.Missing),
+        new(28, "Localized fields", Fit.Clean,
+            "public partial class Page { public string Title { get; set; } = \"\"; public string? Body { get; set; } }",
+            "app.MapCrud<Page>().Publishable().Translatable(page => page.Title, page => page.Body);"),
         new(29, "Revision / Snapshot", Fit.Clean,
             "public partial class Page { public string Title { get; set; } = \"\"; public string? Body { get; set; } }",
             "app.MapCrud<Page>().Revisioned();"),
@@ -635,8 +637,8 @@ public sealed class TaxonomyTests
     public void Tally_MatchesTheWrittenResults()
     {
         // reports/Haldus taksonomi sınaması.md dosyasındaki sayılar; biri değişirse diğeri de güncellenmelidir.
-        Assert.Equal(51, Rows.Count(row => row.Fit == Fit.Clean));
+        Assert.Equal(52, Rows.Count(row => row.Fit == Fit.Clean));
         Assert.Equal(6, Rows.Count(row => row.Fit == Fit.Partial));
-        Assert.Equal(2, Rows.Count(row => row.Fit == Fit.Missing));
+        Assert.Equal(1, Rows.Count(row => row.Fit == Fit.Missing));
     }
 }

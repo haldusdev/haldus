@@ -115,6 +115,12 @@ internal sealed record ResourceModel(
     public TokenModel? Token { get; init; }
 
     /// <summary>Kaydın ters çevrilebildiği durumlar; durum makinesi yoksa <c>null</c> (her zaman).</summary>
+    /// <summary><c>.Translatable(...)</c> ile sayılan alanlar; henüz doğrulanmamıştır.</summary>
+    public EquatableArray<SearchFieldRequest> TranslatableRequests { get; init; } = EquatableArray<SearchFieldRequest>.Empty;
+
+    /// <summary>Başka dillere çevrilebilen metin alanlarının adları.</summary>
+    public EquatableArray<string> TranslatableFields { get; init; } = EquatableArray<string>.Empty;
+
     /// <summary>Kayıtların saklandığı süre (<c>.Retention(...)</c>); yoksa <c>null</c>.</summary>
     public long? RetentionTicks { get; init; }
 
@@ -346,6 +352,7 @@ internal enum Traits
     EffectiveDated = 2097152,
     CustomFields = 4194304,
     ReadTracking = 8388608,
+    Translatable = 16777216,
 }
 
 /// <summary>

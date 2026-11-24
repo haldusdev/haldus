@@ -247,6 +247,11 @@ internal static class ResourceEmitter
             AppendBatchRequests(builder, resource);
         }
 
+        if (resource.TranslatableFields.Length > 0)
+        {
+            AppendTranslationRequest(builder, resource);
+        }
+
         return builder.ToString();
     }
 
@@ -389,6 +394,34 @@ internal static class ResourceEmitter
             AppendRequest(builder, $"BatchUpdate{entity}Item", resource, detailRequests: "Update", withKey: true, forUpdate: true);
             AppendBatchRequest(builder, $"BatchUpdate{entity}Request", $"BatchUpdate{entity}Item");
         }
+    }
+
+    /// <summary>
+    /// Bir dilin çevirileri. Alanlar kaynak dildeki alanın kurallarını (uzunluk, biçim) taşır ama hiçbiri zorunlu
+    /// değildir: boş bırakılan alan çevrilmemiş sayılır ve kaynak dildeki metinle okunur.
+    /// </summary>
+    private static void AppendTranslationRequest(StringBuilder builder, ResourceModel resource)
+    {
+        builder.Append('\n');
+        builder.Append($"public sealed partial record Translate{resource.EntityName}Request\n");
+        builder.Append("{\n");
+
+        var first = true;
+
+        foreach (var property in resource.Properties.Where(property => resource.TranslatableFields.Contains(property.Name)))
+        {
+            builder.Append(first ? string.Empty : "\n");
+            first = false;
+
+            foreach (var attribute in property.ValidationAttributes.Where(attribute => !attribute.IsRequired))
+            {
+                builder.Append($"    [{attribute.Rendered}]\n");
+            }
+
+            builder.Append($"    public string? {property.Name} {{ get; init; }}\n");
+        }
+
+        builder.Append("}\n");
     }
 
     private static void AppendBatchRequest(StringBuilder builder, string name, string item)

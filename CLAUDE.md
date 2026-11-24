@@ -196,6 +196,14 @@ Bunlar kullanıcıyla kararlaştırıldı; yeniden sorma.
     Paylaşılan bir kaydın kullanıcı başına okundu bilgisi (ayrı bir tablo) yazılmadı.
   - `.Counts<TChild>()` / `.Sums<TChild>(...)`: alan artırılıp azaltılmaz, alt kayıt her yazıldığında baştan sayılır.
     Türetilmiş durum ayrı bir bildirim değildir: toplamdan sonra üst kaydın `Compute()` metodu çağrılır.
+- Yerelleştirilmiş alanlar (23. aşama). Kullanıcı sormamamı istedi; yazılan, önerdiğim seçeneklerdir ve ayrıca
+  onaylanmadı:
+  - Araştırmanın açık bıraktığı iki depolama modelinden alan-dil haritası seçildi: çeviriler kayıttaki bir jsonb
+    çantadadır (dil → alan → metin), yan tablo yoktur. Alanın kendisi kaynak dildeki metni taşır.
+  - `.Translatable(item => item.Title, ...)`; `PUT` / `DELETE /{id}/translations/{locale}`. Çeviriler oluşturma ve
+    güncelleme isteklerinde taşınmaz.
+  - Okuma ancak `?locale=` verilirse çevrilir; `Accept-Language` veriyi değiştirmez (okuduğunu geri yazan istemci
+    kaynak metni ezmesin diye). Yanıt çevirilerin tamamını her zaman `translations` altında taşır.
 - Eşzamanlılık trait'inin adı `ConcurrencyChecked` (eski adı `Versioned`). Sürüm yanıt gövdesinde değil
   `ETag` başlığında taşınır; güncelleme ve silme `If-Match` ister (eksikse 428, uyuşmazlıkta 412).
 - Güncelleme için hem `PUT` (tam değiştirme) hem `PATCH` (kısmi) üretilir.
@@ -266,7 +274,7 @@ Bunlar kullanıcıyla kararlaştırıldı; yeniden sorma.
 
 İlk iki plan bitti: ilk sürümün on aşaması (3. aşamaya `.Searchable()`, 8. aşamaya fiziksel temizlik de eklendi) ve
 ikinci planın on bir aşaması. Üçüncü plan sürüyor (aşağıda). Sınamanın sonucu `reports/Haldus taksonomi sınaması.md`
-dosyasındadır: araştırmadaki 59 varlığın 51'i temiz, 6'sı kısmen ifade ediliyor, 2'si için gereken özellik yok (ilk
+dosyasındadır: araştırmadaki 59 varlığın 52'si temiz, 6'sı kısmen ifade ediliyor, 1'i için gereken özellik yok (ilk
 sınamada 19 / 29 / 11). Aynı veri `tests/Haldus.Generators.Tests/TaxonomyTests.cs` içinde derlenir; yeni bir archetype
 veya trait bir satırı kapatıyorsa ikisini birlikte güncelle. Kalan eksikler raporun "Kalan eksikler" tablosundadır.
 
@@ -670,6 +678,23 @@ aşamalardaki gibi, sorulmadan önerilen seçenekle verildi. Her aşama testleri
     listede olmayan geçişin token adresi yoktur. Token ebeveyn altındaki ve kullanıcıya ait kaynaklarla
     birleşmez (görünürlükleri, token'ı taşıyanın sahip olmadığı bir kimliğe bağlıdır). Bilinen sınır: token
     kullanılınca kendiliğinden geçersiz olmaz; ömrünü `Expiring` ve durum makinesi belirler. Oran sınırlama yoktur.
+- **Çeviriler.** `Traits.Translatable` (`ITranslatable`; `Translations` trait alanıdır ve yanıtta yer alır), sayılan
+  alanlar `ResourceModel.TranslatableFields` (bağlayıcıda çözülür: yazılabilir, gömülü olmayan `string` alanlar).
+  Kurallar çalışma zamanındadır (`HaldusTranslations`: etiketin düzeltilmesi, daha genel dile düşme, 50 dil sınırı);
+  çanta jsonb kolonunda metadata gibi metne çevrilerek saklanır (`HaldusDb.ConfigureTranslations`) ve her yazmada
+  yeni bir çanta atanır.
+  - Yazma uçları (`EmitTranslations`) güncelleme ucunun iskeletini kullanır: `ReadIfMatch`, `OwnerGuard`, `ChainGuard`,
+    `StateGuard(EditableIn)`, `ExpectVersion`, `Save`. İstek tipi (`Translate{Entity}Request`) çevrilen alanların
+    doğrulama attribute'larını `Required` dışında taşır; böylece çeviri de aynı filtreden geçer.
+  - Okuma: `Localize(response, locale)` yanıt kurulduktan sonra uygulanır ve yalnızca liste, tekil okuma ve yayın
+    okumalarında çağrılır. Yazma yanıtları, arama (`/search`), doğal anahtarla okuma ve sürümler kaynak dildedir.
+    Geçersiz bir `?locale=` değeri hata değildir; dil istenmemiş sayılır.
+  - Çeviri içeriktir: onaya bağlı kaynakta içerik alanı olarak bildirilir, anlık görüntüye girer ve geri yüklemede
+    geri yazılır; aynı kaynağın başka bir kaydından doğan kayıt (kopya, yayın, düzeltme) çevirileri taşır
+    (`CreateInitializer`).
+  - Sınırlar: yalnızca `MapCrud` ile birleşir; çevirilere göre süzme, arama ve sıralama yoktur (hep kaynak dildeki
+    metin üzerindendir); kaynak metin değişince çeviriler eskimiş sayılmaz; gömülü satırların ve gömülü değer
+    nesnelerinin alanları çevrilemez; toplu ve içe aktarılan kayıtlar çevirisiz doğar.
 - **Saklama süresi.** `ResourceModel.RetentionTicks` (`LifecycleReader`; süre derleme zamanında okunan bir sabit olmalı).
   Üretilen modül `HaldusMaintenanceRegistry.RegisterRetention<T>(süre)` çağırır; bakım, oluşturulalı süreden uzun
   olmuş kayıtları `ExecuteDelete` ile siler (sorgu filtreleri bilerek kaldırılır; silinmiş ve süresi dolmuş kayıtlar

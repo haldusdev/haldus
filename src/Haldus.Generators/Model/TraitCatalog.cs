@@ -77,6 +77,12 @@ internal static class TraitCatalog
             new("ReadAt", DateTimeOffset + "?", InResponse: true, new("ReadAt", SearchKind.Range, DateTimeOffset, IsNullable: true)),
         ]),
 
+        // Çeviriler yanıtta görünür; yalnızca çeviri uçlarından yazılır.
+        new(Traits.Translatable, "global::Haldus.ITranslatable",
+        [
+            new("Translations", TranslationsType, InResponse: true, Search: null),
+        ]),
+
         // Dönem alanları istemcinin yazdığı sıradan alanlardır; ayrıca eklenirler.
         new(Traits.EffectiveDated, "global::Haldus.IEffectiveDated", []),
 
@@ -89,6 +95,9 @@ internal static class TraitCatalog
 
     public const string MetadataType = "global::System.Collections.Generic.Dictionary<string, string>";
 
+    /// <summary>Dil → alan → metin.</summary>
+    public const string TranslationsType = "global::System.Collections.Generic.Dictionary<string, " + MetadataType + ">";
+
     public const string ApprovalStatus = "global::Haldus.ApprovalStatus";
 
     public const string StringList = "global::System.Collections.Generic.List<string>";
@@ -99,7 +108,7 @@ internal static class TraitCatalog
     public static string Initializer(string type) => type switch
     {
         "string" => " = \"\";",
-        MetadataType or StringList or JsonBag => " = new();",
+        MetadataType or TranslationsType or StringList or JsonBag => " = new();",
         _ => string.Empty,
     };
 
