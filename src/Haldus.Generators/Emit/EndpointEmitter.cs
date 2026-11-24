@@ -1351,7 +1351,7 @@ internal sealed partial class EndpointEmitter
                 private static async {{returnType}} {{method}}(
             {{ScopeParameter}}{{KeyParameter}}{{(request is null ? string.Empty : $"        {request} request,\n")}}        {{apply}} apply,
             {{HttpContextParameter}}{{(Sliding ? TimeProviderParameter : string.Empty)}}{{ContextsParameter}}{{MessagesParameter}}{{CancellationParameter}}    {
-            {{ReadIfMatch()}}        var context = contexts.For<{{_entity}}>();
+            {{ReadIfMatch()}}{{OwnerGuard(transition.Route)}}        var context = contexts.For<{{_entity}}>();
                     var entity = await context.Set<{{_entity}}>(){{Includes}}.FirstOrDefaultAsync(item => {{Match}}, cancellationToken);
 
                     if (entity is null)

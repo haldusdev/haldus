@@ -20,6 +20,16 @@ public sealed class EntityActionTests
                 public string Theme { get; set; } = "";
             }
 
+            public partial class Order
+            {
+                public string CustomerName { get; set; } = "";
+            }
+
+            public partial class OrderNote
+            {
+                public string Text { get; set; } = "";
+            }
+
             public sealed record Rename([property: MaxLength(50)] string Code) : IEntityAction<Coupon>
             {
                 public void Apply(Coupon entity) => entity.Code = Code;
@@ -195,6 +205,25 @@ public sealed class EntityActionTests
         var statefulAction = statefulEndpoints[statefulEndpoints.LastIndexOf("> ActionRedeemAsync(", StringComparison.Ordinal)..];
         Assert.DoesNotContain("entity.Status =", statefulAction);
         Assert.Contains("StateChanged(messages)", statefulAction);
+    }
+
+    [Fact]
+    public void Action_OnADetailOfAGuardedOwner_ChecksTheOwnersStateLikeEveryOtherWrite()
+    {
+        // Ayrı uçlu detayın builder'ı normalde yoktur; elle kurulursa üretilen aksiyon yine de sahibin
+        // düzenlenebildiği durumlara bağlı kalmalıdır.
+        var run = Run("""
+            var orders = app.MapCrud<Order>().Workflow<OrderStatus>().EditableIn(OrderStatus.Draft);
+            orders.MapDetail<OrderNote>().AsSubresource();
+            new ResourceBuilder<OrderNote>(orders.Group).MapAction("pin", note => note.Text = note.Text.Trim());
+            """).AssertCompiles();
+
+        var endpoints = run.Sources["Shop.OrderNote.Endpoints.g.cs"];
+        var action = endpoints[endpoints.LastIndexOf("> ActionPinAsync(", StringComparison.Ordinal)..];
+
+        Assert.Contains(".Select(parent => (global::Shop.OrderStatus?)parent.Status)", action);
+        Assert.Contains("if (ownerStatus is not (global::Shop.OrderStatus.Draft))", action);
+        Assert.Contains("StateConflict(messages, \"pin\", ownerStatus)", action);
     }
 
     [Fact]
