@@ -47,6 +47,27 @@ public sealed class ResourceBuilder<TEntity>(RouteGroupBuilder group) : IEndpoin
     public ResourceBuilder<TEntity> CreateOnly(params Expression<Func<TEntity, object?>>[] fields) => this;
 
     /// <summary>
+    /// Kaydın başka bir kayıttan üretildiğini bildirir (sepetten sipariş, faturadan alacak dekontu): kaynağa
+    /// işaret eden alan (<c>CartId</c>) üretilir ve <c>POST /orders/from-cart/{cartId}</c> ucu eklenir. Aynı adlı
+    /// alanlar kaynaktan kopyalanır; entity <see cref="ICreatedFrom{TSource}"/> uygularsa gerisini o doldurur.
+    /// </summary>
+    /// <param name="on">
+    /// Verilirse kayıt, kaynağın bu adlı geçişi çalıştığında ve onunla aynı transaction'da kendiliğinden üretilir.
+    /// Derleme zamanında okunabilmesi için sabit olmalıdır.
+    /// </param>
+    /// <param name="onDelete">Kaynak silindiğinde bu kayda ne olacağı.</param>
+    public ResourceBuilder<TEntity> CreatedFrom<TSource>(string? on = null, OnDelete onDelete = OnDelete.Restrict)
+        where TSource : class => this;
+
+    /// <summary>
+    /// Kaynağın başka kayıtlardan hesaplandığını bildirir (hareketlerden stok seviyesi): her
+    /// <typeparamref name="TSource"/> kaydı oluşturulduğunda, aynı transaction'da
+    /// <see cref="IDerivation{TSource, TTarget}"/> uygulayan sınıfın çağrılır. Kaynak salt-okunur olmalıdır.
+    /// </summary>
+    public ResourceBuilder<TEntity> DerivedFrom<TSource>()
+        where TSource : class => this;
+
+    /// <summary>
     /// Alanı kaydın doğal anahtarı yapar: değeri (kiracı, sahip ve ebeveyn içinde) benzersizdir, çakışan yazma
     /// 409 döner ve kayıt bu değerle de okunabilir (<c>GET /coupons/by-code/{code}</c>). Diğer uçlar <c>Id</c>
     /// ile adreslenmeye devam eder.

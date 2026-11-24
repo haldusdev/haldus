@@ -276,6 +276,16 @@ internal sealed partial class EndpointEmitter
             EmitMove();
         }
 
+        foreach (var chain in ChainOperation.For(_resource))
+        {
+            EmitChain(chain);
+        }
+
+        foreach (var origin in _resource.Origins)
+        {
+            EmitOrigin(origin);
+        }
+
         if (_resource.Batch is not null)
         {
             EmitBatch();
@@ -628,7 +638,9 @@ internal sealed partial class EndpointEmitter
     /// </summary>
     /// <param name="source">Alanların okunduğu nesne: oluşturmada istek, kopyalamada kaynak kayıt.</param>
     /// <param name="preview">Kayıt kaydedilmeyecek mi; öyleyse kimlik üretilmez.</param>
-    private string CreateInitializer(string source = "request", bool preview = false)
+    /// <param name="only">Yalnızca bu adlı alanlar okunur; kaynağı başka tipte bir kayıt olan yeni kayıtlar için.</param>
+    /// <param name="metadata">Metadata çantası da okunsun mu.</param>
+    private string CreateInitializer(string source = "request", bool preview = false, IEnumerable<string>? only = null, bool metadata = true)
     {
         var keys = new List<string>();
         if (preview)
@@ -671,20 +683,38 @@ internal sealed partial class EndpointEmitter
             keys.Add("Culture = global::System.Globalization.CultureInfo.CurrentUICulture.Name");
         }
 
-        if (HasMetadata)
+        if (HasMetadata && metadata)
         {
             keys.Add($"Metadata = global::Haldus.HaldusMetadata.Create({source}.Metadata)");
         }
 
-        return string.Join(
-            ", ", keys.Concat(_writable.Select(property => $"{property.Name} = {source}.{property.Name}")));
+        var fields = only is null ? _writable.Select(property => property.Name) : only;
+
+        return string.Join(", ", keys.Concat(fields.Select(field => $"{field} = {source}.{field}")));
     }
+
+    /// <summary>
+    /// Yeni kayıttan türeyen kaynakların izdüşümlerini çağırır. Kayıt kaydedilmeden önce, onunla aynı bağlamda
+    /// çalışır; böylece kaynak ve ondan türeyenler birlikte kalıcı olur.
+    /// </summary>
+    private string Derive() => _resource.Derivations.Length == 0
+        ? string.Empty
+        : $"        await using var derived = await global::Haldus.HaldusDerivations.BeginAsync(contexts.For<{_entity}>(), \"{_plural}\", cancellationToken);\n"
+            + string.Concat(_resource.Derivations.Select(target =>
+                $"        await global::Haldus.HaldusDerivations.ApplyAsync<{_entity}, {target}>(contexts.For<{_entity}>(), entity, contexts, cancellationToken);\n"));
+
+    /// <summary>Türetmenin sınırını, kaynak kayıt kaydedildikten sonra kapatır.</summary>
+    private string DeriveCommit() => _resource.Derivations.Length == 0
+        ? string.Empty
+        : "        await derived.CommitAsync(cancellationToken);\n";
 
     /// <summary>
     /// Yeni bir kaydı (oluşturulan veya kopyalanan) ekler ve kaydeder; sonunda satır sonu yoktur. Numara ve sıra,
     /// kayıtla aynı transaction'da ayrılır ve onunla birlikte kalıcı olur.
     /// </summary>
-    private string SaveCreated()
+    /// <param name="catches">Kaydetmenin, çakışma olarak bildirilecek ek hataları (yakalama blokları).</param>
+    /// <param name="derive">Kayıttan türeyen kaynaklar da güncellensin mi.</param>
+    private string SaveCreated(string catches = "", bool derive = true)
     {
         var numbered = _resource.Numbering is { AssignOn: null };
         var save = numbered
@@ -700,13 +730,20 @@ internal sealed partial class EndpointEmitter
                     await context.SaveChangesAsync(cancellationToken);
             """;
 
-        if (NaturalKey is not null)
+        if (NaturalKey is not null || catches.Length > 0)
         {
             // Ön kontrolü geçen iki eşzamanlı istekten ikincisi indekse takılır; o da çakışma olarak bildirilir.
-            save = save.Replace("        await context.SaveChangesAsync(cancellationToken);", SaveNew().TrimEnd('\n'));
+            save = save.Replace("        await context.SaveChangesAsync(cancellationToken);", SaveNew(catches).TrimEnd('\n'));
         }
 
-        return Orderable ? OrderAppend() + save + "\n" + OrderCommit().TrimEnd('\n') : save;
+        if (Orderable)
+        {
+            save = OrderAppend() + save + "\n" + OrderCommit().TrimEnd('\n');
+        }
+
+        return derive && _resource.Derivations.Length > 0
+            ? Derive() + save + "\n" + DeriveCommit().TrimEnd('\n')
+            : save;
     }
 
     private void EmitCreate()
@@ -824,7 +861,7 @@ internal sealed partial class EndpointEmitter
                         return {{NotFound}};
                     }
 
-            {{StateGuard(_resource.Workflow?.EditableIn, "update")}}{{WriteChecks(patch: operation == "Patch", creating: false)}}{{CycleCheck(patch: operation == "Patch")}}{{ExpectVersion()}}{{OrderRemember()}}{{assignments}}
+            {{ChainGuard()}}{{StateGuard(_resource.Workflow?.EditableIn, "update")}}{{WriteChecks(patch: operation == "Patch", creating: false)}}{{CycleCheck(patch: operation == "Patch")}}{{ExpectVersion()}}{{OrderRemember()}}{{assignments}}
             {{SyncDetails(patch: operation == "Patch")}}{{Slide()}}{{Compute()}}{{OrderReparent()}}{{Save()}}{{OrderReparentCommit()}}
             {{WriteETag()}}        return {{Http}}.TypedResults.Ok(ToResponse(entity));
                 }
@@ -922,7 +959,7 @@ internal sealed partial class EndpointEmitter
                         return {{NotFound}};
                     }
 
-            {{StateGuard(_resource.Workflow?.DeletableIn, "delete")}}{{ExpectVersion()}}{{OrderBegin()}}        context.Set<{{_entity}}>().Remove(entity);
+            {{ChainDeleteGuard()}}{{StateGuard(_resource.Workflow?.DeletableIn, "delete")}}{{ExpectVersion()}}{{OrderBegin()}}        context.Set<{{_entity}}>().Remove(entity);
             {{SaveDelete()}}{{OrderCloseGap()}}{{OrderCommit()}}
             {{(_resource.Has(Traits.SoftDeletable) ? WriteETag() : string.Empty)}}        return {{Http}}.TypedResults.NoContent();
                 }
@@ -1544,7 +1581,7 @@ internal sealed partial class EndpointEmitter
                         return {{Problems}}.TransitionRejected(messages, rejection.Message);
                     }
 
-            {{setStatus}}{{Slide()}}{{Compute()}}{{allocate}}{{Save()}}{{commit}}
+            {{setStatus}}{{Slide()}}{{Compute()}}{{Spawn(transition)}}{{allocate}}{{Save()}}{{commit}}
             {{WriteETag()}}        return {{Http}}.TypedResults.Ok({{(response is null ? "ToResponse(entity)" : "result")}});
                 }
 
@@ -1775,7 +1812,8 @@ internal sealed partial class EndpointEmitter
     {
         var builder = new StringBuilder();
 
-        foreach (var reference in _resource.References.Where(reference => reference.Kind != ReferenceKind.Parent))
+        // Ebeveyn adresten, kaydın üretildiği kaynak üretme ucundan gelir; ikisi de orada doğrulanır.
+        foreach (var reference in _resource.References.Where(reference => reference.Kind is not (ReferenceKind.Parent or ReferenceKind.Source)))
         {
             if (!creating && IsCreateOnly(reference.PropertyName))
             {
@@ -2149,6 +2187,328 @@ internal sealed partial class EndpointEmitter
             """);
     }
 
+    /// <summary>Gömülü satırları başka bir kayıttan, kendi kimlikleriyle ve sıraları korunarak kopyalar.</summary>
+    private string CopyRows(string source)
+    {
+        var rows = new StringBuilder();
+
+        foreach (var detail in _resource.Details)
+        {
+            var position = ResourceEmitter.CamelCase(detail.CollectionName) + "Position";
+            var assignments = string.Join(
+                ", ",
+                new[] { $"{detail.KeyName} = global::System.Guid.CreateVersion7()", $"Position = {position}++" }
+                    .Concat(detail.Properties.Where(property => property.IsWritable).Select(property => $"{property.Name} = row.{property.Name}")));
+
+            rows.Append($$"""
+
+                        var {{position}} = 0;
+                        foreach (var row in {{source}}.{{detail.CollectionName}}.OrderBy(row => row.Position).ThenBy(row => row.{{detail.KeyName}}))
+                        {
+                            entity.{{detail.CollectionName}}.Add(new {{detail.QualifiedName}} { {{assignments}} });
+                        }
+
+                """);
+        }
+
+        return rows.ToString();
+    }
+
+    /// <summary>
+    /// Bir kaydın yüklenmiş satırlarını kendi sıralarına dizer. Veritabanı satırları belirli bir sırayla vermez;
+    /// kullanıcının sözleşmesi onları okurken (ör. başka bir kayda taşırken) sıra korunmalıdır.
+    /// </summary>
+    private static string SortRows(string record, IEnumerable<string> collections) => string.Concat(collections.Select(collection =>
+        $"        {record}.{collection}.Sort(static (left, right) => left.Position.CompareTo(right.Position));\n"));
+
+    /// <summary>
+    /// Kullanıcının kodu satır ekleyip çıkarmış olabilir; kimliği olmayan satıra kimlik verilir ve sıra, satırların
+    /// koleksiyondaki yerine göre yeniden yazılır.
+    /// </summary>
+    private string NormalizeRows()
+    {
+        var rows = new StringBuilder();
+
+        foreach (var detail in _resource.Details)
+        {
+            var index = ResourceEmitter.CamelCase(detail.CollectionName) + "Index";
+
+            rows.Append($$"""
+                        var {{index}} = 0;
+                        foreach (var row in entity.{{detail.CollectionName}})
+                        {
+                            if (row.{{detail.KeyName}} == default)
+                            {
+                                row.{{detail.KeyName}} = global::System.Guid.CreateVersion7();
+                            }
+
+                            row.Position = {{index}}++;
+                        }
+
+
+                """);
+        }
+
+        return rows.ToString();
+    }
+
+    // ── Zincir: ters kayıt ve yerine geçme ─────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Kapanmış bir halka (ters çevrilmiş veya yerine geçilmiş kayıt) değiştirilemez: karşı kaydı onun o anki
+    /// halinden üretilmiştir.
+    /// </summary>
+    private string ChainGuard() => string.Concat(ChainOperation.For(_resource).Select(chain => $$"""
+                if (entity.{{chain.Back}} is not null)
+                {
+                    return {{Problems}}.ChainLocked(messages, global::Haldus.HaldusMessageKeys.{{chain.LockedDetail}}, "{{_entity}}", {{_keyParameter}});
+                }
+
+
+        """));
+
+    /// <summary>
+    /// Bir çiftin parçası olan kayıt silinemez: silinirse öteki uç hiçbir şeye işaret etmez ya da sonsuza dek
+    /// kapalı kalır. Hiçbir çifte girmemiş kayıt (ör. ters çevrilmemiş bir taslak) serbestçe silinir.
+    /// </summary>
+    private string ChainDeleteGuard() => string.Concat(ChainOperation.For(_resource).Select(chain => $$"""
+                if (entity.{{chain.Back}} is not null || entity.{{chain.Forward}} is not null)
+                {
+                    return {{Problems}}.ChainLocked(messages, global::Haldus.HaldusMessageKeys.ChainMemberDetail, "{{_entity}}", {{_keyParameter}});
+                }
+
+
+        """));
+
+    /// <summary>
+    /// Kaydın karşı kaydını (ters kayıt veya yerine geçen) üretir. Yeni kayıt eskisinin kopyası olarak kurulur,
+    /// entity sözleşmeyi uyguluyorsa o çağrılır, sonra istekte gönderilen alanlar yazılır. İki kayıt tek kaydetmede
+    /// birbirine bağlanır; bir kaydın yalnızca bir karşı kaydı olabilir.
+    /// </summary>
+    private void EmitChain(ChainOperation chain)
+    {
+        var request = $"{chain.Pascal}{_entity}Request";
+        var locked = $"{Problems}.ChainLocked(messages, global::Haldus.HaldusMessageKeys.{chain.LockedDetail}, \"{_entity}\", {_keyParameter})";
+
+        _map.Append($$"""
+                    group.MapPost("{{_keyRoute}}/{{chain.Route}}", {{chain.Pascal}}Async)
+                        .WithName("{{chain.Pascal}}{{_entity}}")
+                        .AddEndpointFilter<global::Haldus.HaldusValidationFilter<{{request}}>>()
+                        .ProducesValidationProblem(){{IdempotencyFilter(request)}}{{(Idempotent ? "\n            .ProducesProblem(422)" : string.Empty)}}
+                        .ProducesProblem(404)
+                        .ProducesProblem(409){{ConcurrencyMetadata()}};
+
+
+            """);
+
+        // Ters kayıt zincirin sonudur; yeniden ters çevrilmesi asıl kaydı geri getirmez, yalnızca izini bulandırır.
+        var terminal = chain.Terminal
+            ? $$"""
+                    if (original.{{chain.Forward}} is not null)
+                    {
+                        return {{Problems}}.ChainLocked(messages, global::Haldus.HaldusMessageKeys.ReversalDetail, "{{_entity}}", {{_keyParameter}});
+                    }
+
+
+            """
+            : string.Empty;
+
+        var implemented = _resource.Contracts.Contains(chain.Contract);
+        var contract = implemented
+            ? SortRows("original", _resource.Details.Select(detail => detail.CollectionName))
+                + $"        ((global::Haldus.{chain.Contract}<{_entity}>)entity).{chain.ContractMethod}(original);\n\n"
+            : string.Empty;
+
+        // Asıl kayıt da değişir (karşı kaydına işaret eder); o sırada başkası değiştirdiyse kaydetme başarısız olur.
+        var concurrency = _concurrency || GuardsState
+            ? $$"""
+                    catch (global::Microsoft.EntityFrameworkCore.DbUpdateConcurrencyException)
+                    {
+                        return {{Problems}}.{{(_concurrency ? "PreconditionFailed" : "StateChanged")}}(messages);
+                    }
+
+            """
+            : string.Empty;
+
+        // Kontrolü birlikte geçen iki istekten ikincisi benzersiz indekse takılır.
+        var taken = $$"""
+                    catch (global::Microsoft.EntityFrameworkCore.DbUpdateException taken)
+                        when (global::Haldus.HaldusDb.IsUniqueViolation(taken, "{{chain.IndexName(_resource)}}"))
+                    {
+                        return {{locked}};
+                    }
+
+            """;
+
+        var duplicate = NaturalKey is { } key
+            ? NaturalKeyQuery(key, $"entity.{key.PropertyName}", string.Empty, string.Empty)
+            : string.Empty;
+
+        _handlers.Append($$"""
+
+                private static async {{Task}}<{{Results}}.Results<{{Results}}.Created<{{_entity}}Response>, {{Problem}}>> {{chain.Pascal}}Async(
+            {{ScopeParameter}}{{KeyParameter}}        {{request}}? request,
+            {{HttpContextParameter}}{{(HasLifetime ? TimeProviderParameter : string.Empty)}}{{ContextsParameter}}{{MessagesParameter}}{{CancellationParameter}}    {
+            {{ReadIfMatch()}}{{OwnerGuard(chain.Route)}}        // Gövde isteğe bağlıdır; gönderilmediyse hiçbir alan değişmez.
+                    request ??= new {{request}}();
+
+                    var context = contexts.For<{{_entity}}>();
+                    var original = await context.Set<{{_entity}}>(){{Includes}}.FirstOrDefaultAsync(item => {{Match}}, cancellationToken);
+
+                    if (original is null)
+                    {
+                        return {{NotFound}};
+                    }
+
+                    if (original.{{chain.Back}} is not null)
+                    {
+                        return {{locked}};
+                    }
+
+            {{terminal}}{{ExpectVersion().Replace("Entry(entity)", "Entry(original)")}}        var entity = new {{_entity}} { {{CreateInitializer(source: "original")}}, {{chain.Forward}} = original.{{_key}} };
+            {{CopyRows("original")}}
+            {{contract}}{{PatchAssignments(_writable)}}{{(implemented ? NormalizeRows() : string.Empty)}}{{ReferenceChecks(patch: false, source: "entity")}}{{Compute()}}{{duplicate}}        original.{{chain.Back}} = entity.{{_key}};
+            {{SaveCreated(concurrency + taken)}}
+
+            {{WriteETag()}}        return {{Http}}.TypedResults.Created(global::Haldus.HaldusRoutes.Sibling(httpContext, entity.{{_key}}), ToResponse(entity));
+                }
+
+            """);
+    }
+
+    // ── Başka bir kayıttan üretme ──────────────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Geçişin doğurduğu kayıtları kurar ve bağlama ekler; geçişle aynı kaydetmede kalıcı olurlar. Kayıt
+    /// kurulamazsa geçiş de tamamlanmaz.
+    /// </summary>
+    private string Spawn(TransitionModel transition)
+    {
+        const string Injection = "global::Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions";
+        var builder = new StringBuilder();
+
+        foreach (var spawn in _resource.Spawns.Where(spawn => spawn.Transition == transition.Route))
+        {
+            var prefix = spawn.TargetNamespace.Prefix();
+            var created = "created" + spawn.TargetName;
+            var time = spawn.NeedsTime
+                ? $"{Injection}.GetRequiredService<global::System.TimeProvider>(httpContext.RequestServices), "
+                : string.Empty;
+
+            builder.Append(SortRows("entity", _resource.Details.Select(detail => detail.CollectionName)));
+            builder.Append($$"""
+                        var {{created}} = await {{prefix}}{{spawn.TargetName}}Endpoints.From{{spawn.SourceName}}Async(
+                            entity, new {{prefix}}Create{{spawn.TargetName}}From{{spawn.SourceName}}Request(), {{time}}contexts, messages, cancellationToken);
+
+                        if ({{created}}.Problem is not null)
+                        {
+                            return {{created}}.Problem;
+                        }
+
+                        contexts.For<{{spawn.TargetType}}>().Set<{{spawn.TargetType}}>().Add({{created}}.Record!);
+
+
+                """);
+        }
+
+        return builder.ToString();
+    }
+
+    /// <summary>
+    /// Kaydı başka bir kayıttan üretir: <c>POST /orders/from-cart/{cartId}</c>. Kurma işi ayrı bir metottadır;
+    /// kaynağın bir geçişi kaydı doğuruyorsa aynı metodu o çağırır.
+    /// </summary>
+    private void EmitOrigin(OriginModel origin)
+    {
+        var request = $"Create{_entity}From{origin.SourceName}Request";
+        var parameter = ResourceEmitter.CamelCase(origin.SourceName + origin.SourceKeyName);
+        var includes = string.Concat(origin.SourceIncludes.Select(collection => $".Include(item => item.{collection})"));
+        var time = HasLifetime ? TimeProviderParameter : string.Empty;
+        var qualified = ResourceEmitter.QualifiedName(_resource, _resource.Namespace);
+
+        EmitOriginBuilder(origin, request, time, qualified);
+
+        if (origin.Trigger is not null)
+        {
+            // Kayıt yalnızca kaynağının geçişiyle doğar. Açık bir uç, geçişin koşullarını (durum, iş kuralı)
+            // atlayarak aynı kaydı üretmenin yolu olurdu.
+            return;
+        }
+
+        _map.Append($$"""
+                    group.MapPost("/from-{{Naming.ToKebabCase(origin.SourceName)}}/{{{parameter}}{{origin.SourceRouteConstraint}}}", CreateFrom{{origin.SourceName}}Async)
+                        .WithName("Create{{_entity}}From{{origin.SourceName}}")
+                        .AddEndpointFilter<global::Haldus.HaldusValidationFilter<{{request}}>>()
+                        .ProducesValidationProblem(){{IdempotencyFilter(request)}}{{(Idempotent ? "\n            .ProducesProblem(422)" : string.Empty)}}
+                        .ProducesProblem(404){{(_resource.OwnerGuard is null && NaturalKey is null ? string.Empty : "\n            .ProducesProblem(409)")}};
+
+
+            """);
+
+        _handlers.Append($$"""
+
+                private static async {{Task}}<{{Results}}.Results<{{Results}}.Created<{{_entity}}Response>, {{Problem}}>> CreateFrom{{origin.SourceName}}Async(
+            {{ScopeParameter}}        {{origin.SourceKeyType}} {{parameter}},
+                    {{request}}? request,
+            {{HttpContextParameter}}{{time}}{{ContextsParameter}}{{MessagesParameter}}{{CancellationParameter}}    {
+            {{(_resource.OwnerGuard is null ? ParentCheck() : OwnerGuard("create"))}}        // Gövde isteğe bağlıdır; kaynakta karşılığı olmayan alanları doldurur.
+                    request ??= new {{request}}();
+
+                    // Kaynak kendi filtrelerinden geçerek okunur; görünmeyen bir kayıttan kayıt üretilemez.
+                    var source = await contexts.For<{{origin.SourceType}}>().Set<{{origin.SourceType}}>().AsNoTracking(){{includes}}
+                        .FirstOrDefaultAsync(item => item.{{origin.SourceKeyName}} == {{parameter}}, cancellationToken);
+
+                    if (source is null)
+                    {
+                        return {{Problems}}.NotFound(messages, "{{origin.SourceName}}", {{parameter}});
+                    }
+
+            {{SortRows("source", origin.SourceIncludes)}}        var built = await From{{origin.SourceName}}Async(source, request, {{ScopeArgument}}{{(HasLifetime ? "timeProvider, " : string.Empty)}}contexts, messages, cancellationToken);
+
+                    if (built.Problem is not null)
+                    {
+                        return built.Problem;
+                    }
+
+                    var entity = built.Record!;
+                    var context = contexts.For<{{_entity}}>();
+            {{SaveCreated()}}
+
+            {{WriteETag()}}        return {{Http}}.TypedResults.Created(global::Haldus.HaldusRoutes.Sibling(httpContext, entity.{{_key}}), ToResponse(entity));
+                }
+
+            """);
+    }
+
+    private void EmitOriginBuilder(OriginModel origin, string request, string time, string qualified)
+    {
+        var contract = origin.HasContract
+            ? $"        ((global::Haldus.ICreatedFrom<{origin.SourceType}>)entity).CreateFrom(source);\n\n"
+            : string.Empty;
+
+        var duplicate = NaturalKey is { } key
+            ? NaturalKeyQuery(key, $"entity.{key.PropertyName}", string.Empty, string.Empty)
+            : string.Empty;
+
+        // Kaydı kurar ama eklemez ve kaydetmez: aynı adlı alanlar kaynaktan gelir, entity sözleşmeyi uyguluyorsa
+        // gerisini o doldurur, en son istekte gönderilen alanlar yazılır. Kontroller oluşturma ucundakilerdir.
+        _handlers.Append($$"""
+
+                /// <summary>
+                /// Kaydı <c>{{origin.SourceName}}</c> kaydından kurar; eklemek ve kaydetmek çağıranın işidir.
+                /// </summary>
+                public static async {{Task}}<global::Haldus.HaldusBuilt<{{qualified}}>> From{{origin.SourceName}}Async(
+                    {{origin.SourceType}} source,
+                    {{request}} request,
+            {{ScopeParameter}}{{time}}{{ContextsParameter}}{{MessagesParameter}}{{CancellationParameter}}    {
+                    var entity = new {{_entity}} { {{string.Join(", ", new[] { CreateInitializer(source: "source", only: origin.CopiedProperties, metadata: origin.CopiesMetadata), $"{origin.ForeignKey} = source.{origin.SourceKeyName}" }.Where(part => part.Length > 0))}} };
+
+            {{contract}}{{PatchAssignments(_writable)}}{{(origin.HasContract ? NormalizeRows() : string.Empty)}}{{ReferenceChecks(patch: false, source: "entity")}}{{Compute()}}{{duplicate}}        return entity;
+                }
+
+            """);
+    }
+
     // ── Önizleme ve kopya ──────────────────────────────────────────────────────────────────────────────
 
     /// <summary>
@@ -2206,7 +2566,7 @@ internal sealed partial class EndpointEmitter
                             return {{NotFound}};
                         }
 
-                {{StateGuard(_resource.Workflow?.EditableIn, "update")}}{{WriteChecks(patch: false, creating: false)}}{{CycleCheck(patch: false)}}{{UpdateAssignments()}}
+                {{ChainGuard()}}{{StateGuard(_resource.Workflow?.EditableIn, "update")}}{{WriteChecks(patch: false, creating: false)}}{{CycleCheck(patch: false)}}{{UpdateAssignments()}}
                 {{SyncDetails(patch: false)}}{{Compute()}}        var preview = ToResponse(entity);
 
                         // Hiçbir şey kaydedilmez. Bağlamda bekleyen değişiklikler de bırakılır ki isteğin devamında
@@ -2243,25 +2603,7 @@ internal sealed partial class EndpointEmitter
             ? NaturalKeyQuery(key, $"entity.{key.PropertyName}", string.Empty, string.Empty)
             : string.Empty;
 
-        var rows = new StringBuilder();
-        foreach (var detail in _resource.Details)
-        {
-            var position = ResourceEmitter.CamelCase(detail.CollectionName) + "Position";
-            var assignments = string.Join(
-                ", ",
-                new[] { $"{detail.KeyName} = global::System.Guid.CreateVersion7()", $"Position = {position}++" }
-                    .Concat(detail.Properties.Where(property => property.IsWritable).Select(property => $"{property.Name} = row.{property.Name}")));
-
-            rows.Append($$"""
-
-                        var {{position}} = 0;
-                        foreach (var row in source.{{detail.CollectionName}}.OrderBy(row => row.Position).ThenBy(row => row.{{detail.KeyName}}))
-                        {
-                            entity.{{detail.CollectionName}}.Add(new {{detail.QualifiedName}} { {{assignments}} });
-                        }
-
-                """);
-        }
+        var rows = CopyRows("source");
 
         _handlers.Append($$"""
 
@@ -2302,14 +2644,14 @@ internal sealed partial class EndpointEmitter
             """;
 
     /// <summary>Yeni bir kaydı kaydeder.</summary>
-    private string SaveNew() => NaturalKey is null
+    private string SaveNew(string catches = "") => NaturalKey is null && catches.Length == 0
         ? "        await context.SaveChangesAsync(cancellationToken);\n"
         : $$"""
                     try
                     {
                         await context.SaveChangesAsync(cancellationToken);
                     }
-            {{DuplicateCatch()}}
+            {{catches}}{{DuplicateCatch()}}
             """;
 
     /// <summary>Hazır bir kod parçasını daha içerideki bir bloğa yerleştirmek için her satırını girintiler.</summary>

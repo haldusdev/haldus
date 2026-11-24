@@ -48,6 +48,18 @@ internal sealed record ResourceModel(
     /// <summary>Kaydın doğal anahtarı; bağlama adımı doldurur.</summary>
     public NaturalKeyModel? NaturalKey { get; init; }
 
+    /// <summary><c>.DerivedFrom&lt;T&gt;()</c> ile gösterilen kaynaklar.</summary>
+    public EquatableArray<SourceDeclaration> DerivedFrom { get; init; } = EquatableArray<SourceDeclaration>.Empty;
+
+    /// <summary>Kaydın üretilebildiği kaynaklar (<c>.CreatedFrom&lt;T&gt;()</c>); bağlama adımı doldurur.</summary>
+    public EquatableArray<OriginModel> Origins { get; init; } = EquatableArray<OriginModel>.Empty;
+
+    /// <summary>Bu kaynağın geçişlerinin doğurduğu kayıtlar; bağlama adımı doldurur.</summary>
+    public EquatableArray<SpawnModel> Spawns { get; init; } = EquatableArray<SpawnModel>.Empty;
+
+    /// <summary>Bu kaynaktan türeyen kaynakların tam adları; bağlama adımı doldurur.</summary>
+    public EquatableArray<string> Derivations { get; init; } = EquatableArray<string>.Empty;
+
     /// <summary>Sunucunun ürettiği anahtarın biçimi (<c>.KeyStrategy(...)</c>).</summary>
     public KeyGeneration KeyGeneration { get; init; }
 
@@ -74,6 +86,12 @@ internal sealed record ResourceModel(
 
     /// <summary>Entity <c>IComputed</c> uyguluyor mu; uyguluyorsa yazma uçları kaydetmeden önce hesaplatır.</summary>
     public bool IsComputed { get; init; }
+
+    /// <summary>
+    /// Entity'nin uyguladığı zincir sözleşmeleri (<c>IReversal</c>, <c>ISupersession</c>) ve
+    /// <c>ICreatedFrom&lt;T&gt;</c> için kaynak tiplerinin tam adları. Uygulanan sözleşme kopyadan sonra çağrılır.
+    /// </summary>
+    public EquatableArray<string> Contracts { get; init; } = EquatableArray<string>.Empty;
 
     /// <summary><c>.Workflow&lt;TStatus&gt;()</c> ile bildirilen durum makinesi.</summary>
     public WorkflowModel? Workflow { get; init; }
@@ -260,6 +278,48 @@ internal enum Traits
 
     /// <summary>Yazmaların kaydetmeyen bir önizlemesi vardır.</summary>
     Previewable = 8192,
+
+    /// <summary>Kayıt, ona işaret eden bir ters kayıtla nötrlenebilir.</summary>
+    Reversible = 16384,
+
+    /// <summary>Kaydın yerine, ona işaret eden yeni bir kayıt geçebilir.</summary>
+    Supersedes = 32768,
+}
+
+/// <summary>
+/// Aynı kaynağın iki kaydını birbirine bağlayan işlem: ters çevirme veya yerine geçme. Yeni kayıt eskisine,
+/// eskisi yenisine işaret eder; eski kayıt bundan sonra kapanmıştır.
+/// </summary>
+/// <param name="Route">Ucun adı: <c>reverse</c>.</param>
+/// <param name="Forward">Yeni kayıttaki, eskisine işaret eden alan: <c>ReversesId</c>.</param>
+/// <param name="Back">Eski kayıttaki, yenisine işaret eden alan: <c>ReversedById</c>.</param>
+/// <param name="Contract">Entity'nin, kopyayı düzeltmek için uygulayabileceği arayüz ve metodu.</param>
+/// <param name="Terminal">Yeni kayıt zincirin sonu mu; ters kayıt yeniden ters çevrilemez, yerine geçen kayıt geçilebilir.</param>
+internal sealed record ChainOperation(
+    Traits Trait,
+    string Route,
+    string Pascal,
+    string Forward,
+    string Back,
+    string Contract,
+    string ContractMethod,
+    string LockedDetail,
+    bool Terminal)
+{
+    public static readonly ChainOperation Reverse = new(
+        Traits.Reversible, "reverse", "Reverse", "ReversesId", "ReversedById", "IReversal", "Reverse", "ReversedDetail", Terminal: true);
+
+    public static readonly ChainOperation Supersede = new(
+        Traits.Supersedes, "supersede", "Supersede", "SupersedesId", "SupersededById", "ISupersession", "Supersede", "SupersededDetail", Terminal: false);
+
+    public static IEnumerable<ChainOperation> For(ResourceModel resource) =>
+        new[] { Reverse, Supersede }.Where(chain => resource.Has(chain.Trait));
+
+    public string IndexName(ResourceModel resource)
+    {
+        var name = $"UX_{Haldus.Generators.Infrastructure.Naming.Pluralize(resource.EntityName)}_{Forward}";
+        return name.Length <= 63 ? name : name.Substring(0, 63);
+    }
 }
 
 /// <summary>Üretilecek standart işlemler. Üye adları <c>Haldus.CrudOperation</c> ile aynıdır.</summary>
@@ -304,6 +364,11 @@ internal enum ReferenceKind
     /// <summary>Zorunlu ebeveyn; kaynak onun adresi altında yaşar: <c>.Under&lt;T&gt;()</c>.</summary>
     Parent,
 
+    /// <summary>
+    /// Kaydın üretildiği kayıt: <c>.CreatedFrom&lt;T&gt;()</c>. Alanı istekle yazılamaz; yalnızca üretme ucu doldurur.
+    /// </summary>
+    Source,
+
     /// <summary>Aynı kaynağa referans; ağaç oluşturur: <c>.Hierarchical()</c>.</summary>
     Self,
 }
@@ -338,7 +403,38 @@ internal sealed record ReferenceDeclaration(
 
     /// <summary>Dış hedef kiracıya bağlı mı (<c>IMultiTenant</c> uyguluyor mu).</summary>
     public bool TargetTenantScoped { get; init; }
+
+    /// <summary><c>.CreatedFrom&lt;T&gt;(on: "...")</c> ile verilen, kaydı kendiliğinden üreten geçişin adı.</summary>
+    public string? Trigger { get; init; }
 }
+
+/// <summary><c>.DerivedFrom&lt;T&gt;()</c> ile gösterilen, henüz çözülmemiş kaynak.</summary>
+internal sealed record SourceDeclaration(string Name, string? Type, LocationInfo Location);
+
+/// <summary>Kaydın başka bir kayıttan üretilme biçimi; bağlama adımı, iki kaynak da bilindikten sonra doldurur.</summary>
+/// <param name="ForeignKey">Üretilen kayıttaki, kaynağa işaret eden alan: <c>CartId</c>.</param>
+/// <param name="SourceIncludes">Kaynağın, sözleşme okuyabilsin diye birlikte yüklenen satır koleksiyonları.</param>
+/// <param name="CopiedProperties">İki kaynakta adı ve tipi aynı olan, kendiliğinden kopyalanan alanlar.</param>
+/// <param name="Trigger">Kaydı kendiliğinden üreten, kaynağa ait geçişin adı; yoksa <c>null</c>.</param>
+/// <param name="HasContract">Entity <c>ICreatedFrom&lt;TSource&gt;</c> uyguluyor mu.</param>
+internal sealed record OriginModel(
+    string SourceName,
+    string SourceType,
+    string SourceKeyName,
+    string SourceKeyType,
+    string SourceRouteConstraint,
+    string ForeignKey,
+    EquatableArray<string> SourceIncludes,
+    EquatableArray<string> CopiedProperties,
+    bool CopiesMetadata,
+    string? Trigger,
+    bool HasContract);
+
+/// <summary>Bir geçişin doğurduğu kayıt: geçiş çalışınca hedefin kurucu metodu çağrılır.</summary>
+/// <param name="Transition">Geçişin adı.</param>
+/// <param name="TargetType">Üretilen entity'nin tam adı; uç sınıfı ve istek tipi bundan türetilir.</param>
+/// <param name="NeedsTime">Hedefin ömrü sunucu tarafından hesaplanıyor mu.</param>
+internal sealed record SpawnModel(string Transition, string TargetType, string TargetNamespace, string TargetName, string SourceName, bool NeedsTime);
 
 /// <param name="TargetRoute">Hedef koleksiyonun rota parçası (ör. <c>projects</c>); <c>.Under&lt;T&gt;()</c> adresi kurarken kullanır.</param>
 internal sealed record ResolvedReference(

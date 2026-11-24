@@ -134,6 +134,22 @@ public static class ResourceBuilderTraitExtensions
     public static ResourceBuilder<TEntity> Previewable<TEntity>(this ResourceBuilder<TEntity> builder)
         where TEntity : class => builder;
 
+    /// <summary>
+    /// Kaydın ters kaydını üretir: <c>POST /{id}/reverse</c>. Ters kayıt asıl kaydın kopyası olarak doğar ve ona
+    /// işaret eder (<c>ReversesId</c>); entity <see cref="IReversal{TEntity}"/> uygularsa farkı (ör. tutarın
+    /// işaretini) o yazar. Bir kayıt yalnızca bir kez ters çevrilir ve ters çevrildikten sonra değiştirilemez.
+    /// </summary>
+    public static ResourceBuilder<TEntity> Reversible<TEntity>(this ResourceBuilder<TEntity> builder)
+        where TEntity : class => builder;
+
+    /// <summary>
+    /// Kaydın yerine geçen yeni bir kayıt üretir (düzeltme, yeniden planlama): <c>POST /{id}/supersede</c>. Yeni
+    /// kayıt eskisinin kopyası olarak doğar, istekte gönderilen alanlar onun yerine geçer ve eskisine işaret eder
+    /// (<c>SupersedesId</c>). Eski kayıt kalır ama artık değiştirilemez.
+    /// </summary>
+    public static ResourceBuilder<TEntity> Supersedes<TEntity>(this ResourceBuilder<TEntity> builder)
+        where TEntity : class => builder;
+
     /// <summary>Sunucunun ürettiği anahtarın biçimini seçer; varsayılanı zamana göre sıralı GUID'dir.</summary>
     /// <param name="strategy">Anahtarın biçimi.</param>
     /// <param name="prefix">

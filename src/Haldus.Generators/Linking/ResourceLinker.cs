@@ -35,10 +35,25 @@ internal static class ResourceLinker
 
             foreach (var declaration in resource.ReferenceDeclarations)
             {
-                if (Resolve(resource, declaration, resources, byType, properties, Fail) is { } reference
-                    && references.All(existing => existing.PropertyName != reference.PropertyName))
+                if (Resolve(resource, declaration, resources, byType, properties, Fail) is not { } reference)
+                {
+                    continue;
+                }
+
+                var existing = references.FirstOrDefault(candidate => candidate.PropertyName == reference.PropertyName);
+
+                if (existing is null)
                 {
                     references.Add(reference);
+                }
+                else if (existing.Kind == ReferenceKind.Source || reference.Kind == ReferenceKind.Source)
+                {
+                    // İki bildirim aynı alanı paylaşamaz: biri alanı istekle yazılabilir yapar, öteki yapmaz.
+                    // Sessizce biri seçilseydi üretme ucu hiç oluşmazdı.
+                    Fail(
+                        "HALDUS007",
+                        declaration.Location,
+                        $"'{resource.EntityName}' already refers to '{reference.TargetName}' through '{reference.PropertyName}'; it cannot also be created from it");
                 }
             }
 
@@ -319,6 +334,8 @@ internal static class ResourceLinker
         "archive" or "unarchive" when resource.Has(Traits.Archivable) => nameof(Traits.Archivable),
         "expire" when resource.Expiry is not null => "Expiring",
         "clone" when resource.Has(Traits.Cloneable) => nameof(Traits.Cloneable),
+        "reverse" when resource.Has(Traits.Reversible) => nameof(Traits.Reversible),
+        "supersede" when resource.Has(Traits.Supersedes) => nameof(Traits.Supersedes),
         "move" when resource.Has(Traits.Orderable) => nameof(Traits.Orderable),
         "preview" when resource.Has(Traits.Previewable) => nameof(Traits.Previewable),
         "cancel" when resource.Archetype == Archetype.Job => "MapJob",
@@ -376,6 +393,131 @@ internal static class ResourceLinker
         }
 
         return associations;
+    }
+
+    /// <summary>
+    /// Kayıtlar arası üretme ve türetme bildirimlerini çözer. İkisi de iki kaynağı ilgilendirir: üretilen kaynak
+    /// kaynağının alanlarını ve satırlarını, kaynak ise kendisinden üretilen ve türeyen kaynakları bilmelidir. Bu
+    /// yüzden geçişler de bağlandıktan sonra, ayrı bir adımda yapılır.
+    /// </summary>
+    public static List<ResourceModel> AttachOrigins(IReadOnlyList<ResourceModel> resources, Action<DiagnosticInfo> report)
+    {
+        var byType = resources.ToDictionary(resource => resource.QualifiedName);
+        var origins = new Dictionary<string, List<OriginModel>>();
+        var spawns = new Dictionary<string, List<SpawnModel>>();
+        var derivations = new Dictionary<string, List<string>>();
+
+        void Fail(LocationInfo location, string message) =>
+            report(new DiagnosticInfo("HALDUS007", location, new[] { message }.ToEquatableArray()));
+
+        foreach (var resource in resources)
+        {
+            foreach (var reference in resource.References.Where(reference => reference.Kind == ReferenceKind.Source))
+            {
+                var source = byType[reference.TargetType];
+                var declaration = resource.ReferenceDeclarations.First(candidate =>
+                    candidate.Kind == ReferenceKind.Source && candidate.TargetName == reference.TargetName);
+
+                if (resource.Parent?.PropertyName == reference.PropertyName)
+                {
+                    Fail(declaration.Location, $"'{resource.EntityName}' already lives under '{source.EntityName}'; it cannot also be created from it");
+                    continue;
+                }
+
+                if (source.Archetype is Archetype.Singleton or Archetype.Detail)
+                {
+                    Fail(declaration.Location, $"'{resource.EntityName}' cannot be created from '{source.EntityName}': the source has no address of its own");
+                    continue;
+                }
+
+                var copied = resource.Properties
+                    .Where(property => property.IsWritable && !property.IsEmbedded && property.Name != reference.PropertyName)
+                    .Where(property => source.Properties.Any(candidate => candidate.Name == property.Name && candidate.Type == property.Type))
+                    .Select(property => property.Name);
+
+                if (declaration.Trigger is { } trigger)
+                {
+                    var problem =
+                        source.Transitions.All(transition => transition.Route != trigger)
+                            ? $"'{source.EntityName}' has no transition or action named '{trigger}' that could create '{resource.EntityName}'"
+                        : resource.Parent is not null
+                            ? $"'{resource.EntityName}' lives under a parent, so it cannot be created by a transition of '{source.EntityName}': the parent is not known there"
+                        : resource.Numbering is { AssignOn: null } || resource.Has(Traits.Orderable)
+                            ? $"'{resource.EntityName}' takes a number or a position when it is created, so it cannot be created by a transition of '{source.EntityName}'; use the from-{Naming.ToKebabCase(source.EntityName)} endpoint instead"
+                        : resources.Any(other => other.DerivedFrom.Any(derived => derived.Type == resource.QualifiedName || (derived.Type is null && derived.Name == resource.EntityName)))
+                            ? $"Other resources are derived from '{resource.EntityName}', so it cannot be created by a transition of '{source.EntityName}'; use the from-{Naming.ToKebabCase(source.EntityName)} endpoint instead"
+                        : null;
+
+                    if (problem is not null)
+                    {
+                        Fail(declaration.Location, problem);
+                        continue;
+                    }
+
+                    Add(spawns, source.QualifiedName, new SpawnModel(
+                        trigger,
+                        resource.QualifiedName,
+                        resource.Namespace,
+                        resource.EntityName,
+                        source.EntityName,
+                        NeedsTime: resource.Expiry is { LifetimeTicks: not null }));
+                }
+
+                Add(origins, resource.QualifiedName, new OriginModel(
+                    source.EntityName,
+                    source.QualifiedName,
+                    source.KeyName,
+                    source.IdType,
+                    Emit.ResourceEmitter.RouteConstraint(source),
+                    reference.PropertyName,
+                    source.Details.Select(detail => detail.CollectionName).ToEquatableArray(),
+                    copied.ToEquatableArray(),
+                    CopiesMetadata: resource.Has(Traits.Metadata) && source.Has(Traits.Metadata),
+                    declaration.Trigger,
+                    HasContract: resource.Contracts.Contains($"ICreatedFrom:{source.QualifiedName}")));
+            }
+
+            foreach (var declaration in resource.DerivedFrom)
+            {
+                var source = Find(declaration.Name, declaration.Type, resources, byType);
+
+                if (source is null)
+                {
+                    report(new DiagnosticInfo("HALDUS009", declaration.Location, new[] { declaration.Name, resource.EntityName }.ToEquatableArray()));
+                }
+                else if (source.Archetype != Archetype.AppendOnly)
+                {
+                    // İzdüşüm yalnızca kayıt oluşturulurken çağrılır; değişen veya silinen bir kaynağı izleyemez.
+                    Fail(declaration.Location, $"'{resource.EntityName}' can only be derived from an append-only resource, but '{source.EntityName}' is mapped with Map{source.Archetype}");
+                }
+                else
+                {
+                    Add(derivations, source.QualifiedName, resource.QualifiedName);
+                }
+            }
+        }
+
+        return
+        [
+            .. resources.Select(resource => resource with
+            {
+                Origins = Values(origins, resource.QualifiedName).ToEquatableArray(),
+                Spawns = Values(spawns, resource.QualifiedName).ToEquatableArray(),
+                Derivations = Values(derivations, resource.QualifiedName).Distinct().ToEquatableArray(),
+            }),
+        ];
+
+        static void Add<T>(Dictionary<string, List<T>> map, string key, T value)
+        {
+            if (!map.TryGetValue(key, out var list))
+            {
+                map[key] = list = [];
+            }
+
+            list.Add(value);
+        }
+
+        static List<T> Values<T>(Dictionary<string, List<T>> map, string key) => map.TryGetValue(key, out var list) ? list : [];
     }
 
     /// <summary>
@@ -484,6 +626,16 @@ internal static class ResourceLinker
         // Başka bir modülde derlenmiş entity bu derlemede eşlenmez; anahtarı derlenmiş tipinden okunur.
         var external = target is null && declaration.IsExternal;
 
+        if (declaration.Kind == ReferenceKind.Source && target is null)
+        {
+            // Kaynağın alanları ve satırları bilinmeden kayıt ondan kurulamaz.
+            fail(
+                "HALDUS007",
+                declaration.Location,
+                [$"'{resource.EntityName}' cannot be created from '{declaration.TargetName}': the source must be mapped with a Map call in the same project"]);
+            return null;
+        }
+
         if (target is null && (declaration.TargetType is null || (declaration.Kind == ReferenceKind.Parent && !external)))
         {
             // Hedef ne bilinen bir tip ne de bir Haldus kaynağı; ebeveyn ise adresi kurulamaz.
@@ -519,9 +671,12 @@ internal static class ResourceLinker
         var required = declaration.Kind switch
         {
             ReferenceKind.Parent => true,
-            ReferenceKind.Self => false,
+            ReferenceKind.Self or ReferenceKind.Source => false,
             _ => declared?.IsNonNullable ?? declaration.Required,
         };
+
+        // Kaynağa işaret eden alanı yalnızca üretme ucu doldurur.
+        var settable = declaration.Kind is not (ReferenceKind.Parent or ReferenceKind.Source);
 
         // Ebeveyn silinince altındakiler de silinir; ama kiracıya ait kayıtlar genel bir ebeveynin
         // altındaysa bu, ebeveyni silen kişinin başka kiracıların verisini silmesi demektir. Geliştirici
@@ -548,11 +703,12 @@ internal static class ResourceLinker
 
         if (declared is null)
         {
-            properties.Add(ForeignKey(propertyName, targetKeyType, required, writable: declaration.Kind != ReferenceKind.Parent));
+            properties.Add(ForeignKey(propertyName, targetKeyType, required, writable: settable));
         }
-        else if (declaration.Kind == ReferenceKind.Parent)
+        else if (!settable)
         {
-            // Ebeveyn adresten gelir; kullanıcı alanı kendisi yazdıysa bile istek gövdesinden yazılamaz.
+            // Ebeveyn adresten, kaynak üretme ucundan gelir; kullanıcı alanı kendisi yazdıysa bile istek
+            // gövdesinden yazılamaz.
             properties[properties.IndexOf(declared)] = declared with { IsWritable = false };
         }
 

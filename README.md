@@ -262,6 +262,29 @@ korumayı verir.
 adıdır (`Favorite`). `GET /me/favorites` bağlı kayıtları döndürür; adreste kullanıcı yer almadığı için kimse
 başkasının bağına ulaşamaz.
 
+## Kayıtlar arası zincir
+
+```csharp
+app.MapAppendOnly<StockMovement>().Reversible();                        // POST /stock-movements/{id}/reverse
+app.MapCrud<Quote>().Supersedes();                                      // POST /quotes/{id}/supersede
+app.MapCrud<Order>().CreatedFrom<Cart>();                               // POST /orders/from-cart/{cartId}
+app.MapAppendOnly<Receipt>().CreatedFrom<Payment>(on: "capture");       // tahsilat geçişiyle doğar
+app.MapReadOnly<StockLevel>().DerivedFrom<StockMovement>();             // her hareketle güncellenir
+```
+
+| Bildirim | Etkisi |
+|---|---|
+| `.Reversible()` | Kaydı nötrleyen ters kaydı üretir; ikisi birbirine işaret eder (`ReversesId`, `ReversedById`). Bir kayıt bir kez ters çevrilir |
+| `.Supersedes()` | Eskisinin yerine geçen yeni kaydı üretir (`SupersedesId`, `SupersededById`). Eski kayıt kalır ama değiştirilemez |
+| `.CreatedFrom<T>()` | Kaydı başka bir kayıttan üretir ve bağı tutar (`CartId`). `on:` verilirse kayıt, kaynağın o geçişiyle doğar |
+| `.DerivedFrom<T>()` | Salt-okunur kaynak başka kayıtlardan hesaplanır: her kaynak kayıtla birlikte izdüşüm sınıfın çağrılır |
+
+Karşı kayıt (ters kayıt, yerine geçen) asıl kaydın kopyası olarak doğar; entity `IReversal<T>` veya
+`ISupersession<T>` uygularsa yalnızca farkı yazar (ör. tutarın işaretini çevirir). Başka bir kayıttan üretilen
+kayıtta aynı adlı alanlar kopyalanır, gerisini `ICreatedFrom<TSource>` doldurur. Türetmeyi
+`IDerivation<TSource, TTarget>` uygulayan bir sınıf yazar; Haldus onu kaynak kayıtla aynı transaction'da ve
+sırayla çağırır.
+
 ## Modüler yapı
 
 Özellikler ayrı sınıf kütüphanelerine bölünebilir. Her modül kendi `Map*` çağrılarını ve entity'lerini
@@ -283,7 +306,7 @@ kısıtı olur, ayrı bağlamlardaysa referans yalnızca kimlikle tutulur ve var
 ## Durum
 
 İlk sürümün planlanan on aşaması tamamlandı; eksikleri kapatan ikinci plan sürüyor. Model, araştırmadaki 59
-gerçek varlığa karşı sınanıyor: bugün 28'i temiz, 24'ü kısmen ifade ediliyor, 7'si için gereken özellik henüz
+gerçek varlığa karşı sınanıyor: bugün 33'ü temiz, 20'si kısmen ifade ediliyor, 6'sı için gereken özellik henüz
 yok. Ayrıntısı ve eksiklerin listesi [taksonomi sınaması](reports/Haldus%20taksonomi%20sınaması.md)
 belgesindedir.
 

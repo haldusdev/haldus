@@ -194,8 +194,8 @@ internal sealed partial class EndpointEmitter
                 {{ScopeParameter}}        {{item}} request,
                 {{DbContextParameter}}{{SavedParameter}}{{time}}{{ContextsParameter}}{{MessagesParameter}}{{CancellationParameter}}    {
                 {{WriteChecks(patch: false, creating: true)}}        var entity = new {{_entity}} { {{CreateInitializer()}} };
-                {{CreateDetails()}}{{Compute()}}{{OrderAppend()}}{{numbering}}        context.Set<{{_entity}}>().Add(entity);
-                {{SaveNew()}}{{OrderCommit()}}        saved.Add(entity);
+                {{CreateDetails()}}{{Compute()}}{{Derive()}}{{OrderAppend()}}{{numbering}}        context.Set<{{_entity}}>().Add(entity);
+                {{SaveNew()}}{{OrderCommit()}}{{DeriveCommit()}}        saved.Add(entity);
                         return null;
                     }
 
@@ -217,7 +217,7 @@ internal sealed partial class EndpointEmitter
                             return {{NotFound}};
                         }
 
-                {{StateGuard(_resource.Workflow?.EditableIn, "update")}}{{WriteChecks(patch: false, creating: false)}}{{CycleCheck(patch: false)}}{{OrderRemember()}}{{UpdateAssignments()}}
+                {{ChainGuard()}}{{StateGuard(_resource.Workflow?.EditableIn, "update")}}{{WriteChecks(patch: false, creating: false)}}{{CycleCheck(patch: false)}}{{OrderRemember()}}{{UpdateAssignments()}}
                 {{SyncDetails(patch: false)}}{{Slide()}}{{Compute()}}{{OrderReparent()}}{{Save()}}{{OrderReparentCommit()}}        saved.Add(entity);
                         return null;
                     }
@@ -306,7 +306,7 @@ internal sealed partial class EndpointEmitter
                         return {{NotFound}};
                     }
 
-            {{StateGuard(_resource.Workflow?.DeletableIn, "delete")}}{{OrderBegin()}}        context.Set<{{_entity}}>().Remove(entity);
+            {{ChainDeleteGuard()}}{{StateGuard(_resource.Workflow?.DeletableIn, "delete")}}{{OrderBegin()}}        context.Set<{{_entity}}>().Remove(entity);
             {{SaveDelete()}}{{OrderCloseGap()}}{{OrderCommit()}}        return null;
                 }
 

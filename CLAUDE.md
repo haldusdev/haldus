@@ -101,6 +101,16 @@ Bunlar kullanıcıyla kararlaştırıldı; yeniden sorma.
     transaction'da yeniden numaralanır. Araya eklenen sıra anahtarı (rank) reddedildi.
   - `.Previewable()`: isteği doğrulayıp hesaplanan alanlarla sonucu döndürür ama kaydetmez. Hem oluşturma
     (`POST /preview`, oluşturma gövdesi) hem güncelleme (`POST /{id}/preview`, güncelleme gövdesi) için üretilir.
+- Kayıtlar arası zincir (14. aşama). Kullanıcı dört soruda da "önerilerinle devam et" dedi; yazılan, sorulan
+  seçeneklerin önerilenleridir:
+  - İçerik: Haldus kopyalar, sözleşme düzeltir. Aynı tipteki karşı kayıt (ters kayıt, yerine geçen) kaynağın
+    kopyası olarak doğar; entity sözleşmeyi (`IReversal<T>`, `ISupersession<T>`) uygularsa kopyadan sonra çağrılır.
+    Farklı tipten üretilen kayıtta aynı adlı alanlar kopyalanır, gerisini `ICreatedFrom<TSource>` doldurur.
+  - `.CreatedFrom<TSource>()` ucu hedef koleksiyondadır: `POST /orders/from-cart/{cartId}`.
+  - `.Supersedes()`: `POST /{id}/supersede`. Eski kayıt kalır, `SupersededById` ile işaretlenir, artık
+    değiştirilemez (409) ve listede görünmeye devam eder.
+  - `.DerivedFrom<TSource>()`: her kaynak kayıt oluşturulduğunda, aynı transaction'da kullanıcının
+    `IDerivation<TSource, TTarget>` sınıfı çağrılır; hedef salt-okunurdur. Baştan yeniden kurma üretilmez.
 - Eşzamanlılık trait'inin adı `ConcurrencyChecked` (eski adı `Versioned`). Sürüm yanıt gövdesinde değil
   `ETag` başlığında taşınır; güncelleme ve silme `If-Match` ister (eksikse 428, uyuşmazlıkta 412).
 - Güncelleme için hem `PUT` (tam değiştirme) hem `PATCH` (kısmi) üretilir.
@@ -170,8 +180,8 @@ Bunlar kullanıcıyla kararlaştırıldı; yeniden sorma.
 ## Aşamalar
 
 On aşamanın tamamı bitti (3. aşamaya `.Searchable()`, 8. aşamaya fiziksel temizlik de eklendi). 10. aşamanın
-sonucu `reports/Haldus taksonomi sınaması.md` dosyasındadır: araştırmadaki 59 varlığın (bugünkü sayımla) 28'i temiz, 24'ü
-kısmen ifade ediliyor, 7'si için gereken özellik yok. Aynı veri `tests/Haldus.Generators.Tests/TaxonomyTests.cs`
+sonucu `reports/Haldus taksonomi sınaması.md` dosyasındadır: araştırmadaki 59 varlığın (bugünkü sayımla) 33'ü temiz, 20'si
+kısmen ifade ediliyor, 6'sı için gereken özellik yok. Aynı veri `tests/Haldus.Generators.Tests/TaxonomyTests.cs`
 içinde derlenir; yeni bir archetype veya trait bir satırı kapatıyorsa ikisini birlikte güncelle.
 
 1. İskelet
@@ -192,7 +202,7 @@ içinde derlenir; yeni bir archetype veya trait bir satırı kapatıyorsa ikisin
 Kullanıcı 2026-11-24'te onayladı. Kapsamı araştırma raporunun v2 listesi, ilk sürümden kalan küçük kalemler
 ve sınamada çıkan küçük eksiklerdir. Raporun v3 listesi (`MapBalance`, `MapChangeSet`, birden çok durum
 ekseni, çeviri, saklama süresi, okundu takibi) ve tekrar serisi bu planın dışındadır. Her aşama testleriyle
-birlikte ayrı commit olur; 11, 12 ve 13. aşamalar bitti, sıradaki 14.
+birlikte ayrı commit olur; 11–14. aşamalar bitti, sıradaki 15.
 
 11. Sahiplik: `OwnedByCurrentUser`, `MapAssociation().ForCurrentUser()`
 12. Alan eklentileri: `Metadata`, yalnızca oluştururken yazılan alan, `NaturalKey`, `KeyStrategy`, liste
@@ -213,7 +223,7 @@ Her aşamanın başında kullanıcıya sorulacak kararlar (yanıtlandıkça "Tas
 
 
 
-- 14: Karşı kaydı Haldus mu üretsin, kullanıcının handler'ı mı.
+
 - 15: Sırrın saklanma biçimi (hash algoritması, önek).
 - 17: Onay tek adım mı, zincir mi.
 - 18: Taslak/yayın için çift kopya mı, sürüm tablosu mu; geçmiş anlık görüntü mü, fark günlüğü mü.
@@ -503,6 +513,35 @@ netleştirilecek.
     zaman damgaları, kiracı, sahip, konum) boştur. Güncelleme önizlemesi kaydı izleyerek değiştirir ve sonunda
     `ChangeTracker.Clear()` çağırır; sürüm (`If-Match`) istemez. Tekil ucun kurallarını paylaşılan parçalara
     koyma kuralı burada da geçerlidir: doğrudan handler'a yazılan bir kural önizlemede uygulanmaz.
+- **Kayıtlar arası zincir.** Dört bildirimin ortak kuralı: alanlarını istekten değil başka bir kayıttan alan yeni
+  kayıt, oluşturma ucunun yaptığı her kontrolden geçer (referanslar kayıttan okunarak doğrulanır, doğal anahtar
+  kayıt üzerinden denetlenir, `Compute` çağrılır) ve `SaveCreated()` ile kaydedilir. Sıra her yerde aynıdır:
+  kopya, entity'nin sözleşmesi, isteğin gönderdiği alanlar, kontroller. Sözleşme satır ekleyip çıkarabildiği için
+  ondan sonra satırlara kimlik ve sıra verilir (`NormalizeRows`); sözleşmeye verilen kaydın satırları da kendi
+  sıralarına dizilir (`SortRows`), çünkü veritabanı onları belirli bir sırayla vermez.
+  - **Çiftler** (`ChainOperation`: `Reverse`, `Supersede`). İki işaret alanı `ExtraMembers`'tadır ve tipi anahtarın
+    tipidir; bu yüzden anahtar belli olunca eklenir. Yeni kaydın anahtarı kaydetmeden önce bilinmelidir, bu
+    yüzden veritabanının ürettiği anahtarla (`int`, `long`) birleşmez. "Bir kaydın yalnızca bir karşı kaydı olur"
+    kuralını ileri işaret alanındaki benzersiz indeks sağlar; ön kontrolü birlikte geçen iki istekten ikincisi
+    ona takılır ve 409 alır. Kapanmış kayıt `PUT`/`PATCH` ile değiştirilemez (`ChainGuard`), bir çiftin parçası
+    olan kayıt silinemez (`ChainDeleteGuard`); hiçbir çifte girmemiş kayıt silinebilir. Geçişler ve entity
+    aksiyonları kapanmış kayıtta da çalışır (iş mantığı açıkça yazıldığı için); engellemek geliştiricinin işidir.
+    Ters kayıt zincirin sonudur (yeniden ters çevrilemez), yerine geçen kaydın ise yerine geçilebilir.
+  - **Üretme** (`ReferenceKind.Source`, `OriginModel`). Kaynağa işaret eden alan istekle yazılamaz; yalnızca üretme
+    yolu doldurur. Kurma işi hedefin uç sınıfındaki herkese açık `From{Kaynak}Async` metodundadır
+    (`HaldusBuilt<T>`: ya kayıt ya hata); `from-…` ucu da kaynağın geçişi de onu çağırır. `on:` verildiyse açık uç
+    üretilmez, çünkü geçişin koşullarını atlamanın yolu olurdu. İki kaynağı da ilgilendiren her şey
+    `ResourceLinker.AttachOrigins` içinde, geçişler bağlandıktan sonra çözülür. Sınırlar: kaynak aynı projede
+    eşlenmiş olmalıdır; geçişle doğan kayıt bir ebeveynin altında olamaz, oluştururken numara veya sıra alamaz ve
+    kendisinden başka kaynak türeyemez; aynı kaynaktan birden çok kayıt üretilebilir (tekilliği zorlayan bir
+    seçenek yok). `Reverses<T>` ayrı bir bildirim olarak eklenmedi; `CreatedFrom<T>` aynı şeyi ifade eder.
+  - **Türetme.** Hedef `DerivedFrom<T>` ile bildirir; çağrı kaynağın oluşturma yollarına eklenir (`Derive`,
+    `DeriveCommit`; `SaveCreated` içinde ve toplu oluşturmada). İzdüşüm kilit altında ve kaynakla aynı
+    transaction'da çalışır (`HaldusDerivations.BeginAsync`, kaynak başına tek kilit): okuyup değiştiren iki
+    izdüşüm aynı anda çalışsa biri ötekini ezerdi. Kaynak `MapAppendOnly`, hedef `MapReadOnly` olmalı ve ikisi aynı
+    bağlamda durmalıdır. İzdüşüm sınıfı handler'lar gibi bulunur ve kaydedilir; eksikse hata ilk yazmada verilir
+    (uygulama açılırken değil). Baştan yeniden kurma ve kaynağın değişmesi/silinmesi kapsam dışıdır; kilit
+    kaynak başına olduğu için yazma hacmi yüksek kaynaklarda darboğaz olur.
 - **Yanıt izdüşümü tek yerdedir:** `ResourceEmitter.ResponseAssignments`. Bir kaynağın yanıtını döndüren her
   üretici (kendi uçları, bağ listeleri) onu kullanır; elle yazılan bir izdüşüm, yanıta sonradan eklenen zorunlu
   alanlarda (durum, numara, gömülü satırlar) derlenmez.

@@ -6,7 +6,7 @@ namespace Haldus.Sample.Shop.Features.Sales;
 /// Sipariş, satırlarıyla birlikte bir bütündür: satırlar siparişin isteğinde gelir ve onunla kaydedilir.
 /// Durumu (<c>Status</c>) ve numarası (<c>Number</c>) Haldus'a aittir; istek gövdesinden yazılamaz.
 /// </summary>
-public partial class Order : IComputed
+public partial class Order : IComputed, ICreatedFrom<Cart>
 {
     [MaxLength(200)]
     public string CustomerName { get; set; } = "";
@@ -26,6 +26,20 @@ public partial class Order : IComputed
     {
         Total = OrderItems.Sum(item => item.Quantity * item.UnitPrice);
         ItemCount = OrderItems.Count;
+    }
+
+    /// <summary>
+    /// Sipariş bir sepetten üretilirken çağrılır. Haldus aynı adlı alanları kendisi kopyalar; adı ve tipi farklı
+    /// olanlar (burada satırlar) elle taşınır. Satırların kimliğini ve sırasını Haldus verir.
+    /// </summary>
+    public void CreateFrom(Cart source)
+    {
+        CustomerName = source.Note ?? "";
+
+        foreach (var item in source.CartItems)
+        {
+            OrderItems.Add(new OrderItem { ProductName = item.ProductName, Quantity = item.Quantity });
+        }
     }
 
     public void Place(string? note) => PlacementNote = note;

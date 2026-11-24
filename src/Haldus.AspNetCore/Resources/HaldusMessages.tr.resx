@@ -51,6 +51,21 @@
   <data name="Metadata.Invalid" xml:space="preserve">
     <value>{0} alanı en çok {1} anahtar taşıyabilir; anahtarlar 1 ile {2} karakter arasında, değerler en çok {3} karakter olmalıdır.</value>
   </data>
+  <data name="ChainLocked.Title" xml:space="preserve">
+    <value>Kayıt artık değiştirilemez</value>
+  </data>
+  <data name="Reversed.Detail" xml:space="preserve">
+    <value>'{1}' kimlikli {0} kaydı ters çevrildi; artık değiştirilemez ve yeniden ters çevrilemez.</value>
+  </data>
+  <data name="Reversal.Detail" xml:space="preserve">
+    <value>'{1}' kimlikli {0} kaydı bir ters kayıttır; ters çevrilemez.</value>
+  </data>
+  <data name="Superseded.Detail" xml:space="preserve">
+    <value>'{1}' kimlikli {0} kaydının yerine başka bir kayıt geçti; artık değiştirilemez.</value>
+  </data>
+  <data name="ChainMember.Detail" xml:space="preserve">
+    <value>'{1}' kimlikli {0} kaydı, onu ters çeviren ya da yerine geçen (veya kendisinin ters çevirdiği ya da yerine geçtiği) kayda bağlıdır; silinemez.</value>
+  </data>
   <data name="InUse.Title" xml:space="preserve">
     <value>Kayıt kullanımda</value>
   </data>

@@ -280,6 +280,16 @@ internal static class ModuleEmitter
             statements.Add("global::Haldus.HaldusDb.ConfigureMetadata(entity.Property(item => item.Metadata));");
         }
 
+        foreach (var chain in ChainOperation.For(resource))
+        {
+            // Bir kaydın yalnızca bir karşı kaydı olabilir. Benzersiz indeks bunu, aynı anda gelen iki istek için
+            // de güvenceye alır; işaret edilen kayıt silinemez.
+            statements.Add(
+                $"entity.HasOne<{entity}>().WithMany().HasForeignKey(item => item.{chain.Forward})"
+                + ".OnDelete(global::Microsoft.EntityFrameworkCore.DeleteBehavior.Restrict);");
+            statements.Add($"entity.HasIndex(item => item.{chain.Forward}).IsUnique().HasDatabaseName(\"{chain.IndexName(resource)}\");");
+        }
+
         if (resource.NaturalKey is { } naturalKey)
         {
             // Anahtar, kaydın kapsamı içinde benzersizdir: aynı değer başka bir kiracıda, başka bir kullanıcıda

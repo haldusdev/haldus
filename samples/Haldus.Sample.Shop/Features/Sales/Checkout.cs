@@ -103,3 +103,23 @@ public enum RefundStatus
     Succeeded,
     Cancelled,
 }
+
+/// <summary>Müşteriye verilen fiyat teklifi. Değişiklik, eskisinin yerine geçen yeni bir teklifle yapılır.</summary>
+public partial class Quote
+{
+    [Required]
+    [MaxLength(200)]
+    public string CustomerName { get; set; } = "";
+
+    [Range(0.0, 10_000_000.0)]
+    public decimal Amount { get; set; }
+
+    [MaxLength(500)]
+    public string? Terms { get; set; }
+}
+
+/// <summary>Tahsil edilen ödemenin makbuzu. Tutarı, aynı adı taşıdığı için ödemeden kendiliğinden kopyalanır.</summary>
+public partial class Receipt
+{
+    public decimal Amount { get; set; }
+}

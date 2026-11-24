@@ -27,6 +27,11 @@ public static class HaldusMessageKeys
     public const string DuplicateDetail = "Duplicate.Detail";
     public const string SortInvalid = "Sort.Invalid";
     public const string MetadataInvalid = "Metadata.Invalid";
+    public const string ChainLockedTitle = "ChainLocked.Title";
+    public const string ReversedDetail = "Reversed.Detail";
+    public const string ReversalDetail = "Reversal.Detail";
+    public const string SupersededDetail = "Superseded.Detail";
+    public const string ChainMemberDetail = "ChainMember.Detail";
     public const string InUseTitle = "InUse.Title";
     public const string InUseDetail = "InUse.Detail";
     public const string StateConflictTitle = "StateConflict.Title";

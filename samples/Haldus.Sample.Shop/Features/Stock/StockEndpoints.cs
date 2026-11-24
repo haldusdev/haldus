@@ -4,11 +4,14 @@ public static class StockEndpoints
 {
     public static void MapStock(this IEndpointRouteBuilder app)
     {
-        // Stok hareketi bir kez yazılır, sonra değişmez; düzeltme yeni bir hareketle yapılır.
+        // Stok hareketi bir kez yazılır, sonra değişmez; düzeltme, onu nötrleyen ters hareketle yapılır:
+        // POST /stock-movements/{id}/reverse
         app.MapAppendOnly<StockMovement>()
-            .Auditable();
+            .Auditable()
+            .Reversible();
 
-        // Stok seviyesini istemci yazamaz; hareketlerden sistem hesaplar.
-        app.MapReadOnly<StockLevel>();
+        // Stok seviyesini istemci yazamaz; her hareket kaydedilirken StockLevelProjection onu günceller.
+        app.MapReadOnly<StockLevel>()
+            .DerivedFrom<StockMovement>();
     }
 }

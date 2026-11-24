@@ -174,6 +174,13 @@ public sealed class HaldusGenerator : IIncrementalGenerator
                 .Select(resource => (resource, resource.Namespace)),
         ];
 
+        valid =
+        [
+            .. ResourceLinker
+                .AttachOrigins([.. valid.Select(entry => entry.Resource)], diagnostic => Report(context, diagnostic))
+                .Select(resource => (resource, resource.Namespace)),
+        ];
+
         // Aynı istek tipi birden çok rotaya eşlenebilir; endpoint kodu bir kez üretilir.
         var validQueries = new List<QueryModel>();
         var seenQueries = new HashSet<string>();

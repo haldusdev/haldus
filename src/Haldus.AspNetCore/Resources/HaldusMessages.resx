@@ -51,6 +51,21 @@
   <data name="Metadata.Invalid" xml:space="preserve">
     <value>The field {0} may hold at most {1} entries; keys must be 1 to {2} characters and values at most {3} characters.</value>
   </data>
+  <data name="ChainLocked.Title" xml:space="preserve">
+    <value>Record can no longer be changed</value>
+  </data>
+  <data name="Reversed.Detail" xml:space="preserve">
+    <value>{0} '{1}' has been reversed and can no longer be changed or reversed again.</value>
+  </data>
+  <data name="Reversal.Detail" xml:space="preserve">
+    <value>{0} '{1}' is itself a reversal and cannot be reversed.</value>
+  </data>
+  <data name="Superseded.Detail" xml:space="preserve">
+    <value>{0} '{1}' has been superseded and can no longer be changed or superseded again.</value>
+  </data>
+  <data name="ChainMember.Detail" xml:space="preserve">
+    <value>{0} '{1}' is linked to the record that reverses or supersedes it (or that it reverses or supersedes) and cannot be deleted.</value>
+  </data>
   <data name="InUse.Title" xml:space="preserve">
     <value>Resource is in use</value>
   </data>

@@ -56,12 +56,14 @@ public sealed class TaxonomyTests
                 public void Compute() => Total = OrderItems.Sum(item => item.Quantity * item.UnitPrice);
             }
             public partial class OrderItem { public int Quantity { get; set; } public decimal UnitPrice { get; set; } }
+            public partial class Cart { public string CustomerName { get; set; } = ""; }
             public sealed record CancelOrder(string Reason) : ITransition<Order> { public void Apply(Order entity) { } }
             """,
             """
+            app.MapCrud<Cart>();
             var orders = app.MapCrud<Order>().MultiTenant().Auditable(trackUser: true).ConcurrencyChecked()
                 .Workflow<OrderStatus>(initial: OrderStatus.Draft).EditableIn(OrderStatus.Draft).DeletableIn(OrderStatus.Draft)
-                .Numbered("ORD-{yyyy}-{seq:6}", assignOn: OrderStatus.Placed).Idempotent();
+                .Numbered("ORD-{yyyy}-{seq:6}", assignOn: OrderStatus.Placed).Idempotent().CreatedFrom<Cart>();
             orders.MapDetail<OrderItem>();
             orders.MapTransition("place", OrderStatus.Draft, OrderStatus.Placed);
             orders.MapTransition("ship", OrderStatus.Placed, OrderStatus.Shipped);
@@ -97,15 +99,17 @@ public sealed class TaxonomyTests
             var carts = app.MapCrud<Cart>().OwnedByCurrentUser().Expiring(TimeSpan.FromDays(7), sliding: true).Cloneable();
             carts.MapDetail<CartItem>();
             """),
-        new(6, "Checkout Session", Fit.Partial,
+        new(6, "Checkout Session", Fit.Clean,
             """
             public enum CheckoutStatus { Open, Completed }
             public partial class CheckoutSession { public decimal Amount { get; set; } }
+            public partial class Purchase { public decimal Amount { get; set; } }
             """,
             """
             var sessions = app.MapCrud<CheckoutSession>().Without(CrudOperation.Delete)
                 .Workflow<CheckoutStatus>().EditableIn(CheckoutStatus.Open).Expiring(TimeSpan.FromMinutes(30)).Idempotent();
             sessions.MapTransition("complete", CheckoutStatus.Open, CheckoutStatus.Completed);
+            app.MapCrud<Purchase>().Without(CrudOperation.Create).CreatedFrom<CheckoutSession>(on: "complete");
             """),
         new(7, "Coupon", Fit.Clean,
             """
@@ -161,10 +165,15 @@ public sealed class TaxonomyTests
             """
             public partial class StockMovement { public string Sku { get; set; } = ""; public int Delta { get; set; } }
             public partial class StockLevel { public string Sku { get; set; } = ""; public int OnHand { get; set; } }
+            public sealed class StockLevelProjection : IDerivation<StockMovement, StockLevel>
+            {
+                public System.Threading.Tasks.Task ApplyAsync(StockMovement source, IDerivedSet<StockLevel> targets, System.Threading.CancellationToken cancellationToken) =>
+                    System.Threading.Tasks.Task.CompletedTask;
+            }
             """,
             """
             app.MapAppendOnly<StockMovement>().MultiTenant();
-            app.MapReadOnly<StockLevel>().MultiTenant();
+            app.MapReadOnly<StockLevel>().MultiTenant().DerivedFrom<StockMovement>();
             """),
 
         // ── Muhasebe ─────────────────────────────────────────────────────────────────────────────────
@@ -193,17 +202,17 @@ public sealed class TaxonomyTests
             public partial class InvoiceLine { public string Description { get; set; } = ""; public decimal Amount { get; set; } }
             """,
             "app.MapCrud<Invoice>().MapDetail<InvoiceLine>();"),
-        new(14, "Credit note", Fit.Partial,
+        new(14, "Credit note", Fit.Clean,
             Invoice + """
             public enum CreditNoteStatus { Issued, Voided }
             public partial class CreditNote { public decimal Amount { get; set; } }
             """,
             """
             app.MapCrud<Invoice>();
-            var notes = app.MapAppendOnly<CreditNote>().References<Invoice>().Workflow<CreditNoteStatus>().Numbered("CN-{seq:6}");
+            var notes = app.MapAppendOnly<CreditNote>().CreatedFrom<Invoice>().Workflow<CreditNoteStatus>().Numbered("CN-{seq:6}");
             notes.MapTransition("void", CreditNoteStatus.Issued, CreditNoteStatus.Voided);
             """),
-        new(15, "JournalEntry", Fit.Partial,
+        new(15, "JournalEntry", Fit.Clean,
             """
             public enum JournalStatus { Draft, Posted }
             public partial class JournalEntry { public string Memo { get; set; } = ""; }
@@ -212,7 +221,7 @@ public sealed class TaxonomyTests
             """
             var entries = app.MapCrud<JournalEntry>()
                 .Workflow<JournalStatus>().EditableIn(JournalStatus.Draft).DeletableIn(JournalStatus.Draft)
-                .Numbered("JE-{yyyy}-{seq:6}", assignOn: JournalStatus.Posted);
+                .Numbered("JE-{yyyy}-{seq:6}", assignOn: JournalStatus.Posted).Reversible();
             entries.MapDetail<JournalLine>();
             entries.MapTransition("post", JournalStatus.Draft, JournalStatus.Posted, entry =>
             {
@@ -237,11 +246,11 @@ public sealed class TaxonomyTests
         new(18, "Document numbering", Fit.Clean,
             "public partial class Receipt { public decimal Amount { get; set; } }",
             "app.MapCrud<Receipt>().MultiTenant().Numbered(\"RCP-{yyyy}{MM}-{seq:5}\");"),
-        new(19, "Payment (muhasebe) + allocation", Fit.Partial,
+        new(19, "Payment (muhasebe) + allocation", Fit.Clean,
             Invoice + "public partial class InvoicePayment { public decimal Amount { get; set; } }",
             """
             app.MapCrud<Invoice>();
-            app.MapAppendOnly<InvoicePayment>().References<Invoice>().Idempotent();
+            app.MapAppendOnly<InvoicePayment>().References<Invoice>().Idempotent().Reversible();
             """),
 
         // ── Envanter ─────────────────────────────────────────────────────────────────────────────────
@@ -299,7 +308,20 @@ public sealed class TaxonomyTests
             leave.MapTransition("approve", LeaveStatus.Requested, LeaveStatus.Approved);
             leave.MapTransition("reject", LeaveStatus.Requested, LeaveStatus.Rejected);
             """),
-        new(25, "Time-off balance", Fit.Missing),
+        new(25, "Time-off balance", Fit.Partial,
+            """
+            public partial class LeaveEntry { public string EmployeeCode { get; set; } = ""; public decimal Days { get; set; } }
+            public partial class LeaveBalance { public string EmployeeCode { get; set; } = ""; public decimal Days { get; set; } }
+            public sealed class LeaveBalanceProjection : IDerivation<LeaveEntry, LeaveBalance>
+            {
+                public System.Threading.Tasks.Task ApplyAsync(LeaveEntry source, IDerivedSet<LeaveBalance> targets, System.Threading.CancellationToken cancellationToken) =>
+                    System.Threading.Tasks.Task.CompletedTask;
+            }
+            """,
+            """
+            app.MapAppendOnly<LeaveEntry>().Reversible();
+            app.MapReadOnly<LeaveBalance>().DerivedFrom<LeaveEntry>();
+            """),
         new(26, "Timesheet / attendance", Fit.Clean,
             """
             public partial class TimeEntry
@@ -356,13 +378,13 @@ public sealed class TaxonomyTests
             public sealed record Availability(bool Free);
             """,
             "app.MapQuery<AvailabilityRequest, Availability>((request, _) => System.Threading.Tasks.Task.FromResult(new Availability(true)));"),
-        new(35, "Appointment / Booking", Fit.Partial,
+        new(35, "Appointment / Booking", Fit.Clean,
             """
             public enum BookingStatus { Pending, Confirmed, Cancelled }
             public partial class Booking { public DateTimeOffset StartsAt { get; set; } }
             """,
             """
-            var bookings = app.MapCrud<Booking>().Workflow<BookingStatus>().Idempotent().ConcurrencyChecked();
+            var bookings = app.MapCrud<Booking>().Workflow<BookingStatus>().Idempotent().ConcurrencyChecked().Supersedes();
             bookings.MapTransition("confirm", BookingStatus.Pending, BookingStatus.Confirmed);
             bookings.MapTransition("cancel", [BookingStatus.Pending, BookingStatus.Confirmed], BookingStatus.Cancelled);
             """),
@@ -401,12 +423,14 @@ public sealed class TaxonomyTests
             """
             public enum InvitationStatus { Pending, Accepted, Revoked }
             public partial class Invitation { public string Email { get; set; } = ""; }
+            public partial class Member { public string Email { get; set; } = ""; }
             """,
             """
             var invitations = app.MapCrud<Invitation>().Without(CrudOperation.Update, CrudOperation.Patch, CrudOperation.Delete)
                 .Workflow<InvitationStatus>().Expiring(TimeSpan.FromDays(7));
             invitations.MapTransition("accept", InvitationStatus.Pending, InvitationStatus.Accepted);
             invitations.MapTransition("revoke", InvitationStatus.Pending, InvitationStatus.Revoked);
+            app.MapCrud<Member>().CreatedFrom<Invitation>(on: "accept");
             """),
         new(42, "ApiKey / secret", Fit.Partial,
             "public partial class ApiKey { public string Name { get; set; } = \"\"; }",
@@ -587,8 +611,8 @@ public sealed class TaxonomyTests
     public void Tally_MatchesTheWrittenResults()
     {
         // reports/Haldus taksonomi sınaması.md dosyasındaki sayılar; biri değişirse diğeri de güncellenmelidir.
-        Assert.Equal(28, Rows.Count(row => row.Fit == Fit.Clean));
-        Assert.Equal(24, Rows.Count(row => row.Fit == Fit.Partial));
-        Assert.Equal(7, Rows.Count(row => row.Fit == Fit.Missing));
+        Assert.Equal(33, Rows.Count(row => row.Fit == Fit.Clean));
+        Assert.Equal(20, Rows.Count(row => row.Fit == Fit.Partial));
+        Assert.Equal(6, Rows.Count(row => row.Fit == Fit.Missing));
     }
 }

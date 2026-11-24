@@ -96,6 +96,21 @@ public static class HaldusProblems
     internal static string MetadataMessage(IHaldusMessages messages, string name) => messages.Format(
         HaldusMessageKeys.MetadataInvalid, name, HaldusMetadata.MaxEntries, HaldusMetadata.MaxKeyLength, HaldusMetadata.MaxValueLength);
 
+    /// <summary>
+    /// Kayıt bir zincirin kapanmış halkasıdır (ters çevrilmiş veya yerine geçilmiş); artık değiştirilemez ve aynı
+    /// işlem ona ikinci kez uygulanamaz.
+    /// </summary>
+    /// <param name="detailKey">Durumu anlatan mesajın anahtarı (<see cref="HaldusMessageKeys"/>).</param>
+    public static ProblemHttpResult ChainLocked(IHaldusMessages messages, string detailKey, string resourceName, object id)
+    {
+        ArgumentNullException.ThrowIfNull(messages);
+
+        return TypedResults.Problem(
+            title: messages.Format(HaldusMessageKeys.ChainLockedTitle),
+            detail: messages.Format(detailKey, resourceName, id),
+            statusCode: StatusCodes.Status409Conflict);
+    }
+
     /// <summary>Kayıt, başka kayıtlar ona referans verdiği için silinemiyor.</summary>
     public static ProblemHttpResult InUse(IHaldusMessages messages, string resourceName, object id)
     {

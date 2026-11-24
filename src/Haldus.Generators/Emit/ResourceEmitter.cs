@@ -180,6 +180,26 @@ internal static class ResourceEmitter
                 resource.Properties.Where(property => property.IsWritable));
         }
 
+        foreach (var origin in resource.Origins)
+        {
+            // Kaynakta karşılığı olmayan alanları istek doldurur; gönderilen alan kopyalananın yerine geçer.
+            AppendPatchRequest(
+                builder,
+                $"Create{resource.EntityName}From{origin.SourceName}Request",
+                resource,
+                resource.Properties.Where(property => property.IsWritable));
+        }
+
+        foreach (var chain in ChainOperation.For(resource))
+        {
+            // Karşı kayıt da kopya gibi kurulur; istek, kopyadaki alanları değiştirebilir.
+            AppendPatchRequest(
+                builder,
+                $"{chain.Pascal}{resource.EntityName}Request",
+                resource,
+                resource.Properties.Where(property => property.IsWritable));
+        }
+
         if (resource.SearchFields.Length > 0)
         {
             AppendSearchTypes(builder, resource);

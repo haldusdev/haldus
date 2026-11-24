@@ -42,6 +42,10 @@ internal static class ChainReader
         "Orderable",
         "Cloneable",
         "Previewable",
+        "Reversible",
+        "Supersedes",
+        "CreatedFrom",
+        "DerivedFrom",
     ];
 
     /// <summary>Zincirdeki çağrıları, Map çağrısından dışa doğru sırayla verir.</summary>
@@ -115,6 +119,12 @@ internal static class ChainReader
                     break;
                 case "Previewable":
                     traits |= Traits.Previewable;
+                    break;
+                case "Reversible":
+                    traits |= Traits.Reversible;
+                    break;
+                case "Supersedes":
+                    traits |= Traits.Supersedes;
                     break;
                 case "OwnedByCurrentUser":
                     traits |= Traits.Owned;

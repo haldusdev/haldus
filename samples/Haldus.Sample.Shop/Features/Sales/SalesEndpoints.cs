@@ -52,7 +52,11 @@ public static class SalesEndpoints
             .Idempotent()
 
             // Önizleme toplamı hesaplar ama kaydetmez: POST /orders/preview ve POST /orders/{id}/preview
-            .Previewable();
+            .Previewable()
+
+            // Sipariş bir sepetten de üretilebilir: POST /orders/from-cart/{cartId}
+            // Sepetin satırlarını siparişe Order.CreateFrom taşır; sepet silinirse bağ boşalır.
+            .CreatedFrom<Cart>(onDelete: OnDelete.SetNull);
 
         // Satırlar siparişin istek ve yanıtlarına gömülüdür; ayrı uçları yoktur.
         orders.MapDetail<OrderItem>();
@@ -102,6 +106,12 @@ public static class SalesEndpoints
         app.MapAppendOnly<PaymentTransaction>()
             .Under<Payment>();
 
+        // Makbuzu istemci oluşturamaz; ödeme tahsil edildiğinde, o geçişle aynı transaction'da doğar.
+        app.MapAppendOnly<Receipt>()
+            .MultiTenant()
+            .Without(CrudOperation.Create)
+            .CreatedFrom<Payment>(on: "capture");
+
         // Kupon koduyla da okunur (GET /coupons/by-code/{code}) ve kod benzersizdir. Kod ile indirim oranı
         // yalnızca oluştururken yazılır; dağıtılmış bir kuponun anlamı sonradan değişmez.
         var coupons = app.MapCrud<Coupon>()
@@ -122,6 +132,11 @@ public static class SalesEndpoints
 
             return Task.CompletedTask;
         });
+
+        // Teklif düzeltilmez; yenisi eskisinin yerine geçer: POST /quotes/{id}/supersede  { "amount": 900 }
+        // Yerine geçilmiş ya da başka bir teklifin yerine geçmiş teklif silinemez; diğerleri silinebilir.
+        app.MapCrud<Quote>()
+            .Supersedes();
 
         // Uzun süren iş: POST 202 döner, iş arka planda çalışır. Mantığı ReportExportHandler sınıfındadır.
         app.MapJob<ReportExport>()
