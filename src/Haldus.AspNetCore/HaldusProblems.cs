@@ -125,6 +125,18 @@ public static class HaldusProblems
 
     /// <summary>Doğal anahtarı aynı olan başka bir kayıt var.</summary>
     /// <param name="field">Doğal anahtar alanının adı.</param>
+    /// <summary>Kimliği istemcinin verdiği kaynakta (<c>KeyStrategy.Client</c>) kimlik gönderilmedi veya boş.</summary>
+    public static ProblemHttpResult KeyRequired(IHaldusMessages messages, string field)
+    {
+        ArgumentNullException.ThrowIfNull(messages);
+
+        return TypedResults.Problem(new HttpValidationProblemDetails(
+            new Dictionary<string, string[]> { [field] = [messages.Format(HaldusMessageKeys.ValidationRequired, field)] })
+        {
+            Status = StatusCodes.Status400BadRequest,
+        });
+    }
+
     public static ProblemHttpResult Duplicate(IHaldusMessages messages, string resourceName, string field, object? value)
     {
         ArgumentNullException.ThrowIfNull(messages);

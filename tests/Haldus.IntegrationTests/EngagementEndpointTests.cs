@@ -19,6 +19,58 @@ public sealed class EngagementEndpointTests(ShopFixture fixture)
     // ── Okundu takibi ──────────────────────────────────────────────────────────────────────────────────
 
     [Fact]
+    public async Task UlidKeys_AreGeneratedInCreationOrder()
+    {
+        var first = await ReadAsync<ParcelResponse>(await SendAsync(HttpMethod.Post, "/parcels", new { recipient = "Ada" }));
+        await Task.Delay(5, CancellationToken);
+        var second = await ReadAsync<ParcelResponse>(await SendAsync(HttpMethod.Post, "/parcels", new { recipient = "Grace" }));
+
+        // 26 karakter, Crockford base32; metin sırası oluşturulma sırasıdır.
+        Assert.All(new[] { first.Id, second.Id }, id => Assert.Matches("^[0-7][0-9A-HJKMNP-TV-Z]{25}$", id));
+        Assert.True(string.CompareOrdinal(first.Id, second.Id) < 0);
+
+        var read = await ReadAsync<ParcelResponse>(await SendAsync(HttpMethod.Get, $"/parcels/{second.Id}"));
+        Assert.Equal("Grace", read.Recipient);
+        Assert.Equal(HttpStatusCode.NotFound, (await SendAsync(HttpMethod.Get, "/parcels/01ARZ3NDEKTSV4RRFFQ69G5FAV")).StatusCode);
+
+        // Uygulamanın kendi eklediği, anahtarı boş kayıt da aynı biçimi alır.
+        string? generated = null;
+        await fixture.WithDbContextAsync(async context =>
+        {
+            var parcel = new Parcel { Recipient = "Direct" };
+            context.Add(parcel);
+            await context.SaveChangesAsync(CancellationToken);
+            generated = parcel.Id;
+        });
+        Assert.Matches("^[0-7][0-9A-HJKMNP-TV-Z]{25}$", generated);
+    }
+
+    [Fact]
+    public async Task ClientKeys_AreGivenByTheClientAndCannotBeTakenTwice()
+    {
+        var id = Guid.NewGuid();
+
+        var created = await SendAsync(HttpMethod.Post, $"/enrollments?id={id}", new { course = "Algebra" });
+        Assert.Equal(HttpStatusCode.Created, created.StatusCode);
+        Assert.Equal(id, (await ReadAsync<EnrollmentResponse>(created)).Id);
+        Assert.EndsWith($"/enrollments/{id}", created.Headers.Location?.ToString());
+
+        // Aynı kimlikle ikinci oluşturma bir çakışmadır; var olan kayda dokunulmaz.
+        var again = await SendAsync(HttpMethod.Post, $"/enrollments?id={id}", new { course = "Geometry" });
+        Assert.Equal(HttpStatusCode.Conflict, again.StatusCode);
+        Assert.Equal("Algebra", (await ReadAsync<EnrollmentResponse>(await SendAsync(HttpMethod.Get, $"/enrollments/{id}"))).Course);
+
+        // Kimlik zorunludur ve boş olamaz; istek her zamanki gibi doğrulanır.
+        Assert.Equal(HttpStatusCode.BadRequest, (await SendAsync(HttpMethod.Post, "/enrollments", new { course = "No key" })).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await SendAsync(HttpMethod.Post, $"/enrollments?id={Guid.Empty}", new { course = "Empty key" })).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await SendAsync(HttpMethod.Post, $"/enrollments?id={Guid.NewGuid()}", new { course = "" })).StatusCode);
+
+        // Güncelleme kimliği değiştirmez.
+        var updated = await ReadAsync<EnrollmentResponse>(await SendAsync(HttpMethod.Put, $"/enrollments/{id}", new { course = "Calculus" }));
+        Assert.Equal((id, "Calculus"), (updated.Id, updated.Course));
+    }
+
+    [Fact]
     public async Task ReadReceipts_AreKeptPerUserForSharedRecords()
     {
         async Task<long> UnreadAsync(string user) =>

@@ -386,6 +386,54 @@ public sealed class FieldExtensionTests
     }
 
     [Fact]
+    public void KeyStrategy_Ulid_MakesTheKeyASortableString()
+    {
+        var run = Run("app.MapCrud<Product>().KeyStrategy(KeyStrategy.Ulid);").AssertCompiles();
+
+        Assert.Contains("public string Id { get; set; }", run.Sources["Shop.Product.Entity.g.cs"]);
+
+        var endpoints = run.Sources["Shop.Product.Endpoints.g.cs"];
+        Assert.Contains("Id = global::Haldus.HaldusKeys.NewUlid()", Handler(endpoints, "CreateAsync"));
+        Assert.Contains("""MapGet("/{id}", GetAsync)""", endpoints);
+
+        // Uygulamanın kendi eklediği kayıtlar da aynı biçimi alır.
+        Assert.Contains("global::Haldus.HaldusDb.ConfigureUlidKey(entity.Property(item => item.Id));", run.Sources["HaldusModule.g.cs"]);
+    }
+
+    [Fact]
+    public void KeyStrategy_Client_TakesTheKeyFromTheCreateRequest()
+    {
+        var run = Run("app.MapCrud<Product>().KeyStrategy(KeyStrategy.Client).Previewable();").AssertCompiles();
+        var endpoints = run.Sources["Shop.Product.Endpoints.g.cs"];
+        var create = Handler(endpoints, "CreateAsync");
+
+        // Kimlik adresin sorgusundan gelir (gövdede değil); boş olamaz ve alınmışsa çakışmadır.
+        Assert.Contains("global::System.Guid id,\n        CreateProductRequest request,", create);
+        Assert.Contains("if (id == global::System.Guid.Empty)", create);
+        Assert.Contains("Id = id,", create);
+        Assert.Contains("IsUniqueViolation(taken, \"PK_Products\")", create);
+        Assert.Contains("Duplicate(messages, \"Product\", \"id\", entity.Id)", create);
+        Assert.DoesNotContain("Id", run.Sources["Shop.Product.Dtos.g.cs"].Substring(run.Sources["Shop.Product.Dtos.g.cs"].IndexOf("record CreateProductRequest", StringComparison.Ordinal)).Split("record UpdateProductRequest")[0].Replace("CategoryId", string.Empty));
+
+        // Önizlenen kayıt var olmayacak; kimliği de yoktur.
+        Assert.DoesNotContain("Id = id", Handler(endpoints, "PreviewAsync"));
+
+        // Anahtarı ne veritabanı ne EF üretir.
+        Assert.Contains("entity.Property(item => item.Id).ValueGeneratedNever();", run.Sources["HaldusModule.g.cs"]);
+    }
+
+    [Theory]
+    [InlineData("app.MapCrud<Product>().KeyStrategy(KeyStrategy.Client).Batch();", "KeyStrategy.Client cannot be combined with Batch")]
+    [InlineData("app.MapCrud<Product>().KeyStrategy(KeyStrategy.Client).Cloneable();", "KeyStrategy.Client cannot be combined with Cloneable")]
+    [InlineData("app.MapCrud<Product>().KeyStrategy(KeyStrategy.Client).Without(CrudOperation.Create);", "KeyStrategy.Client needs the Create operation")]
+    [InlineData("app.MapCrud<Product>().KeyStrategy(KeyStrategy.Ulid, \"ord\");", "A key prefix has no effect")]
+    public void KeyStrategy_RejectsCombinationsThatCannotWork(string body, string message)
+    {
+        var run = Run(body);
+        Assert.Contains(run.GeneratorDiagnostics, candidate => candidate.Id == "HALDUS007" && candidate.GetMessage().Contains(message, StringComparison.Ordinal));
+    }
+
+    [Fact]
     public void KeyStrategy_ChoosesBetweenSequentialAndRandomGuids()
     {
         var random = Run("app.MapCrud<Product>().KeyStrategy(KeyStrategy.Random);").AssertCompiles();

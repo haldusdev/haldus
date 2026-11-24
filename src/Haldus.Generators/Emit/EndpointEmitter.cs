@@ -62,7 +62,20 @@ internal sealed partial class EndpointEmitter
     private bool Translatable => _resource.TranslatableFields.Length > 0;
 
     /// <summary>Oluşturma bir hata yanıtıyla dönebilir mi: referans bulunamayabilir veya doğal anahtar çakışabilir.</summary>
-    private bool CreateCanFail => ChecksReferences || NaturalKey is not null || EffectiveDated || HasCustomFields;
+    private bool CreateCanFail => ChecksReferences || NaturalKey is not null || EffectiveDated || HasCustomFields || ClientKey;
+
+    /// <summary>Kimliği oluşturma isteğinde istemci verir (<c>KeyStrategy.Client</c>).</summary>
+    private bool ClientKey => _resource.KeyGeneration == KeyGeneration.Client;
+
+    /// <summary>İstemcinin verdiği kimlik boş olamaz.</summary>
+    private string ClientKeyCheck() => $$"""
+                if ({{_keyParameter}} == global::System.Guid.Empty)
+                {
+                    return {{Problems}}.KeyRequired(messages, "{{ResourceEmitter.CamelCase(_key)}}");
+                }
+
+
+        """;
 
     private bool HasCustomFields => _resource.Has(Traits.CustomFields);
 
@@ -929,6 +942,15 @@ internal sealed partial class EndpointEmitter
         {
             keys.Add($"{_key} = global::Haldus.HaldusKeys.NewPrefixed({ResourceEmitter.Literal(_resource.KeyPrefix!)})");
         }
+        else if (_resource.KeyGeneration == KeyGeneration.Ulid)
+        {
+            keys.Add($"{_key} = global::Haldus.HaldusKeys.NewUlid()");
+        }
+        else if (ClientKey)
+        {
+            // Kimliği istemci verir; yalnızca tekil oluşturma isteğinde gelir.
+            keys.Add($"{_key} = {_keyParameter}");
+        }
         else if (_resource.IdKind == IdKind.Guid)
         {
             keys.Add(_resource.KeyGeneration == KeyGeneration.Random
@@ -1093,7 +1115,18 @@ internal sealed partial class EndpointEmitter
     private void EmitCreate()
     {
         var assignments = CreateInitializer();
-        var save = SaveCreated();
+
+        // İstemcinin verdiği kimlik alınmışsa birincil anahtar reddeder; bu bir çakışmadır (aynı isteğin tekrarı da olabilir).
+        var save = ClientKey
+            ? SaveCreated(catches: $$"""
+                    catch (global::Microsoft.EntityFrameworkCore.DbUpdateException taken)
+                        when (global::Haldus.HaldusDb.IsUniqueViolation(taken, "PK_{{ModuleEmitter.TableName(_resource)}}"))
+                    {
+                        return {{Problems}}.Duplicate(messages, "{{_entity}}", "{{ResourceEmitter.CamelCase(_key)}}", entity.{{_key}});
+                    }
+
+            """)
+            : SaveCreated();
 
         // İş oluşturulur ve hemen dönülür: kayıt, altyapının kuyruğuyla birlikte kaydedilir, sonra teslim edilir.
         var job = _resource.Archetype == Archetype.Job;
@@ -1127,9 +1160,9 @@ internal sealed partial class EndpointEmitter
         _handlers.Append($$"""
 
                 private static async {{returnType}} CreateAsync(
-            {{ScopeParameter}}        Create{{_entity}}Request request,
+            {{ScopeParameter}}{{(ClientKey ? KeyParameter : string.Empty)}}        Create{{_entity}}Request request,
             {{HttpContextParameter}}{{(HasLifetime || job ? TimeProviderParameter : string.Empty)}}{{(job ? "        global::Haldus.IHaldusJobDispatcher jobs,\n" : string.Empty)}}{{ContextsParameter}}{{(CreateCanFail ? MessagesParameter : string.Empty)}}{{CancellationParameter}}    {
-            {{(_resource.OwnerGuard is null ? ParentCheck() : OwnerGuard("create"))}}{{WriteChecks(patch: false, creating: true)}}{{SecretVariables()}}        var entity = new {{_entity}} { {{assignments}} };
+            {{(ClientKey ? ClientKeyCheck() : string.Empty)}}{{(_resource.OwnerGuard is null ? ParentCheck() : OwnerGuard("create"))}}{{WriteChecks(patch: false, creating: true)}}{{SecretVariables()}}        var entity = new {{_entity}} { {{assignments}} };
             {{CreateDetails()}}{{Compute()}}
                     var context = contexts.For<{{_entity}}>();
             {{save}}

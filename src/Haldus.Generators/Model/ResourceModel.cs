@@ -272,6 +272,12 @@ internal enum KeyGeneration
 
     /// <summary>Önekli metin kimlik.</summary>
     Prefixed,
+
+    /// <summary>ULID: 26 karakterlik, zamana göre sıralı metin kimlik.</summary>
+    Ulid,
+
+    /// <summary>Kimliği (Guid) oluşturma isteğinde istemci verir.</summary>
+    Client,
 }
 
 /// <summary>Kaydın doğal anahtarı: benzersizdir ve kayıt onunla da okunabilir.</summary>

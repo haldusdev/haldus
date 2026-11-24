@@ -232,7 +232,7 @@ sınırları ayrıca [README](../README.md) ve `CLAUDE.md` dosyalarında, özell
 | Mesaj kuyruğu paketi | — | `PublishesEvents` olayı uygulamanın yayıncısına teslim eder; taşımak onun işidir |
 | Zamanlanmış yayından kaldırma | 27 | Zamanlanmış yayın sonradan yazıldı (`ScheduledPublishing`); yayın, zamanından en çok bir bakım aralığı sonra gerçekleşir |
 | "İş tanımı + çalıştırmalar" modeli (AIP-152) | — | İş kaydı zaten bir çalıştırmadır; yeniden çalıştırma yeni bir iş kaydıdır |
-| ULID ve istemcinin verdiği kimlik | — | `KeyStrategy` için tercih belirtilmedi; önekli kimlik ve GUID yazıldı |
+| İstemcinin verdiği metin kimlik (slug) | — | ULID ve istemcinin verdiği `Guid` kimlik sonradan yazıldı; anlamlı metin anahtar için `NaturalKey` veya `MapStore` vardır |
 | "Uzatma kancaları" | — | Araştırmanın ilk sürüm listesinde adı geçiyor, tanımı yok |
 | Gerçek kimlik doğrulamalı bir örnek arayüz | — | Örnek panel ve mobil uygulama demo kimliğiyle (başlıklar) çalışır; kimlik sağlayıcı seçimi sorulması gereken bir karardır |
 | Arayüzler için otomatik test | — | Frontend test framework'ü sorulması gereken bir seçimdi; arayüzler tip denetimi, derleme ve elle doğrulandı |

@@ -365,6 +365,13 @@ public sealed class HistoryTests
         Assert.Contains("source.ScheduledAt = null;", due);
         Assert.DoesNotContain("IgnoreQueryFilters()", endpoints);
 
+        // Kendi filtrelerinden geçemeyen taslak hiç yayınlanamaz; zamanlaması düşürülür. Başarısız olanlar atlanarak
+        // sıradakilere geçilir: yayınlanamayan birkaç taslak sıranın başını tutup ötekileri (başka kiracıları) bekletemez.
+        Assert.Contains("global::Haldus.HaldusScheduledPublishing.ClearAsync<Post>(", due);
+        Assert.Contains("skip: failed,", due);
+        Assert.Contains("failed++;", due);
+        Assert.Contains("attempted < global::Haldus.HaldusScheduledPublishing.MaxPerRun", due);
+
         Assert.Contains(
             "global::Haldus.HaldusMaintenanceRegistry.RegisterScheduledPublishing<global::Shop.Post>(global::Shop.PostEndpoints.PublishDueAsync);",
             run.Sources["HaldusModule.g.cs"]);

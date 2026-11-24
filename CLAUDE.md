@@ -110,7 +110,9 @@ Bunlar kullanıcıyla kararlaştırıldı; yeniden sorma.
     anahtar eklenir veya değişir, `null` gönderilen silinir), `PUT` tamamını değiştirir. Sınır: 50 anahtar, anahtar
     40, değer 500 karakter.
   - `KeyStrategy` için kullanıcı tercih belirtmedi ("No preference"); önerilen önekli kimlik (`ord_…`) ve rastgele
-    GUID (v4) yazıldı. ULID ve istemcinin verdiği kimlik yazılmadı; istenirse eklenir.
+    GUID (v4) yazıldı. Planlardan sonra ULID (`KeyStrategy.Ulid`; 26 karakterlik metin) ve istemcinin verdiği kimlik
+    (`KeyStrategy.Client`) eklendi. İstemcinin kimliği, AIP-133'teki gibi, gövdede değil sorguda gelir
+    (`POST /enrollments?id={guid}`) ve bir `Guid`'dir; aynı kimlikle ikinci oluşturma 409 alır.
 - Kayıt işlemleri (13. aşama, kullanıcı kararları):
   - `.Cloneable()`: `POST /{id}/clone`. Kopyaya yazılabilir alanlar ve gömülü satırlar taşınır; geri kalanı yeni
     kayıt gibi atanır (yeni kimlik, başlangıç durumu, numara kendi kuralıyla, zaman damgaları, sahip). İstek
@@ -716,6 +718,13 @@ denenmesi, yük ölçümü. Raporun "Bilinen sınırlar" tablosundaki kalemler d
     anahtarı boş kayıtlar da aynı biçimi alır. Önek derleme zamanında okunan bir metin sabiti olmalıdır.
     `MapCrud`, `MapReadOnly` ve `MapAppendOnly` ile birleşir; işin kimliği kuyruklarda `Guid` taşındığı için
     `MapJob` ile birleşmez. Gömülü detay satırlarının kimliği her zaman v7 GUID'dir.
+  - **ULID ve istemcinin kimliği.** `KeyGeneration.Ulid` önekli anahtarla aynı yoldan geçer (`IdKind.String`,
+    `HaldusKeys.NewUlid`, `HaldusDb.ConfigureUlidKey`); gerçek bir ULID'dir (48 bit zaman + 80 bit rastgele), aynı
+    milisaniyede üretilen iki kimliğin sırası rastgeledir. `KeyGeneration.Client` yalnızca tekil oluşturma ucunu
+    değiştirir: handler kimliği sorgudan alır (`ClientKey`, `ClientKeyCheck`), `CreateInitializer` onu atar ve alınmış
+    kimlik birincil anahtarın ihlalinden tanınıp 409 olur (ön kontrol yoktur: başka bir kiracının aynı kimliği de
+    çakışmadır ve sorgu filtreleri onu göstermezdi). Kayıt oluşturan öteki yollar kimlik veremediği için `Batch`,
+    `Cloneable`, `CreatedFrom`, `Reversible`, `Supersedes`, `Document` ve `Publishable` ile birleşmez (`HALDUS007`).
   - **Metadata.** `Traits.Metadata` (`IHasMetadata`). Alan trait alanı gibi üretilir ve yanıtta yer alır;
     isteklerdeki yeri ayrıca üretilir (`ResourceEmitter.AppendRequest`, `MetadataChanges`). Çanta jsonb kolonunda,
     metne çevrilerek saklanır (`HaldusDb.ConfigureMetadata`); böylece Npgsql'in dinamik JSON desteğinin açılması
@@ -1179,9 +1188,12 @@ denenmesi, yük ölçümü. Raporun "Bilinen sınırlar" tablosundaki kalemler d
     `HaldusMaintenanceRegistry.RegisterScheduledPublishing` ile kaydeder; bakım zamanı gelen taslakları bütün
     filtreleri kaldırarak bulur (`HaldusScheduledPublishing.DueAsync`; tur başına kaynak başına 100), sonra her
     taslağı kendi kiracısı ve sahibi adına (`HaldusAmbient`), filtrelerden geçirerek yeniden okur ve yayınlar.
-    Zamanlamak taslağın bir yazmasıdır (`If-Match`, `Save`). Sınırlar: yayın zamanından en çok bir bakım aralığı
-    (`MaintenanceInterval`) sonra gerçekleşir; zamanlanmış yayından kaldırma yoktur; bakım sırasında çakışan
-    taslak bir sonraki turda yeniden denenir.
+    Zamanlamak taslağın bir yazmasıdır (`If-Match`, `Save`). Kendi filtrelerinden geçemeyen taslak (üst kaydı
+    görünmeyen, silinmiş sayılan) hiç yayınlanamaz; zamanlaması düşürülür (`ClearAsync`). Tur, başarısız olanları
+    atlayarak sıradakilere geçer (`skip: failed`; kaynak başına en çok 1000 deneme): yayınlanamayan birkaç taslak
+    sıranın başını tutup başka kiracıların taslaklarını bekletemez (güvenlik incelemesinde çıktı). Sınırlar: yayın
+    zamanından en çok bir bakım aralığı (`MaintenanceInterval`) sonra gerçekleşir; zamanlanmış yayından kaldırma
+    yoktur; bakım sırasında çakışan taslak bir sonraki turda yeniden denenir.
 - **Onay.** `Traits.Approvable` (`IApprovable`; alanları `TraitCatalog`'dadır), kuralları `ResourceModel.Approval`
   (`LifecycleReader.ReadApproval`). Kimin karar verebileceği ve kararın kayda nasıl yazıldığı çalışma zamanındadır
   (`HaldusApprovals.DecideAsync`); üretilen uç kaydı bulur, yazma kurallarından geçirir (`If-Match`, kapanmış kayıt

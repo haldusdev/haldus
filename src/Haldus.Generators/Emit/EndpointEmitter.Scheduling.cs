@@ -63,12 +63,26 @@ internal sealed partial class EndpointEmitter
                 {
                     var contexts = {{Injection}}.GetRequiredService<global::Haldus.IHaldusDbContextProvider>(services);
                     var context = contexts.For<{{_entity}}>();
-                    var due = await global::Haldus.HaldusScheduledPublishing.DueAsync<{{_entity}}>(
-                        context,
-                        candidate => candidate.PublishedOfId == null && candidate.ScheduledAt != null && candidate.ScheduledAt <= now,
-                        candidate => candidate.ScheduledAt,
-                        cancellationToken);
                     var published = 0;
+                    var failed = 0;
+
+                    // Yayınlanan ve zamanlaması düşen taslaklar "zamanı gelmiş" olmaktan çıkar; başarısız olanlar atlanarak
+                    // sıradakilere geçilir. Böylece yayınlanamayan birkaç taslak sıranın başını tutamaz.
+                    for (var attempted = 0; attempted < global::Haldus.HaldusScheduledPublishing.MaxPerRun;)
+                    {
+                        var due = await global::Haldus.HaldusScheduledPublishing.DueAsync<{{_entity}}>(
+                            context,
+                            candidate => candidate.PublishedOfId == null && candidate.ScheduledAt != null && candidate.ScheduledAt <= now,
+                            candidate => candidate.ScheduledAt,
+                            skip: failed,
+                            cancellationToken);
+
+                        if (due.Count == 0)
+                        {
+                            break;
+                        }
+
+                        attempted += due.Count;
 
                     foreach (var scheduled in due)
                     {
@@ -79,8 +93,17 @@ internal sealed partial class EndpointEmitter
                         context.ChangeTracker.Clear();
                         var source = await context.Set<{{_entity}}>(){{Includes}}.FirstOrDefaultAsync(candidate => candidate.{{_key}} == scheduled.{{_key}}, cancellationToken);
 
-                        // Bu sırada silinmiş veya zamanlaması kaldırılmış olabilir.
-                        if (source is null || source.ScheduledAt is null || source.ScheduledAt > now)
+                        if (source is null)
+                        {
+                            // Taslak kendi filtrelerinden geçemiyor (silinmiş sayılıyor, üst kaydı görünmüyor): hiçbir
+                            // zaman yayınlanamaz. Zamanlaması düşürülür ki her turda yeniden denenmesin.
+                            await global::Haldus.HaldusScheduledPublishing.ClearAsync<{{_entity}}>(
+                                context, candidate => candidate.{{_key}} == scheduled.{{_key}}, candidate => candidate.ScheduledAt, cancellationToken);
+                            continue;
+                        }
+
+                        // Bu sırada zamanlaması kaldırılmış veya ileri alınmış olabilir; artık zamanı gelmiş sayılmaz.
+                        if (source.ScheduledAt is null || source.ScheduledAt > now)
                         {
                             continue;
                         }
@@ -95,7 +118,9 @@ internal sealed partial class EndpointEmitter
                         catch (global::Microsoft.EntityFrameworkCore.DbUpdateException)
                         {
                             // Taslak bu sırada başka bir istekle değişti veya yayınlandı; bir sonraki turda yeniden denenir.
+                            failed++;
                         }
+                    }
                     }
 
                     context.ChangeTracker.Clear();

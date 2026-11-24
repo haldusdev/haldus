@@ -269,9 +269,32 @@ internal static class MapCallParser
 
         var (keyGeneration, keyPrefix) = ReadKeyStrategy(chain, location, diagnostics);
 
-        // Önekli anahtar metindir; kullanıcı Id'yi kendisi yazdıysa string olmalıdır.
-        var prefixed = keyGeneration == KeyGeneration.Prefixed;
+        // Önekli anahtar ve ULID metindir; kullanıcı Id'yi kendisi yazdıysa string olmalıdır.
+        var prefixed = keyGeneration is KeyGeneration.Prefixed or KeyGeneration.Ulid;
         var declaredTextKey = prefixed && id?.Type.SpecialType == SpecialType.System_String;
+
+        if (keyGeneration == KeyGeneration.Client)
+        {
+            // Kimlik yalnızca tekil oluşturma isteğinde gelir; kayıt oluşturan öteki yollar onu veremez.
+            if ((operations & Operations.Create) == 0)
+            {
+                diagnostics.Add(new DiagnosticInfo(
+                    "HALDUS007",
+                    location,
+                    new EquatableArray<string>(["KeyStrategy.Client needs the Create operation: the client gives the key when it creates the record"])));
+            }
+
+            foreach (var other in new[] { "Batch", "Cloneable", "CreatedFrom", "Reversible", "Supersedes", "Document", "Publishable" })
+            {
+                if (chain.Any(call => call.Name == other))
+                {
+                    diagnostics.Add(new DiagnosticInfo(
+                        "HALDUS007",
+                        location,
+                        new EquatableArray<string>([$"KeyStrategy.Client cannot be combined with {other}: it creates records whose key no client has given"])));
+                }
+            }
+        }
 
         // Anahtarı istemcinin verdiği archetype'larda varsayılan tip metindir; diğerlerinde sunucu Guid üretir.
         var idKind = archetype.HasClientKey() || prefixed ? IdKind.String : IdKind.Guid;

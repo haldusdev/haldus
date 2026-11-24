@@ -11,6 +11,15 @@ public enum KeyStrategy
 
     /// <summary>Önekli metin kimlik (<c>ord_01j9…</c>): kaydın türü kimliğinden anlaşılır, gövdesi zamana göre sıralıdır.</summary>
     Prefixed,
+
+    /// <summary>ULID: 26 karakterlik, zamana göre sıralı metin kimlik (<c>01J9Z3K8Q4…</c>).</summary>
+    Ulid,
+
+    /// <summary>
+    /// Kimliği istemci verir: <c>POST /devices?id={guid}</c>. Aynı kimlikle ikinci oluşturma 409 alır; böylece istemci
+    /// kaydı oluşturmadan önce kimliğini bilir ve yinelenen isteği ikinci bir kayıt yaratmaz.
+    /// </summary>
+    Client,
 }
 
 /// <summary>Üretilen kodun ve uygulamanın anahtar üretmek için kullandığı yardımcılar.</summary>
@@ -26,6 +35,39 @@ public static class HaldusKeys
     /// <c>{önek}_{gövde}</c> biçiminde bir kimlik üretir. Gövde, zamana göre sıralı bir GUID'in (v7) 26
     /// karakterlik yazımıdır; aynı önekli kimlikler metin olarak sıralandığında oluşturulma sırasına dizilir.
     /// </summary>
+    /// <summary>
+    /// Yeni bir ULID üretir: 48 bit zaman (milisaniye) ve 80 bit rastgele değer, Crockford base32 ile 26 karakter.
+    /// Metin sırası oluşturulma sırasıdır; aynı milisaniyede üretilen iki kimliğin sırası rastgeledir.
+    /// </summary>
+    public static string NewUlid()
+    {
+        const string Symbols = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
+
+        Span<byte> bytes = stackalloc byte[16];
+        var milliseconds = (ulong)DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+
+        for (var index = 5; index >= 0; index--)
+        {
+            bytes[index] = (byte)milliseconds;
+            milliseconds >>= 8;
+        }
+
+        System.Security.Cryptography.RandomNumberGenerator.Fill(bytes[6..]);
+
+        var value = new UInt128(
+            System.Buffers.Binary.BinaryPrimitives.ReadUInt64BigEndian(bytes),
+            System.Buffers.Binary.BinaryPrimitives.ReadUInt64BigEndian(bytes[8..]));
+
+        return string.Create(26, value, static (span, state) =>
+        {
+            for (var index = span.Length - 1; index >= 0; index--)
+            {
+                span[index] = Symbols[(int)(state & 31)];
+                state >>= 5;
+            }
+        });
+    }
+
     public static string NewPrefixed(string prefix)
     {
         ArgumentException.ThrowIfNullOrEmpty(prefix);

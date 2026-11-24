@@ -80,6 +80,27 @@ public static class HaldusDb
             .HasValueGenerator((_, _) => new PrefixedKeyGenerator(prefix));
     }
 
+    /// <summary>
+    /// ULID anahtarı: uçlar anahtarı kendileri atar; uygulamanın kendi eklediği, anahtarı boş kayıtlar da aynı biçimi alır.
+    /// </summary>
+    public static PropertyBuilder<string> ConfigureUlidKey(PropertyBuilder<string> property)
+    {
+        ArgumentNullException.ThrowIfNull(property);
+
+        return property
+            .HasMaxLength(26)
+            .HasSentinel(string.Empty)
+            .ValueGeneratedOnAdd()
+            .HasValueGenerator((_, _) => new UlidKeyGenerator());
+    }
+
+    private sealed class UlidKeyGenerator : ValueGenerator<string>
+    {
+        public override bool GeneratesTemporaryValues => false;
+
+        public override string Next(EntityEntry entry) => HaldusKeys.NewUlid();
+    }
+
     private sealed class PrefixedKeyGenerator(string prefix) : ValueGenerator<string>
     {
         public override bool GeneratesTemporaryValues => false;

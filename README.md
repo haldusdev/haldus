@@ -331,7 +331,7 @@ app.MapCrud<Customer>()
 | `.Metadata()` | Metin değerli serbest anahtar-değer çantası; `PATCH` birleştirir, `PUT` tamamını değiştirir |
 | `.NaturalKey(x => x.Code)` | Alan benzersiz olur (çakışma 409) ve kayıt onunla da okunur: `GET /coupons/by-code/{code}` |
 | `.CreateOnly(...)` | Sayılan alanlar yalnızca `POST` isteğinde yer alır; sonradan değişmez |
-| `.KeyStrategy(...)` | Anahtarın biçimi: sıralı GUID (varsayılan), rastgele GUID veya önekli kimlik (`ord_01j9…`) |
+| `.KeyStrategy(...)` | Anahtarın biçimi: sıralı GUID (varsayılan), rastgele GUID, önekli kimlik (`ord_01j9…`), ULID (`KeyStrategy.Ulid`; 26 karakterlik, zamana göre sıralı metin) veya istemcinin verdiği kimlik (`KeyStrategy.Client`: `POST /enrollments?id={guid}`; aynı kimlikle ikinci oluşturma 409 alır) |
 | `.Sortable(...)` | Liste sıralanabilir: `?sort=-createdAt,name`; yalnızca sayılan alanlara göre |
 | `.Orderable()` | `Position` alanı; liste bu sırayla döner, `POST /{id}/move` kaydı taşır ve kardeşleri yeniden numaralar |
 | `.Cloneable()` | `POST /{id}/clone`: alanlar ve gömülü satırlar kopyalanır; isteğe bağlı gövde kopyadaki alanları değiştirir |

@@ -48,6 +48,22 @@ public partial class Contact
     public string? Source { get; set; }
 }
 
+/// <summary>Koli; kimliği bir ULID'dir (26 karakter, zamana göre sıralı).</summary>
+public partial class Parcel
+{
+    [Required]
+    [MaxLength(200)]
+    public string Recipient { get; set; } = "";
+}
+
+/// <summary>Kayıt başvurusu; kimliğini istemci verir, böylece yinelenen istek ikinci bir başvuru yaratmaz.</summary>
+public partial class Enrollment
+{
+    [Required]
+    [MaxLength(200)]
+    public string Course { get; set; } = "";
+}
+
 /// <summary>Duyuru herkese açıktır; kimin okuduğu kullanıcı başına, ayrı tutulur.</summary>
 public partial class Announcement
 {

@@ -383,7 +383,7 @@ internal static class ModuleEmitter
         return builder.ToString();
     }
 
-    private static string TableName(ResourceModel resource) =>
+    internal static string TableName(ResourceModel resource) =>
         resource.Archetype == Archetype.Singleton ? resource.EntityName : Naming.Pluralize(resource.EntityName);
 
     private static void AppendModel(StringBuilder builder, ResourceModel resource, string entity)
@@ -424,6 +424,15 @@ internal static class ModuleEmitter
             // Uçlar anahtarı kendileri atar; uygulamanın kendi eklediği kayıtlar için de aynı biçim üretilir.
             statements.Add(
                 $"global::Haldus.HaldusDb.ConfigurePrefixedKey(entity.Property(item => item.{resource.KeyName}), {ResourceEmitter.Literal(resource.KeyPrefix!)});");
+        }
+        else if (resource.KeyGeneration == KeyGeneration.Ulid)
+        {
+            statements.Add($"global::Haldus.HaldusDb.ConfigureUlidKey(entity.Property(item => item.{resource.KeyName}));");
+        }
+        else if (resource.KeyGeneration == KeyGeneration.Client)
+        {
+            // Anahtarı istemci verir; veritabanı ya da EF onu üretmez.
+            statements.Add($"entity.Property(item => item.{resource.KeyName}).ValueGeneratedNever();");
         }
         else if (resource.Archetype.HasClientKey())
         {

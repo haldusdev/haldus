@@ -65,6 +65,14 @@ public static class EngagementEndpoints
         garments.MapDetail<GarmentVariant>();
         garments.MapAction<GenerateVariants>();
         // Kimlik numarası hassastır: isteklerde yazılır, hiçbir yanıtta ve saklanan sürümde yer almaz.
+        // Anahtar biçimleri: ULID (sunucu üretir) ve istemcinin verdiği kimlik (POST /enrollments?id={guid}; aynı
+        // kimlikle ikinci oluşturma 409 alır).
+        app.MapCrud<Parcel>()
+            .KeyStrategy(KeyStrategy.Ulid);
+
+        app.MapCrud<Enrollment>()
+            .KeyStrategy(KeyStrategy.Client);
+
         // Paylaşılan kaydın kullanıcı başına okundu bilgisi: POST /announcements/{id}/read ve /unread,
         // GET /announcements/{id}/read-state, POST /announcements/read-all, GET /announcements/unread-count,
         // GET /announcements?unread=true. Duyurunun kendisi değişmez; işaretler ayrı bir tablodadır.
