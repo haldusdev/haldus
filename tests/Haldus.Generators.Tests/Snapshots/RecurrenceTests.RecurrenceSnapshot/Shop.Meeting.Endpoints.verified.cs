@@ -250,7 +250,7 @@ public static partial class MeetingEndpoints
         global::System.Threading.CancellationToken cancellationToken)
     {
         var context = contexts.For<Meeting>();
-        var entity = await context.Set<Meeting>().AsNoTracking().FirstOrDefaultAsync(item => item.Id == id, cancellationToken);
+        var entity = await context.Set<Meeting>().FirstOrDefaultAsync(item => item.Id == id, cancellationToken);
 
         if (entity is null)
         {
@@ -260,9 +260,16 @@ public static partial class MeetingEndpoints
         // Yalnızca kuralın gerçekten verdiği bir oluş ertelenebilir veya iptal edilebilir.
         var changed = await global::Haldus.HaldusRecurrence.ChangeAsync(context, entity, global::System.Convert.ToString(id, global::System.Globalization.CultureInfo.InvariantCulture)!, start, request, cancellationToken);
 
-        return changed is null
-            ? global::Haldus.HaldusProblems.NotFound(messages, "Occurrence", start)
-            : global::Microsoft.AspNetCore.Http.TypedResults.Ok(changed);
+        if (changed is null)
+        {
+            return global::Haldus.HaldusProblems.NotFound(messages, "Occurrence", start);
+        }
+
+        // Oluşun değişmesi serinin değişmesidir: sürümü ilerler ve seriye bağlı her kural (onay, sürümler) işler.
+        context.Entry(entity).State = global::Microsoft.EntityFrameworkCore.EntityState.Modified;
+        await context.SaveChangesAsync(cancellationToken);
+
+        return global::Microsoft.AspNetCore.Http.TypedResults.Ok(changed);
     }
 
     private static async global::System.Threading.Tasks.Task<global::Microsoft.AspNetCore.Http.HttpResults.Results<global::Microsoft.AspNetCore.Http.HttpResults.Ok<global::Haldus.Occurrence>, global::Microsoft.AspNetCore.Http.HttpResults.ProblemHttpResult>> RestoreOccurrenceAsync(
@@ -273,7 +280,7 @@ public static partial class MeetingEndpoints
         global::System.Threading.CancellationToken cancellationToken)
     {
         var context = contexts.For<Meeting>();
-        var entity = await context.Set<Meeting>().AsNoTracking().FirstOrDefaultAsync(item => item.Id == id, cancellationToken);
+        var entity = await context.Set<Meeting>().FirstOrDefaultAsync(item => item.Id == id, cancellationToken);
 
         if (entity is null)
         {
@@ -283,9 +290,16 @@ public static partial class MeetingEndpoints
         // Yalnızca kuralın gerçekten verdiği bir oluş ertelenebilir veya iptal edilebilir.
         var changed = await global::Haldus.HaldusRecurrence.ChangeAsync(context, entity, global::System.Convert.ToString(id, global::System.Globalization.CultureInfo.InvariantCulture)!, start, new global::Haldus.OccurrenceChange(), cancellationToken);
 
-        return changed is null
-            ? global::Haldus.HaldusProblems.NotFound(messages, "Occurrence", start)
-            : global::Microsoft.AspNetCore.Http.TypedResults.Ok(changed);
+        if (changed is null)
+        {
+            return global::Haldus.HaldusProblems.NotFound(messages, "Occurrence", start);
+        }
+
+        // Oluşun değişmesi serinin değişmesidir: sürümü ilerler ve seriye bağlı her kural (onay, sürümler) işler.
+        context.Entry(entity).State = global::Microsoft.EntityFrameworkCore.EntityState.Modified;
+        await context.SaveChangesAsync(cancellationToken);
+
+        return global::Microsoft.AspNetCore.Http.TypedResults.Ok(changed);
     }
 
     private static MeetingResponse ToResponse(Meeting item) => new() { Id = item.Id, Title = item.Title, StartsAt = item.StartsAt, RecurrenceFrequency = item.RecurrenceFrequency, RecurrenceInterval = item.RecurrenceInterval, RecurrenceUntil = item.RecurrenceUntil, RecurrenceCount = item.RecurrenceCount };

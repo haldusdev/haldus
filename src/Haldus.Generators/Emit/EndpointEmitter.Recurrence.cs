@@ -5,6 +5,8 @@ namespace Haldus.Generators.Emit;
 /// <summary>
 /// Yinelenen kaydın oluşları. Oluşlar saklanmaz: kuraldan hesaplanır (<c>HaldusRecurrence</c>) ve tek tek ertelenip iptal
 /// edilebilir. Uçlar kaydı her zaman kendi filtrelerinden geçirerek bulur; kaydı göremeyen oluşlarını da göremez.
+/// Tek bir oluşu değiştirmek serinin bir yazmasıdır: güncelleme ucunun korumalarından (sürüm, sahibin durumu, kapanmış
+/// veya onaylanmış kayıt, düzenlenebilir durum) geçer, seriyle aynı kaydetmede kalıcı olur ve serinin sürümünü ilerletir.
 /// </summary>
 internal sealed partial class EndpointEmitter
 {
@@ -12,7 +14,7 @@ internal sealed partial class EndpointEmitter
     {
         var occurrence = "global::Haldus.Occurrence";
         var route = $"{_keyRoute}/occurrences";
-        var guard = StateGuard(_resource.Workflow?.EditableIn, "update");
+        var metadata = $"{StateMetadata(_resource.Workflow?.EditableIn)}{ConcurrencyMetadata()}";
 
         _map.Append($$"""
                     group.MapGet("{{route}}", OccurrencesAsync)
@@ -21,11 +23,11 @@ internal sealed partial class EndpointEmitter
 
                     group.MapPut("{{route}}/{start}", ChangeOccurrenceAsync)
                         .WithName("Change{{_entity}}Occurrence")
-                        .ProducesProblem(404){{StateMetadata(_resource.Workflow?.EditableIn)}};
+                        .ProducesProblem(404){{metadata}};
 
                     group.MapDelete("{{route}}/{start}", RestoreOccurrenceAsync)
                         .WithName("Restore{{_entity}}Occurrence")
-                        .ProducesProblem(404){{StateMetadata(_resource.Workflow?.EditableIn)}};
+                        .ProducesProblem(404){{metadata}};
 
 
             """);
@@ -34,21 +36,27 @@ internal sealed partial class EndpointEmitter
 
                 private static async {{Task}}<{{Results}}.Results<{{Results}}.Ok<{{occurrence}}>, {{Problem}}>> {{name}}(
             {{ScopeParameter}}{{KeyParameter}}        global::System.DateTimeOffset start,
-            {{parameters}}{{ContextsParameter}}{{MessagesParameter}}{{CancellationParameter}}    {
-                    var context = contexts.For<{{_entity}}>();
-                    var entity = await context.Set<{{_entity}}>().AsNoTracking().FirstOrDefaultAsync(item => {{Match}}, cancellationToken);
+            {{parameters}}{{(_concurrency ? HttpContextParameter : string.Empty)}}{{(Sliding ? TimeProviderParameter : string.Empty)}}{{ContextsParameter}}{{MessagesParameter}}{{CancellationParameter}}    {
+            {{ReadIfMatch()}}{{OwnerGuard("update")}}        var context = contexts.For<{{_entity}}>();
+                    var entity = await context.Set<{{_entity}}>(){{Includes}}.FirstOrDefaultAsync(item => {{Match}}, cancellationToken);
 
                     if (entity is null)
                     {
                         return {{NotFound}};
                     }
 
-            {{guard}}        // Yalnızca kuralın gerçekten verdiği bir oluş ertelenebilir veya iptal edilebilir.
+            {{ChainGuard()}}{{StateGuard(_resource.Workflow?.EditableIn, "update")}}{{ExpectVersion()}}        // Yalnızca kuralın gerçekten verdiği bir oluş ertelenebilir veya iptal edilebilir.
                     var changed = await global::Haldus.HaldusRecurrence.ChangeAsync(context, entity, {{KeyText}}, start, {{change}}, cancellationToken);
 
-                    return changed is null
-                        ? {{Problems}}.NotFound(messages, "Occurrence", start)
-                        : {{Http}}.TypedResults.Ok(changed);
+                    if (changed is null)
+                    {
+                        return {{Problems}}.NotFound(messages, "Occurrence", start);
+                    }
+
+                    // Oluşun değişmesi serinin değişmesidir: sürümü ilerler ve seriye bağlı her kural (onay, sürümler) işler.
+                    context.Entry(entity).State = global::Microsoft.EntityFrameworkCore.EntityState.Modified;
+            {{Slide()}}{{Save()}}
+            {{WriteETag()}}        return {{Http}}.TypedResults.Ok(changed);
                 }
 
             """;

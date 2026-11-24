@@ -137,7 +137,8 @@ public static class HaldusRecurrence
 
     /// <summary>
     /// Tek bir oluşu erteler veya iptal eder. Verilen zaman kuralın bir oluşu değilse <c>null</c> döner ve hiçbir şey
-    /// yazılmaz. Değişiklik, kuraldan sapma kalmadıysa (zaman aynı, iptal değil) istisnayı kaldırır.
+    /// değişmez. Değişiklik, kuraldan sapma kalmadıysa (zaman aynı, iptal değil) istisnayı kaldırır. Kaydetmek çağıranın
+    /// işidir: istisna, serinin kendisiyle aynı kaydetmede ve onun yazma kurallarından geçerek kalıcı olur.
     /// </summary>
     public static async Task<Occurrence?> ChangeAsync<TEntity>(
         DbContext context,
@@ -177,7 +178,6 @@ public static class HaldusRecurrence
             existing.Cancelled = change.Cancelled;
         }
 
-        await context.SaveChangesAsync(cancellationToken);
         return new Occurrence(originalStart, moved ?? originalStart, change.Cancelled);
     }
 }

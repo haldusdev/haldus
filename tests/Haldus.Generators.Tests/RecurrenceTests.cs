@@ -93,10 +93,46 @@ public sealed class RecurrenceTests
             Assert.Contains("if (entity.Status is not (global::Shop.MeetingStatus.Planned))", change);
             Assert.Contains("global::Haldus.HaldusRecurrence.ChangeAsync(context, entity,", change);
             Assert.Contains("NotFound(messages, \"Occurrence\", start)", change);
+
+            // İstisna seriyle aynı kaydetmede kalıcı olur ve seri değişmiş sayılır.
+            var marked = change.IndexOf("context.Entry(entity).State = global::Microsoft.EntityFrameworkCore.EntityState.Modified;", StringComparison.Ordinal);
+            Assert.True(marked >= 0 && marked < change.IndexOf("SaveChangesAsync", StringComparison.Ordinal));
         }
 
         Assert.Contains("global::Haldus.HaldusRecurrence.Configure(modelBuilder);", run.Sources["HaldusModule.g.cs"]);
         Assert.DoesNotContain("HaldusRecurrence", Run("app.MapCrud<Meeting>();").AssertCompiles().Sources["HaldusModule.g.cs"]);
+    }
+
+    [Fact]
+    public void ChangingAnOccurrence_GoesThroughTheGuardsOfAnUpdate()
+    {
+        var run = Run("app.MapCrud<Meeting>().ConcurrencyChecked().Approvable().Reversible().Recurring();").AssertCompiles();
+        var endpoints = run.Sources["Shop.Meeting.Endpoints.g.cs"];
+        var update = Handler(endpoints, "UpdateAsync");
+
+        foreach (var name in new[] { "ChangeOccurrenceAsync", "RestoreOccurrenceAsync" })
+        {
+            var change = Handler(endpoints, name);
+
+            // Güncelleme ucunun her koruması burada da vardır: sürüm, kapanmış kayıt, onaylanmış kayıt.
+            foreach (var guard in new[]
+            {
+                "global::Haldus.HaldusETag.ReadIfMatch(httpContext)",
+                "ApprovalStatus.Approved",
+                "ReversedById is not null",
+                "Property(item => item.Version).OriginalValue = expectedVersion;",
+                "PreconditionFailed(messages)",
+            })
+            {
+                Assert.Contains(guard, update);
+                Assert.Contains(guard, change);
+            }
+
+            Assert.Contains("global::Haldus.HaldusETag.Write(httpContext, entity.Version);", change);
+        }
+
+        // Okuma bir yazma değildir.
+        Assert.DoesNotContain("ReadIfMatch", Handler(endpoints, "OccurrencesAsync"));
     }
 
     [Theory]

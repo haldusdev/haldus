@@ -742,8 +742,11 @@ içeriyor (ilişki bildirimleri, `Sensitive`, `PublishesEvents`, `Purgeable`, ye
   kuraldan hesaplar (her oluş ilk oluştan sayılır; günlük ve haftalık seride aralığın başına doğrudan atlanır) ve
   `HaldusOccurrenceExceptions` tablosundaki istisnalarla birleştirir. İstisna, kuralın verdiği zamanla (UTC) anahtarlanır;
   kuralın vermediği bir zamana istisna yazılamaz (404). `RecurrenceFrequency` enum'u JSON'a her zaman adıyla yazılır
-  (dönüştürücü tipin üzerindedir). Uçlar kaydı kendi filtrelerinden geçirerek okur; istisna yazan uçlar yalnızca
-  `EditableIn` kuralına bakar (sürüm ve kapanmış kayıt koruması yok: istisna kaydın satırı değildir). Sınırlar: yalnızca
+  (dönüştürücü tipin üzerindedir). Uçlar kaydı kendi filtrelerinden geçirerek okur. **Tek bir oluşu değiştirmek serinin
+  bir yazmasıdır:** uç, satır komutlarıyla aynı diziden geçer (`ReadIfMatch`, `OwnerGuard`, `ChainGuard`, `StateGuard`,
+  `ExpectVersion`), istisnayı kaydetmeden hazırlar (`HaldusRecurrence.ChangeAsync` kaydetmez), seriyi `Modified`
+  işaretler ve `Save()` ile ikisini birlikte kaydeder; böylece serinin sürümü ilerler ve onayı düşer. İlk yazımda
+  yalnızca `EditableIn` kuralına bakılıyordu (güvenlik incelemesinde çıktı). Sınırlar: yalnızca
   `MapCrud`; kural değişince eski istisnalar yok sayılır ama silinmez; kayıt silinince istisnaları kalır; oluş başına
   alan (ör. farklı başlık) taşınmaz; oluşlara göre süzme, "bu aralıkta olanlar" sorgusu ve çakışma kontrolü yoktur;
   bir istek en çok 500 oluş döndürür.
