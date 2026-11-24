@@ -47,6 +47,7 @@ internal static class MapCallParser
         "MapLookup" => Archetype.Lookup,
         "MapSingleton" => Archetype.Singleton,
         "MapDetail" => Archetype.Detail,
+        "MapJob" => Archetype.Job,
         _ => null,
     };
 
@@ -108,6 +109,11 @@ internal static class MapCallParser
 
         // Durum makinesi, numaralama ve son kullanma bildirimleri de trait'ler gibi entity'ye alan ekler.
         var lifecycle = LifecycleReader.Read(context.SemanticModel, invocation, entityName, diagnostics, cancellationToken);
+
+        if (archetype == Archetype.Job)
+        {
+            lifecycle.Members.AddRange(LifecycleReader.JobMembers());
+        }
 
         var properties = new List<PropertyModel>();
         var declaredTraitMembers = new List<string>();
@@ -179,6 +185,15 @@ internal static class MapCallParser
                 "HALDUS003",
                 location,
                 new EquatableArray<string>([$"{entityName}.{keyName}", id.Type.ToDisplayString(), SupportedKeyTypes(archetype)])));
+        }
+
+        else if (id is not null && archetype == Archetype.Job && idKind != IdKind.Guid)
+        {
+            // İşin kimliği kuyruklarda taşınır ve Haldus tarafından atanır.
+            diagnostics.Add(new DiagnosticInfo(
+                "HALDUS003",
+                location,
+                new EquatableArray<string>([$"{entityName}.{keyName}", id.Type.ToDisplayString(), "Guid"])));
         }
 
         var idType = id?.Type.ToDisplayString(TypeFormat) ?? (archetype.HasClientKey() ? "string" : GuidType);
@@ -452,6 +467,9 @@ internal static class MapCallParser
             Archetype.AppendOnly => Traits.ConcurrencyChecked | Traits.SoftDeletable,
             Archetype.Store or Archetype.Lookup => Traits.ConcurrencyChecked | Traits.SoftDeletable,
             Archetype.Singleton => Traits.ConcurrencyChecked | Traits.SoftDeletable | Traits.Archivable,
+
+            // İşin yaşam döngüsü sabittir; istemci onu güncelleyemez veya silemez.
+            Archetype.Job => Traits.ConcurrencyChecked | Traits.SoftDeletable | Traits.Archivable,
             _ => Traits.None,
         };
 
@@ -497,7 +515,7 @@ internal static class MapCallParser
                 "Numbered" or "Expiring" => archetype is Archetype.Crud or Archetype.AppendOnly,
 
                 // Anahtarla ekle-veya-güncelle zaten tekrara dayanıklıdır; tek kaydın oluşturma ucu yoktur.
-                "Idempotent" => archetype is Archetype.Crud or Archetype.ReadOnly or Archetype.AppendOnly,
+                "Idempotent" => archetype is Archetype.Crud or Archetype.ReadOnly or Archetype.AppendOnly or Archetype.Job,
                 _ => true,
             };
 

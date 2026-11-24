@@ -1,5 +1,6 @@
 using Haldus.Sample.Shop;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
 using Testcontainers.PostgreSql;
 
@@ -14,6 +15,14 @@ public sealed class ShopFixture : IAsyncLifetime
 
     public HttpClient CreateClient() =>
         (_factory ?? throw new InvalidOperationException("The fixture has not been initialized.")).CreateClient();
+
+    /// <summary>
+    /// Aynı veritabanına bağlanan, servisleri değiştirilmiş ikinci bir uygulama (ör. başka bir iş altyapısıyla).
+    /// </summary>
+    public HttpClient CreateClient(Action<IServiceCollection> configureServices) =>
+        (_factory ?? throw new InvalidOperationException("The fixture has not been initialized."))
+            .WithWebHostBuilder(builder => builder.ConfigureTestServices(configureServices))
+            .CreateClient();
 
     /// <summary>İstemcinin yazamadığı verileri (ör. salt-okunur kaynaklar) doğrudan veritabanına koymak için.</summary>
     public async Task WithDbContextAsync(Func<AppDbContext, Task> action)

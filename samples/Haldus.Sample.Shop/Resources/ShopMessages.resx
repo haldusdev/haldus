@@ -15,4 +15,7 @@
   <data name="OrderHasNoItems" xml:space="preserve">
     <value>An order without items cannot be placed.</value>
   </data>
+  <data name="NothingToExport" xml:space="preserve">
+    <value>There are no orders to export.</value>
+  </data>
 </root>

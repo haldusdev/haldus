@@ -31,8 +31,9 @@ public sealed class HaldusSaveChangesInterceptor : SaveChangesInterceptor
         }
 
         var now = HaldusTime.UtcNow(context.GetService<TimeProvider>());
-        var tenants = new Lazy<ITenantProvider>(context.GetService<ITenantProvider>);
-        var users = new Lazy<ICurrentUser>(context.GetService<ICurrentUser>);
+        // Kimlik, bir isteğin dışında çalışan kodda (arka plandaki iş) HaldusAmbient'ten gelir.
+        var tenants = new Lazy<Guid?>(() => HaldusScope.TenantId(context));
+        var users = new Lazy<string?>(() => HaldusScope.UserId(context));
 
         foreach (var entry in context.ChangeTracker.Entries())
         {
@@ -54,11 +55,11 @@ public sealed class HaldusSaveChangesInterceptor : SaveChangesInterceptor
         }
     }
 
-    private static void OnAdded(EntityEntry entry, DateTimeOffset now, Lazy<ITenantProvider> tenants, Lazy<ICurrentUser> users)
+    private static void OnAdded(EntityEntry entry, DateTimeOffset now, Lazy<Guid?> tenants, Lazy<string?> users)
     {
         if (entry.Entity is IMultiTenant tenantOwned)
         {
-            if (tenants.Value.TenantId is { } tenantId)
+            if (tenants.Value is { } tenantId)
             {
                 tenantOwned.TenantId = tenantId;
             }
@@ -77,11 +78,11 @@ public sealed class HaldusSaveChangesInterceptor : SaveChangesInterceptor
 
         if (entry.Entity is IUserAuditable userAuditable)
         {
-            userAuditable.CreatedBy = users.Value.UserId;
+            userAuditable.CreatedBy = users.Value;
         }
     }
 
-    private static void OnModified(EntityEntry entry, DateTimeOffset now, Lazy<ICurrentUser> users)
+    private static void OnModified(EntityEntry entry, DateTimeOffset now, Lazy<string?> users)
     {
         if (entry.Entity is IMultiTenant)
         {
@@ -96,7 +97,7 @@ public sealed class HaldusSaveChangesInterceptor : SaveChangesInterceptor
 
         if (entry.Entity is IUserAuditable)
         {
-            entry.Property(nameof(IUserAuditable.UpdatedBy)).CurrentValue = users.Value.UserId;
+            entry.Property(nameof(IUserAuditable.UpdatedBy)).CurrentValue = users.Value;
         }
     }
 }

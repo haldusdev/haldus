@@ -73,6 +73,12 @@ public static class SalesEndpoints
         app.MapCrud<Coupon>()
             .Expiring();
 
+        // Uzun süren iş: POST 202 döner, iş arka planda çalışır. Mantığı ReportExportHandler sınıfındadır.
+        app.MapJob<ReportExport>()
+            .MultiTenant()
+            .Auditable(trackUser: true)
+            .Idempotent();
+
         // Numara bir sequence'ten gelir: iadeler birbirini beklemez, ama numaralarda boşluk olabilir.
         app.MapAppendOnly<Refund>()
             .MultiTenant()

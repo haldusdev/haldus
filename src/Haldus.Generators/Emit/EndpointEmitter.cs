@@ -249,6 +249,11 @@ internal sealed class EndpointEmitter
             EmitExpire();
         }
 
+        if (_resource.Archetype == Archetype.Job)
+        {
+            EmitJobCancel();
+        }
+
         foreach (var transition in _resource.Transitions)
         {
             EmitTransition(transition);
@@ -305,8 +310,8 @@ internal sealed class EndpointEmitter
             : $"        {self.TargetKeyType}? {ResourceEmitter.CamelCase(self.PropertyName)},\n        bool? roots,\n";
 
         // Durum makinesi olan kaynak duruma göre süzülebilir; kullanıcının filtresi aynı adı taşıyorsa o geçerlidir.
-        var status = _resource.Workflow is { } workflow && _resource.Filter?.Properties.Any(property => property.Name == "Status") != true
-            ? workflow.StatusType
+        var status = _resource.Filter?.Properties.Any(property => property.Name == "Status") != true
+            ? _resource.StatusType
             : null;
         var statusParameter = status is null ? string.Empty : $"        {status}? status,\n";
 
@@ -492,6 +497,14 @@ internal sealed class EndpointEmitter
             keys.Add($"ExpiresAt = {Now} + Lifetime");
         }
 
+        if (_resource.Archetype == Archetype.Job)
+        {
+            keys.Add($"CreatedAt = {Now}");
+
+            // İş, isteğin diliyle çalışır; arka planda istek olmadığı için dil kayda yazılır.
+            keys.Add("Culture = global::System.Globalization.CultureInfo.CurrentUICulture.Name");
+        }
+
         var assignments = string.Join(
             ", ", keys.Concat(_writable.Select(property => $"{property.Name} = request.{property.Name}")));
 
@@ -510,10 +523,25 @@ internal sealed class EndpointEmitter
                     await context.SaveChangesAsync(cancellationToken);
             """;
 
+        // İş oluşturulur ve hemen dönülür: kayıt, altyapının kuyruğuyla birlikte kaydedilir, sonra teslim edilir.
+        var job = _resource.Archetype == Archetype.Job;
+        var result = job ? "Accepted" : "Created";
+
+        if (job)
+        {
+            save = $$"""
+                    var ticket = new global::Haldus.HaldusJobTicket(global::Haldus.HaldusJobRegistry.Name<{{_entity}}>(), entity.{{_key}});
+                    jobs.Prepare(context, ticket);
+                    context.Set<{{_entity}}>().Add(entity);
+                    await context.SaveChangesAsync(cancellationToken);
+                    await jobs.DispatchAsync(ticket, cancellationToken);
+            """;
+        }
+
         // Referans veya ebeveyn bulunamazsa oluşturma reddedilir; dönüş tipi buna göre genişler.
         var returnType = ChecksReferences
-            ? $"{Task}<{Results}.Results<{Results}.Created<{_entity}Response>, {Problem}>>"
-            : $"{Task}<{Results}.Created<{_entity}Response>>";
+            ? $"{Task}<{Results}.Results<{Results}.{result}<{_entity}Response>, {Problem}>>"
+            : $"{Task}<{Results}.{result}<{_entity}Response>>";
 
         _map.Append($$"""
                     group.MapPost("/", CreateAsync)
@@ -528,14 +556,52 @@ internal sealed class EndpointEmitter
 
                 private static async {{returnType}} CreateAsync(
             {{ScopeParameter}}        Create{{_entity}}Request request,
-            {{HttpContextParameter}}{{(HasLifetime ? TimeProviderParameter : string.Empty)}}{{ContextsParameter}}{{(ChecksReferences ? MessagesParameter : string.Empty)}}{{CancellationParameter}}    {
+            {{HttpContextParameter}}{{(HasLifetime || job ? TimeProviderParameter : string.Empty)}}{{(job ? "        global::Haldus.IHaldusJobDispatcher jobs,\n" : string.Empty)}}{{ContextsParameter}}{{(ChecksReferences ? MessagesParameter : string.Empty)}}{{CancellationParameter}}    {
             {{(_resource.OwnerGuard is null ? ParentCheck() : OwnerGuard("create"))}}{{ReferenceChecks(patch: false)}}        var entity = new {{_entity}} { {{assignments}} };
             {{CreateDetails()}}{{Compute()}}
                     var context = contexts.For<{{_entity}}>();
             {{save}}
 
             {{WriteETag()}}        var location = $"{httpContext.Request.PathBase}{httpContext.Request.Path.Value?.TrimEnd('/')}/{entity.{{_key}}}";
-                    return {{Http}}.TypedResults.Created(location, ToResponse(entity));
+                    return {{Http}}.TypedResults.{{result}}(location, ToResponse(entity));
+                }
+
+            """);
+    }
+
+    /// <summary>
+    /// İşi iptal eder. Sırada bekleyen iş hemen iptal olur; çalışan iş için iptal istenir ve yanıt işin o
+    /// anki halini döner (iş, mantığı iptali gördüğünde <c>Cancelled</c> olur).
+    /// </summary>
+    private void EmitJobCancel()
+    {
+        _map.Append($$"""
+                    group.MapPost("{{_keyRoute}}/cancel", CancelAsync)
+                        .WithName("Cancel{{_entity}}")
+                        .ProducesProblem(404)
+                        .ProducesProblem(409);
+
+
+            """);
+
+        _handlers.Append($$"""
+
+                private static async {{OkOrProblem}} CancelAsync(
+            {{KeyParameter}}{{TimeProviderParameter}}{{ContextsParameter}}{{MessagesParameter}}{{CancellationParameter}}    {
+                    var context = contexts.For<{{_entity}}>();
+                    var entity = await context.Set<{{_entity}}>().FirstOrDefaultAsync(item => {{Match}}, cancellationToken);
+
+                    if (entity is null)
+                    {
+                        return {{NotFound}};
+                    }
+
+                    if (!await global::Haldus.HaldusJobs.CancelAsync(context, entity, timeProvider, cancellationToken))
+                    {
+                        return {{Problems}}.StateConflict(messages, "cancel", entity.Status);
+                    }
+
+                    return {{Http}}.TypedResults.Ok(ToResponse(entity));
                 }
 
             """);

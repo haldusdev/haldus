@@ -20,6 +20,9 @@ builder.Services.AddSingleton<ICurrentUser>(services => services.GetRequiredServ
 
 builder.Services.AddHaldus<AppDbContext>();
 
+// İşler (MapJob) uygulamanın kendi veritabanındaki bir kuyrukta bekler; iş kaydıyla aynı transaction'da yazılır.
+builder.Services.AddHaldusPostgreSqlJobs<AppDbContext>();
+
 // Uygulamanın kendi son kullanıcı metinleri (ör. bir geçişin reddedilme nedeni) Resources altından okunur.
 builder.Services.AddLocalization(options => options.ResourcesPath = "Resources");
 builder.Services.AddOpenApi();

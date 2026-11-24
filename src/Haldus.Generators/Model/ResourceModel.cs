@@ -81,8 +81,21 @@ internal sealed record ResourceModel(
     public OwnerGuardModel? OwnerGuard { get; init; }
 
     /// <summary>Yanıtta yer alan, Haldus'a ait alanlar: trait alanları ve durum modeli alanları.</summary>
-    public IEnumerable<TraitMember> ResponseMembers =>
-        TraitCatalog.ResponseMembers(Traits).Concat(ExtraMembers.Where(member => member.InResponse));
+    public IEnumerable<TraitMember> ResponseMembers
+    {
+        get
+        {
+            // Aynı alanı hem bir trait hem bir bildirim getirebilir (ör. Auditable bir işin CreatedAt alanı).
+            var seen = new HashSet<string>();
+            return TraitCatalog.ResponseMembers(Traits)
+                .Concat(ExtraMembers.Where(member => member.InResponse))
+                .Where(member => seen.Add(member.Name))
+                .ToArray();
+        }
+    }
+
+    /// <summary>Kaydın durum alanının tipi: durum makinesinin enum'u veya bir işin sabit durumları.</summary>
+    public string? StatusType => Workflow?.StatusType ?? (Archetype == Archetype.Job ? "global::Haldus.JobStatus" : null);
 
     /// <summary>Tekrara karşı korunabilecek bir uç var mı: oluşturma veya en az bir geçiş.</summary>
     public bool HasWrites => Has(Operations.Create) || Transitions.Length > 0;
@@ -137,6 +150,9 @@ internal enum Archetype
 
     /// <summary>Başka bir kaynağın sahip olduğu satır; kendi başına adreslenmez.</summary>
     Detail,
+
+    /// <summary>İsteği aşan iş: oluşturulur, arka planda çalışır, durumu izlenir, iptal edilebilir.</summary>
+    Job,
 }
 
 internal static class ArchetypeExtensions
@@ -144,7 +160,7 @@ internal static class ArchetypeExtensions
     public static Operations BaseOperations(this Archetype archetype) => archetype switch
     {
         Archetype.ReadOnly => Operations.List | Operations.Get,
-        Archetype.AppendOnly => Operations.List | Operations.Get | Operations.Create,
+        Archetype.AppendOnly or Archetype.Job => Operations.List | Operations.Get | Operations.Create,
         Archetype.Store or Archetype.Lookup => Operations.List | Operations.Get | Operations.Update | Operations.Delete,
         Archetype.Singleton => Operations.Get | Operations.Update | Operations.Patch,
         _ => Operations.All,
@@ -342,7 +358,7 @@ internal sealed record OwnerGuardModel(string StatusType, EquatableArray<string>
 /// <summary><c>.Searchable(...)</c> içinde sayılan, henüz doğrulanmamış bir alan.</summary>
 internal sealed record SearchFieldRequest(string? FieldName, string Expression, LocationInfo Location);
 
-/// <summary><c>IActionHandler</c>, <c>IQueryHandler</c> veya <c>ITransitionHandler</c> uygulayan, bağımlılık enjeksiyonuna kaydedilecek sınıf.</summary>
+/// <summary>Haldus'un handler arayüzlerinden birini uygulayan, bağımlılık enjeksiyonuna kaydedilecek sınıf.</summary>
 internal sealed record HandlerModel(string Implementation, EquatableArray<string> Services);
 
 /// <summary>Bir <c>MapQuery</c> çağrısı: istek tipi sorgu parametrelerinden doldurulur.</summary>

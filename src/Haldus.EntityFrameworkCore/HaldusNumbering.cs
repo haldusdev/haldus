@@ -207,7 +207,7 @@ public static class HaldusNumbering
             return new NumberAllocation(format.Render(next, now), transaction: null);
         }
 
-        var tenantId = format.PerTenant ? context.GetService<ITenantProvider>().TenantId : null;
+        var tenantId = format.PerTenant ? HaldusScope.TenantId(context) : null;
         var transaction = context.Database.CurrentTransaction is null
             ? await context.Database.BeginTransactionAsync(cancellationToken)
             : null;

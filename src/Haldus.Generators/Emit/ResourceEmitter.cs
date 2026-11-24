@@ -54,9 +54,18 @@ internal static class ResourceEmitter
                 .Select(member => $"    public {member.Type} {member.Name} {{ get; set; }}"));
         }
 
-        // Durum makinesi, numaralama ve son kullanma bildirimlerinin alanları.
+        if (resource.Archetype == Archetype.Job)
+        {
+            interfaces.Add("global::Haldus.IHaldusJob");
+        }
+
+        // Durum makinesi, numaralama ve son kullanma bildirimlerinin alanları. Aynı alanı bir trait zaten
+        // eklediyse (ör. Auditable bir işin CreatedAt alanı) yinelenmez.
+        var fromTraits = new HashSet<string>(
+            TraitCatalog.For(resource.Traits).SelectMany(trait => trait.Members).Select(member => member.Name));
+
         members.AddRange(resource.ExtraMembers
-            .Where(member => !declared.Contains(member.Name))
+            .Where(member => !declared.Contains(member.Name) && !fromTraits.Contains(member.Name))
             .Select(member => $"    public {member.Type} {member.Name} {{ get; set; }}{(member.Type == "string" ? " = \"\";" : string.Empty)}"));
 
         if (resource.Archetype == Archetype.Detail && !resource.PositionDeclared)

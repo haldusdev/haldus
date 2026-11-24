@@ -20,6 +20,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\samples\Haldus.Sample.Shop\Haldus.Sample.Shop.csproj" />
+    <ProjectReference Include="..\..\src\Haldus.Jobs.InMemory\Haldus.Jobs.InMemory.csproj" />
   </ItemGroup>
 
 </Project>

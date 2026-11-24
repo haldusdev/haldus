@@ -35,6 +35,10 @@ public static class HaldusServiceCollectionExtensions
         services.TryAddSingleton(TimeProvider.System);
         services.TryAddSingleton<IHaldusMessages, ResourceHaldusMessages>();
 
+        // İşlerin yürütücüsü altyapıdan bağımsızdır; işleri ona ulaştıran altyapı ayrı bir paketle seçilir.
+        services.AddOptions<HaldusJobOptions>();
+        services.TryAddSingleton<HaldusJobRunner>();
+
         // Generator'ın bulduğu handler sınıfları.
         HaldusServiceRegistry.Apply(services);
 

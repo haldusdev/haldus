@@ -39,6 +39,7 @@ Her archetype bir kaynağın hangi işlemlere sahip olduğunu seçer:
 | `MapLookup<T>()` | Sayfalamasız liste, tekil, `PUT /{code}`, sil; `Code` ve `Name` alanları |
 | `MapSingleton<T>()` | Tek kayıt: `GET`, `PUT`, `PATCH` |
 | `MapDetail<T>()` | Sahibine ait satırlar: sahibin isteğine gömülü ya da onun adresi altında ayrı uçlar |
+| `MapJob<T>()` | Uzun süren iş: `POST` 202 döner, `GET` durumu gösterir, `POST /{id}/cancel` iptal eder |
 | `MapAction<TRequest, TResponse>()` | `POST`: entity'ye bağlı olmayan komut |
 | `MapQuery<TRequest, TResponse>()` | `GET`: entity'ye bağlı olmayan hesap |
 
@@ -149,6 +150,41 @@ public sealed class PlaceOrderHandler(IStock stock) : ITransitionHandler<Order, 
 // 3. Kısa işler için lambda.
 orders.MapTransition<ReopenOrder>(OrderStatus.Cancelled, OrderStatus.Draft, (order, request) => order.Reopen());
 ```
+
+## Uzun süren işler
+
+İsteği aşan işler (rapor üretme, içe aktarma) `MapJob` ile bildirilir. Entity işin girdisini ve çıktısını
+taşır; durumunu, ilerlemesini ve hatasını Haldus ekler.
+
+```csharp
+builder.Services.AddHaldusPostgreSqlJobs<AppDbContext>();   // veya AddHaldusInMemoryJobs()
+
+app.MapJob<ReportExport>().MultiTenant();
+```
+
+```csharp
+public partial class ReportExport
+{
+    public int Year { get; set; }                        // girdi: istekten gelir
+    public string? DownloadUrl { get; private set; }     // çıktı: yalnızca yanıtta görünür
+}
+
+public sealed class ReportExportHandler(AppDbContext db) : IJobHandler<ReportExport>
+{
+    public async Task HandleAsync(ReportExport job, JobContext context, CancellationToken cancellationToken)
+    {
+        await context.ReportProgressAsync(50, cancellationToken);
+        // ...
+    }
+}
+```
+
+İş, onu başlatan kiracının ve kullanıcının kimliğiyle, isteğin dilinde çalışır. Altyapı ayrı bir pakettir:
+
+| Paket | Kuyruk |
+|---|---|
+| `Haldus.Jobs.PostgreSql` | Uygulamanın veritabanında; iş kaydıyla aynı transaction'da yazılır, sunucular paylaşır |
+| `Haldus.Jobs.InMemory` | Sürecin belleğinde; geliştirme ve tek sunucu için, yeniden başlatmada işler kaybolur |
 
 ## Trait'ler ve süzme
 

@@ -140,6 +140,34 @@ internal static class LifecycleReader
         return result;
     }
 
+    /// <summary>
+    /// Bir işin Haldus'a ait alanları (<c>IHaldusJob</c>). İstek gövdesinden yazılamazlar; sayaç ve iptal
+    /// bayrağı yanıtta da görünmez.
+    /// </summary>
+    public static IEnumerable<TraitMember> JobMembers()
+    {
+        const string JobStatus = "global::Haldus.JobStatus";
+
+        yield return new TraitMember(
+            "Status",
+            JobStatus,
+            InResponse: true,
+            new SearchField("Status", SearchKind.Equality, JobStatus, IsNullable: false),
+            ResponseAttribute: "global::System.Text.Json.Serialization.JsonConverter(typeof("
+                + $"global::System.Text.Json.Serialization.JsonStringEnumConverter<{JobStatus}>))");
+        yield return new TraitMember("Progress", "int", InResponse: true, Search: null);
+        yield return new TraitMember("Error", "string?", InResponse: true, Search: null);
+        yield return new TraitMember(
+            "CreatedAt", DateTimeOffset, InResponse: true, new SearchField("CreatedAt", SearchKind.Range, DateTimeOffset, IsNullable: false));
+        yield return new TraitMember(
+            "StartedAt", DateTimeOffset + "?", InResponse: true, new SearchField("StartedAt", SearchKind.Range, DateTimeOffset, IsNullable: true));
+        yield return new TraitMember(
+            "CompletedAt", DateTimeOffset + "?", InResponse: true, new SearchField("CompletedAt", SearchKind.Range, DateTimeOffset, IsNullable: true));
+        yield return new TraitMember("Attempts", "int", InResponse: false, Search: null);
+        yield return new TraitMember("CancelRequested", "bool", InResponse: false, Search: null);
+        yield return new TraitMember("Culture", "string?", InResponse: false, Search: null);
+    }
+
     /// <summary>Son kullanma zamanını istemcinin verdiği modda üretilen, yazılabilir alan.</summary>
     public static PropertyModel ClientExpiry() => new(
         "ExpiresAt",

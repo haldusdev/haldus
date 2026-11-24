@@ -50,6 +50,36 @@ public static class HaldusEndpointRouteBuilderExtensions
         new(HaldusEndpointRegistry.Map<TEntity>(endpoints, nameof(MapSingleton)));
 
     /// <summary>
+    /// İsteği aşan bir iş (rapor üretme, içe aktarma): <c>POST</c> işi oluşturur ve hemen 202 döner, iş arka
+    /// planda çalışır, <c>GET</c> durumunu gösterir, <c>POST /{id}/cancel</c> iptal eder. Entity işin
+    /// girdisini (yazılabilir alanlar) ve çıktısını (herkese açık setter'ı olmayan alanlar) taşır; mantığı
+    /// Haldus'un bulduğu bir <see cref="IJobHandler{TJob}"/> sınıfındadır.
+    /// </summary>
+    public static ResourceBuilder<TJob> MapJob<TJob>(this IEndpointRouteBuilder endpoints)
+        where TJob : class
+    {
+        ArgumentNullException.ThrowIfNull(endpoints);
+        HaldusJobs.Require<TJob>(endpoints.ServiceProvider, hasLambda: false);
+
+        return new(HaldusEndpointRegistry.Map<TJob>(endpoints, nameof(MapJob)));
+    }
+
+    /// <inheritdoc cref="MapJob{TJob}(IEndpointRouteBuilder)"/>
+    /// <param name="handler">İşin mantığı; bağımlılıklarını <see cref="JobContext.Services"/> üzerinden alır.</param>
+    public static ResourceBuilder<TJob> MapJob<TJob>(
+        this IEndpointRouteBuilder endpoints,
+        Func<TJob, JobContext, CancellationToken, Task> handler)
+        where TJob : class
+    {
+        ArgumentNullException.ThrowIfNull(endpoints);
+        ArgumentNullException.ThrowIfNull(handler);
+        HaldusJobs.Require<TJob>(endpoints.ServiceProvider, hasLambda: true);
+        HaldusJobRegistry.SetHandler(handler);
+
+        return new(HaldusEndpointRegistry.Map<TJob>(endpoints, nameof(MapJob)));
+    }
+
+    /// <summary>
     /// İki kaynak arasında çoktan-çoğa bağ: <c>PUT</c> ile kur, <c>DELETE</c> ile kaldır, iki yönden de
     /// listele (<c>/products/{id}/tags</c> ve <c>/tags/{id}/products</c>). Bağ kayıtlarının entity'si
     /// (<c>ProductTag</c>) üretilir; iki uç da bir <c>Map*</c> çağrısıyla eşlenmiş olmalıdır.

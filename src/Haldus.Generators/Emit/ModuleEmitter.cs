@@ -67,6 +67,12 @@ internal static class ModuleEmitter
             var entity = ResourceEmitter.QualifiedName(resource, entityNamespace);
             blocks.Add($"        global::Haldus.HaldusEndpointRegistry.Register<{entity}>({entity}Endpoints.Map);\n");
 
+            if (resource.Archetype == Archetype.Job)
+            {
+                // Yürütücü işi, kuyruktan gelen tip adıyla bulur.
+                blocks.Add($"        global::Haldus.HaldusJobRegistry.Register<{entity}>();\n");
+            }
+
             foreach (var transition in resource.Transitions)
             {
                 var name = transition.RegistryName is null ? "null" : ResourceEmitter.Literal(transition.RegistryName);
@@ -230,6 +236,15 @@ internal static class ModuleEmitter
                 // sürüm kontrollü kaynakta aynı işi satır sürümü görür.
                 statements.Add("entity.Property(item => item.Status).IsConcurrencyToken();");
             }
+        }
+
+        if (resource.Archetype == Archetype.Job)
+        {
+            // Durum eşzamanlılık belirtecidir: iki yürütücü aynı işi sahiplenemez ve iptal ile başlatma yarışmaz.
+            statements.Add("entity.Property(item => item.Status).HasConversion<string>().HasMaxLength(64).IsConcurrencyToken();");
+            statements.Add("entity.Property(item => item.Error).HasMaxLength(2000);");
+            statements.Add("entity.Property(item => item.Culture).HasMaxLength(20);");
+            statements.Add("entity.HasIndex(item => item.Status);");
         }
 
         if (resource.Numbering is not null)

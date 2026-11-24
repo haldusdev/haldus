@@ -21,6 +21,8 @@ EF Core yapılandırması üretilir.
 - `src/Haldus.Generators`: Roslyn incremental generator (netstandard2.0, Roslyn 5.0.0'a sabit).
 - `src/Haldus.EntityFrameworkCore`: model kayıt defteri, interceptor'lar, sorgu filtreleri.
 - `src/Haldus.AspNetCore`: `AddHaldus`, `Map*` giriş noktaları, validasyon, hata yanıtları, `.resx`.
+- `src/Haldus.Jobs.InMemory`, `src/Haldus.Jobs.PostgreSql`: `MapJob` işlerini yürütücüye ulaştıran
+  altyapı paketleri. Çekirdek yalnızca `IHaldusJobDispatcher` arayüzünü bilir.
 - `tests/Haldus.Generators.Tests`: generator çıktısı testleri.
 - `tests/Haldus.IntegrationTests`: örnek uygulamaya karşı gerçek PostgreSQL testleri.
 - `samples/Haldus.Sample.Shop`: örnek uygulama ve modelin sınandığı yer.
@@ -89,6 +91,12 @@ Bunlar kullanıcıyla kararlaştırıldı; yeniden sorma.
 - `Numbered` sayacı varsayılan olarak boşluksuzdur: numara kayıtla aynı transaction'da, kapsam başına
   (kaynak, kiracı, desendeki tarih parçaları) kilitlenen bir sayaç satırından alınır. `gapless: false` ile
   veritabanı sequence'ine geçilir; ikisi de desteklenir (kullanıcı kararı).
+- `MapJob` altyapısı paketlerle seçilir ve üçü de desteklenecek (kullanıcı kararı): bellek içi kuyruk
+  (`AddHaldusInMemoryJobs()`), kendi PostgreSQL kuyruğumuz (`AddHaldusPostgreSqlJobs<TContext>()`) ve
+  Hangfire. İlk ikisi yazıldı; Hangfire paketi yeni bağımlılık getirdiği için onay bekliyor.
+- `Batch` işlem başına ayrı uçlarla sunulur (`POST /products/batch-get`, `batch-create`, `batch-update`,
+  `batch-delete`) ve varsayılan olarak atomiktir; `.Batch(atomic: false)` ile kısmi başarıya (207, öğe
+  başına sonuç) geçilir. İkisi de desteklenecek (kullanıcı kararı). Henüz yazılmadı.
 - `Expiring` süresi dolan kaydın erişimini keser (kullanıcı kararı): kayıt silinmez, sorgu filtresiyle
   okuma anında gizlenir ve yazılamaz. Fiziksel temizlik arka plan işleriyle birlikte 8. aşamadadır.
 - `MultiTenant` kiracıyı token'daki claim'den okur.
@@ -120,7 +128,9 @@ Bunlar kullanıcıyla kararlaştırıldı; yeniden sorma.
 
 ## Aşamalar
 
-1–7 tamamlandı (3. aşamaya `.Searchable()` da eklendi); sıradaki 8.
+1–7 tamamlandı (3. aşamaya `.Searchable()` da eklendi). 8. aşama sürüyor: `MapJob` ile bellek içi ve
+PostgreSQL altyapıları bitti; kalanlar Hangfire paketi, `Batch` ve fiziksel temizlik (süresi dolmuş
+`Expiring` kayıtları, saklama süresi geçmiş idempotency kayıtları).
 
 1. İskelet
 2. Generator çekirdeği ve `MapCrud`
@@ -138,8 +148,9 @@ Bunlar kullanıcıyla kararlaştırıldı; yeniden sorma.
 ## Açık kararlar
 
 - Frontend ve mobil desteğinin kapsamı (backend API şekli oturunca ele alınacak).
-- `MapJob` altyapısı (8. aşamada sorulacak). Aynı altyapı, süresi dolmuş `Expiring` kayıtlarının ve saklama
-  süresi geçmiş idempotency kayıtlarının fiziksel temizliğini de üstlenecek; şu an ikisi de birikir.
+- Hangfire paketinin bağımlılıkları (`Hangfire.Core`; testlerde bir depolama sağlayıcısı) için onay.
+- Fiziksel temizlik: süresi dolmuş `Expiring` kayıtları ve saklama süresi geçmiş idempotency kayıtları şu an
+  birikir. Süresi dolmuş kayıtların varsayılan olarak silinip silinmeyeceği sorulacak.
 
 ## Generator'ın işleyişi
 
@@ -266,6 +277,34 @@ Bunlar kullanıcıyla kararlaştırıldı; yeniden sorma.
   saklanır; başarısız istek anahtarla birlikte geri alınır. Anahtarın kapsamı kiracı, kullanıcı, metot ve
   adrestir. Yanıt, saklanabilmesi için belleğe yazdırılır. `MapAction` kapsam dışıdır (entity'ye bağlı
   olmadığı için hangi bağlamın kullanılacağı belli değil).
+- **İşler.** `MapJob` bir archetype'tır (`Archetype.Job`): `AppendOnly` gibi liste, tekil ve oluşturma uçları
+  vardır; oluşturma 202 döner ve `POST /{id}/cancel` eklenir. İş entity'si `IHaldusJob` uygular; alanları
+  (`Status`, `Progress`, `Error`, `StartedAt`...) `LifecycleReader.JobMembers` ile `ExtraMembers`'a girer.
+  Girdi yazılabilir alanlar, çıktı herkese açık setter'ı olmayan alanlardır. Mantık bir `IJobHandler<TJob>`
+  sınıfında veya `MapJob`'a verilen lambda'dadır.
+  - Yaşam döngüsünü, hangi altyapı teslim ederse etsin, `HaldusJobRunner` yönetir: kaydı yükler, `Running`
+    yapar, mantığı çağırır, sonucu yazar. Başarıda mantığın bağlamı kaydedilir; başarısızlık ve iptalde o
+    bağlam atılır ve sonuç ayrı bir kapsamda `ExecuteUpdate` ile yazılır (yarım kalan değişiklikler
+    kaydedilmez). `JobFailedException` mesajı `Error` alanına yazılır; başka hataların ayrıntısı istemciye
+    gösterilmez, yalnızca günlüğe yazılır.
+  - İş bir isteğin dışında çalışır. Kiracı ve kullanıcı `HaldusAmbient` ile taşınır; sorgu filtreleri,
+    interceptor ve numaralama kimliği `HaldusScope.TenantId` / `UserId` üzerinden okur (istekten çözüleni
+    değil). Yeni bir yerde kiracıya ihtiyaç olursa `ITenantProvider`'ı doğrudan değil bunları kullan. İş
+    ayrıca, onu oluşturan isteğin diliyle çalışır (`Culture` alanı).
+  - `Status` eşzamanlılık belirtecidir: iki yürütücü aynı işi sahiplenemez, iptal ile başlatma yarışmaz.
+  - Mantığı hata fırlatan iş yeniden denenmez. Süreç kapanırken yarıda kalan iş `Running` kalır ve altyapı
+    yeniden teslim ederse baştan çalışır (`HaldusJobOptions.MaxAttempts`, varsayılan 3); bu yüzden
+    mantığın yeniden çalışmaya dayanıklı olması gerekir.
+  - İptal: bekleyen iş hemen `Cancelled` olur; çalışan iş için `CancelRequested` yazılır, aynı süreçteki
+    yürütücü hemen, başka bir sunucudaki yürütücü kaydı yoklayarak (`CancellationPollInterval`) görür.
+  - Altyapı arayüzü iki adımlıdır: `Prepare` kaydetmeden önce çağrılır (PostgreSQL kuyruğu satırını aynı
+    bağlama ekler; iş ve kuyruk kaydı birlikte kalıcı olur), `DispatchAsync` kaydettikten sonra. Yürütücü,
+    kayıt henüz görünmüyorsa (transaction bitmemiş olabilir) kısa aralıklarla yeniden bakar.
+  - PostgreSQL kuyruğu `FOR UPDATE SKIP LOCKED` ile alınır, çalışırken kirası uzatılır, iş sonuçlanınca
+    silinir. Bellek içi kuyrukta süreç yeniden başlarsa bekleyen işler kaybolur.
+  - Build sırasındaki şema üretimi arka plan servislerini de başlatır; iş altyapıları
+    `HaldusJobs.IsGeneratingOpenApiDocument` ile o sırada veritabanına bağlanmaz. Yeni bir arka plan
+    servisi eklerken aynı kontrolü yap.
 - Haldus'un kendi tabloları (`HaldusCounters`, `HaldusIdempotencyRecords`) yalnızca onları kullanan bir
   kaynak varsa modele eklenir; ekleyen, üretilen modül kodudur.
 - Tanılar `HALDUS001`+ kodlarıyla `Diagnostics/HaldusDiagnostics.cs` ve `AnalyzerReleases.Unshipped.md`

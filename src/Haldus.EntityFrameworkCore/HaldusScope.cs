@@ -42,7 +42,14 @@ public static class HaldusScope
     public static Guid? TenantId(DbContext context)
     {
         ArgumentNullException.ThrowIfNull(context);
-        return context.GetService<ITenantProvider>().TenantId;
+        return HaldusAmbient.Current is { } ambient ? ambient.TenantId : context.GetService<ITenantProvider>().TenantId;
+    }
+
+    /// <summary>Geçerli kullanıcı.</summary>
+    public static string? UserId(DbContext context)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        return HaldusAmbient.Current is { } ambient ? ambient.UserId : context.GetService<ICurrentUser>().UserId;
     }
 
     /// <summary>Sorgunun çalıştığı an; süresi dolmuş kayıtları gizleyen filtre her sorguda bunu yeniden okur.</summary>
@@ -50,5 +57,32 @@ public static class HaldusScope
     {
         ArgumentNullException.ThrowIfNull(context);
         return HaldusTime.UtcNow(context.GetService<TimeProvider>());
+    }
+}
+
+/// <summary>
+/// Bir HTTP isteği dışında çalışan kodun (arka plandaki bir iş gibi) kimliği. Etkinken sorgu filtreleri ve
+/// trait alanları, istekten çözülen kiracı ve kullanıcı yerine bunu kullanır; böylece iş, onu başlatan
+/// kiracının verisini görür ve yazdığı kayıtlar o kiracıya ait olur.
+/// </summary>
+public static class HaldusAmbient
+{
+    private static readonly AsyncLocal<Identity?> Value = new();
+
+    internal static Identity? Current => Value.Value;
+
+    /// <summary>Dönen nesne atılana kadar, bu asenkron akışta verilen kimlik geçerli olur.</summary>
+    public static IDisposable Use(Guid? tenantId, string? userId)
+    {
+        var previous = Value.Value;
+        Value.Value = new Identity(tenantId, userId);
+        return new Scope(previous);
+    }
+
+    internal sealed record Identity(Guid? TenantId, string? UserId);
+
+    private sealed class Scope(Identity? previous) : IDisposable
+    {
+        public void Dispose() => Value.Value = previous;
     }
 }

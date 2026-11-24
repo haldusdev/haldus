@@ -19,6 +19,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\Haldus.AspNetCore\Haldus.AspNetCore.csproj" />
+    <ProjectReference Include="..\..\src\Haldus.Jobs.PostgreSql\Haldus.Jobs.PostgreSql.csproj" />
     <ProjectReference Include="..\..\src\Haldus.Generators\Haldus.Generators.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
   </ItemGroup>
 

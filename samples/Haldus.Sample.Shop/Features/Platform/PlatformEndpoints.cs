@@ -1,3 +1,5 @@
+using Microsoft.EntityFrameworkCore;
+
 namespace Haldus.Sample.Shop.Features.Platform;
 
 public static class PlatformEndpoints
@@ -25,5 +27,12 @@ public static class PlatformEndpoints
         app.MapSingleton<StoreSettings>()
             .MultiTenant()
             .Auditable();
+
+        // Kısa bir iş: mantığı lambda'dadır ve bağımlılıklarını işin kapsamından alır.
+        app.MapJob<CatalogRecount>(async (job, context, cancellationToken) =>
+        {
+            var db = context.Services.GetRequiredService<AppDbContext>();
+            job.Record(await db.Products.CountAsync(cancellationToken));
+        });
     }
 }

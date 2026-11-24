@@ -36,3 +36,11 @@ public partial class StoreSettings
     [Range(0.0, 100.0)]
     public decimal TaxRate { get; set; } = 20m;
 }
+
+/// <summary>Katalogdaki ürünleri sayan iş; girdisi yoktur, çıktısı <see cref="ProductCount"/> alanıdır.</summary>
+public partial class CatalogRecount
+{
+    public int ProductCount { get; private set; }
+
+    public void Record(int productCount) => ProductCount = productCount;
+}

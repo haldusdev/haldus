@@ -7,6 +7,8 @@
     <Project Path="src/Haldus.AspNetCore/Haldus.AspNetCore.csproj" />
     <Project Path="src/Haldus.EntityFrameworkCore/Haldus.EntityFrameworkCore.csproj" />
     <Project Path="src/Haldus.Generators/Haldus.Generators.csproj" />
+    <Project Path="src/Haldus.Jobs.InMemory/Haldus.Jobs.InMemory.csproj" />
+    <Project Path="src/Haldus.Jobs.PostgreSql/Haldus.Jobs.PostgreSql.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Haldus.Generators.Tests/Haldus.Generators.Tests.csproj" />

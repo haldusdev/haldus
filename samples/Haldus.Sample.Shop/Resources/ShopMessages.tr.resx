@@ -15,4 +15,7 @@
   <data name="OrderHasNoItems" xml:space="preserve">
     <value>Satırı olmayan bir sipariş verilemez.</value>
   </data>
+  <data name="NothingToExport" xml:space="preserve">
+    <value>Dışa aktarılacak sipariş yok.</value>
+  </data>
 </root>
