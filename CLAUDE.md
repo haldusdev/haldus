@@ -456,9 +456,10 @@ aşaması değildir ve kararları yine sorulmadan verildi:
   bir PostgreSQL kapsayıcısına karşı ölçüldü; sayılar o makinenin göreli kıyasıdır, bir kapasite vaadi değildir.
   Ölçümün gösterdikleri: aynı kilidi bekleyen yazmalar sıraya girer (o ortamda ~150 işlem/sn; tavanı commit süresi
   belirler); `MapBalance` ve toplanan alanlar anahtar / üst kayıt başına kilitlendiği için farklı anahtarlarda
-  ölçeklenir; `DerivedFrom` (kaynak tipi başına tek kilit) ve `Orderable` (ağaç başına tek kilit) en dar boğazlardır;
-  boşluksuz `Numbered` sayacının satır kilidi yüksek eşzamanlılıkta uzun bir kuyruk bırakır (32 istemcide p99 1,5 sn;
-  danışma kilidi kullanan özelliklerde dağılım düzgün). Sayacı danışma kilidine taşımak yapılmadı; ayrı bir iştir.
+  ölçeklenir; `DerivedFrom` (kaynak tipi başına tek kilit) ve `Orderable` (ağaç başına tek kilit) en dar boğazlardır.
+  Ölçüm boşluksuz `Numbered`'da bir kusur da gösterdi: sayacın satır kilidini bekleyenler sırayla uyanmıyordu
+  (32 istemcide p99 1,5 sn). `HaldusNumbering.AllocateAsync` artık önce kapsamın danışma kilidini alıyor
+  (`HaldusOrdering.LockAsync`); p99 239 ms'ye indi, verim değişmedi.
 
 Yapılmayanlar ve nedenleri: arayüzler için otomatik test (genel kural: test altyapısı kendiliğinden kurulmaz), mobil
 uygulamanın cihazda denenmesi (bu makinede emülatör yok), yeni bağımlılık gerektiren paketler (nesne deposu, mesaj
@@ -636,8 +637,9 @@ kuyruğu). Raporun "Bilinen sınırlar" tablosunda kalan satırlar bilerek dar b
     durumuna bakar (`OwnerGuardModel`). Serbestçe yazılabilen alt kayıtlar için `MapDetail` yerine
     `.Under<T>()` kullanılır.
 - **Numaralama.** Numara `HaldusNumbering.AllocateAsync` ile, kaydetmeden hemen önce ayrılır. Boşluksuz
-  modda bu bir transaction açar (zaten açık biri varsa ona katılır) ve `HaldusCounters` tablosundaki sayaç
-  satırını tek bir `INSERT ... ON CONFLICT ... DO UPDATE ... RETURNING` ile artırır; kaydetme başarısız
+  modda bu bir transaction açar (zaten açık biri varsa ona katılır), kapsamın danışma kilidini alır (bekleyenler
+  geliş sırasıyla ilerlesin diye; satır kilidi tek başına yük altında bazı istekleri saniyelerce bekletiyordu) ve
+  `HaldusCounters` tablosundaki sayaç satırını tek bir `INSERT ... ON CONFLICT ... DO UPDATE ... RETURNING` ile artırır; kaydetme başarısız
   olursa ya da uç bir hata yanıtıyla dönerse `await using` transaction'ı geri alır ve numara geri verilir.
   Bu SQL PostgreSQL'e özgüdür. Sayaç kapsamı desendeki tarih parçalarını içerir; `{yyyy}` varsa sayaç her
   yıl yeniden başlar. Sequence modunda sayaç kiracı ya da dönem başına sıfırlanmaz. Desenin kuralları

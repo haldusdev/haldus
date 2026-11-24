@@ -35,8 +35,7 @@ public static class HaldusOrdering
 
         try
         {
-            var key = LockKey(name, scope);
-            await context.Database.ExecuteSqlAsync($"SELECT pg_advisory_xact_lock({key})", cancellationToken);
+            await LockAsync(context, name, cancellationToken, scope);
         }
         catch
         {
@@ -49,6 +48,16 @@ public static class HaldusOrdering
         }
 
         return new OrderingScope(owned);
+    }
+
+    /// <summary>
+    /// Açık transaction içinde adlandırılmış bir kilit alır; kilit transaction bitince bırakılır. Bekleyenler geliş
+    /// sırasıyla ilerler.
+    /// </summary>
+    internal static Task LockAsync(DbContext context, string name, CancellationToken cancellationToken, params object?[] scope)
+    {
+        var key = LockKey(name, scope);
+        return context.Database.ExecuteSqlAsync($"SELECT pg_advisory_xact_lock({key})", cancellationToken);
     }
 
     /// <summary>Kapsamın sonuna eklenecek kaydın konumu.</summary>

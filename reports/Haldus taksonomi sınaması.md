@@ -269,7 +269,7 @@ varsayılan ayarlarıyla, boş başlatıldı. Sayılar bu makinenin göreli kıy
 |---|---|---:|---:|---:|
 | Okuma | 20 kayıtlık sayfa + toplam | 366 (2,7 ms) | 2373 (3,2 / 5,8 ms) | 4839 (6,2 / 12,1 ms) |
 | Yazma | Kilitsiz, sayaçsız kayıt | 222 (4,4 ms) | 1632 (4,8 / 7,6 ms) | 4542 (7,5 / 9,3 ms) |
-| Boşluksuz numara | Tek sayaç satırı | 98 (9,5 ms) | 175 (27,4 / 233 ms) | 164 (13,6 / 1486 ms) |
+| Boşluksuz numara | Tek sayaç | 97 (10,0 ms) | 156 (50 / 68 ms) | 157 (202 / 239 ms) |
 | Sequence numarası | `gapless: false` (+ idempotency) | 70 (13,9 ms) | 538 (14,5 / 19,9 ms) | 1148 (27,1 / 48,8 ms) |
 | Sıraya ekleme | `Orderable`, ağacın kilidi | 104 (9,5 ms) | 143 (55 / 67 ms) | 143 (223 / 250 ms) |
 | Sırada taşıma | 100 kardeş yeniden numaralanır | 54 (18,3 ms) | 58 (136 / 163 ms) | 57 (558 / 592 ms) |
@@ -295,11 +295,14 @@ Okunması:
   bağlar; örnekte bütün ürünlerin stok hareketleri ve bütün kategori eklemeleri saniyede ~150 ile sınırlıdır. İkisi
   de `CLAUDE.md`'de bilinen sınır olarak yazılıydı; ölçüm büyüklüğünü verdi. Yazma hacmi yüksek bir kaynak için
   türetme yerine kendi kilidi dar olan `MapBalance` veya toplanan alan uygundur.
-- **Boşluksuz numaranın kuyruğu uzun.** Verim ötekilerle aynı (~165–175 işlem/sn), ama 32 istemcide yanıt süresinin
-  dağılımı çok eşitsiz: ortanca 13,6 ms iken yüzde biri 1,5 saniyeyi geçiyor. Sayaç bir satır kilidiyle korunuyor ve
-  PostgreSQL satır kilidini bekleyenlere sırayla vermiyor; öteki özelliklerin kullandığı danışma kilidinde dağılım
-  düzgün (aynı eşzamanlılıkta p99, ortancanın en çok 1,4 katı). Numaranın boşluksuz olması gerekmiyorsa `gapless: false` bu kuyruğu ortadan
-  kaldırıyor ve eşzamanlılıkla ölçekleniyor. Sayacı danışma kilidine taşımak ayrı bir iştir; yapılmadı.
+- **Ölçüm boşluksuz numarada bir kusur gösterdi ve düzeltildi.** İlk ölçümde verim ötekilerle aynıydı (~165–175
+  işlem/sn), ama 32 istemcide yanıt süresinin dağılımı çok eşitsizdi: ortanca 13,6 ms iken yüzde biri 1,5 saniyeyi, en
+  uzunu 2 saniyeyi geçiyordu. Sayaç yalnızca bir satır kilidiyle korunuyordu ve PostgreSQL o kilidi bekleyenleri
+  geliş sırasıyla uyandırmıyor; bazı istekler defalarca öne geçiliyordu. Sayaç artışının önüne, öteki özelliklerin
+  kullandığı danışma kilidi konuldu. Tablodaki satır düzeltmeden sonraki ölçümdür: verim aynı kaldı (157 işlem/sn),
+  p99 1486 ms'den 239 ms'ye, en uzun yanıt 2064 ms'den 241 ms'ye indi. Ortanca yükseldi (13,6 → 202 ms), çünkü artık
+  kimse sırayı atlamıyor; tek istemcide bedeli bir ek gidiş-dönüştür (9,5 → 10,0 ms). Numaranın boşluksuz olması
+  gerekmiyorsa `gapless: false` kilidi tümüyle kaldırır ve eşzamanlılıkla ölçeklenir.
 - **Sırada taşımanın maliyeti kapsamın büyüklüğüyle orantılı.** 100 kardeşte taşıma, eklemenin yaklaşık iki katı
   sürüyor (18 ms). Daha büyük kapsamlar ölçülmedi.
 
