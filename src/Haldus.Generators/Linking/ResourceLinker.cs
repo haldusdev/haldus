@@ -680,6 +680,16 @@ internal static class ResourceLinker
                 // Hedefin kayıtlarını veren ve oluşturan metotlar, kendi uç sınıfı olan bir koleksiyonda üretilir.
                 Fail("HALDUS007", $"{declaration}<{target.EntityName}>() needs a resource mapped with MapCrud, MapReadOnly or MapAppendOnly that is not attached to other resources");
             }
+            else if (IsTenantScoped(target, resources, byType) && !job.Has(Traits.MultiTenant))
+            {
+                // İşin kaydı ve ürettiği dosya, işi görebilen herkese açıktır. Kiracıya ait kayıtları aktaran iş
+                // kiracıya ait değilse, bir kiracının verisi (ve hata raporu) ötekilere görünürdü.
+                Fail("HALDUS007", $"{declaration}<{target.EntityName}>() moves tenant-owned records, so the job '{job.EntityName}' must be MultiTenant() as well; otherwise its file and its report would be visible across tenants");
+            }
+            else if (target.Has(Traits.Owned) && !job.Has(Traits.Owned))
+            {
+                Fail("HALDUS007", $"{declaration}<{target.EntityName}>() moves records that belong to a user, so the job '{job.EntityName}' must be OwnedByCurrentUser() as well; otherwise its file and its report would be visible to other users");
+            }
             else if (!transfer.Export && (target.Batch is null || !target.Has(Operations.Create) || target.Parent is not null))
             {
                 // İçe aktarma her satırı toplu oluşturmanın öğe yoluyla oluşturur; o yol kaynağın kendi adresindedir.

@@ -125,11 +125,30 @@ public sealed class TransferTests
     [InlineData("app.MapJob<ProductExport>().Exports<Product>();", "HALDUS009", "Product")]
     [InlineData("app.MapStore<Product>(); app.MapJob<ProductExport>().Exports<Product>();", "HALDUS007", "Exports<Product>() needs a resource mapped with MapCrud, MapReadOnly or MapAppendOnly")]
     [InlineData("app.MapCrud<Product>(); app.MapJob<ProductImport>().Imports<Product>();", "HALDUS007", "to declare Batch() with the Create operation")]
+    [InlineData("app.MapCrud<Product>().MultiTenant(); app.MapJob<ProductExport>().Exports<Product>();", "HALDUS007", "the job 'ProductExport' must be MultiTenant() as well")]
+    [InlineData("app.MapCrud<Product>().MultiTenant().Batch(); app.MapJob<ProductImport>().Imports<Product>();", "HALDUS007", "the job 'ProductImport' must be MultiTenant() as well")]
+    [InlineData("app.MapCrud<Category>().MultiTenant(); app.MapCrud<Product>().Under<Category>(); app.MapJob<ProductExport>().Exports<Product>();", "HALDUS007", "the job 'ProductExport' must be MultiTenant() as well")]
+    [InlineData("app.MapCrud<Product>().OwnedByCurrentUser(); app.MapJob<ProductExport>().Exports<Product>();", "HALDUS007", "the job 'ProductExport' must be OwnedByCurrentUser() as well")]
     [InlineData("app.MapCrud<Category>(); app.MapCrud<Product>().Under<Category>().Batch(); app.MapJob<ProductImport>().Imports<Product>();", "HALDUS007", "to live at its own address")]
     public void Transfers_RejectDeclarationsThatCannotWork(string body, string expectedId, string expectedMessage)
     {
         var run = Run(body);
         Assert.Contains(run.GeneratorDiagnostics, candidate => candidate.Id == expectedId && candidate.GetMessage().Contains(expectedMessage, StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Transfers_OfScopedRecords_CompileWhenTheJobCarriesTheSameScope()
+    {
+        Run("""
+            app.MapCrud<Product>().MultiTenant().Batch();
+            app.MapJob<ProductExport>().Exports<Product>().MultiTenant();
+            app.MapJob<ProductImport>().Imports<Product>().MultiTenant();
+            """).AssertCompiles();
+
+        Run("""
+            app.MapCrud<Product>().OwnedByCurrentUser();
+            app.MapJob<ProductExport>().Exports<Product>().OwnedByCurrentUser();
+            """).AssertCompiles();
     }
 
     [Fact]
