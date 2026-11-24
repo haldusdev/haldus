@@ -46,6 +46,9 @@ internal static class ChainReader
         "Supersedes",
         "CreatedFrom",
         "DerivedFrom",
+        "SecretOnce",
+        "Rotatable",
+        "TokenAccess",
     ];
 
     /// <summary>Zincirdeki çağrıları, Map çağrısından dışa doğru sırayla verir.</summary>

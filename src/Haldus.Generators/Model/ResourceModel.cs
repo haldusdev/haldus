@@ -102,6 +102,12 @@ internal sealed record ResourceModel(
     /// <summary><c>.Expiring(...)</c> ile bildirilen son kullanma kuralı.</summary>
     public ExpiryModel? Expiry { get; init; }
 
+    /// <summary>Kaydın, yalnızca bir kez gösterilen sırrı.</summary>
+    public SecretModel? Secret { get; init; }
+
+    /// <summary>Kayda oturumsuz erişim sağlayan token.</summary>
+    public TokenModel? Token { get; init; }
+
     /// <summary>Kaydın ters çevrilebildiği durumlar; durum makinesi yoksa <c>null</c> (her zaman).</summary>
     public EquatableArray<string>? ReversibleIn { get; init; }
 
@@ -417,6 +423,15 @@ internal sealed record ReferenceDeclaration(
     /// <summary><c>.CreatedFrom&lt;T&gt;(on: "...")</c> ile verilen, kaydı kendiliğinden üreten geçişin adı.</summary>
     public string? Trigger { get; init; }
 }
+
+/// <summary><c>.SecretOnce(...)</c> ve <c>.Rotatable(...)</c> ile bildirilen sır.</summary>
+/// <param name="Recoverable">Sır, sunucu kullanabilsin diye şifrelenmiş olarak da saklanıyor mu.</param>
+/// <param name="OverlapTicks">Döndürmeden sonra eski sırrın geçerli kaldığı süre; <c>null</c> ise hemen geçersiz olur.</param>
+internal sealed record SecretModel(string Prefix, bool Recoverable, bool Rotatable, long? OverlapTicks);
+
+/// <summary><c>.TokenAccess(...)</c> ile bildirilen token.</summary>
+/// <param name="Operations">Token ile çalıştırılabilen geçişlerin ve aksiyonların adları.</param>
+internal sealed record TokenModel(string Prefix, EquatableArray<string> Operations);
 
 /// <summary><c>.DerivedFrom&lt;T&gt;()</c> ile gösterilen, henüz çözülmemiş kaynak.</summary>
 internal sealed record SourceDeclaration(string Name, string? Type, LocationInfo Location);

@@ -29,6 +29,10 @@ internal static class LifecycleReader
 
         public BatchModel? Batch { get; set; }
 
+        public SecretModel? Secret { get; set; }
+
+        public TokenModel? Token { get; set; }
+
         /// <summary>Kaydın ters çevrilebildiği durumlar; durum makinesi yoksa <c>null</c>.</summary>
         public EquatableArray<string>? ReversibleIn { get; set; }
 
@@ -54,6 +58,8 @@ internal static class LifecycleReader
         LocationInfo? numberingLocation = null;
         (SimpleNameSyntax Name, SeparatedSyntaxList<ArgumentSyntax> Arguments)? reversible = null;
         (SimpleNameSyntax Name, SeparatedSyntaxList<ArgumentSyntax> Arguments)? supersedes = null;
+        var rotatable = false;
+        long? overlap = null;
 
         void Invalid(SyntaxNode node, string message) => diagnostics.Add(new DiagnosticInfo(
             "HALDUS010", LocationInfo.From(node.GetLocation()), new EquatableArray<string>([message])));
@@ -91,6 +97,31 @@ internal static class LifecycleReader
                     result.Batch = ReadBatch(semanticModel, name, arguments, Invalid, cancellationToken);
                     break;
 
+                case "SecretOnce":
+                    result.Secret = ReadSecret(semanticModel, name, arguments, Invalid, cancellationToken);
+                    break;
+
+                case "Rotatable":
+                    rotatable = true;
+
+                    foreach (var argument in arguments.Where(argument => argument.Expression.ToString() != "null"))
+                    {
+                        if (TimeSpanTicks(semanticModel, argument.Expression, cancellationToken) is { } ticks and > 0)
+                        {
+                            overlap = ticks;
+                        }
+                        else
+                        {
+                            Invalid(argument, "The overlap of Rotatable must be readable at compile time and longer than zero; write it as TimeSpan.FromHours(24) with constant arguments");
+                        }
+                    }
+
+                    break;
+
+                case "TokenAccess":
+                    result.Token = ReadToken(semanticModel, name, arguments, Invalid, cancellationToken);
+                    break;
+
                 // Durumları, durum makinesi zincirin neresinde bildirilmiş olursa olsun doğrulanabilsin diye
                 // döngüden sonra okunur.
                 case "Reversible":
@@ -101,6 +132,31 @@ internal static class LifecycleReader
                     supersedes = (name, arguments);
                     break;
             }
+        }
+
+        if (result.Secret is { } secret)
+        {
+            result.Secret = secret = secret with { Rotatable = rotatable, OverlapTicks = rotatable ? overlap : null };
+
+            // Sırrın kendisi saklanmaz; özeti aranır, son karakterleri listede gösterilir.
+            result.Members.Add(new TraitMember("SecretHash", "string", InResponse: false, Search: null));
+            result.Members.Add(new TraitMember("SecretHint", "string", InResponse: true, Search: null));
+
+            if (secret.Recoverable)
+            {
+                result.Members.Add(new TraitMember("SecretCipher", "string", InResponse: false, Search: null));
+            }
+
+            if (secret.OverlapTicks is not null)
+            {
+                result.Members.Add(new TraitMember("PreviousSecretHash", "string?", InResponse: false, Search: null));
+                result.Members.Add(new TraitMember("PreviousSecretExpiresAt", DateTimeOffset + "?", InResponse: false, Search: null));
+            }
+        }
+
+        if (result.Token is not null)
+        {
+            result.Members.Add(new TraitMember("TokenHash", "string", InResponse: false, Search: null));
         }
 
         result.ReversibleIn = ReadChainStates(semanticModel, reversible, result.Workflow, "reversed", Invalid, cancellationToken);
@@ -293,6 +349,77 @@ internal static class LifecycleReader
 
         return states.ToEquatableArray();
     }
+
+    private static SecretModel? ReadSecret(
+        SemanticModel semanticModel,
+        SimpleNameSyntax name,
+        SeparatedSyntaxList<ArgumentSyntax> arguments,
+        Action<SyntaxNode, string> invalid,
+        CancellationToken cancellationToken)
+    {
+        string? prefix = null;
+        var recoverable = false;
+
+        foreach (var argument in arguments)
+        {
+            switch (semanticModel.GetConstantValue(argument.Expression, cancellationToken))
+            {
+                case { HasValue: true, Value: string text }:
+                    prefix = text;
+                    break;
+                case { HasValue: true, Value: bool flag }:
+                    recoverable = flag;
+                    break;
+                default:
+                    invalid(argument, "The arguments of SecretOnce must be constants: a string for the prefix and true or false for recoverable");
+                    return null;
+            }
+        }
+
+        if (prefix is null || !MapCallParser.IsKeyPrefix(prefix))
+        {
+            invalid(name, PrefixRule("SecretOnce", "sk"));
+            return null;
+        }
+
+        return new SecretModel(prefix, recoverable, Rotatable: false, OverlapTicks: null);
+    }
+
+    private static TokenModel? ReadToken(
+        SemanticModel semanticModel,
+        SimpleNameSyntax name,
+        SeparatedSyntaxList<ArgumentSyntax> arguments,
+        Action<SyntaxNode, string> invalid,
+        CancellationToken cancellationToken)
+    {
+        var texts = new List<string>();
+
+        foreach (var argument in arguments)
+        {
+            if (semanticModel.GetConstantValue(argument.Expression, cancellationToken) is { HasValue: true, Value: string text })
+            {
+                texts.Add(text);
+            }
+            else
+            {
+                // Hangi yazmaların oturumsuz yapılabildiği derleme zamanında bilinmelidir.
+                invalid(argument, "The arguments of TokenAccess must be string constants: the prefix, then the names of the transitions and actions the token may run");
+                return null;
+            }
+        }
+
+        if (texts.Count == 0 || !MapCallParser.IsKeyPrefix(texts[0]))
+        {
+            invalid(name, PrefixRule("TokenAccess", "inv"));
+            return null;
+        }
+
+        return new TokenModel(texts[0], texts.Skip(1).Distinct().ToEquatableArray());
+    }
+
+    private static string PrefixRule(string declaration, string example) =>
+        $"{declaration} needs a prefix: it starts with a lowercase letter, contains only lowercase letters and digits, "
+        + $"and is at most 12 characters long, for example {declaration}(prefix: \"{example}\")";
 
     /// <summary>
     /// Ters çevirme ve yerine geçme, kaydın düzenlenemediği durumlarda da çalışan yazmalardır. Kaynağın bir durum

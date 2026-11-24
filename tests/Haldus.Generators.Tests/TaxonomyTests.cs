@@ -420,7 +420,7 @@ public sealed class TaxonomyTests
             var memberships = app.MapCrud<Membership>().References<User>().References<Organization>().Workflow<MembershipStatus>();
             memberships.MapTransition("activate", MembershipStatus.Pending, MembershipStatus.Active);
             """),
-        new(41, "Invitation", Fit.Partial,
+        new(41, "Invitation", Fit.Clean,
             """
             public enum InvitationStatus { Pending, Accepted, Revoked }
             public partial class Invitation { public string Email { get; set; } = ""; }
@@ -428,14 +428,17 @@ public sealed class TaxonomyTests
             """,
             """
             var invitations = app.MapCrud<Invitation>().Without(CrudOperation.Update, CrudOperation.Patch, CrudOperation.Delete)
-                .Workflow<InvitationStatus>().Expiring(TimeSpan.FromDays(7));
+                .Workflow<InvitationStatus>().Expiring(TimeSpan.FromDays(7)).TokenAccess("inv", "accept");
             invitations.MapTransition("accept", InvitationStatus.Pending, InvitationStatus.Accepted);
             invitations.MapTransition("revoke", InvitationStatus.Pending, InvitationStatus.Revoked);
             app.MapCrud<Member>().CreatedFrom<Invitation>(on: "accept");
             """),
-        new(42, "ApiKey / secret", Fit.Partial,
+        new(42, "ApiKey / secret", Fit.Clean,
             "public partial class ApiKey { public string Name { get; set; } = \"\"; }",
-            "app.MapCrud<ApiKey>().Without(CrudOperation.Update, CrudOperation.Patch).Expiring();"),
+            """
+            app.MapCrud<ApiKey>().Without(CrudOperation.Update, CrudOperation.Patch).Expiring()
+                .SecretOnce(prefix: "sk").Rotatable(overlap: TimeSpan.FromHours(24));
+            """),
         new(43, "Settings / Preferences", Fit.Clean,
             """
             public partial class StoreSettings { public string Currency { get; set; } = ""; }
@@ -474,7 +477,7 @@ public sealed class TaxonomyTests
         new(46, "Webhook endpoint", Fit.Partial,
             Webhook,
             """
-            var webhooks = app.MapCrud<Webhook>().MultiTenant().Archivable();
+            var webhooks = app.MapCrud<Webhook>().MultiTenant().Archivable().SecretOnce(prefix: "whsec", recoverable: true).Rotatable();
             webhooks.MapAction("ping", (webhook, services, cancellationToken) => System.Threading.Tasks.Task.CompletedTask);
             """),
         new(47, "Webhook delivery", Fit.Clean,
@@ -612,8 +615,8 @@ public sealed class TaxonomyTests
     public void Tally_MatchesTheWrittenResults()
     {
         // reports/Haldus taksonomi sınaması.md dosyasındaki sayılar; biri değişirse diğeri de güncellenmelidir.
-        Assert.Equal(33, Rows.Count(row => row.Fit == Fit.Clean));
-        Assert.Equal(20, Rows.Count(row => row.Fit == Fit.Partial));
+        Assert.Equal(35, Rows.Count(row => row.Fit == Fit.Clean));
+        Assert.Equal(18, Rows.Count(row => row.Fit == Fit.Partial));
         Assert.Equal(6, Rows.Count(row => row.Fit == Fit.Missing));
     }
 }

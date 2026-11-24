@@ -67,6 +67,9 @@ public static class HaldusServiceCollectionExtensions
 
         // TryAdd: tüketen proje kendi uygulamalarını Haldus'tan önce veya sonra kaydedebilir.
         services.AddHttpContextAccessor();
+
+        // Geri okunabilen sırlar (SecretOnce(recoverable: true)) bununla şifrelenir; çağrı yinelenebilir.
+        services.AddDataProtection();
         services.TryAddSingleton<ITenantProvider, ClaimsTenantProvider>();
         services.TryAddSingleton<ICurrentUser, ClaimsCurrentUser>();
         services.TryAddSingleton(TimeProvider.System);

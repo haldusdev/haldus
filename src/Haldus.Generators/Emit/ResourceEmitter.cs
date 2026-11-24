@@ -61,6 +61,21 @@ internal static class ResourceEmitter
             interfaces.Add("global::Haldus.IHaldusJob");
         }
 
+        if (resource.Secret is { } secret)
+        {
+            interfaces.Add(secret.OverlapTicks is null ? "global::Haldus.IHasSecret" : "global::Haldus.IHasRotatingSecret");
+
+            if (secret.Recoverable)
+            {
+                interfaces.Add("global::Haldus.IHasRecoverableSecret");
+            }
+        }
+
+        if (resource.Token is not null)
+        {
+            interfaces.Add("global::Haldus.IHasAccessToken");
+        }
+
         // Durum makinesi, numaralama ve son kullanma bildirimlerinin alanları. Aynı alanı bir trait zaten
         // eklediyse (ör. Auditable bir işin CreatedAt alanı) yinelenmez.
         var fromTraits = new HashSet<string>(
@@ -136,6 +151,16 @@ internal static class ResourceEmitter
         {
             builder.Append(
                 $"    public required {ReadOnlyList}<{detail.QualifiedName}Response> {detail.CollectionName} {{ get; init; }}\n");
+        }
+
+        // Sır ve token yalnızca üretildikleri yanıtta doludur; başka her yanıtta alan hiç yazılmaz.
+        foreach (var once in new[] { resource.Secret is null ? null : "Secret", resource.Token is null ? null : "Token" })
+        {
+            if (once is not null)
+            {
+                builder.Append("    [global::System.Text.Json.Serialization.JsonIgnore(Condition = global::System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]\n");
+                builder.Append($"    public string? {once} {{ get; init; }}\n");
+            }
         }
 
         builder.Append("}\n");

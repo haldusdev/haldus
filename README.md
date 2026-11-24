@@ -285,6 +285,34 @@ kayıtta aynı adlı alanlar kopyalanır, gerisini `ICreatedFrom<TSource>` doldu
 `IDerivation<TSource, TTarget>` uygulayan bir sınıf yazar; Haldus onu kaynak kayıtla aynı transaction'da ve
 sırayla çağırır.
 
+## Sırlar
+
+```csharp
+app.MapCrud<ApiKey>().SecretOnce(prefix: "sk").Rotatable(overlap: TimeSpan.FromHours(1));
+app.MapCrud<WebhookEndpoint>().SecretOnce(prefix: "whsec", recoverable: true).Rotatable();
+
+var invitations = app.MapCrud<Invitation>().Workflow<InvitationStatus>().TokenAccess(prefix: "inv", "accept");
+invitations.MapTransition("accept", from: InvitationStatus.Pending, to: InvitationStatus.Accepted);
+```
+
+| Bildirim | Etkisi |
+|---|---|
+| `.SecretOnce(prefix)` | Sır sunucuda üretilir ve yalnızca oluşturma yanıtında görünür; veritabanında SHA-256 özeti, listede son dört karakteri durur |
+| `.SecretOnce(prefix, recoverable: true)` | Sır ayrıca ASP.NET Data Protection ile şifrelenir; sunucu onu açıp kullanabilir (`HaldusSecretProtection.Reveal`) |
+| `.Rotatable(overlap)` | `POST /{id}/rotate` yeni sır üretir; eski sır hemen ya da örtüşme süresi sonunda geçersiz olur |
+| `.TokenAccess(prefix, ...)` | Kayıt, oturumu olmayan biri tarafından `X-Access-Token` başlığındaki token ile okunur (`GET /by-token`) ve yalnızca sayılan geçişler çalıştırılır (`POST /by-token/accept`) |
+
+Sunulan bir sırrın kime ait olduğu `FindBySecretAsync` ile bulunur:
+
+```csharp
+var key = await db.ApiKeys
+    .IgnoreQueryFilters([HaldusFilters.Tenant])     // kimlik doğrulanırken kiracı henüz bilinmez
+    .FindBySecretAsync(request.Headers["X-Api-Key"], now, cancellationToken);
+```
+
+Token uçları kimlik doğrulama istemez (`AllowAnonymous`): isteği yapanı token tanıtır. Geri okunabilen sırlar için
+Data Protection anahtarlarının kalıcı ve sunucular arasında ortak olması uygulamanın sorumluluğundadır.
+
 ## Modüler yapı
 
 Özellikler ayrı sınıf kütüphanelerine bölünebilir. Her modül kendi `Map*` çağrılarını ve entity'lerini
@@ -306,7 +334,7 @@ kısıtı olur, ayrı bağlamlardaysa referans yalnızca kimlikle tutulur ve var
 ## Durum
 
 İlk sürümün planlanan on aşaması tamamlandı; eksikleri kapatan ikinci plan sürüyor. Model, araştırmadaki 59
-gerçek varlığa karşı sınanıyor: bugün 33'ü temiz, 20'si kısmen ifade ediliyor, 6'sı için gereken özellik henüz
+gerçek varlığa karşı sınanıyor: bugün 35'i temiz, 18'i kısmen ifade ediliyor, 6'sı için gereken özellik henüz
 yok. Ayrıntısı ve eksiklerin listesi [taksonomi sınaması](reports/Haldus%20taksonomi%20sınaması.md)
 belgesindedir.
 

@@ -6,16 +6,16 @@ sınamanın sonucudur: her satır, yazılmış olan API ile ifade edilmeye çal�
 
 ## Sonuç
 
-59 satırın 53'ü bugünkü API ile yazılıp derleniyor; 6'sı için anlamlı bir eşleme yok. (İlk sayım 19 temiz, 29
+59 satırın 53'ü bugünkü API ile yazılıp derleniyor (35'i eksiksiz); 6'sı için anlamlı bir eşleme yok. (İlk sayım 19 temiz, 29
 kısmi, 11 yok idi. Entity aksiyonu yazıldıktan sonra bir satır temize geçti; sahiplik yazıldıktan sonra iki satır
 temize, bir satır yoktan kısmiye geçti; alan eklentileri yazıldıktan sonra üç satır temize, bir satır yoktan
 kısmiye geçti; kayıt işlemleri yazıldıktan sonra üç satır daha temize geçti; kayıtlar arası zincir yazıldıktan
-sonra beş satır temize, bir satır yoktan kısmiye geçti.)
+sonra beş satır temize, bir satır yoktan kısmiye geçti; sırlar yazıldıktan sonra iki satır daha temize geçti.)
 
 | Sonuç | Satır | Anlamı |
 |---|---|---|
-| Temiz | 33 | Raporun önerdiği eşleme, yazılmış özelliklerle eksiksiz ifade ediliyor |
-| Kısmi | 20 | Çekirdek ifade ediliyor; önerilen eşlemedeki bir veya daha çok özellik henüz yok |
+| Temiz | 35 | Raporun önerdiği eşleme, yazılmış özelliklerle eksiksiz ifade ediliyor |
+| Kısmi | 18 | Çekirdek ifade ediliyor; önerilen eşlemedeki bir veya daha çok özellik henüz yok |
 | Yok | 6 | Gereken archetype veya trait yazılmadı |
 
 Araştırmanın başlangıçtaki düz katalog için kendi sayımı 10 oturuyor, 31 zorlanarak, 18 oturmuyor idi. İki sayım
@@ -34,7 +34,8 @@ tamamı eksik trait veya archetype'tır.
 - **Çalışma:** Derleme, uçların doğru davrandığını göstermez. Tablodaki birleşimlerin bir kısmı örnek uygulamalarda
   gerçek PostgreSQL'e karşı sınanıyor: sipariş, satırlar, rezervasyon, kupon, iade, sepet, ödeme, yorumlar,
   ayarlar, stok, iş, toplu işlemler, kullanıcıya ait kaynaklar, favoriler, doğal anahtar, sıralama, metadata,
-  kardeşler arası sıra, kopyalama, önizleme, ters kayıt, yerine geçme, başka bir kayıttan üretme ve türetme.
+  kardeşler arası sıra, kopyalama, önizleme, ters kayıt, yerine geçme, başka bir kayıttan üretme, türetme, bir kez
+  gösterilen sır, döndürme ve token ile erişim.
   Geri kalan satırlar yalnızca derleme düzeyinde doğrulandı.
 - **Hüküm:** "Temiz" ile "kısmi" arasındaki ayrım benim yorumumdur: önerilen eşlemede adı geçen bir özellik
   yazılmadıysa, aynı sonuç elle (ör. bir handler içinde) elde edilebilse bile satır kısmi sayıldı.
@@ -83,12 +84,12 @@ tamamı eksik trait veya archetype'tır.
 | 38 | User | Temiz | `MapCrud` + `SoftDeletable` + `Metadata` + `Searchable` + entity aksiyonu | — |
 | 39 | Role & permission | Temiz | `MapLookup` + `MapCrud` + `MapAssociation` | — |
 | 40 | Membership | Kısmi | `MapCrud` + iki `References` + `Workflow` | Yük taşıyan ve durumu olan `MapAssociation` |
-| 41 | Invitation | Kısmi | `MapCrud().Without(Update, Patch, Delete)` + `Workflow` + `Expiring`; kabul edilince doğan üyelik `CreatedFrom<Invitation>(on: "accept")` | `TokenAccess` |
-| 42 | ApiKey / secret | Kısmi | `MapCrud().Without(Update, Patch)` + `Expiring()` | `SecretOnce`, `Rotatable` |
+| 41 | Invitation | Temiz | `MapCrud().Without(Update, Patch, Delete)` + `Workflow` + `Expiring` + `TokenAccess`; kabul edilince doğan üyelik `CreatedFrom<Invitation>(on: "accept")` | — |
+| 42 | ApiKey / secret | Temiz | `MapCrud().Without(Update, Patch)` + `Expiring()` + `SecretOnce` + `Rotatable` | — |
 | 43 | Settings / Preferences | Temiz | `MapSingleton().MultiTenant()`, `MapStore().MultiTenant()` | — |
 | 44 | AuditLog / Event | Kısmi | `MapReadOnly` + `Searchable`; dışa aktarma ayrı bir `MapJob` | `Retention` |
 | 45 | Notification | Kısmi | `MapReadOnly` + `OwnedByCurrentUser`; okundu işareti bir entity aksiyonu | `ReadTracking` (hepsini okundu işaretleme, okunmamış sayısı) |
-| 46 | Webhook endpoint | Kısmi | `MapCrud` + `Archivable`; ping bir entity aksiyonu | `SecretOnce`, ebeveyn altında tek kayıt |
+| 46 | Webhook endpoint | Kısmi | `MapCrud` + `Archivable` + `SecretOnce(recoverable)` + `Rotatable`; ping bir entity aksiyonu | Ebeveyn altında tek kayıt (yapılandırma) |
 | 47 | Webhook delivery | Temiz | `MapReadOnly` + `Under<Webhook>` + `Workflow`; yeniden gönderme bir geçiş | — |
 | 48 | Subscription / Plan | Temiz | `MapCrud` + `Workflow` + `MapDetail` | — |
 | 49 | Polimorfik attachment | Yok | — | `Attachable`, `MapFile` |
@@ -121,8 +122,10 @@ tamamı eksik trait veya archetype'tır.
   üretmek. `Reversible` ile yazıldı. Araştırmanın ayrı önerdiği `Reverses<T>` (başka tipten telafi kaydı) ayrı bir
   bildirim olarak eklenmedi: `CreatedFrom<T>` aynı şeyi (kaynağa işaret eden, ondan üretilen kayıt) ifade ediyor;
   14. satır bu yüzden temiz sayıldı ve bu benim yorumumdur.
-- **Gizli değerler üç satırda eksik** (41, 42, 46): yalnızca bir kez gösterilen anahtar, döndürme, token ile erişim.
-  Bunlar olmadan API anahtarı ve webhook sırrı güvenli biçimde üretilemiyor; elle yazılmaları gerekir.
+- **Gizli değerler üç satırda eksikti** (41, 42, 46): yalnızca bir kez gösterilen anahtar, döndürme, token ile erişim.
+  `SecretOnce`, `Rotatable` ve `TokenAccess` ile yazıldı. Araştırma sırrın yalnızca özetinin saklanmasını
+  öneriyordu; webhook imza sırrı gibi sunucunun kendisinin kullandığı sırlar özetten geri okunamadığı için
+  şifreli saklama (`recoverable: true`) ayrıca eklendi.
 
 ## Eksikler, etkiledikleri satır sayısına göre
 
@@ -130,7 +133,7 @@ tamamı eksik trait veya archetype'tır.
 |---|---|
 | `CustomFields` | 23, 51 |
 
-| `SecretOnce` / `Rotatable` / `TokenAccess` | 41, 42, 46 |
+
 | `Publishable` | 3, 27 |
 | `Revisioned` | 27, 29 |
 
@@ -138,7 +141,7 @@ tamamı eksik trait veya archetype'tır.
 | `MapFile` / `Attachable` | 32, 49 |
 | `Commentable` | 30, 50 |
 | Birden çok durum ekseni | 1, 10 |
-| Tek satırı etkileyenler | `MapChangeSet` (1), türetilmiş durum (12), sepet birleştirme (5), `Approvable` (24), `Translatable` (28), yüklü ve durumlu bağ (40), bağların topluca değiştirilmesi (31), `Retention` (44), `ReadTracking` (45), `Rollup` (57), `EffectiveDated` ve `ChangeFeed` (23) |
+| Tek satırı etkileyenler | `MapChangeSet` (1), türetilmiş durum (12), sepet birleştirme (5), `Approvable` (24), `Translatable` (28), yüklü ve durumlu bağ (40), ebeveyn altında tek kayıt (46), bağların topluca değiştirilmesi (31), `Retention` (44), `ReadTracking` (45), `Rollup` (57), `EffectiveDated` ve `ChangeFeed` (23) |
 
 Araştırma bunların çoğunu zaten ikinci ve üçüncü sürüme bırakmıştı. Bu sınamanın o sıralamaya eklediği tek şey,
 ilk sürümün kapsamındaki satırlarda da gereken entity aksiyonuydu; o artık yazıldı. Dört satırı etkileyen sahiplik

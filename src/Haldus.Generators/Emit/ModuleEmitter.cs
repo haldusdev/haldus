@@ -280,6 +280,26 @@ internal static class ModuleEmitter
             statements.Add("global::Haldus.HaldusDb.ConfigureMetadata(entity.Property(item => item.Metadata));");
         }
 
+        if (resource.Secret is { } secret)
+        {
+            // Sunulan sır özetiyle aranır; iki kaydın aynı sırrı taşıması olanaksız olmalıdır.
+            statements.Add("entity.Property(item => item.SecretHash).HasMaxLength(64);");
+            statements.Add("entity.Property(item => item.SecretHint).HasMaxLength(8);");
+            statements.Add("entity.HasIndex(item => item.SecretHash).IsUnique();");
+
+            if (secret.OverlapTicks is not null)
+            {
+                statements.Add("entity.Property(item => item.PreviousSecretHash).HasMaxLength(64);");
+                statements.Add("entity.HasIndex(item => item.PreviousSecretHash);");
+            }
+        }
+
+        if (resource.Token is not null)
+        {
+            statements.Add("entity.Property(item => item.TokenHash).HasMaxLength(64);");
+            statements.Add("entity.HasIndex(item => item.TokenHash).IsUnique();");
+        }
+
         foreach (var chain in ChainOperation.For(resource))
         {
             // Bir kaydın yalnızca bir karşı kaydı olabilir. Benzersiz indeks bunu, aynı anda gelen iki istek için

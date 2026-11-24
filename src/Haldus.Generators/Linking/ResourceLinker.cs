@@ -335,6 +335,7 @@ internal static class ResourceLinker
         "expire" when resource.Expiry is not null => "Expiring",
         "clone" when resource.Has(Traits.Cloneable) => nameof(Traits.Cloneable),
         "reverse" when resource.Has(Traits.Reversible) => nameof(Traits.Reversible),
+        "rotate" when resource.Secret is { Rotatable: true } => "Rotatable",
         "supersede" when resource.Has(Traits.Supersedes) => nameof(Traits.Supersedes),
         "move" when resource.Has(Traits.Orderable) => nameof(Traits.Orderable),
         "preview" when resource.Has(Traits.Previewable) => nameof(Traits.Previewable),
@@ -475,6 +476,15 @@ internal static class ResourceLinker
                     CopiesMetadata: resource.Has(Traits.Metadata) && source.Has(Traits.Metadata),
                     declaration.Trigger,
                     HasContract: resource.Contracts.Contains($"ICreatedFrom:{source.QualifiedName}")));
+            }
+
+            foreach (var operation in resource.Token?.Operations ?? EquatableArray<string>.Empty)
+            {
+                // Yanlış yazılmış bir ad sessizce yok sayılsaydı, token ile yapılabileceği sanılan işlem yapılamazdı.
+                if (resource.Transitions.All(transition => transition.Route != operation))
+                {
+                    Fail(resource.Location, $"TokenAccess lists '{operation}', but '{resource.EntityName}' has no transition or action with that name");
+                }
             }
 
             foreach (var declaration in resource.DerivedFrom)

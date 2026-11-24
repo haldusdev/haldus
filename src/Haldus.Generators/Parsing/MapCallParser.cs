@@ -410,6 +410,8 @@ internal static class MapCallParser
             Workflow = lifecycle.Workflow,
             Numbering = lifecycle.Numbering,
             Expiry = lifecycle.Expiry,
+            Secret = lifecycle.Secret,
+            Token = lifecycle.Token,
             ReversibleIn = lifecycle.ReversibleIn,
             SupersedableIn = lifecycle.SupersedableIn,
             Batch = lifecycle.Batch,
@@ -598,6 +600,47 @@ internal static class MapCallParser
             yield return "CreateOnly has no effect: the resource needs the Create operation and at least one of Update and Patch";
         }
 
+        foreach (var declaration in new[] { "SecretOnce", "TokenAccess" })
+        {
+            if (chain.All(call => call.Name != declaration) || !(crudLike || archetype == Archetype.AppendOnly))
+            {
+                continue;
+            }
+
+            if ((operations & Operations.Create) == 0)
+            {
+                yield return $"{declaration} requires the Create operation: the value is generated and shown when the record is created";
+            }
+
+            // Değer yalnızca tekil oluşturma yanıtında gösterilebilir; başka bir yoldan doğan kayıt onsuz doğardı.
+            foreach (var other in new[] { "Batch", "Cloneable", "Previewable", "Reversible", "Supersedes", "CreatedFrom" })
+            {
+                if (chain.Any(call => call.Name == other))
+                {
+                    yield return $"{declaration} cannot be combined with {other}: a record created that way would have no value to show";
+                }
+            }
+        }
+
+        if (chain.Any(call => call.Name == "Rotatable") && chain.All(call => call.Name != "SecretOnce"))
+        {
+            yield return "Rotatable rotates the secret of the resource; declare SecretOnce(prefix: ...) as well";
+        }
+
+        if (chain.Any(call => call.Name == "TokenAccess"))
+        {
+            // Token ile gelen kişinin kiracısı ve kimliği yoktur; kaydın görünürlüğü onlara bağlıysa kayıt bulunamaz.
+            if (chain.Any(call => call.Name == "Under"))
+            {
+                yield return "TokenAccess cannot be combined with Under<T>(): the visibility of the record would depend on a parent the token holder cannot see";
+            }
+
+            if ((traits & Traits.Owned) != 0)
+            {
+                yield return "TokenAccess cannot be combined with OwnedByCurrentUser: the token holder is not the owner";
+            }
+        }
+
         // Geçişle doğan kayıt için açık bir uç üretilmez; üretilen uç ise bir oluşturmadır.
         if (chain.Any(call => call.Name == "CreatedFrom" && !call.Arguments.Any(argument => argument.StartsWith("\"", StringComparison.Ordinal)))
             && (crudLike || archetype == Archetype.AppendOnly)
@@ -710,6 +753,9 @@ internal static class MapCallParser
 
                 // Sıra ve kopya, istemcinin oluşturup silebildiği koleksiyonlar içindir.
                 "Orderable" or "Cloneable" => crudLike,
+
+                // Sır ve token kayıt oluşturulurken üretilir ve yalnızca o yanıtta gösterilir.
+                "SecretOnce" or "Rotatable" or "TokenAccess" => crudLike || archetype == Archetype.AppendOnly,
 
                 // Başka bir kayıttan üretilen kayıt, sunucunun anahtar ürettiği bir koleksiyona eklenir.
                 "CreatedFrom" => crudLike || archetype == Archetype.AppendOnly,
@@ -954,7 +1000,7 @@ internal static class MapCallParser
         return (generation, prefix);
     }
 
-    private static bool IsKeyPrefix(string prefix) =>
+    internal static bool IsKeyPrefix(string prefix) =>
         prefix.Length is > 0 and <= 12
         && prefix[0] is >= 'a' and <= 'z'
         && prefix.All(character => character is (>= 'a' and <= 'z') or (>= '0' and <= '9'));

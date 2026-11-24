@@ -286,6 +286,16 @@ internal sealed partial class EndpointEmitter
             EmitOrigin(origin);
         }
 
+        if (_resource.Secret is { Rotatable: true })
+        {
+            EmitRotate();
+        }
+
+        if (_resource.Token is not null)
+        {
+            EmitTokenRead();
+        }
+
         if (_resource.Batch is not null)
         {
             EmitBatch();
@@ -688,6 +698,17 @@ internal sealed partial class EndpointEmitter
             keys.Add($"Metadata = global::Haldus.HaldusMetadata.Create({source}.Metadata)");
         }
 
+        if (!preview && source == "request")
+        {
+            // Sır ve token oluşturma ucunda üretilir (SecretVariables); kayda yalnızca özetleri yazılır.
+            keys.AddRange(SecretAssignments(prefix: string.Empty));
+
+            if (_resource.Token is not null)
+            {
+                keys.Add("TokenHash = global::Haldus.HaldusSecrets.Hash(token)");
+            }
+        }
+
         var fields = only is null ? _writable.Select(property => property.Name) : only;
 
         return string.Join(", ", keys.Concat(fields.Select(field => $"{field} = {source}.{field}")));
@@ -785,13 +806,13 @@ internal sealed partial class EndpointEmitter
                 private static async {{returnType}} CreateAsync(
             {{ScopeParameter}}        Create{{_entity}}Request request,
             {{HttpContextParameter}}{{(HasLifetime || job ? TimeProviderParameter : string.Empty)}}{{(job ? "        global::Haldus.IHaldusJobDispatcher jobs,\n" : string.Empty)}}{{ContextsParameter}}{{(CreateCanFail ? MessagesParameter : string.Empty)}}{{CancellationParameter}}    {
-            {{(_resource.OwnerGuard is null ? ParentCheck() : OwnerGuard("create"))}}{{WriteChecks(patch: false, creating: true)}}        var entity = new {{_entity}} { {{assignments}} };
+            {{(_resource.OwnerGuard is null ? ParentCheck() : OwnerGuard("create"))}}{{WriteChecks(patch: false, creating: true)}}{{SecretVariables()}}        var entity = new {{_entity}} { {{assignments}} };
             {{CreateDetails()}}{{Compute()}}
                     var context = contexts.For<{{_entity}}>();
             {{save}}
 
             {{WriteETag()}}        var location = $"{httpContext.Request.PathBase}{httpContext.Request.Path.Value?.TrimEnd('/')}/{entity.{{_key}}}";
-                    return {{Http}}.TypedResults.{{result}}(location, ToResponse(entity));
+                    return {{Http}}.TypedResults.{{result}}(location, {{CreatedBody()}});
                 }
 
             """);
@@ -1473,7 +1494,7 @@ internal sealed partial class EndpointEmitter
                     global::Microsoft.AspNetCore.Routing.IEndpointRouteBuilder group,
                     {{apply}} apply)
                 {
-            {{requireHandler}}        return group.MapPost("{{_keyRoute}}/{{transition.Route}}", (
+            {{requireHandler}}{{TokenTransitionMap(transition, method, parameters, validation)}}        return group.MapPost("{{_keyRoute}}/{{transition.Route}}", (
             {{lambdaParameters}}) =>
                             {{method}}({{arguments}}))
                         .WithName("{{transition.PascalName}}{{_entity}}"){{validation}}{{IdempotencyFilter(request)}}
@@ -1586,6 +1607,8 @@ internal sealed partial class EndpointEmitter
                 }
 
             """);
+
+        EmitTokenTransition(transition, method, request, apply, returnType);
     }
     /// <summary>Kayıt sayılan durumlardan birinde değilse işlemi çakışma olarak reddeder.</summary>
     private string StateGuard(EquatableArray<string>? allowed, string operation)
@@ -2385,6 +2408,212 @@ internal sealed partial class EndpointEmitter
             {{SaveCreated(concurrency + taken)}}
 
             {{WriteETag()}}        return {{Http}}.TypedResults.Created(global::Haldus.HaldusRoutes.Sibling(httpContext, entity.{{_key}}), ToResponse(entity));
+                }
+
+            """);
+    }
+
+    // ── Sırlar ve token ────────────────────────────────────────────────────────────────────────────────
+
+    /// <summary>Oluşturma ucunun ürettiği, yalnızca o yanıtta gösterilen değerler.</summary>
+    private string SecretVariables() =>
+        (_resource.Secret is { } secret
+            ? $"        var secret = global::Haldus.HaldusSecrets.Generate({ResourceEmitter.Literal(secret.Prefix)});\n"
+            : string.Empty)
+        + (_resource.Token is { } token
+            ? $"        var token = global::Haldus.HaldusSecrets.Generate({ResourceEmitter.Literal(token.Prefix)});\n"
+            : string.Empty);
+
+    /// <summary>Sırrın kayda yazılan alanları; sırrın kendisi hiçbir alana yazılmaz.</summary>
+    /// <param name="prefix">Atamaların hedefi: başlangıç değerlerinde boş, var olan kayıtta <c>entity.</c>.</param>
+    private IEnumerable<string> SecretAssignments(string prefix)
+    {
+        if (_resource.Secret is not { } secret)
+        {
+            yield break;
+        }
+
+        yield return $"{prefix}SecretHash = global::Haldus.HaldusSecrets.Hash(secret)";
+        yield return $"{prefix}SecretHint = global::Haldus.HaldusSecrets.Hint(secret)";
+
+        if (secret.Recoverable)
+        {
+            yield return $"{prefix}SecretCipher = global::Haldus.HaldusSecretProtection.Protect<{_entity}>(httpContext.RequestServices, secret)";
+        }
+    }
+
+    /// <summary>Oluşturma yanıtı; sır ve token yalnızca burada (ve döndürmede) görünür.</summary>
+    private string CreatedBody()
+    {
+        var once = new[] { _resource.Secret is null ? null : "Secret = secret", _resource.Token is null ? null : "Token = token" }
+            .Where(part => part is not null)
+            .ToArray();
+
+        return once.Length == 0 ? "ToResponse(entity)" : $"ToResponse(entity) with {{ {string.Join(", ", once)} }}";
+    }
+
+    /// <summary>
+    /// Sırrı döndürür: yenisi üretilir ve yalnızca bu yanıtta gösterilir. Örtüşme bildirildiyse eski sır o süre
+    /// boyunca geçerli kalır; bildirilmediyse hemen geçersiz olur. Döndürme kaydın içeriğine dokunmaz, bu yüzden
+    /// düzenleme durum kuralına bağlı değildir (sızmış bir sır her durumda kapatılabilmelidir); kapanmış bir kayıtta
+    /// ise çalışmaz.
+    /// </summary>
+    private void EmitRotate()
+    {
+        var secret = _resource.Secret!;
+
+        _map.Append($$"""
+                    group.MapPost("{{_keyRoute}}/rotate", RotateAsync)
+                        .WithName("Rotate{{_entity}}")
+                        .ProducesProblem(404){{StateMetadata(null)}}{{ConcurrencyMetadata()}};
+
+
+            """);
+
+        var keep = secret.OverlapTicks is { } ticks
+            ? $"        entity.PreviousSecretHash = entity.SecretHash;\n        entity.PreviousSecretExpiresAt = {Now} + global::System.TimeSpan.FromTicks({ticks}L);\n"
+            : string.Empty;
+
+        _handlers.Append($$"""
+
+                private static async {{OkOrProblem}} RotateAsync(
+            {{ScopeParameter}}{{KeyParameter}}{{HttpContextParameter}}{{(secret.OverlapTicks is null ? string.Empty : TimeProviderParameter)}}{{ContextsParameter}}{{MessagesParameter}}{{CancellationParameter}}    {
+            {{ReadIfMatch()}}{{OwnerGuard("rotate")}}        var context = contexts.For<{{_entity}}>();
+                    var entity = await context.Set<{{_entity}}>(){{Includes}}.FirstOrDefaultAsync(item => {{Match}}, cancellationToken);
+
+                    if (entity is null)
+                    {
+                        return {{NotFound}};
+                    }
+
+            {{ChainClosedGuard()}}{{ExpectVersion()}}        var secret = global::Haldus.HaldusSecrets.Generate({{ResourceEmitter.Literal(secret.Prefix)}});
+            {{keep}}{{string.Concat(SecretAssignments("entity.").Select(assignment => $"        {assignment};\n"))}}{{Save()}}
+            {{WriteETag()}}        return {{Http}}.TypedResults.Ok(ToResponse(entity) with { Secret = secret });
+                }
+
+            """);
+    }
+
+    /// <summary>Kaydı, isteği yapanın kiracısına bakmadan, token'ıyla bulan sorgu.</summary>
+    private string TokenQuery => $"contexts.For<{_entity}>().Set<{_entity}>()"
+        + (_tenant ? ".IgnoreQueryFilters(new[] { global::Haldus.HaldusFilters.Tenant })" : string.Empty)
+        + ".AsNoTracking()";
+
+    /// <summary>
+    /// Kaydı token ile okutur. Token'ı taşıyan kişinin oturumu ve kiracısı yoktur; onu kayıt üzerindeki token
+    /// tanıtır. Yalnızca kiracı filtresi kaldırılır: silinmiş veya süresi dolmuş bir kayıt token ile de bulunamaz.
+    /// </summary>
+    private void EmitTokenRead()
+    {
+        _map.Append($$"""
+                    group.MapGet("/by-token", GetByTokenAsync)
+                        .WithName("Get{{_entity}}ByToken")
+                        .WithMetadata(global::Haldus.HaldusTokenAccess.Instance)
+                        .AllowAnonymous()
+                        .ProducesProblem(404);
+
+
+            """);
+
+        _handlers.Append($$"""
+
+                private static async {{OkOrProblem}} GetByTokenAsync(
+            {{HttpContextParameter}}{{ContextsParameter}}{{MessagesParameter}}{{CancellationParameter}}    {
+                    var tokenHash = global::Haldus.HaldusTokenAccess.ReadHash(httpContext);
+                    var entity = tokenHash is null
+                        ? null
+                        : await {{TokenQuery}}{{Includes}}
+                            .FirstOrDefaultAsync(item => item.TokenHash == tokenHash, cancellationToken);
+
+                    if (entity is null)
+                    {
+                        return {{Problems}}.TokenInvalid(messages);
+                    }
+
+            {{WriteETag()}}        return {{Http}}.TypedResults.Ok(ToResponse(entity));
+                }
+
+            """);
+    }
+
+    private bool RunsByToken(TransitionModel transition) =>
+        _resource.Token is { } token && token.Operations.Contains(transition.Route);
+
+    /// <summary>Token ile çalıştırılabilen bir geçişin ikinci adresi: <c>POST /by-token/{geçiş}</c>.</summary>
+    private string TokenTransitionMap(
+        TransitionModel transition,
+        string method,
+        List<(string Type, string Name)> parameters,
+        string validation)
+    {
+        if (!RunsByToken(transition))
+        {
+            return string.Empty;
+        }
+
+        // Kayıt adresten değil token'dan bulunur; kimlik parametresi yoktur.
+        var byToken = parameters.Where(parameter => parameter.Name != _keyParameter).ToList();
+        var lambdaParameters = string.Join(",\n", byToken.Select(parameter => $"                {parameter.Type} {parameter.Name}"));
+        var arguments = string.Join(", ", byToken.Select(parameter => parameter.Name == "httpContext" ? "apply, httpContext" : parameter.Name));
+
+        return $$"""
+                    group.MapPost("/by-token/{{transition.Route}}", (
+            {{lambdaParameters}}) =>
+                            Token{{method}}({{arguments}}))
+                        .WithName("{{transition.PascalName}}{{_entity}}ByToken"){{validation}}
+                        .WithMetadata(global::Haldus.HaldusTokenAccess.Instance)
+                        .AllowAnonymous()
+                        .ProducesProblem(404)
+                        .ProducesProblem(409)
+                        .ProducesProblem(422){{ConcurrencyMetadata()}};
+
+
+            """;
+    }
+
+    /// <summary>
+    /// Token'dan kaydı bulur ve asıl geçişi çağırır; böylece geçişin bütün kuralları (durum, sürüm, iş mantığı)
+    /// token ile gelene de aynen uygulanır. Kayıt bir kiracıya aitse geçiş o kiracı adına çalışır.
+    /// </summary>
+    private void EmitTokenTransition(TransitionModel transition, string method, string? request, string apply, string returnType)
+    {
+        if (!RunsByToken(transition))
+        {
+            return;
+        }
+
+        const string Injection = "global::Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions";
+
+        var identity = _tenant
+            ? $$"""
+
+                    // Token'ı taşıyanın kiracısı yoktur; geçiş, kaydın kiracısı adına çalışır.
+                    using var identity = global::Haldus.HaldusAmbient.Use(
+                        found.TenantId,
+                        {{Injection}}.GetRequiredService<global::Haldus.ICurrentUser>(httpContext.RequestServices).UserId);
+
+            """
+            : string.Empty;
+
+        _handlers.Append($$"""
+
+                private static async {{returnType}} Token{{method}}(
+            {{(request is null ? string.Empty : $"        {request} request,\n")}}        {{apply}} apply,
+            {{HttpContextParameter}}{{(Sliding ? TimeProviderParameter : string.Empty)}}{{ContextsParameter}}{{MessagesParameter}}{{CancellationParameter}}    {
+                    var tokenHash = global::Haldus.HaldusTokenAccess.ReadHash(httpContext);
+                    var found = tokenHash is null
+                        ? null
+                        : await {{TokenQuery}}
+                            .Where(item => item.TokenHash == tokenHash)
+                            .Select(item => new { item.{{_key}}{{(_tenant ? ", item.TenantId" : string.Empty)}} })
+                            .FirstOrDefaultAsync(cancellationToken);
+
+                    if (found is null)
+                    {
+                        return {{Problems}}.TokenInvalid(messages);
+                    }
+            {{identity}}
+                    return await {{method}}(found.{{_key}}, {{(request is null ? string.Empty : "request, ")}}apply, httpContext, {{(Sliding ? "timeProvider, " : string.Empty)}}contexts, messages, cancellationToken);
                 }
 
             """);

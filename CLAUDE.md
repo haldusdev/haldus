@@ -190,7 +190,7 @@ Bunlar kullanıcıyla kararlaştırıldı; yeniden sorma.
 ## Aşamalar
 
 On aşamanın tamamı bitti (3. aşamaya `.Searchable()`, 8. aşamaya fiziksel temizlik de eklendi). 10. aşamanın
-sonucu `reports/Haldus taksonomi sınaması.md` dosyasındadır: araştırmadaki 59 varlığın (bugünkü sayımla) 33'ü temiz, 20'si
+sonucu `reports/Haldus taksonomi sınaması.md` dosyasındadır: araştırmadaki 59 varlığın (bugünkü sayımla) 35'i temiz, 18'i
 kısmen ifade ediliyor, 6'sı için gereken özellik yok. Aynı veri `tests/Haldus.Generators.Tests/TaxonomyTests.cs`
 içinde derlenir; yeni bir archetype veya trait bir satırı kapatıyorsa ikisini birlikte güncelle.
 
@@ -212,7 +212,7 @@ içinde derlenir; yeni bir archetype veya trait bir satırı kapatıyorsa ikisin
 Kullanıcı 2026-11-24'te onayladı. Kapsamı araştırma raporunun v2 listesi, ilk sürümden kalan küçük kalemler
 ve sınamada çıkan küçük eksiklerdir. Raporun v3 listesi (`MapBalance`, `MapChangeSet`, birden çok durum
 ekseni, çeviri, saklama süresi, okundu takibi) ve tekrar serisi bu planın dışındadır. Her aşama testleriyle
-birlikte ayrı commit olur; 11–14. aşamalar bitti, sıradaki 15.
+birlikte ayrı commit olur; 11–15. aşamalar bitti, sıradaki 16.
 
 11. Sahiplik: `OwnedByCurrentUser`, `MapAssociation().ForCurrentUser()`
 12. Alan eklentileri: `Metadata`, yalnızca oluştururken yazılan alan, `NaturalKey`, `KeyStrategy`, liste
@@ -564,6 +564,30 @@ netleştirilecek.
     bağlamda durmalıdır. İzdüşüm sınıfı handler'lar gibi bulunur ve kaydedilir; eksikse hata ilk yazmada verilir
     (uygulama açılırken değil). Baştan yeniden kurma ve kaynağın değişmesi/silinmesi kapsam dışıdır; kilit
     kaynak başına olduğu için yazma hacmi yüksek kaynaklarda darboğaz olur.
+- **Sırlar.** `LifecycleReader` `SecretOnce`, `Rotatable` ve `TokenAccess` bildirimlerini okur (`SecretModel`,
+  `TokenModel`); alanları (`SecretHash`, `SecretHint`, `SecretCipher`, `PreviousSecret*`, `TokenHash`)
+  `ExtraMembers`'tadır ve entity ilgili arayüzü uygular (`IHasSecret`, `IHasRotatingSecret`,
+  `IHasRecoverableSecret`, `IHasAccessToken`).
+  - Sırrın kendisi hiçbir alana yazılmaz. Oluşturma ucunda üretilir (`SecretVariables`), kayda özeti yazılır
+    (`SecretAssignments`) ve yanıta `ToResponse(entity) with { Secret = secret }` ile eklenir; yanıt DTO'sundaki
+    `Secret` / `Token` alanı null iken JSON'a hiç yazılmaz. **Bir yanıta sır eklerken yalnızca bu yolu kullan;
+    sırrı entity'ye ya da `ToResponse`'a koyma.**
+  - Değer yalnızca tekil oluşturma yanıtında gösterilebildiği için `SecretOnce` ve `TokenAccess`, kayıt oluşturan
+    diğer yollarla (`Batch`, `Cloneable`, `Previewable`, `Reversible`, `Supersedes`, `CreatedFrom`) birleşmez.
+  - Özet SHA-256'dır: sır 256 bit rastgele olduğu için yavaş bir parola özetine gerek yoktur ve özet aramada da
+    kullanılır (benzersiz indeks). Döndürme kaydın içeriğine dokunmadığı için düzenleme durum kuralına bağlı
+    değildir (sızmış bir sır her durumda kapatılabilmelidir); sürüm (`If-Match`) ve kapanmış kayıt korumasına ise
+    bağlıdır.
+  - Geri okunabilen sır `HaldusSecretProtection` ile şifrelenir (amaç dizesi entity tipini içerir); `AddHaldus`
+    `AddDataProtection()` çağırır. Anahtarların kalıcılığı uygulamanın işidir.
+  - **Token uçları oturumsuzdur.** `HaldusTokenAccess` metadatası taşırlar ve `AllowAnonymous` ile işaretlenirler;
+    kiracı ve kullanıcı zorunluluğu filtreleri bu metadatayı görünce geçer. Kayıt token'ın özetiyle, yalnızca
+    kiracı filtresi kaldırılarak bulunur (silinmiş ve süresi dolmuş kayıt bulunmaz). Token ile çalışan geçiş,
+    kaydı bulduktan sonra asıl geçiş metodunu çağırır (kuralları aynen geçerlidir) ve, kayıt kiracıya aitse,
+    `HaldusAmbient` ile o kiracı adına çalışır. Hangi geçişlerin token ile çalıştığı derleme zamanında sabittir;
+    listede olmayan geçişin token adresi yoktur. Token ebeveyn altındaki ve kullanıcıya ait kaynaklarla
+    birleşmez (görünürlükleri, token'ı taşıyanın sahip olmadığı bir kimliğe bağlıdır). Bilinen sınır: token
+    kullanılınca kendiliğinden geçersiz olmaz; ömrünü `Expiring` ve durum makinesi belirler. Oran sınırlama yoktur.
 - **Yanıt izdüşümü tek yerdedir:** `ResourceEmitter.ResponseAssignments`. Bir kaynağın yanıtını döndüren her
   üretici (kendi uçları, bağ listeleri) onu kullanır; elle yazılan bir izdüşüm, yanıta sonradan eklenen zorunlu
   alanlarda (durum, numara, gömülü satırlar) derlenmez.
