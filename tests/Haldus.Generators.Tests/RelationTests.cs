@@ -172,8 +172,9 @@ public sealed class RelationTests
         // Geri alınabilir silme kaydı fiziksel olarak kaldırmaz, dolayısıyla çakışma oluşmaz; çakışma ancak
         // kalıcı silmede ortaya çıkar.
         var softEndpoints = soft.Sources["Shop.Category.Endpoints.g.cs"];
-        var delete = Handler(softEndpoints, "DeleteAsync(", "RestoreAsync(");
-        var purge = Handler(softEndpoints, "PurgeAsync(", "ToResponse(");
+        // "> " öneki handler bildirimini seçer; yoksa ExecuteDeleteAsync çağrısı da eşleşirdi.
+        var delete = Handler(softEndpoints, "> DeleteAsync(", "> RestoreAsync(");
+        var purge = Handler(softEndpoints, "> PurgeAsync(", " ToResponse(");
 
         Assert.DoesNotContain("InUse", delete);
         Assert.Contains("catch (global::System.Data.Common.DbException)", purge);
