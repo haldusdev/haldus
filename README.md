@@ -424,6 +424,8 @@ app.MapCrud<Reply>().Under<Discussion>();
 Toplanan alanlar yalnızca yanıtta görünür, süzülebilir ve sıralanabilir. Alt kayıt hangi koddan yazılırsa yazılsın
 (uç, toplu işlem, iş, uygulamanın kendi kodu) üst kaydın alanı aynı transaction içinde **baştan sayılır**; artırıp
 azaltılmaz, bu yüzden kaçırılmış bir yazma kalıcı bir yanlış bırakmaz. Silinmiş ve süresi dolmuş kayıtlar sayılmaz.
+Kiracıya ait kayıtlar genel bir kayıtta toplanamaz; kullanıcılara ait kayıtların ortak bir kayıtta toplanması (beğeni
+sayısı gibi) `acrossOwners: true` ile açıkça istenmelidir, çünkü toplam o kaydı gören herkese açılır.
 Üst kayıt `IComputed` uygularsa toplamdan sonra `Compute()` yeniden çağrılır; "ödenen tutardan ödeme durumu" gibi
 türetilmiş durumlar böyle yazılır:
 

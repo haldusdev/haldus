@@ -203,6 +203,10 @@ public sealed class TrackingTests
     [InlineData("app.MapCrud<Discussion>().Counts<Reply>();", "HALDUS009", "Reply")]
     [InlineData("app.MapCrud<Discussion>().Counts<Reply>(); app.MapCrud<Reply>();", "HALDUS007", "needs 'Reply' to refer to 'Discussion'")]
     [InlineData("app.MapCrud<Discussion>().Counts<Reply>(); app.MapCrud<Reply>().References<Discussion>().MultiTenant();", "HALDUS007", "would add up the records of every tenant")]
+    [InlineData("app.MapCrud<Discussion>().Counts<Reply>(); app.MapCrud<Reply>().Under<Discussion>().OwnedByCurrentUser(underMe: false);", "HALDUS007", "pass 'acrossOwners: true' if that is intended")]
+    [InlineData("app.MapCrud<Discussion>().Sums<Reply>(reply => reply.Score); app.MapCrud<Reply>().References<Discussion>().OwnedByCurrentUser();", "HALDUS007", "pass 'acrossOwners: true' if that is intended")]
+    [InlineData("app.MapCrud<Discussion>().OwnedByCurrentUser(); app.MapCrud<Notification>().Counts<Reply>(); app.MapCrud<Reply>().Under<Discussion>().References<Notification>();", "HALDUS007", "pass 'acrossOwners: true' if that is intended")]
+    [InlineData("var open = true; app.MapCrud<Discussion>().Counts<Reply>(acrossOwners: open); app.MapCrud<Reply>().References<Discussion>();", "HALDUS010", "must be readable at compile time")]
     [InlineData("app.MapCrud<Discussion>().Sums<Reply>(reply => reply.Text); app.MapCrud<Reply>().References<Discussion>();", "HALDUS010", "needs a non-nullable decimal, int, long or double property")]
     [InlineData("app.MapCrud<Discussion>().Sums<Reply>(reply => reply.Weight); app.MapCrud<Reply>().References<Discussion>();", "HALDUS010", "needs a non-nullable decimal, int, long or double property")]
     [InlineData("app.MapCrud<Discussion>().Counts<Reply>(into: \"Total\").Sums<Reply>(reply => reply.Score, into: \"Total\"); app.MapCrud<Reply>().References<Discussion>();", "HALDUS010", "'Total' cannot name the field")]
@@ -222,10 +226,16 @@ public sealed class TrackingTests
             app.MapCrud<Reply>().Under<Discussion>();
             """).AssertCompiles();
 
-        // Kullanıcıya ait kayıtlar herkesin gördüğü bir kayıtta sayılabilir (beğeni sayısı gibi).
+        // Kullanıcıya ait kayıtlar herkesin gördüğü bir kayıtta ancak açıkça istenirse sayılır (beğeni sayısı gibi).
         Run("""
-            app.MapCrud<Discussion>().Counts<Reply>();
+            app.MapCrud<Discussion>().Counts<Reply>(acrossOwners: true).Sums<Reply>(reply => reply.Score, "Score", acrossOwners: true);
             app.MapCrud<Reply>().Under<Discussion>().OwnedByCurrentUser(underMe: false);
+            """).AssertCompiles();
+
+        // Üst kayıt da aynı kullanıcıya aitse açılan bir şey yoktur: kaydı yalnızca sahibi görür.
+        Run("""
+            app.MapCrud<Discussion>().OwnedByCurrentUser().Counts<Reply>();
+            app.MapCrud<Reply>().Under<Discussion>();
             """).AssertCompiles();
     }
 

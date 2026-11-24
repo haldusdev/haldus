@@ -696,8 +696,10 @@ aşamalardaki gibi, sorulmadan önerilen seçenekle verildi. Her aşama testleri
   - Sayılan kayıtlar `HaldusRollups.Children<T>`'tır: kimliğe bağlı filtreler (kiracı, sahip, ebeveyn) kalkar, çünkü
     sayı alt kaydı yazanın neyi görebildiğine bağlı olamaz; silinmiş, süresi dolmuş ve yayın kopyası olan kayıtlar
     sayılmaz. **Bu yüzden kiracıya ait kayıtlar genel bir kayıtta toplanamaz** (`HALDUS007`): herkesin gördüğü alan
-    her kiracının kaç kaydı olduğunu ötekilere gösterirdi. Kullanıcıya ait kayıtların ortak bir kayıtta sayılması
-    (beğeni sayısı) bilerek serbesttir.
+    her kiracının kaç kaydı olduğunu ötekilere gösterirdi. Kullanıcıya ait kayıtların (kendisi sahipli veya sahipli
+    bir ebeveynin altında; `ResourceLinker.IsOwnerScoped`) o kullanıcıya ait olmayan bir kayıtta toplanması da aynı
+    nedenle reddedilir; beğeni sayısı gibi bilerek istenen durumlar `acrossOwners: true` ile açıkça yazılır
+    (güvenlik incelemesinde çıktı; ilk yazımda örtük olarak serbestti).
   - Alanlar `ExecuteUpdate` ile yazılır: üst kaydın `UpdatedAt` alanı, sürümleri, onayı ve değişiklik akışı
     etkilenmez (satır sürümü, xmin, ilerler). Üst kayıt `IComputed` ise ardından satırlarıyla yüklenir, `Compute()`
     çağrılır ve değiştiyse sıradan bir kaydetmeyle yazılır (o zaman bütün kurallar işler); eşzamanlılık çakışmasında

@@ -398,6 +398,7 @@ internal static class MapCallParser
 
                     string? field = null;
                     string? into = null;
+                    var acrossOwners = false;
                     ITypeSymbol? fieldType = null;
 
                     foreach (var argument in call.ArgumentList.Arguments)
@@ -407,9 +408,25 @@ internal static class MapCallParser
                             field = member;
                             fieldType = known ? PublicInstanceProperties(child!).FirstOrDefault(property => property.Name == member)?.Type : null;
                         }
-                        else if (context.SemanticModel.GetConstantValue(argument.Expression, cancellationToken) is { HasValue: true, Value: string text })
+                        else if (context.SemanticModel.GetConstantValue(argument.Expression, cancellationToken) is { HasValue: true } constant)
                         {
-                            into = text;
+                            switch (constant.Value)
+                            {
+                                case string text:
+                                    into = text;
+                                    break;
+                                case bool allowed:
+                                    acrossOwners = allowed;
+                                    break;
+                            }
+                        }
+                        else
+                        {
+                            // Okunamayan bir argüman sessizce yok sayılsaydı, alanın adı veya izin yanlış anlaşılırdı.
+                            diagnostics.Add(new DiagnosticInfo(
+                                "HALDUS010",
+                                LocationInfo.From(argument.GetLocation()),
+                                new EquatableArray<string>([$"The arguments of {rollupCall.Identifier.ValueText}<{childName}>() must be readable at compile time"])));
                         }
                     }
 
@@ -435,7 +452,10 @@ internal static class MapCallParser
                         known ? child!.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) : null,
                         sum ? field : null,
                         into,
-                        LocationInfo.From(counted[0].GetLocation())));
+                        LocationInfo.From(counted[0].GetLocation()))
+                    {
+                        AcrossOwners = acrossOwners,
+                    });
 
                     // Alan yalnızca yanıtta görünür; değeri bağlı kayıtlar kaydedildikçe hesaplanır.
                     lifecycle.Members.Add(new TraitMember(

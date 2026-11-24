@@ -159,6 +159,14 @@ internal static class ResourceLinker
                     "HALDUS007",
                     $"{declaration} would add up the records of every tenant on '{resource.EntityName}', which is not tenant-scoped; make '{resource.EntityName}' MultiTenant() or count a resource that is not");
             }
+            else if (!rollup.AcrossOwners && IsOwnerScoped(child, resources, byType) && !IsOwnerScoped(resource, resources, byType))
+            {
+                // Başkalarının göremediği kayıtların sayısı veya toplamı, üst kaydı gören herkese açılırdı. Beğeni sayısı
+                // gibi bilerek istenen durumlar açıkça yazılmalıdır.
+                Fail(
+                    "HALDUS007",
+                    $"{declaration} would show everyone who can see '{resource.EntityName}' a figure made of records that belong to individual users; pass 'acrossOwners: true' if that is intended");
+            }
             else
             {
                 resolved.Add(rollup with { ChildType = child.QualifiedName, ForeignKey = reference.PropertyName });
@@ -166,6 +174,25 @@ internal static class ResourceLinker
         }
 
         return resolved;
+    }
+
+    /// <summary>
+    /// Kaynağın kayıtları tek bir kullanıcıya mı ait: ya kendisi sahiplidir ya da sahipli bir ebeveynin altındadır.
+    /// </summary>
+    private static bool IsOwnerScoped(
+        ResourceModel resource,
+        IReadOnlyList<ResourceModel> resources,
+        Dictionary<string, ResourceModel> byType,
+        int depth = 0)
+    {
+        if (resource.Has(Traits.Owned))
+        {
+            return true;
+        }
+
+        return depth < 8 && resource.ReferenceDeclarations
+            .Where(declaration => declaration.Kind == ReferenceKind.Parent)
+            .Any(parent => FindTarget(parent, resources, byType) is { } target && IsOwnerScoped(target, resources, byType, depth + 1));
     }
 
     /// <summary>

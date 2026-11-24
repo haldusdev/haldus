@@ -703,7 +703,14 @@ internal sealed record RollupModel(
     string? Field,
     string Into,
     LocationInfo Location,
-    string ForeignKey = "");
+    string ForeignKey = "")
+{
+    /// <summary>
+    /// Kullanıcılara ait kayıtların, o kullanıcılara ait olmayan bir kayıtta toplanmasına açıkça izin verildi mi
+    /// (<c>acrossOwners: true</c>; beğeni sayısı gibi).
+    /// </summary>
+    public bool AcrossOwners { get; init; }
+}
 
 /// <summary><c>MapFile</c> ile bildirilen dosya kaynağının içerik kuralları.</summary>
 /// <param name="MaxBytes">Kabul edilen en büyük içerik.</param>

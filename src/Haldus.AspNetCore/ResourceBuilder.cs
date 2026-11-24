@@ -86,7 +86,12 @@ public sealed class ResourceBuilder<TEntity>(RouteGroupBuilder group, IEndpointR
     /// <c>References</c> veya <c>AttachedTo</c> ile bağlı olmalıdır.
     /// </summary>
     /// <param name="into">Alanın adı; verilmezse alt kaynağın adından türetilir.</param>
-    public ResourceBuilder<TEntity> Counts<TChild>(string? into = null)
+    /// <param name="acrossOwners">
+    /// Alt kayıtlar kullanıcılara aitse (<c>OwnedByCurrentUser</c>) ve bu kayıt o kullanıcılara ait değilse, sayı
+    /// başkalarının göremediği kayıtlardan oluşur ve bu kaydı gören herkese açılır. Beğeni sayısı gibi bilerek
+    /// istenen durumlarda <c>true</c> verilir; verilmezse bildirim derlenmez.
+    /// </param>
+    public ResourceBuilder<TEntity> Counts<TChild>(string? into = null, bool acrossOwners = false)
         where TChild : class => this;
 
     /// <summary>
@@ -96,7 +101,8 @@ public sealed class ResourceBuilder<TEntity>(RouteGroupBuilder group, IEndpointR
     /// </summary>
     /// <param name="field">Toplanan sayısal alan.</param>
     /// <param name="into">Alanın adı; verilmezse alt kaynağın ve alanın adından türetilir.</param>
-    public ResourceBuilder<TEntity> Sums<TChild>(Expression<Func<TChild, object?>> field, string? into = null)
+    /// <param name="acrossOwners"><see cref="Counts{TChild}"/> ile aynı: kullanıcılara ait kayıtların ortak bir kayıtta toplanmasına izin verir.</param>
+    public ResourceBuilder<TEntity> Sums<TChild>(Expression<Func<TChild, object?>> field, string? into = null, bool acrossOwners = false)
         where TChild : class => this;
 
     /// <summary>

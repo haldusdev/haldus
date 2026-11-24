@@ -20,8 +20,9 @@ public static class HaldusRollups
     private static readonly string[] VisibilityFields = [nameof(ISoftDeletable.DeletedAt), "ExpiresAt"];
 
     // Sayı, isteği yapanın kim olduğuna göre değişmemelidir; kaydı yalnızca kimliğe göre gizleyen filtreler kalkar.
-    private static readonly string[] IdentityFilters =
-        [HaldusFilters.Tenant, HaldusFilters.Owner, HaldusFilters.Parent, HaldusFilters.Association];
+    // Kiracılar arası toplama derleme zamanında reddedilir; kullanıcılar arası toplama ise ancak açıkça
+    // istendiyse (acrossOwners) derlenir. Burada kaldırılan filtreler o kararların çalışma zamanındaki karşılığıdır.
+    private static readonly string[] IdentityFilters = [HaldusFilters.Tenant, HaldusFilters.Owner, HaldusFilters.Parent];
 
     /// <summary>
     /// Bir üst kaydın, bir alt kaynaktan toplanan alanlarını bildirir. Üretilen modül kodu çağırır.
