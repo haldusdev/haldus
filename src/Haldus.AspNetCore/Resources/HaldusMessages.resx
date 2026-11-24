@@ -39,6 +39,18 @@
   <data name="Hierarchy.Cycle" xml:space="preserve">
     <value>A record cannot be placed under itself or under one of its own descendants.</value>
   </data>
+  <data name="Duplicate.Title" xml:space="preserve">
+    <value>Already exists</value>
+  </data>
+  <data name="Duplicate.Detail" xml:space="preserve">
+    <value>Another {0} already has the {1} '{2}'.</value>
+  </data>
+  <data name="Sort.Invalid" xml:space="preserve">
+    <value>Cannot sort by '{0}'. Sortable fields: {1}.</value>
+  </data>
+  <data name="Metadata.Invalid" xml:space="preserve">
+    <value>The field {0} may hold at most {1} entries; keys must be 1 to {2} characters and values at most {3} characters.</value>
+  </data>
   <data name="InUse.Title" xml:space="preserve">
     <value>Resource is in use</value>
   </data>

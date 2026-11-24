@@ -33,6 +33,27 @@ internal sealed record ResourceModel(
     /// <summary>Hedefinin anahtar tipi ve adı çözülmüş referanslar.</summary>
     public EquatableArray<ResolvedReference> References { get; init; } = EquatableArray<ResolvedReference>.Empty;
 
+    /// <summary><c>.Sortable(...)</c> içinde sayılan, henüz doğrulanmamış alanlar.</summary>
+    public EquatableArray<SearchFieldRequest> SortRequests { get; init; } = EquatableArray<SearchFieldRequest>.Empty;
+
+    /// <summary>Liste ucunun sıralanabildiği alanlar; bağlama adımı doldurur.</summary>
+    public EquatableArray<SearchField> SortFields { get; init; } = EquatableArray<SearchField>.Empty;
+
+    /// <summary><c>.CreateOnly(...)</c> içinde sayılan alanlar; bağlama adımı ilgili alanları işaretler.</summary>
+    public EquatableArray<SearchFieldRequest> CreateOnlyRequests { get; init; } = EquatableArray<SearchFieldRequest>.Empty;
+
+    /// <summary><c>.NaturalKey(...)</c> ile gösterilen, henüz doğrulanmamış alan.</summary>
+    public SearchFieldRequest? NaturalKeyRequest { get; init; }
+
+    /// <summary>Kaydın doğal anahtarı; bağlama adımı doldurur.</summary>
+    public NaturalKeyModel? NaturalKey { get; init; }
+
+    /// <summary>Sunucunun ürettiği anahtarın biçimi (<c>.KeyStrategy(...)</c>).</summary>
+    public KeyGeneration KeyGeneration { get; init; }
+
+    /// <summary>Önekli anahtarın öneki: <c>ord</c>.</summary>
+    public string? KeyPrefix { get; init; }
+
 
     /// <summary><c>MapDetail</c> ile bildirildiyse sahibi olan kaynağın adı ve (çözülebildiyse) tam tip adı.</summary>
     public string? DetailOfName { get; init; }
@@ -132,6 +153,23 @@ internal sealed record ResourceModel(
     public bool Has(Operations operation) => (Operations & operation) == operation;
 }
 
+/// <summary>Sunucunun ürettiği anahtarın biçimi.</summary>
+internal enum KeyGeneration
+{
+    /// <summary>Zamana göre sıralı GUID (v7); varsayılan.</summary>
+    Sequential,
+
+    /// <summary>Rastgele GUID (v4).</summary>
+    Random,
+
+    /// <summary>Önekli metin kimlik.</summary>
+    Prefixed,
+}
+
+/// <summary>Kaydın doğal anahtarı: benzersizdir ve kayıt onunla da okunabilir.</summary>
+/// <param name="RouteConstraint">Adresteki değerin rota kısıtı (<c>:int</c>, <c>:guid</c> veya boş).</param>
+internal sealed record NaturalKeyModel(string PropertyName, string Type, string RouteConstraint);
+
 internal enum IdKind
 {
     Guid,
@@ -210,6 +248,9 @@ internal enum Traits
 
     /// <summary>Kullanıcıya ait kaynak <c>/me</c> altına alınmaz; adresi değişmez.</summary>
     OwnedPlainRoute = 512,
+
+    /// <summary>Kayıt serbest bir anahtar-değer çantası taşır.</summary>
+    Metadata = 1024,
 }
 
 /// <summary>Üretilecek standart işlemler. Üye adları <c>Haldus.CrudOperation</c> ile aynıdır.</summary>
@@ -237,9 +278,13 @@ internal sealed record PropertyModel(
     string ValueType,
     EquatableArray<AttributeModel> ValidationAttributes,
     bool IsGenerated = false,
-    bool IsEmbedded = false)
+    bool IsEmbedded = false,
+    bool IsCreateOnly = false)
 {
     public bool IsNonNullable => IsNonNullableReference || IsNonNullableValue;
+
+    /// <summary>Alan güncelleme isteklerinde yer alır mı: yazılabilir ve yalnızca oluştururken yazılan bir alan değil.</summary>
+    public bool IsUpdatable => IsWritable && !IsCreateOnly;
 }
 
 internal enum ReferenceKind

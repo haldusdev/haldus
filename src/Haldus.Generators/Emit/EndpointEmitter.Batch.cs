@@ -193,10 +193,9 @@ internal sealed partial class EndpointEmitter
                     private static async {{Task}}<{{Problem}}?> BatchCreateItemAsync(
                 {{ScopeParameter}}        {{item}} request,
                 {{DbContextParameter}}{{SavedParameter}}{{time}}{{ContextsParameter}}{{MessagesParameter}}{{CancellationParameter}}    {
-                {{ReferenceChecks(patch: false)}}        var entity = new {{_entity}} { {{CreateInitializer()}} };
+                {{WriteChecks(patch: false, creating: true)}}        var entity = new {{_entity}} { {{CreateInitializer()}} };
                 {{CreateDetails()}}{{Compute()}}{{numbering}}        context.Set<{{_entity}}>().Add(entity);
-                        await context.SaveChangesAsync(cancellationToken);
-                        saved.Add(entity);
+                {{SaveNew()}}        saved.Add(entity);
                         return null;
                     }
 
@@ -218,7 +217,7 @@ internal sealed partial class EndpointEmitter
                             return {{NotFound}};
                         }
 
-                {{StateGuard(_resource.Workflow?.EditableIn, "update")}}{{ReferenceChecks(patch: false)}}{{CycleCheck(patch: false)}}{{UpdateAssignments()}}
+                {{StateGuard(_resource.Workflow?.EditableIn, "update")}}{{WriteChecks(patch: false, creating: false)}}{{CycleCheck(patch: false)}}{{UpdateAssignments()}}
                 {{SyncDetails(patch: false)}}{{Slide()}}{{Compute()}}{{Save()}}        saved.Add(entity);
                         return null;
                     }

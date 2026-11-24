@@ -102,6 +102,26 @@ public static class ResourceBuilderTraitExtensions
         int maxItems = HaldusBatch.DefaultMaxItems)
         where TEntity : class => builder;
 
+    /// <summary>
+    /// Kayda serbest bir anahtar-değer çantası ekler (<c>Metadata</c>): değerler metindir ve Haldus anlamlarına
+    /// bakmaz. <c>PATCH</c> çantayı birleştirir (gönderilen anahtar eklenir veya değişir, <c>null</c> gönderilen
+    /// silinir); <c>PUT</c> tamamını değiştirir.
+    /// </summary>
+    public static ResourceBuilder<TEntity> Metadata<TEntity>(this ResourceBuilder<TEntity> builder)
+        where TEntity : class => builder;
+
+    /// <summary>Sunucunun ürettiği anahtarın biçimini seçer; varsayılanı zamana göre sıralı GUID'dir.</summary>
+    /// <param name="strategy">Anahtarın biçimi.</param>
+    /// <param name="prefix">
+    /// <see cref="Haldus.KeyStrategy.Prefixed"/> için önek (<c>"ord"</c> → <c>ord_01j9…</c>): küçük harfle başlar,
+    /// küçük harf ve rakamdan oluşur, en çok 12 karakterdir. Derleme zamanında okunabilmesi için sabit olmalıdır.
+    /// </param>
+    public static ResourceBuilder<TEntity> KeyStrategy<TEntity>(
+        this ResourceBuilder<TEntity> builder,
+        KeyStrategy strategy,
+        string? prefix = null)
+        where TEntity : class => builder;
+
     /// <summary>Verilen standart işlemlerin endpoint'lerini üretmez.</summary>
     public static ResourceBuilder<TEntity> Without<TEntity>(this ResourceBuilder<TEntity> builder, params CrudOperation[] operations)
         where TEntity : class => builder;

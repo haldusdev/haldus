@@ -19,6 +19,12 @@ public static class CatalogEndpoints
                 product => product.Description,
                 product => product.CategoryId)
 
+            // Liste sıralanabilir: GET /products?sort=-price,name
+            .Sortable(product => product.Name, product => product.Price)
+
+            // Serbest anahtar-değer çantası; PATCH birleştirir, PUT tamamını değiştirir.
+            .Metadata()
+
             // Toplu uçlar: POST /products/batch-get, batch-create, batch-update, batch-delete.
             // Varsayılan atomiktir: bir öğe reddedilirse hiçbiri kaydedilmez.
             .Batch();

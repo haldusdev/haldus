@@ -1,4 +1,5 @@
 using System.Text;
+using Haldus.Generators.Infrastructure;
 using Haldus.Generators.Model;
 
 namespace Haldus.Generators.Emit;
@@ -15,6 +16,7 @@ internal static class ResourceEmitter
     /// <summary>Bir namespace'i, ardından tip adı yazılabilecek tam önek haline getirir.</summary>
     public static string Prefix(this string @namespace) => @namespace.Length == 0 ? "global::" : $"global::{@namespace}.";
     private const string NotNullWhenSetAttributeName = "global::Haldus.NotNullWhenSetAttribute";
+    private const string MetadataAttributeName = "global::Haldus.MetadataAttribute";
 
     public static string QualifiedName(ResourceModel resource, string entityNamespace) =>
         entityNamespace.Length == 0
@@ -51,7 +53,7 @@ internal static class ResourceEmitter
             interfaces.Add(trait.Interface);
             members.AddRange(trait.Members
                 .Where(member => !declared.Contains(member.Name))
-                .Select(member => $"    public {member.Type} {member.Name} {{ get; set; }}{(member.Type == "string" ? " = \"\";" : string.Empty)}"));
+                .Select(member => $"    public {member.Type} {member.Name} {{ get; set; }}{TraitCatalog.Initializer(member.Type)}"));
         }
 
         if (resource.Archetype == Archetype.Job)
@@ -154,7 +156,7 @@ internal static class ResourceEmitter
 
         if (resource.Has(Operations.Update))
         {
-            AppendRequest(builder, $"{WriteOperationName(resource)}{resource.EntityName}Request", resource, detailRequests: "Update");
+            AppendRequest(builder, $"{WriteOperationName(resource)}{resource.EntityName}Request", resource, detailRequests: "Update", forUpdate: true);
         }
 
         if (resource.Has(Operations.Patch))
@@ -311,7 +313,7 @@ internal static class ResourceEmitter
 
         if (resource.Has(Operations.Update))
         {
-            AppendRequest(builder, $"BatchUpdate{entity}Item", resource, detailRequests: "Update", withKey: true);
+            AppendRequest(builder, $"BatchUpdate{entity}Item", resource, detailRequests: "Update", withKey: true, forUpdate: true);
             AppendBatchRequest(builder, $"BatchUpdate{entity}Request", $"BatchUpdate{entity}Item");
         }
     }
@@ -326,6 +328,16 @@ internal static class ResourceEmitter
         builder.Append("}\n");
     }
 
+    /// <summary>Doğal anahtarın benzersiz indeksinin adı; kaydetme hatası bu adla tanınır.</summary>
+    public static string NaturalKeyIndex(ResourceModel resource)
+    {
+        var name = $"UX_{Haldus.Generators.Infrastructure.Naming.Pluralize(resource.EntityName)}_{resource.NaturalKey!.PropertyName}";
+
+        // PostgreSQL daha uzun adları sessizce keser; kesilmiş ad hata metnindekiyle eşleşmezdi.
+        return name.Length <= 63 ? name : name.Substring(0, 63);
+    }
+
+    /// <param name="forUpdate">İstek var olan bir kaydı mı değiştiriyor; öyleyse yalnızca oluştururken yazılan alanlar yer almaz.</param>
     /// <param name="withKey">İstek, hangi kaydı hedeflediğini kendi taşır mı (toplu güncelleme öğesi).</param>
     /// <param name="detailRequests">
     /// Gömülü detayların bu istekte hangi satır tipiyle taşınacağı: oluşturmada <c>Create</c> (isteğe bağlı),
@@ -338,7 +350,8 @@ internal static class ResourceEmitter
         ResourceModel resource,
         string? detailRequests,
         bool withOptionalId = false,
-        bool withKey = false)
+        bool withKey = false,
+        bool forUpdate = false)
     {
         builder.Append('\n');
         builder.Append($"public sealed partial record {name}\n");
@@ -373,7 +386,7 @@ internal static class ResourceEmitter
                 : $"    [{RequiredAttributeName}]\n    public {itemType} {detail.CollectionName} {{ get; init; }} = default!;\n");
         }
 
-        foreach (var property in resource.Properties.Where(property => property.IsWritable))
+        foreach (var property in resource.Properties.Where(property => forUpdate ? property.IsUpdatable : property.IsWritable))
         {
             if (!first)
             {
@@ -391,6 +404,14 @@ internal static class ResourceEmitter
             builder.Append($"    public {property.Type} {property.Name} {{ get; init; }}{initializer}\n");
         }
 
+        if (resource.Has(Traits.Metadata))
+        {
+            // Çanta isteğe bağlıdır: gönderilmezse oluşturmada boş başlar, tam değiştirmede boşaltılır.
+            builder.Append(first ? string.Empty : "\n");
+            builder.Append($"    [{MetadataAttributeName}]\n");
+            builder.Append($"    public {TraitCatalog.MetadataType}? Metadata {{ get; init; }}\n");
+        }
+
         builder.Append("}\n");
     }
 
@@ -403,8 +424,9 @@ internal static class ResourceEmitter
     {
         // Gömülü detay koleksiyonu da gönderildiyse eşitlenir, gönderilmediyse satırlara dokunulmaz.
         var writable = resource.Properties
-            .Where(property => property.IsWritable)
+            .Where(property => property.IsUpdatable)
             .Concat(resource.Details.Select(DetailCollection))
+            .Concat(resource.Has(Traits.Metadata) ? [MetadataChanges()] : Array.Empty<PropertyModel>())
             .ToArray();
 
         builder.Append('\n');
@@ -465,6 +487,26 @@ internal static class ResourceEmitter
         builder.Append("        _ => false,\n");
         builder.Append("    };\n");
         builder.Append("}\n");
+    }
+
+    /// <summary>
+    /// PATCH isteğindeki metadata değişiklikleri: değeri <c>null</c> olan anahtar silinir, bu yüzden değerler
+    /// burada null olabilir.
+    /// </summary>
+    private static PropertyModel MetadataChanges()
+    {
+        const string Type = "global::System.Collections.Generic.Dictionary<string, string?>";
+
+        return new PropertyModel(
+            "Metadata",
+            Type,
+            NullableType: Type + "?",
+            IsWritable: true,
+            IsNonNullableReference: false,
+            IsNonNullableValue: false,
+            SearchKind.Equality,
+            Type,
+            new[] { new AttributeModel(MetadataAttributeName, IsRequired: false) }.ToEquatableArray());
     }
 
     /// <summary>Gömülü bir detayın koleksiyonunu, PATCH isteğinde izlenen bir alan olarak tarif eder.</summary>

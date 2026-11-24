@@ -20,7 +20,7 @@ public sealed class EntityActionEndpointTests(ShopFixture fixture)
     public async Task ActionWithALambda_ChangesTheRecordAndReturnsIt()
     {
         var coupon = await ReadAsync<CouponResponse>(
-            await SendAsync(HttpMethod.Post, "/coupons", new { code = "ONCE", percent = 10, maxRedemptions = 1 }));
+            await SendAsync(HttpMethod.Post, "/coupons", new { code = $"ONCE-{Guid.NewGuid():N}", percent = 10, maxRedemptions = 1 }));
 
         var redeemed = await ReadAsync<CouponResponse>(await SendAsync(HttpMethod.Post, $"/coupons/{coupon.Id}/redeem"));
         var persisted = await ReadAsync<CouponResponse>(await SendAsync(HttpMethod.Get, $"/coupons/{coupon.Id}"));
@@ -34,7 +34,7 @@ public sealed class EntityActionEndpointTests(ShopFixture fixture)
     public async Task ActionThatRejects_SavesNothingAndExplainsWhyInTheRequestsLanguage()
     {
         var coupon = await ReadAsync<CouponResponse>(
-            await SendAsync(HttpMethod.Post, "/coupons", new { code = "ONCE", percent = 10, maxRedemptions = 1 }));
+            await SendAsync(HttpMethod.Post, "/coupons", new { code = $"ONCE-{Guid.NewGuid():N}", percent = 10, maxRedemptions = 1 }));
         await SendAsync(HttpMethod.Post, $"/coupons/{coupon.Id}/redeem");
 
         var english = await SendAsync(HttpMethod.Post, $"/coupons/{coupon.Id}/redeem");

@@ -233,6 +233,12 @@ internal static class ModuleEmitter
                 statements.Add("entity.HasKey(global::Haldus.HaldusModel.SingletonKey);");
             }
         }
+        else if (resource.KeyGeneration == KeyGeneration.Prefixed)
+        {
+            // Uçlar anahtarı kendileri atar; uygulamanın kendi eklediği kayıtlar için de aynı biçim üretilir.
+            statements.Add(
+                $"global::Haldus.HaldusDb.ConfigurePrefixedKey(entity.Property(item => item.{resource.KeyName}), {ResourceEmitter.Literal(resource.KeyPrefix!)});");
+        }
         else if (resource.Archetype.HasClientKey())
         {
             // Anahtarı istemci verir; kiracıya bağlı kaynakta aynı anahtar her kiracıda ayrı kullanılabilir.
@@ -267,6 +273,42 @@ internal static class ModuleEmitter
         if (resource.Has(Traits.SoftDeletable))
         {
             statements.Add("entity.HasQueryFilter(global::Haldus.HaldusFilters.SoftDelete, item => item.DeletedAt == null);");
+        }
+
+        if (resource.Has(Traits.Metadata))
+        {
+            statements.Add("global::Haldus.HaldusDb.ConfigureMetadata(entity.Property(item => item.Metadata));");
+        }
+
+        if (resource.NaturalKey is { } naturalKey)
+        {
+            // Anahtar, kaydın kapsamı içinde benzersizdir: aynı değer başka bir kiracıda, başka bir kullanıcıda
+            // veya başka bir ebeveynin altında yeniden kullanılabilir. Silinmiş (geri alınabilir) kayıtlar da
+            // değeri tutar; böylece geri yükleme her zaman mümkündür.
+            var columns = new List<string>();
+
+            if (tenant)
+            {
+                columns.Add("TenantId");
+            }
+
+            if (resource.Has(Traits.Owned))
+            {
+                columns.Add("OwnerId");
+            }
+
+            if (resource.Parent is { } scope)
+            {
+                columns.Add(scope.PropertyName);
+            }
+
+            columns.Add(naturalKey.PropertyName);
+
+            var key = columns.Count == 1
+                ? $"item => item.{columns[0]}"
+                : $"item => new {{ {string.Join(", ", columns.Select(column => $"item.{column}"))} }}";
+
+            statements.Add($"entity.HasIndex({key}).IsUnique().HasDatabaseName(\"{ResourceEmitter.NaturalKeyIndex(resource)}\");");
         }
 
         if (resource.Workflow is not null)

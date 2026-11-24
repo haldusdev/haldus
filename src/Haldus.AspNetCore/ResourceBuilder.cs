@@ -35,6 +35,25 @@ public sealed class ResourceBuilder<TEntity>(RouteGroupBuilder group) : IEndpoin
     public ResourceBuilder<TEntity> Searchable(params Expression<Func<TEntity, object?>>[] fields) => this;
 
     /// <summary>
+    /// Liste ucunu sıralanabilir yapar: <c>?sort=-createdAt,name</c> (baştaki eksi azalan sıradır). Yalnızca
+    /// burada sayılan alanlara göre sıralanabilir; başka bir alan istenirse 400 döner.
+    /// </summary>
+    public ResourceBuilder<TEntity> Sortable(params Expression<Func<TEntity, object?>>[] fields) => this;
+
+    /// <summary>
+    /// Sayılan alanlar yalnızca kayıt oluşturulurken yazılır: <c>POST</c> isteğinde yer alırlar, <c>PUT</c> ve
+    /// <c>PATCH</c> isteklerinde yer almazlar ve sonradan değişmezler.
+    /// </summary>
+    public ResourceBuilder<TEntity> CreateOnly(params Expression<Func<TEntity, object?>>[] fields) => this;
+
+    /// <summary>
+    /// Alanı kaydın doğal anahtarı yapar: değeri (kiracı, sahip ve ebeveyn içinde) benzersizdir, çakışan yazma
+    /// 409 döner ve kayıt bu değerle de okunabilir (<c>GET /coupons/by-code/{code}</c>). Diğer uçlar <c>Id</c>
+    /// ile adreslenmeye devam eder.
+    /// </summary>
+    public ResourceBuilder<TEntity> NaturalKey(Expression<Func<TEntity, object?>> field) => this;
+
+    /// <summary>
     /// Başka bir kaynağa kimlikle referans verir: yabancı anahtar alanı (ör. <c>CategoryId</c>) üretilir ve
     /// yazılırken hedefin var olduğu doğrulanır.
     /// </summary>

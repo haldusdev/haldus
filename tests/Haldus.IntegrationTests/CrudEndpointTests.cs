@@ -37,7 +37,8 @@ public sealed class CrudEndpointTests(ShopFixture fixture)
 
         var product = await _client.GetFromJsonAsync<ProductResponse>($"/products/{created.Id}", CancellationToken);
 
-        Assert.Equal(created, product);
+        // Yanıt bir metadata çantası da taşıyor; record eşitliği onu içeriğiyle değil başvurusuyla karşılaştırır.
+        Assert.Equivalent(created, product, strict: true);
     }
 
     [Fact]

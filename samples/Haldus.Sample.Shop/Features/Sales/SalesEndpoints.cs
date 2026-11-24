@@ -95,8 +95,12 @@ public static class SalesEndpoints
         app.MapAppendOnly<PaymentTransaction>()
             .Under<Payment>();
 
+        // Kupon koduyla da okunur (GET /coupons/by-code/{code}) ve kod benzersizdir. Kod ile indirim oranı
+        // yalnızca oluştururken yazılır; dağıtılmış bir kuponun anlamı sonradan değişmez.
         var coupons = app.MapCrud<Coupon>()
-            .Expiring();
+            .Expiring()
+            .NaturalKey(coupon => coupon.Code)
+            .CreateOnly(coupon => coupon.Code, coupon => coupon.Percent);
 
         // Gövdesiz aksiyon; mantığı lambda'dadır ve reddedilirse hiçbir şey kaydedilmez: POST /coupons/{id}/redeem
         coupons.MapAction("redeem", (coupon, services, _) =>
@@ -122,7 +126,10 @@ public static class SalesEndpoints
             .References<Order>()
             .Workflow<RefundStatus>(initial: RefundStatus.Pending)
             .Numbered("RF-{seq:8}", gapless: false)
-            .Idempotent(required: true);
+            .Idempotent(required: true)
+
+            // İadeyi başlatan sistem kendi notlarını ekleyebilir (ör. destek kaydının numarası).
+            .Metadata();
 
         refunds.MapTransition("cancel", from: RefundStatus.Pending, to: RefundStatus.Cancelled);
 

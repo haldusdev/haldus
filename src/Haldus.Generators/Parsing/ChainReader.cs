@@ -34,6 +34,11 @@ internal static class ChainReader
         "Batch",
         "OwnedByCurrentUser",
         "ForCurrentUser",
+        "Sortable",
+        "CreateOnly",
+        "NaturalKey",
+        "Metadata",
+        "KeyStrategy",
     ];
 
     /// <summary>Zincirdeki çağrıları, Map çağrısından dışa doğru sırayla verir.</summary>
@@ -95,6 +100,9 @@ internal static class ChainReader
                     break;
                 case "Archivable":
                     traits |= Traits.Archivable;
+                    break;
+                case "Metadata":
+                    traits |= Traits.Metadata;
                     break;
                 case "OwnedByCurrentUser":
                     traits |= Traits.Owned;

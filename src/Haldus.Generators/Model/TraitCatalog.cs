@@ -40,7 +40,23 @@ internal static class TraitCatalog
         [
             new("ArchivedAt", DateTimeOffset + "?", InResponse: true, new("ArchivedAt", SearchKind.Range, DateTimeOffset, IsNullable: true)),
         ]),
+
+        // Çanta yanıtta görünür; isteklerdeki yeri ve yazılma kuralları ayrıca üretilir.
+        new(Traits.Metadata, "global::Haldus.IHasMetadata",
+        [
+            new("Metadata", MetadataType, InResponse: true, Search: null),
+        ]),
     ];
+
+    public const string MetadataType = "global::System.Collections.Generic.Dictionary<string, string>";
+
+    /// <summary>Üretilen trait alanının başlangıç değeri; null olamayan referans tipleri boş başlar.</summary>
+    public static string Initializer(string type) => type switch
+    {
+        "string" => " = \"\";",
+        MetadataType => " = new();",
+        _ => string.Empty,
+    };
 
     public static IEnumerable<TraitDefinition> For(Traits traits) =>
         All.Where(definition => (traits & definition.Trait) == definition.Trait);

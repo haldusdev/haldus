@@ -520,6 +520,13 @@
             }
           },
           {
+            "name": "sort",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
             "name": "search",
             "in": "query",
             "schema": {
@@ -565,6 +572,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/PagedResultOfProductResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpValidationProblemDetails"
                 }
               }
             }
@@ -7329,6 +7346,46 @@
         }
       }
     },
+    "/coupons/by-code/{code}": {
+      "get": {
+        "tags": [
+          "Coupons"
+        ],
+        "operationId": "GetCouponByCode",
+        "parameters": [
+          {
+            "name": "code",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CouponResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/coupons/{id}/expire": {
       "post": {
         "tags": [
@@ -9449,6 +9506,13 @@
               ],
               "format": "int32"
             }
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -9458,6 +9522,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/PagedResultOfShoppingListResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpValidationProblemDetails"
                 }
               }
             }
@@ -9515,8 +9589,7 @@
             "in": "path",
             "required": true,
             "schema": {
-              "type": "string",
-              "format": "uuid"
+              "type": "string"
             }
           }
         ],
@@ -9554,8 +9627,7 @@
             "in": "path",
             "required": true,
             "schema": {
-              "type": "string",
-              "format": "uuid"
+              "type": "string"
             }
           }
         ],
@@ -9613,8 +9685,7 @@
             "in": "path",
             "required": true,
             "schema": {
-              "type": "string",
-              "format": "uuid"
+              "type": "string"
             }
           }
         ],
@@ -9672,14 +9743,53 @@
             "in": "path",
             "required": true,
             "schema": {
-              "type": "string",
-              "format": "uuid"
+              "type": "string"
             }
           }
         ],
         "responses": {
           "204": {
             "description": "No Content"
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/me/shopping-lists/by-name/{name}": {
+      "get": {
+        "tags": [
+          "ShoppingLists"
+        ],
+        "operationId": "GetShoppingListByName",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ShoppingListResponse"
+                }
+              }
+            }
           },
           "404": {
             "description": "Not Found",
@@ -9706,8 +9816,7 @@
             "in": "path",
             "required": true,
             "schema": {
-              "type": "string",
-              "format": "uuid"
+              "type": "string"
             }
           },
           {
@@ -9759,8 +9868,7 @@
             "in": "path",
             "required": true,
             "schema": {
-              "type": "string",
-              "format": "uuid"
+              "type": "string"
             }
           }
         ],
@@ -9820,8 +9928,7 @@
             "in": "path",
             "required": true,
             "schema": {
-              "type": "string",
-              "format": "uuid"
+              "type": "string"
             }
           },
           {
@@ -9868,8 +9975,7 @@
             "in": "path",
             "required": true,
             "schema": {
-              "type": "string",
-              "format": "uuid"
+              "type": "string"
             }
           },
           {
@@ -9936,8 +10042,7 @@
             "in": "path",
             "required": true,
             "schema": {
-              "type": "string",
-              "format": "uuid"
+              "type": "string"
             }
           },
           {
@@ -10004,8 +10109,7 @@
             "in": "path",
             "required": true,
             "schema": {
-              "type": "string",
-              "format": "uuid"
+              "type": "string"
             }
           },
           {
@@ -10962,6 +11066,15 @@
               "string"
             ],
             "format": "int32"
+          },
+          "metadata": {
+            "type": [
+              "null",
+              "object"
+            ],
+            "additionalProperties": {
+              "type": "string"
+            }
           }
         }
       },
@@ -11629,6 +11742,15 @@
               "string"
             ],
             "format": "int32"
+          },
+          "metadata": {
+            "type": [
+              "null",
+              "object"
+            ],
+            "additionalProperties": {
+              "type": "string"
+            }
           }
         }
       },
@@ -11684,6 +11806,15 @@
           "orderId": {
             "type": "string",
             "format": "uuid"
+          },
+          "metadata": {
+            "type": [
+              "null",
+              "object"
+            ],
+            "additionalProperties": {
+              "type": "string"
+            }
           }
         }
       },
@@ -13584,24 +13715,6 @@
       "PatchCouponRequest": {
         "type": "object",
         "properties": {
-          "code": {
-            "maxLength": 50,
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "percent": {
-            "maximum": 90,
-            "minimum": 1,
-            "pattern": "^-?(?:0|[1-9]\\d*)$",
-            "type": [
-              "null",
-              "integer",
-              "string"
-            ],
-            "format": "int32"
-          },
           "maxRedemptions": {
             "maximum": 1000000,
             "minimum": 1,
@@ -13812,6 +13925,15 @@
               "string"
             ],
             "format": "int32"
+          },
+          "metadata": {
+            "type": [
+              "null",
+              "object"
+            ],
+            "additionalProperties": {
+              "type": "string"
+            }
           }
         }
       },
@@ -14120,7 +14242,8 @@
           "name",
           "price",
           "description",
-          "categoryId"
+          "categoryId",
+          "metadata"
         ],
         "type": "object",
         "properties": {
@@ -14153,6 +14276,12 @@
               "string"
             ],
             "format": "int32"
+          },
+          "metadata": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
           }
         }
       },
@@ -14611,6 +14740,7 @@
           "amount",
           "reason",
           "orderId",
+          "metadata",
           "status",
           "number"
         ],
@@ -14637,6 +14767,12 @@
           "orderId": {
             "type": "string",
             "format": "uuid"
+          },
+          "metadata": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
           },
           "status": {
             "$ref": "#/components/schemas/RefundStatus"
@@ -14889,8 +15025,7 @@
             "type": "boolean"
           },
           "shoppingListId": {
-            "type": "string",
-            "format": "uuid"
+            "type": "string"
           }
         }
       },
@@ -14904,8 +15039,7 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string",
-            "format": "uuid"
+            "type": "string"
           },
           "name": {
             "type": "string"
@@ -15216,25 +15350,8 @@
         }
       },
       "UpdateCouponRequest": {
-        "required": [
-          "code"
-        ],
         "type": "object",
         "properties": {
-          "code": {
-            "maxLength": 50,
-            "type": "string"
-          },
-          "percent": {
-            "maximum": 90,
-            "minimum": 1,
-            "pattern": "^-?(?:0|[1-9]\\d*)$",
-            "type": [
-              "integer",
-              "string"
-            ],
-            "format": "int32"
-          },
           "maxRedemptions": {
             "maximum": 1000000,
             "minimum": 1,
@@ -15464,6 +15581,15 @@
               "string"
             ],
             "format": "int32"
+          },
+          "metadata": {
+            "type": [
+              "null",
+              "object"
+            ],
+            "additionalProperties": {
+              "type": "string"
+            }
           }
         }
       },

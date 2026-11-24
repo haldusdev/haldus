@@ -6,15 +6,16 @@ sınamanın sonucudur: her satır, yazılmış olan API ile ifade edilmeye çal�
 
 ## Sonuç
 
-59 satırın 50'si bugünkü API ile yazılıp derleniyor; 9'u için anlamlı bir eşleme yok. (İlk sayım 19 temiz, 29
+59 satırın 51'i bugünkü API ile yazılıp derleniyor; 8'i için anlamlı bir eşleme yok. (İlk sayım 19 temiz, 29
 kısmi, 11 yok idi. Entity aksiyonu yazıldıktan sonra bir satır temize geçti; sahiplik yazıldıktan sonra iki satır
-temize, bir satır yoktan kısmiye geçti.)
+temize, bir satır yoktan kısmiye geçti; alan eklentileri yazıldıktan sonra üç satır temize, bir satır yoktan
+kısmiye geçti.)
 
 | Sonuç | Satır | Anlamı |
 |---|---|---|
-| Temiz | 22 | Raporun önerdiği eşleme, yazılmış özelliklerle eksiksiz ifade ediliyor |
-| Kısmi | 28 | Çekirdek ifade ediliyor; önerilen eşlemedeki bir veya daha çok özellik henüz yok |
-| Yok | 9 | Gereken archetype veya trait yazılmadı |
+| Temiz | 25 | Raporun önerdiği eşleme, yazılmış özelliklerle eksiksiz ifade ediliyor |
+| Kısmi | 26 | Çekirdek ifade ediliyor; önerilen eşlemedeki bir veya daha çok özellik henüz yok |
+| Yok | 8 | Gereken archetype veya trait yazılmadı |
 
 Araştırmanın başlangıçtaki düz katalog için kendi sayımı 10 oturuyor, 31 zorlanarak, 18 oturmuyor idi. İki sayım
 aynı ölçüyle yapılmadı (o, araştırmacının hükmüydü; bu, derlenen kod), bu yüzden fark kesin bir iyileşme ölçüsü
@@ -31,8 +32,8 @@ tamamı eksik trait veya archetype'tır.
   hatasız derlendiğini doğrular. Aşağıdaki tablo o dosyadaki verinin aynısıdır; sayılar bir testle bağlıdır.
 - **Çalışma:** Derleme, uçların doğru davrandığını göstermez. Tablodaki birleşimlerin bir kısmı örnek uygulamalarda
   gerçek PostgreSQL'e karşı sınanıyor: sipariş, satırlar, rezervasyon, kupon, iade, sepet, ödeme, yorumlar,
-  ayarlar, stok, iş, toplu işlemler, kullanıcıya ait kaynaklar ve favoriler. Geri kalan satırlar yalnızca derleme
-  düzeyinde doğrulandı.
+  ayarlar, stok, iş, toplu işlemler, kullanıcıya ait kaynaklar, favoriler, doğal anahtar, sıralama ve metadata.
+  Geri kalan satırlar yalnızca derleme düzeyinde doğrulandı.
 - **Hüküm:** "Temiz" ile "kısmi" arasındaki ayrım benim yorumumdur: önerilen eşlemede adı geçen bir özellik
   yazılmadıysa, aynı sonuç elle (ör. bir handler içinde) elde edilebilse bile satır kısmi sayıldı.
 
@@ -46,9 +47,9 @@ tamamı eksik trait veya archetype'tır.
 | 4 | Category / Collection | Kısmi | `MapCrud` + `Hierarchical` + `Archivable` | Kardeşler arası sıra (`Orderable`) |
 | 5 | Cart | Kısmi | `MapCrud` + `OwnedByCurrentUser` + `MapDetail` + `Expiring(sliding)` | `Cloneable`, sepet birleştirme, anonim oturumun sahipliği |
 | 6 | Checkout Session | Kısmi | `MapCrud().Without(Delete)` + `Workflow` + `Expiring` + `Idempotent` | `Creates<T>` (handler içinde elle) |
-| 7 | Coupon | Kısmi | `MapCrud` + `Expiring()` + `IComputed` | Yalnızca oluştururken yazılan alan, doğal anahtar |
+| 7 | Coupon | Temiz | `MapCrud` + `Expiring()` + `NaturalKey` + `CreateOnly` + `IComputed` | — |
 | 8 | Payment (auth/capture/void) | Temiz | `MapCrud().Without(Delete)` + `Workflow` + `Idempotent`; hareketler `MapAppendOnly().Under<Payment>()` | — |
-| 9 | Refund | Kısmi | `MapAppendOnly` + `Workflow` + `Idempotent`; iptal bir geçiş | `Metadata` |
+| 9 | Refund | Temiz | `MapAppendOnly` + `Workflow` + `Idempotent` + `Metadata`; iptal bir geçiş | — |
 | 10 | FulfillmentOrder | Kısmi | `MapReadOnly` + `Workflow` + geçişler | İkinci durum ekseni, böl/birleştir/taşı |
 | 11 | Inventory level | Kısmi | `MapAppendOnly` hareket + `MapReadOnly` seviye | `MapBalance`, türetme bildirimi |
 | 12 | Invoice | Kısmi | `MapCrud` + `Workflow` + `EditableIn` + `Numbered(assignOn)` + `Idempotent` + `MapDetail` | `Previewable`, türetilmiş `paid` durumu |
@@ -77,7 +78,7 @@ tamamı eksik trait veya archetype'tır.
 | 35 | Appointment / Booking | Kısmi | `MapCrud` + `Workflow` + `Idempotent` + `ConcurrencyChecked` | `Supersedes` (yeniden planlama) |
 | 36 | Recurring event / series | Yok | — | Araştırmada bilinçli olarak kapsam dışı |
 | 37 | Tenant / Organization | Temiz | `MapCrud` + `Auditable` | — |
-| 38 | User | Kısmi | `MapCrud` + `SoftDeletable` + `Searchable` + entity aksiyonu | `Metadata` |
+| 38 | User | Temiz | `MapCrud` + `SoftDeletable` + `Metadata` + `Searchable` + entity aksiyonu | — |
 | 39 | Role & permission | Temiz | `MapLookup` + `MapCrud` + `MapAssociation` | — |
 | 40 | Membership | Kısmi | `MapCrud` + iki `References` + `Workflow` | Yük taşıyan ve durumu olan `MapAssociation` |
 | 41 | Invitation | Kısmi | `MapCrud().Without(Update, Patch, Delete)` + `Workflow` + `Expiring` | `TokenAccess`, `Creates<Membership>` |
@@ -90,7 +91,7 @@ tamamı eksik trait veya archetype'tır.
 | 48 | Subscription / Plan | Temiz | `MapCrud` + `Workflow` + `MapDetail` | — |
 | 49 | Polimorfik attachment | Yok | — | `Attachable`, `MapFile` |
 | 50 | Comment / activity feed | Yok | — | `Commentable` |
-| 51 | Custom fields / metadata | Yok | — | `Metadata`, `CustomFields` |
+| 51 | Custom fields / metadata | Kısmi | `Metadata` (serbest anahtar-değer çantası) | `CustomFields` (kiracının tanımladığı, doğrulanan alanlar) |
 | 52 | `/me` ve kullanıcıya ait kaynaklar | Temiz | `OwnedByCurrentUser()` (`/me` altında) veya `OwnedByCurrentUser(underMe: false)` | — |
 | 53 | Report / aggregation | Temiz | `MapQuery` veya `MapJob` | — |
 | 54 | Search | Temiz | `Searchable` | — |
@@ -123,7 +124,7 @@ tamamı eksik trait veya archetype'tır.
 
 | Eksik | Satırlar |
 |---|---|
-| `Metadata` / `CustomFields` | 9, 23, 38, 51 |
+| `CustomFields` | 23, 51 |
 | `Reversible` / `Reverses` | 14, 15, 19 |
 | `SecretOnce` / `Rotatable` / `TokenAccess` | 41, 42, 46 |
 | `Publishable` | 3, 27 |
@@ -139,7 +140,9 @@ tamamı eksik trait veya archetype'tır.
 
 Araştırma bunların çoğunu zaten ikinci ve üçüncü sürüme bırakmıştı. Bu sınamanın o sıralamaya eklediği tek şey,
 ilk sürümün kapsamındaki satırlarda da gereken entity aksiyonuydu; o artık yazıldı. Dört satırı etkileyen sahiplik
-(`OwnedByCurrentUser`, geçerli kullanıcıya bağlı bağ) da yazıldı ve bu tablodan çıktı.
+(`OwnedByCurrentUser`, geçerli kullanıcıya bağlı bağ) da yazıldı ve bu tablodan çıktı. Ardından alan eklentileri
+(`Metadata`, `CreateOnly`, `NaturalKey`) yazıldı; `Metadata`'nın kapattığı satırlar tablodan çıktı, kiracının
+tanımladığı alanlar (`CustomFields`) ayrı bir kalem olarak kaldı.
 
 ## Bu sınamanın söylemediği
 

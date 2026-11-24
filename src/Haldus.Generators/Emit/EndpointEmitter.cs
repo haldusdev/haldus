@@ -30,6 +30,7 @@ internal sealed partial class EndpointEmitter
     private readonly bool _concurrency;
     private readonly bool _tenant;
     private readonly PropertyModel[] _writable;
+    private readonly PropertyModel[] _updatable;
     private readonly StringBuilder _map = new();
     private readonly StringBuilder _handlers = new();
     private readonly StringBuilder _transitionMaps = new();
@@ -51,7 +52,15 @@ internal sealed partial class EndpointEmitter
         _concurrency = resource.Has(Traits.ConcurrencyChecked);
         _tenant = resource.Has(Traits.MultiTenant);
         _writable = [.. resource.Properties.Where(property => property.IsWritable)];
+        _updatable = [.. _writable.Where(property => !property.IsCreateOnly)];
     }
+
+    private NaturalKeyModel? NaturalKey => _resource.NaturalKey;
+
+    private bool HasMetadata => _resource.Has(Traits.Metadata);
+
+    /// <summary>Oluşturma bir hata yanıtıyla dönebilir mi: referans bulunamayabilir veya doğal anahtar çakışabilir.</summary>
+    private bool CreateCanFail => ChecksReferences || NaturalKey is not null;
 
     private string OkOrProblem => $"{Task}<{Results}.Results<{Results}.Ok<{_entity}Response>, {Problem}>>";
 
@@ -194,6 +203,11 @@ internal sealed partial class EndpointEmitter
         if (_resource.Has(Operations.Get))
         {
             EmitGet();
+
+            if (NaturalKey is not null)
+            {
+                EmitGetByNaturalKey();
+            }
         }
 
         if (_resource.Has(Operations.Create))
@@ -295,9 +309,12 @@ internal sealed partial class EndpointEmitter
         var softDelete = _resource.Has(Traits.SoftDeletable);
         var archive = _resource.Has(Traits.Archivable);
 
+        // Sıralanabilir liste, sayılmayan bir alan istendiğinde hata yanıtıyla dönebilir.
+        var sortable = _resource.SortFields.Length > 0;
+
         _map.Append($$"""
                     group.MapGet("/", ListAsync)
-                        .WithName("List{{_plural}}");
+                        .WithName("List{{_plural}}"){{(sortable ? "\n            .ProducesValidationProblem()" : string.Empty)}};
 
 
             """);
@@ -313,11 +330,14 @@ internal sealed partial class EndpointEmitter
             : null;
         var statusParameter = status is null ? string.Empty : $"        {status}? status,\n";
 
+        var paged = $"{Results}.Ok<global::Haldus.PagedResult<{_entity}Response>>";
+        var listResult = sortable ? $"{Results}.Results<{paged}, {Problem}>" : paged;
+
         _handlers.Append($$"""
 
-                private static async {{Task}}<{{Results}}.Ok<global::Haldus.PagedResult<{{_entity}}Response>>> ListAsync(
+                private static async {{Task}}<{{listResult}}> ListAsync(
             {{ScopeParameter}}        [{{Http}}.AsParameters] global::Haldus.PageRequest page,
-            {{(softDelete ? "        bool? includeDeleted,\n" : string.Empty)}}{{(archive ? "        bool? includeArchived,\n" : string.Empty)}}{{treeParameters}}{{statusParameter}}{{FilterParameters()}}{{ContextsParameter}}{{CancellationParameter}}    {
+            {{(sortable ? "        string? sort,\n" : string.Empty)}}{{(softDelete ? "        bool? includeDeleted,\n" : string.Empty)}}{{(archive ? "        bool? includeArchived,\n" : string.Empty)}}{{treeParameters}}{{statusParameter}}{{FilterParameters()}}{{ContextsParameter}}{{(sortable ? MessagesParameter : string.Empty)}}{{CancellationParameter}}    {
                     var query = contexts.For<{{_entity}}>().Set<{{_entity}}>().AsNoTracking(){{ScopeFilter}};
 
             """);
@@ -379,11 +399,24 @@ internal sealed partial class EndpointEmitter
 
         _handlers.Append(ApplyFilter());
 
+        if (sortable)
+        {
+            _handlers.Append($$"""
+
+                        if (!TrySort(query, sort, out var sorted, out var unknownSortField))
+                        {
+                            return {{Problems}}.SortInvalid(messages, unknownSortField, SortableFields);
+                        }
+
+                """);
+        }
+
+        var source = sortable ? "sorted" : $"query\n            .OrderBy(item => item.{_key})";
+
         _handlers.Append($$"""
 
                     var totalCount = await query.LongCountAsync(cancellationToken);
-                    var items = await query
-                        .OrderBy(item => item.{{_key}})
+                    var items = await {{source}}
                         .Skip(page.Skip)
                         .Take(page.PageSizeOrDefault)
                         .Select(item => new {{_entity}}Response { {{ResponseAssignments}} })
@@ -391,6 +424,105 @@ internal sealed partial class EndpointEmitter
 
                     return {{Http}}.TypedResults.Ok(
                         new global::Haldus.PagedResult<{{_entity}}Response>(items, page.PageOrDefault, page.PageSizeOrDefault, totalCount));
+                }
+
+            """);
+
+        if (sortable)
+        {
+            EmitSortHelper();
+        }
+    }
+
+    /// <summary>
+    /// <c>?sort=-createdAt,name</c> ifadesini sorguya uygular. Yalnızca <c>.Sortable(...)</c> ile sayılan alanlar
+    /// tanınır; tanınmayan bir alan sessizce yok sayılmaz, çünkü istemci sonucun sıralı olduğunu sanardı.
+    /// </summary>
+    private void EmitSortHelper()
+    {
+        var fields = _resource.SortFields;
+        var names = string.Join(", ", fields.Select(field => ResourceEmitter.CamelCase(field.Name)));
+        var cases = string.Concat(fields.Select(field => $$"""
+                            case "{{ResourceEmitter.CamelCase(field.Name)}}":
+                                ordered = global::Haldus.HaldusSearch.OrderBy(query, ordered, item => item.{{field.Name}}, descending);
+                                break;
+
+            """));
+
+        _handlers.Append($$"""
+
+                private const string SortableFields = "{{names}}";
+
+                private static bool TrySort(
+                    global::System.Linq.IQueryable<{{_entity}}> query,
+                    string? sort,
+                    out global::System.Linq.IOrderedQueryable<{{_entity}}> sorted,
+                    out string unknown)
+                {
+                    global::System.Linq.IOrderedQueryable<{{_entity}}>? ordered = null;
+                    var terms = (sort ?? string.Empty).Split(
+                        ',', global::System.StringSplitOptions.RemoveEmptyEntries | global::System.StringSplitOptions.TrimEntries);
+                    sorted = null!;
+                    unknown = string.Empty;
+
+                    // Bir alanı yinelemenin anlamı yoktur; terim sayısını sınırlamak sorgunun büyümesini de sınırlar.
+                    if (terms.Length > {{fields.Length}})
+                    {
+                        unknown = terms[{{fields.Length}}].TrimStart('-');
+                        return false;
+                    }
+
+                    foreach (var term in terms)
+                    {
+                        var descending = term[0] == '-';
+                        var name = descending ? term.Substring(1) : term;
+
+                        switch (name)
+                        {
+            {{cases}}                default:
+                                unknown = name;
+                                return false;
+                        }
+                    }
+
+                    // Sayfalama kararlı olsun diye sıralama her zaman anahtarla tamamlanır.
+                    sorted = global::Haldus.HaldusSearch.OrderBy(query, ordered, item => item.{{_key}}, descending: false);
+                    return true;
+                }
+
+            """);
+    }
+
+    /// <summary>Kaydı doğal anahtarıyla okur: <c>GET /coupons/by-code/{code}</c>.</summary>
+    private void EmitGetByNaturalKey()
+    {
+        var key = NaturalKey!;
+        var parameter = ResourceEmitter.CamelCase(key.PropertyName);
+        var segment = Naming.ToKebabCase(key.PropertyName);
+
+        _map.Append($$"""
+                    group.MapGet("/by-{{segment}}/{{{parameter}}{{key.RouteConstraint}}}", GetBy{{key.PropertyName}}Async)
+                        .WithName("Get{{_entity}}By{{key.PropertyName}}")
+                        .ProducesProblem(404);
+
+
+            """);
+
+        _handlers.Append($$"""
+
+                private static async {{OkOrProblem}} GetBy{{key.PropertyName}}Async(
+            {{ScopeParameter}}        {{key.Type}} {{parameter}},
+            {{(_concurrency ? HttpContextParameter : string.Empty)}}{{ContextsParameter}}{{MessagesParameter}}{{CancellationParameter}}    {
+                    var entity = await contexts.For<{{_entity}}>().Set<{{_entity}}>()
+                        .AsNoTracking(){{Includes}}
+                        .FirstOrDefaultAsync(item => item.{{key.PropertyName}} == {{parameter}}{{ScopeCondition("item")}}, cancellationToken);
+
+                    if (entity is null)
+                    {
+                        return {{Problems}}.NotFound(messages, "{{_entity}}", {{parameter}});
+                    }
+
+            {{WriteETag()}}        return {{Http}}.TypedResults.Ok(ToResponse(entity));
                 }
 
             """);
@@ -477,9 +609,15 @@ internal sealed partial class EndpointEmitter
     private string CreateInitializer()
     {
         var keys = new List<string>();
-        if (_resource.IdKind == IdKind.Guid)
+        if (_resource.KeyGeneration == KeyGeneration.Prefixed)
         {
-            keys.Add($"{_key} = global::System.Guid.CreateVersion7()");
+            keys.Add($"{_key} = global::Haldus.HaldusKeys.NewPrefixed({ResourceEmitter.Literal(_resource.KeyPrefix!)})");
+        }
+        else if (_resource.IdKind == IdKind.Guid)
+        {
+            keys.Add(_resource.KeyGeneration == KeyGeneration.Random
+                ? $"{_key} = global::System.Guid.NewGuid()"
+                : $"{_key} = global::System.Guid.CreateVersion7()");
         }
 
         if (Parent is not null)
@@ -507,6 +645,11 @@ internal sealed partial class EndpointEmitter
             keys.Add("Culture = global::System.Globalization.CultureInfo.CurrentUICulture.Name");
         }
 
+        if (HasMetadata)
+        {
+            keys.Add("Metadata = global::Haldus.HaldusMetadata.Create(request.Metadata)");
+        }
+
         return string.Join(
             ", ", keys.Concat(_writable.Select(property => $"{property.Name} = request.{property.Name}")));
     }
@@ -530,6 +673,12 @@ internal sealed partial class EndpointEmitter
                     await context.SaveChangesAsync(cancellationToken);
             """;
 
+        if (NaturalKey is not null)
+        {
+            // Ön kontrolü geçen iki eşzamanlı istekten ikincisi indekse takılır; o da çakışma olarak bildirilir.
+            save = save.Replace("        await context.SaveChangesAsync(cancellationToken);", SaveNew().TrimEnd('\n'));
+        }
+
         // İş oluşturulur ve hemen dönülür: kayıt, altyapının kuyruğuyla birlikte kaydedilir, sonra teslim edilir.
         var job = _resource.Archetype == Archetype.Job;
         var result = job ? "Accepted" : "Created";
@@ -546,7 +695,7 @@ internal sealed partial class EndpointEmitter
         }
 
         // Referans veya ebeveyn bulunamazsa oluşturma reddedilir; dönüş tipi buna göre genişler.
-        var returnType = ChecksReferences
+        var returnType = CreateCanFail
             ? $"{Task}<{Results}.Results<{Results}.{result}<{_entity}Response>, {Problem}>>"
             : $"{Task}<{Results}.{result}<{_entity}Response>>";
 
@@ -563,8 +712,8 @@ internal sealed partial class EndpointEmitter
 
                 private static async {{returnType}} CreateAsync(
             {{ScopeParameter}}        Create{{_entity}}Request request,
-            {{HttpContextParameter}}{{(HasLifetime || job ? TimeProviderParameter : string.Empty)}}{{(job ? "        global::Haldus.IHaldusJobDispatcher jobs,\n" : string.Empty)}}{{ContextsParameter}}{{(ChecksReferences ? MessagesParameter : string.Empty)}}{{CancellationParameter}}    {
-            {{(_resource.OwnerGuard is null ? ParentCheck() : OwnerGuard("create"))}}{{ReferenceChecks(patch: false)}}        var entity = new {{_entity}} { {{assignments}} };
+            {{HttpContextParameter}}{{(HasLifetime || job ? TimeProviderParameter : string.Empty)}}{{(job ? "        global::Haldus.IHaldusJobDispatcher jobs,\n" : string.Empty)}}{{ContextsParameter}}{{(CreateCanFail ? MessagesParameter : string.Empty)}}{{CancellationParameter}}    {
+            {{(_resource.OwnerGuard is null ? ParentCheck() : OwnerGuard("create"))}}{{WriteChecks(patch: false, creating: true)}}        var entity = new {{_entity}} { {{assignments}} };
             {{CreateDetails()}}{{Compute()}}
                     var context = contexts.For<{{_entity}}>();
             {{save}}
@@ -640,7 +789,7 @@ internal sealed partial class EndpointEmitter
                         return {{NotFound}};
                     }
 
-            {{StateGuard(_resource.Workflow?.EditableIn, "update")}}{{ReferenceChecks(patch: operation == "Patch")}}{{CycleCheck(patch: operation == "Patch")}}{{ExpectVersion()}}{{assignments}}
+            {{StateGuard(_resource.Workflow?.EditableIn, "update")}}{{WriteChecks(patch: operation == "Patch", creating: false)}}{{CycleCheck(patch: operation == "Patch")}}{{ExpectVersion()}}{{assignments}}
             {{SyncDetails(patch: operation == "Patch")}}{{Slide()}}{{Compute()}}{{Save()}}
             {{WriteETag()}}        return {{Http}}.TypedResults.Ok(ToResponse(entity));
                 }
@@ -1579,12 +1728,21 @@ internal sealed partial class EndpointEmitter
     /// Yazılan her referansın hedefinin var olduğunu doğrular. Sorgu hedefin kendi filtrelerinden geçer;
     /// böylece başka bir kiracının veya silinmiş bir kaydın kimliği verilerek referans kurulamaz.
     /// </summary>
-    private string ReferenceChecks(bool patch)
+    /// <param name="creating">
+    /// Kayıt oluşturuluyor mu. Güncellemede, yalnızca oluştururken yazılan referanslar istekte yer almaz ve
+    /// yeniden doğrulanmaz.
+    /// </param>
+    private string ReferenceChecks(bool patch, bool creating = true)
     {
         var builder = new StringBuilder();
 
         foreach (var reference in _resource.References.Where(reference => reference.Kind != ReferenceKind.Parent))
         {
+            if (!creating && IsCreateOnly(reference.PropertyName))
+            {
+                continue;
+            }
+
             var property = reference.PropertyName;
             var field = ResourceEmitter.CamelCase(property);
 
@@ -1627,7 +1785,8 @@ internal sealed partial class EndpointEmitter
     /// <summary>Ağaçta bir düğüm kendi altındaki bir düğümün çocuğu yapılamaz.</summary>
     private string CycleCheck(bool patch)
     {
-        if (_resource.SelfReference is not { } self)
+        // Ebeveyn yalnızca oluştururken yazılıyorsa düğüm sonradan taşınamaz; döngü de oluşamaz.
+        if (_resource.SelfReference is not { } self || IsCreateOnly(self.PropertyName))
         {
             return string.Empty;
         }
@@ -1717,14 +1876,15 @@ internal sealed partial class EndpointEmitter
             """;
     }
 
-    private string UpdateAssignments() => string.Concat(
-        _writable.Select(property => $"        entity.{property.Name} = request.{property.Name};\n"));
+    private string UpdateAssignments() =>
+        string.Concat(_updatable.Select(property => $"        entity.{property.Name} = request.{property.Name};\n"))
+        + (HasMetadata ? "        entity.Metadata = global::Haldus.HaldusMetadata.Create(request.Metadata);\n" : string.Empty);
 
     private string PatchAssignments()
     {
         var builder = new StringBuilder();
 
-        foreach (var property in _writable)
+        foreach (var property in _updatable)
         {
             var value = property switch
             {
@@ -1743,8 +1903,95 @@ internal sealed partial class EndpointEmitter
                 """);
         }
 
+        if (HasMetadata)
+        {
+            // Çanta birleştirilir: gönderilen anahtarlar yazılır, null gönderilenler silinir. Sınır, isteğin
+            // kendisine değil birleşmiş çantaya uygulanır.
+            builder.Append($$"""
+                        if (((global::Haldus.IHaldusPatch)request).IsSet("Metadata"))
+                        {
+                            entity.Metadata = global::Haldus.HaldusMetadata.Merge(entity.Metadata, request.Metadata);
+
+                            if (entity.Metadata.Count > global::Haldus.HaldusMetadata.MaxEntries)
+                            {
+                                return {{Problems}}.MetadataInvalid(messages);
+                            }
+                        }
+
+
+                """);
+        }
+
         return builder.ToString();
     }
+
+    /// <summary>Bir yazmanın, kayda dokunmadan önce yaptığı kontroller: referansların varlığı ve doğal anahtarın benzersizliği.</summary>
+    private string WriteChecks(bool patch, bool creating) => ReferenceChecks(patch, creating) + NaturalKeyCheck(patch, creating);
+
+    private bool IsCreateOnly(string propertyName) =>
+        _resource.Properties.Any(property => property.Name == propertyName && property.IsCreateOnly);
+
+    /// <summary>
+    /// Doğal anahtarı aynı olan başka bir kayıt varsa yazmayı reddeder. Silinmiş ve süresi dolmuş kayıtlar da
+    /// değeri tutar (indeks onları da kapsar); kiracı, sahip ve ebeveyn süzgeçleri ise kapsamı çizdiği için kalır.
+    /// </summary>
+    private string NaturalKeyCheck(bool patch, bool creating)
+    {
+        if (NaturalKey is not { } key
+            || _resource.Properties.FirstOrDefault(candidate => candidate.Name == key.PropertyName) is not { IsWritable: true } property
+            || (!creating && property.IsCreateOnly))
+        {
+            return string.Empty;
+        }
+
+        var hidden = new List<string>();
+        if (_resource.Has(Traits.SoftDeletable))
+        {
+            hidden.Add("global::Haldus.HaldusFilters.SoftDelete");
+        }
+
+        if (_resource.Expiry is not null)
+        {
+            hidden.Add("global::Haldus.HaldusFilters.Expiry");
+        }
+
+        var ignore = hidden.Count == 0 ? string.Empty : $".IgnoreQueryFilters(new[] {{ {string.Join(", ", hidden)} }})";
+        var isSet = patch ? $"((global::Haldus.IHaldusPatch)request).IsSet(\"{key.PropertyName}\")\n            && " : string.Empty;
+        var self = creating ? string.Empty : $" && item.{_key} != {_keyParameter}";
+
+        return $$"""
+                    if ({{isSet}}await contexts.For<{{_entity}}>().Set<{{_entity}}>(){{ignore}}
+                        .AnyAsync(item => item.{{key.PropertyName}} == request.{{key.PropertyName}}{{self}}{{ScopeCondition("item")}}, cancellationToken))
+                    {
+                        return {{Problems}}.Duplicate(messages, "{{_entity}}", "{{ResourceEmitter.CamelCase(key.PropertyName)}}", request.{{key.PropertyName}});
+                    }
+
+
+            """;
+    }
+
+    /// <summary>Kaydetme doğal anahtarın indeksine takılırsa, hatayı 500 yerine çakışma olarak bildirir.</summary>
+    private string DuplicateCatch() => NaturalKey is not { } key
+        ? string.Empty
+        : $$"""
+                    catch (global::Microsoft.EntityFrameworkCore.DbUpdateException duplicate)
+                        when (global::Haldus.HaldusDb.IsUniqueViolation(duplicate, "{{ResourceEmitter.NaturalKeyIndex(_resource)}}"))
+                    {
+                        return {{Problems}}.Duplicate(messages, "{{_entity}}", "{{ResourceEmitter.CamelCase(key.PropertyName)}}", entity.{{key.PropertyName}});
+                    }
+
+            """;
+
+    /// <summary>Yeni bir kaydı kaydeder.</summary>
+    private string SaveNew() => NaturalKey is null
+        ? "        await context.SaveChangesAsync(cancellationToken);\n"
+        : $$"""
+                    try
+                    {
+                        await context.SaveChangesAsync(cancellationToken);
+                    }
+            {{DuplicateCatch()}}
+            """;
 
     /// <summary>Hazır bir kod parçasını daha içerideki bir bloğa yerleştirmek için her satırını girintiler.</summary>
     private static string Indent(string code, int spaces)
@@ -1790,19 +2037,30 @@ internal sealed partial class EndpointEmitter
     /// </summary>
     private bool GuardsState => _resource.Workflow is not null && !_concurrency;
 
-    private string Save() => _concurrency || GuardsState
-        ? $$"""
-                    try
-                    {
-                        await context.SaveChangesAsync(cancellationToken);
-                    }
-                    catch (global::Microsoft.EntityFrameworkCore.DbUpdateConcurrencyException)
-                    {
-                        return {{Problems}}.{{(_concurrency ? "PreconditionFailed" : "StateChanged")}}(messages);
-                    }
+    private string Save()
+    {
+        var concurrency = _concurrency || GuardsState
+            ? $$"""
+                        catch (global::Microsoft.EntityFrameworkCore.DbUpdateConcurrencyException)
+                        {
+                            return {{Problems}}.{{(_concurrency ? "PreconditionFailed" : "StateChanged")}}(messages);
+                        }
 
-            """
-        : "        await context.SaveChangesAsync(cancellationToken);\n";
+                """
+            : string.Empty;
+
+        var duplicate = DuplicateCatch();
+
+        return concurrency.Length == 0 && duplicate.Length == 0
+            ? "        await context.SaveChangesAsync(cancellationToken);\n"
+            : $$"""
+                        try
+                        {
+                            await context.SaveChangesAsync(cancellationToken);
+                        }
+                {{concurrency}}{{duplicate}}
+                """;
+    }
 
     private string WriteETag() => _concurrency
         ? "        global::Haldus.HaldusETag.Write(httpContext, entity.Version);\n"

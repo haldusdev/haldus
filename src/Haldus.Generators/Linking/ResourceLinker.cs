@@ -43,6 +43,9 @@ internal static class ResourceLinker
             }
 
             var searchFields = ResolveSearchFields(resource, properties, Fail);
+            var sortFields = ResolveSortFields(resource, properties, Fail);
+            MarkCreateOnly(resource, properties, Fail);
+            var naturalKey = ResolveNaturalKey(resource, properties, Fail);
 
             if (!failed)
             {
@@ -51,6 +54,8 @@ internal static class ResourceLinker
                     Properties = properties.ToEquatableArray(),
                     References = references.ToEquatableArray(),
                     SearchFields = searchFields.ToEquatableArray(),
+                    SortFields = sortFields.ToEquatableArray(),
+                    NaturalKey = naturalKey,
                 });
             }
         }
@@ -604,6 +609,111 @@ internal static class ResourceLinker
             IsGenerated: true);
     }
 
+    /// <summary>
+    /// Liste ucunun sıralanabildiği alanlar. Aranabilen her alan sıralanabilir de; ikisi aynı adaylardan seçilir.
+    /// </summary>
+    private static List<SearchField> ResolveSortFields(
+        ResourceModel resource,
+        List<PropertyModel> properties,
+        Action<string, LocationInfo, string[]> fail)
+    {
+        var fields = new List<SearchField>();
+        if (resource.SortRequests.Length == 0)
+        {
+            return fields;
+        }
+
+        // Filtrenin sorgu parametresi sıralamanınkiyle aynı adı taşırsa biri diğerini gölgeler.
+        if (resource.Filter?.Properties.Any(property => property.Name == "Sort") == true)
+        {
+            fail("HALDUS007", resource.Location, ["Sortable adds the 'sort' query parameter, which the filter of this resource already uses; rename the filter's Sort property"]);
+        }
+
+        var candidates = FieldCandidates(resource, properties);
+
+        foreach (var request in resource.SortRequests)
+        {
+            if (request.FieldName is not null && candidates.TryGetValue(request.FieldName, out var field))
+            {
+                if (fields.All(existing => existing.Name != field.Name))
+                {
+                    fields.Add(field);
+                }
+            }
+            else
+            {
+                fail(
+                    "HALDUS010",
+                    request.Location,
+                    [$"'{request.Expression}' cannot be sorted: write it as 'item => item.Property', where the property is the Id, a scalar property or a trait field of '{resource.EntityName}'"]);
+            }
+        }
+
+        return fields;
+    }
+
+    /// <summary>
+    /// <c>.CreateOnly(...)</c> ile sayılan alanları işaretler. Alan, isteklerde yer alan (yazılabilir) bir alan
+    /// olmalıdır; üretilen yabancı anahtarlar da sayılabilir, böylece referans oluşturulduktan sonra değişmez.
+    /// </summary>
+    private static void MarkCreateOnly(
+        ResourceModel resource,
+        List<PropertyModel> properties,
+        Action<string, LocationInfo, string[]> fail)
+    {
+        foreach (var request in resource.CreateOnlyRequests)
+        {
+            var index = request.FieldName is null ? -1 : properties.FindIndex(property => property.Name == request.FieldName);
+
+            if (index < 0 || !properties[index].IsWritable)
+            {
+                fail(
+                    "HALDUS010",
+                    request.Location,
+                    [$"'{request.Expression}' cannot be create-only: write it as 'item => item.Property', where the property is a writable property of '{resource.EntityName}'"]);
+                continue;
+            }
+
+            properties[index] = properties[index] with { IsCreateOnly = true };
+        }
+    }
+
+    /// <summary>Doğal anahtar, null olamayan ve adreste taşınabilen tek bir skaler alandır.</summary>
+    private static NaturalKeyModel? ResolveNaturalKey(
+        ResourceModel resource,
+        List<PropertyModel> properties,
+        Action<string, LocationInfo, string[]> fail)
+    {
+        if (resource.NaturalKeyRequest is not { } request)
+        {
+            return null;
+        }
+
+        var property = request.FieldName is null ? null : properties.FirstOrDefault(candidate => candidate.Name == request.FieldName);
+
+        var constraint = property is { IsNonNullable: true, IsEmbedded: false }
+            ? property.Type switch
+            {
+                "string" => string.Empty,
+                "int" => ":int",
+                "long" => ":long",
+                "global::System.Guid" => ":guid",
+                _ => null,
+            }
+            : null;
+
+        if (property is null || constraint is null)
+        {
+            fail(
+                "HALDUS010",
+                request.Location,
+                [$"'{request.Expression}' cannot be a natural key: write it as 'item => item.Property', where the property is a non-nullable string, int, long or Guid property of '{resource.EntityName}'"]);
+            return null;
+        }
+
+        return new NaturalKeyModel(property.Name, property.Type, constraint);
+    }
+
     /// <summary>Aranabilecek alanlar: anahtar, skaler alanlar (üretilen yabancı anahtarlar dahil) ve trait'lerin açık alanları.</summary>
     private static List<SearchField> ResolveSearchFields(
         ResourceModel resource,
@@ -616,6 +726,29 @@ internal static class ResourceLinker
             return fields;
         }
 
+        var candidates = FieldCandidates(resource, properties);
+
+        foreach (var request in resource.SearchRequests)
+        {
+            if (request.FieldName is not null && candidates.TryGetValue(request.FieldName, out var field))
+            {
+                if (fields.All(existing => existing.Name != field.Name))
+                {
+                    fields.Add(field);
+                }
+            }
+            else
+            {
+                fail("HALDUS005", request.Location, [request.Expression, resource.EntityName]);
+            }
+        }
+
+        return fields;
+    }
+
+    /// <summary>Bir sorguda adıyla gösterilebilen alanlar: anahtar, skaler alanlar ve trait'lerin açık alanları.</summary>
+    private static Dictionary<string, SearchField> FieldCandidates(ResourceModel resource, List<PropertyModel> properties)
+    {
         var keyKind = resource.IdKind switch
         {
             IdKind.Guid => SearchKind.Equality,
@@ -644,21 +777,6 @@ internal static class ResourceLinker
             }
         }
 
-        foreach (var request in resource.SearchRequests)
-        {
-            if (request.FieldName is not null && candidates.TryGetValue(request.FieldName, out var field))
-            {
-                if (fields.All(existing => existing.Name != field.Name))
-                {
-                    fields.Add(field);
-                }
-            }
-            else
-            {
-                fail("HALDUS005", request.Location, [request.Expression, resource.EntityName]);
-            }
-        }
-
-        return fields;
+        return candidates;
     }
 }

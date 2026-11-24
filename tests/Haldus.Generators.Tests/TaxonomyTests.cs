@@ -107,7 +107,7 @@ public sealed class TaxonomyTests
                 .Workflow<CheckoutStatus>().EditableIn(CheckoutStatus.Open).Expiring(TimeSpan.FromMinutes(30)).Idempotent();
             sessions.MapTransition("complete", CheckoutStatus.Open, CheckoutStatus.Completed);
             """),
-        new(7, "Coupon", Fit.Partial,
+        new(7, "Coupon", Fit.Clean,
             """
             public partial class Coupon : IComputed
             {
@@ -118,7 +118,12 @@ public sealed class TaxonomyTests
                 public void Compute() => Valid = TimesRedeemed < 100;
             }
             """,
-            "app.MapCrud<Coupon>().Expiring().Searchable(coupon => coupon.Code);"),
+            """
+            app.MapCrud<Coupon>().Expiring()
+                .NaturalKey(coupon => coupon.Code)
+                .CreateOnly(coupon => coupon.Code, coupon => coupon.Percent)
+                .Searchable(coupon => coupon.Code);
+            """),
         new(8, "Payment (auth/capture/void)", Fit.Clean,
             """
             public enum PaymentStatus { RequiresCapture, Captured, Voided }
@@ -132,14 +137,14 @@ public sealed class TaxonomyTests
             payments.MapTransition("void", PaymentStatus.RequiresCapture, PaymentStatus.Voided);
             app.MapAppendOnly<PaymentTransaction>().Under<Payment>();
             """),
-        new(9, "Refund", Fit.Partial,
+        new(9, "Refund", Fit.Clean,
             Order + """
             public enum RefundStatus { Pending, Succeeded, Cancelled }
             public partial class Refund { public decimal Amount { get; set; } }
             """,
             """
             app.MapCrud<Order>();
-            var refunds = app.MapAppendOnly<Refund>().References<Order>().Workflow<RefundStatus>().Idempotent(required: true);
+            var refunds = app.MapAppendOnly<Refund>().References<Order>().Workflow<RefundStatus>().Idempotent(required: true).Metadata();
             refunds.MapTransition("cancel", RefundStatus.Pending, RefundStatus.Cancelled);
             """),
         new(10, "FulfillmentOrder", Fit.Partial,
@@ -367,10 +372,10 @@ public sealed class TaxonomyTests
         new(37, "Tenant / Organization", Fit.Clean,
             "public partial class Organization { public string Name { get; set; } = \"\"; }",
             "app.MapCrud<Organization>().Auditable();"),
-        new(38, "User", Fit.Partial,
+        new(38, "User", Fit.Clean,
             User,
             """
-            var users = app.MapCrud<User>().SoftDeletable().Searchable(user => user.Email);
+            var users = app.MapCrud<User>().SoftDeletable().Metadata().Searchable(user => user.Email);
             users.MapAction("verify-email", user => user.Email = user.Email.ToLowerInvariant());
             """),
         new(39, "Role & permission", Fit.Clean,
@@ -472,7 +477,9 @@ public sealed class TaxonomyTests
         // ── Yatay kalıplar ───────────────────────────────────────────────────────────────────────────
         new(49, "Polimorfik attachment", Fit.Missing),
         new(50, "Comment / activity feed", Fit.Missing),
-        new(51, "Custom fields / metadata", Fit.Missing),
+        new(51, "Custom fields / metadata", Fit.Partial,
+            Product,
+            "app.MapCrud<Product>().Metadata();"),
         new(52, "/me ve kullanıcıya ait kaynaklar", Fit.Clean,
             """
             public partial class SavedAddress { public string Line { get; set; } = ""; }
@@ -572,8 +579,8 @@ public sealed class TaxonomyTests
     public void Tally_MatchesTheWrittenResults()
     {
         // reports/Haldus taksonomi sınaması.md dosyasındaki sayılar; biri değişirse diğeri de güncellenmelidir.
-        Assert.Equal(22, Rows.Count(row => row.Fit == Fit.Clean));
-        Assert.Equal(28, Rows.Count(row => row.Fit == Fit.Partial));
-        Assert.Equal(9, Rows.Count(row => row.Fit == Fit.Missing));
+        Assert.Equal(25, Rows.Count(row => row.Fit == Fit.Clean));
+        Assert.Equal(26, Rows.Count(row => row.Fit == Fit.Partial));
+        Assert.Equal(8, Rows.Count(row => row.Fit == Fit.Missing));
     }
 }

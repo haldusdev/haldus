@@ -23,6 +23,10 @@ public static class HaldusMessageKeys
     public const string ReferenceNotFound = "Reference.NotFound";
     public const string HierarchyCycle = "Hierarchy.Cycle";
     public const string DetailNotFound = "Detail.NotFound";
+    public const string DuplicateTitle = "Duplicate.Title";
+    public const string DuplicateDetail = "Duplicate.Detail";
+    public const string SortInvalid = "Sort.Invalid";
+    public const string MetadataInvalid = "Metadata.Invalid";
     public const string InUseTitle = "InUse.Title";
     public const string InUseDetail = "InUse.Detail";
     public const string StateConflictTitle = "StateConflict.Title";

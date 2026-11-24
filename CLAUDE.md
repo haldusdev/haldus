@@ -80,6 +80,18 @@ Bunlar kullanıcıyla kararlaştırıldı; yeniden sorma.
   `app.MapAssociation<Favorite, Product>().ForCurrentUser()`. İlk tip argümanı bir uç değil, üretilecek bağ
   entity'sinin adıdır. Uçlar `/me/favorites` altındadır: `PUT` / `DELETE` / `GET /{productId}` ve bağlı
   kayıtları (bağları değil) döndüren `GET /`.
+- Alan eklentileri (12. aşama, kullanıcı kararları):
+  - Yalnızca oluştururken yazılan alan zincirde sayılır: `.CreateOnly(coupon => coupon.Code, ...)`. Alan `POST`
+    isteğinde yer alır, `PUT` ve `PATCH` isteklerinde yer almaz.
+  - `.NaturalKey(coupon => coupon.Code)` alanı benzersiz yapar (çakışma 409) ve ek bir okuma ucu üretir:
+    `GET /coupons/by-code/{code}`. Diğer uçlar `Id` ile kalır; doğal anahtar adreste `Id`'nin yerine geçmez.
+  - Liste ucunda sıralama `?sort=-createdAt,name` biçimindedir (eksi azalan). Sıralanabilir alanlar
+    `.Sortable(...)` ile sayılır; sayılmayan alan 400 döner.
+  - `.Metadata()` değerleri metin olan bir anahtar-değer çantasıdır (jsonb). `PATCH` birleştirir (gönderilen
+    anahtar eklenir veya değişir, `null` gönderilen silinir), `PUT` tamamını değiştirir. Sınır: 50 anahtar, anahtar
+    40, değer 500 karakter.
+  - `KeyStrategy` için kullanıcı tercih belirtmedi ("No preference"); önerilen önekli kimlik (`ord_…`) ve rastgele
+    GUID (v4) yazıldı. ULID ve istemcinin verdiği kimlik yazılmadı; istenirse eklenir.
 - Eşzamanlılık trait'inin adı `ConcurrencyChecked` (eski adı `Versioned`). Sürüm yanıt gövdesinde değil
   `ETag` başlığında taşınır; güncelleme ve silme `If-Match` ister (eksikse 428, uyuşmazlıkta 412).
 - Güncelleme için hem `PUT` (tam değiştirme) hem `PATCH` (kısmi) üretilir.
@@ -149,8 +161,8 @@ Bunlar kullanıcıyla kararlaştırıldı; yeniden sorma.
 ## Aşamalar
 
 On aşamanın tamamı bitti (3. aşamaya `.Searchable()`, 8. aşamaya fiziksel temizlik de eklendi). 10. aşamanın
-sonucu `reports/Haldus taksonomi sınaması.md` dosyasındadır: araştırmadaki 59 varlığın (bugünkü sayımla) 22'si temiz, 28'i
-kısmen ifade ediliyor, 11'i için gereken özellik yok. Aynı veri `tests/Haldus.Generators.Tests/TaxonomyTests.cs`
+sonucu `reports/Haldus taksonomi sınaması.md` dosyasındadır: araştırmadaki 59 varlığın (bugünkü sayımla) 25'i temiz, 26'sı
+kısmen ifade ediliyor, 8'i için gereken özellik yok. Aynı veri `tests/Haldus.Generators.Tests/TaxonomyTests.cs`
 içinde derlenir; yeni bir archetype veya trait bir satırı kapatıyorsa ikisini birlikte güncelle.
 
 1. İskelet
@@ -171,7 +183,7 @@ içinde derlenir; yeni bir archetype veya trait bir satırı kapatıyorsa ikisin
 Kullanıcı 2026-11-24'te onayladı. Kapsamı araştırma raporunun v2 listesi, ilk sürümden kalan küçük kalemler
 ve sınamada çıkan küçük eksiklerdir. Raporun v3 listesi (`MapBalance`, `MapChangeSet`, birden çok durum
 ekseni, çeviri, saklama süresi, okundu takibi) ve tekrar serisi bu planın dışındadır. Her aşama testleriyle
-birlikte ayrı commit olur; 11. aşama bitti, sıradaki 12.
+birlikte ayrı commit olur; 11. ve 12. aşamalar bitti, sıradaki 13.
 
 11. Sahiplik: `OwnedByCurrentUser`, `MapAssociation().ForCurrentUser()`
 12. Alan eklentileri: `Metadata`, yalnızca oluştururken yazılan alan, `NaturalKey`, `KeyStrategy`, liste
@@ -190,7 +202,7 @@ birlikte ayrı commit olur; 11. aşama bitti, sıradaki 12.
 
 Her aşamanın başında kullanıcıya sorulacak kararlar (yanıtlandıkça "Tasarım kararları"na taşınır):
 
-- 12: `KeyStrategy` hangi anahtar türlerini desteklesin.
+
 - 13: Kopyalamada satırlar ve numara nasıl davransın; sıra tam sayı mı, araya eklemeye uygun bir değer mi.
 - 14: Karşı kaydı Haldus mu üretsin, kullanıcının handler'ı mı.
 - 15: Sırrın saklanma biçimi (hash algoritması, önek).
@@ -423,6 +435,35 @@ netleştirilecek.
   silinir (`Cascade`): bağ yalnızca bir işarettir ve bir kullanıcının işareti silmeyi engellememelidir.
   Yazılmamış bağ entity'si, her yazılmamış entity gibi, çağrının bulunduğu namespace'e üretilir. Bağ henüz yük
   taşımaz (16. aşama); değer taşıyan oy bu yüzden yazılamaz.
+- **Alan eklentileri.** Alanları lambda ile sayan bildirimler (`Sortable`, `CreateOnly`, `NaturalKey`) `Searchable`
+  gibi `ResourceBuilder<T>` üyesidir, `MapCallParser.ReadFieldRequests` ile okunur ve `ResourceLinker`'da, üretilen
+  yabancı anahtarlar da bilindikten sonra çözülür. Geçersiz alan `HALDUS010` olur.
+  - **Create-only.** `PropertyModel.IsCreateOnly`; güncelleme isteklerine ve atamalarına `IsUpdatable` alanlar
+    girer. Yalnızca `MapCrud` (ve ayrı uçlu detay) ile birleşir. Yalnızca oluştururken yazılan bir yabancı anahtar
+    güncellemede yeniden doğrulanmaz; `ParentId` öyleyse döngü kontrolü de üretilmez.
+  - **Doğal anahtar.** Tek alan; null olamayan `string`, `int`, `long` veya `Guid`. Benzersiz indeks kaydın kapsamını
+    izler (kiracı, sahip, ebeveyn + alan) ve adı açıkça verilir (`UX_{Tablo}_{Alan}`,
+    `ResourceEmitter.NaturalKeyIndex`). Çakışma iki yerde yakalanır: yazmadan önce `NaturalKeyCheck` (silinmiş ve
+    süresi dolmuş kayıtları da görür; onlar da değeri tutar) ve kaydederken `DuplicateCatch`
+    (`HaldusDb.IsUniqueViolation`, PostgreSQL'in 23505 kodu ve indeks adı). İkincisi olmadan eşzamanlı iki istekten
+    biri 500 alırdı. Yeni kaydı kaydeden yol `SaveNew()`, var olanı kaydeden yol `Save()` kullanmalıdır.
+    Kontroller `WriteChecks` içindedir; toplu yol da onu çağırır.
+  - **Sıralama.** `TrySort` üretilir; tanınmayan alan ve sıralanabilir alan sayısından çok terim 400 döner.
+    Sıralama her zaman anahtarla tamamlanır. Sıralanabilir alanlar aranabilir alanlarla aynı adaylardan seçilir
+    (`ResourceLinker.FieldCandidates`). `MapLookup` listesi sıralanamaz (her zaman koda göredir).
+  - **Anahtar biçimi.** `ResourceModel.KeyGeneration` / `KeyPrefix`. Önekli anahtarda `IdKind.String` olur; bu
+    yüzden anahtarın metin olması artık "anahtarı istemci verir" demek değildir, onu `Archetype.HasClientKey()`
+    söyler. Gövde, v7 GUID'in Crockford base32 yazımıdır (`HaldusKeys.NewPrefixed`); metin sırası oluşturulma
+    sırasıdır. Model ayrıca bir değer üreteci kurar (`HaldusDb.ConfigurePrefixedKey`): uygulamanın kendi eklediği,
+    anahtarı boş kayıtlar da aynı biçimi alır. Önek derleme zamanında okunan bir metin sabiti olmalıdır.
+    `MapCrud`, `MapReadOnly` ve `MapAppendOnly` ile birleşir; işin kimliği kuyruklarda `Guid` taşındığı için
+    `MapJob` ile birleşmez. Gömülü detay satırlarının kimliği her zaman v7 GUID'dir.
+  - **Metadata.** `Traits.Metadata` (`IHasMetadata`). Alan trait alanı gibi üretilir ve yanıtta yer alır;
+    isteklerdeki yeri ayrıca üretilir (`ResourceEmitter.AppendRequest`, `MetadataChanges`). Çanta jsonb kolonunda,
+    metne çevrilerek saklanır (`HaldusDb.ConfigureMetadata`); böylece Npgsql'in dinamik JSON desteğinin açılması
+    gerekmez. Sınırları `MetadataAttribute` doğrular; `PATCH` birleştirdiği için sınır birleşmiş çantaya da
+    uygulanır. `PUT` isteğinde çanta gönderilmezse boşaltılır (gömülü satırların aksine zorunlu değildir).
+    Yanıt DTO'su bir sözlük taşıdığı için record eşitliği artık içeriği karşılaştırmaz.
 - **Yanıt izdüşümü tek yerdedir:** `ResourceEmitter.ResponseAssignments`. Bir kaynağın yanıtını döndüren her
   üretici (kendi uçları, bağ listeleri) onu kullanır; elle yazılan bir izdüşüm, yanıta sonradan eklenen zorunlu
   alanlarda (durum, numara, gömülü satırlar) derlenmez.

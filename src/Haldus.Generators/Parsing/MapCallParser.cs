@@ -177,9 +177,19 @@ internal static class MapCallParser
                 new EquatableArray<string>([$"Embeds<{unused.Value}> has no effect: '{entityName}' has no property of type '{unused.Value}'"])));
         }
 
+        var (keyGeneration, keyPrefix) = ReadKeyStrategy(chain, location, diagnostics);
+
+        // Önekli anahtar metindir; kullanıcı Id'yi kendisi yazdıysa string olmalıdır.
+        var prefixed = keyGeneration == KeyGeneration.Prefixed;
+        var declaredTextKey = prefixed && id?.Type.SpecialType == SpecialType.System_String;
+
         // Anahtarı istemcinin verdiği archetype'larda varsayılan tip metindir; diğerlerinde sunucu Guid üretir.
-        var idKind = archetype.HasClientKey() ? IdKind.String : IdKind.Guid;
-        if (id is not null && !TryGetIdKind(id.Type, archetype, out idKind))
+        var idKind = archetype.HasClientKey() || prefixed ? IdKind.String : IdKind.Guid;
+        if (declaredTextKey)
+        {
+            idKind = IdKind.String;
+        }
+        else if (id is not null && !TryGetIdKind(id.Type, archetype, out idKind))
         {
             diagnostics.Add(new DiagnosticInfo(
                 "HALDUS003",
@@ -196,7 +206,18 @@ internal static class MapCallParser
                 new EquatableArray<string>([$"{entityName}.{keyName}", id.Type.ToDisplayString(), "Guid"])));
         }
 
-        var idType = id?.Type.ToDisplayString(TypeFormat) ?? (archetype.HasClientKey() ? "string" : GuidType);
+        var idType = id?.Type.ToDisplayString(TypeFormat) ?? (archetype.HasClientKey() || prefixed ? "string" : GuidType);
+
+        if (id is not null && keyGeneration != KeyGeneration.Sequential && idKind != (prefixed ? IdKind.String : IdKind.Guid))
+        {
+            diagnostics.Add(new DiagnosticInfo(
+                "HALDUS007",
+                location,
+                new EquatableArray<string>(
+                [
+                    $"KeyStrategy.{keyGeneration} produces a {(prefixed ? "string" : "Guid")} key, but '{entityName}.{keyName}' is declared as '{id.Type.ToDisplayString()}'",
+                ])));
+        }
 
         if (archetype == Archetype.Lookup && properties.All(property => property.Name != "Name"))
         {
@@ -216,6 +237,9 @@ internal static class MapCallParser
 
         FilterModel? filter = null;
         var searchRequests = new List<SearchFieldRequest>();
+        var sortRequests = new List<SearchFieldRequest>();
+        var createOnlyRequests = new List<SearchFieldRequest>();
+        SearchFieldRequest? naturalKeyRequest = null;
         var references = new List<ReferenceDeclaration>();
 
         foreach (var (callName, call) in ChainReader.Nodes(invocation))
@@ -228,6 +252,28 @@ internal static class MapCallParser
                 case { Identifier.ValueText: "Searchable" }:
                     ReadSearchRequests(callName, call, entityName, searchRequests, diagnostics);
                     break;
+                case { Identifier.ValueText: "Sortable" }:
+                    ReadFieldRequests(callName, call, sortRequests, diagnostics);
+                    break;
+                case { Identifier.ValueText: "CreateOnly" }:
+                    ReadFieldRequests(callName, call, createOnlyRequests, diagnostics);
+                    break;
+                case { Identifier.ValueText: "NaturalKey" }:
+                {
+                    var keys = new List<SearchFieldRequest>();
+                    ReadFieldRequests(callName, call, keys, diagnostics);
+
+                    if (naturalKeyRequest is not null || keys.Count > 1)
+                    {
+                        diagnostics.Add(new DiagnosticInfo(
+                            "HALDUS007",
+                            LocationInfo.From(callName.GetLocation()),
+                            new EquatableArray<string>([$"'{entityName}' can have only one natural key, made of a single field"])));
+                    }
+
+                    naturalKeyRequest ??= keys.FirstOrDefault();
+                    break;
+                }
                 case GenericNameSyntax { Identifier.ValueText: "References", TypeArgumentList.Arguments: { Count: 1 } targets }:
                     references.Add(ReadReference(
                         ReferenceKind.Reference, targets[0], call, context.SemanticModel, OnDeleteBehavior.Restrict, cancellationToken));
@@ -291,6 +337,11 @@ internal static class MapCallParser
             DetailOfName = detailOfName,
             DetailOfType = detailOfType,
             IsSubresource = chain.Any(call => call.Name == "AsSubresource"),
+            SortRequests = sortRequests.ToEquatableArray(),
+            CreateOnlyRequests = createOnlyRequests.ToEquatableArray(),
+            NaturalKeyRequest = naturalKeyRequest,
+            KeyGeneration = keyGeneration,
+            KeyPrefix = keyPrefix,
             Workflow = lifecycle.Workflow,
             Numbering = lifecycle.Numbering,
             Expiry = lifecycle.Expiry,
@@ -457,6 +508,17 @@ internal static class MapCallParser
     {
         var name = $"Map{archetype}";
 
+        // Ayrı uçlu detay, sahibinin adresi altında yaşayan sıradan bir kaynaktır.
+        var crudLike = archetype == Archetype.Crud
+            || (archetype == Archetype.Detail && chain.Any(call => call.Name == "AsSubresource"));
+
+        if (chain.Any(call => call.Name == "CreateOnly")
+            && crudLike
+            && ((operations & Operations.Create) == 0 || (operations & (Operations.Update | Operations.Patch)) == 0))
+        {
+            yield return "CreateOnly has no effect: the resource needs the Create operation and at least one of Update and Patch";
+        }
+
         if (unsupportedOperations != Operations.None)
         {
             yield return $"{name} does not have the operation(s) '{unsupportedOperations}'; they cannot be selected with Without or Only";
@@ -520,6 +582,17 @@ internal static class MapCallParser
 
                 // Toplu uçlar, sunucunun anahtar ürettiği koleksiyonların işlemlerini izler.
                 "Batch" => archetype is Archetype.Crud or Archetype.ReadOnly or Archetype.AppendOnly,
+
+                // Anahtarın biçimi yalnızca sunucunun anahtar ürettiği koleksiyonlarda seçilir; işin kimliği
+                // kuyruklarda taşındığı için sabittir.
+                "KeyStrategy" => archetype is Archetype.Crud or Archetype.ReadOnly or Archetype.AppendOnly,
+
+                // Doğal anahtar, zaten istemcinin anahtar verdiği archetype'larda anlamsızdır.
+                "NaturalKey" => crudLike || archetype is Archetype.ReadOnly or Archetype.AppendOnly,
+                "Metadata" => archetype is Archetype.Crud or Archetype.ReadOnly or Archetype.AppendOnly,
+
+                // Oluşturma ve güncelleme isteklerinin ayrı olduğu tek şekil budur.
+                "CreateOnly" => crudLike,
                 _ => true,
             };
 
@@ -553,7 +626,7 @@ internal static class MapCallParser
                 + "a batch item cannot carry the version it expects. Remove those operations with Without, or drop one of the two";
         }
 
-        foreach (var declaration in new[] { "Filterable", "Searchable" })
+        foreach (var declaration in new[] { "Filterable", "Searchable", "Sortable" })
         {
             if (chain.All(call => call.Name != declaration))
             {
@@ -671,6 +744,92 @@ internal static class MapCallParser
                 LocationInfo.From(argument.GetLocation())));
         }
     }
+
+    /// <summary>Alanları lambda ile sayan bir bildirimi (<c>Sortable</c>, <c>CreateOnly</c>, <c>NaturalKey</c>) okur.</summary>
+    private static void ReadFieldRequests(
+        SimpleNameSyntax callName,
+        InvocationExpressionSyntax call,
+        List<SearchFieldRequest> requests,
+        List<DiagnosticInfo> diagnostics)
+    {
+        if (call.ArgumentList.Arguments.Count == 0)
+        {
+            var declaration = callName.Identifier.ValueText;
+
+            diagnostics.Add(new DiagnosticInfo(
+                "HALDUS010",
+                LocationInfo.From(callName.GetLocation()),
+                new EquatableArray<string>([$"{declaration} needs at least one field, for example {declaration}(item => item.Name)"])));
+            return;
+        }
+
+        foreach (var argument in call.ArgumentList.Arguments)
+        {
+            requests.Add(new SearchFieldRequest(
+                DirectMember(argument.Expression),
+                argument.Expression.ToString(),
+                LocationInfo.From(argument.GetLocation())));
+        }
+    }
+
+    /// <summary>
+    /// <c>.KeyStrategy(...)</c> bildirimini okur. Biçim ve önek derleme zamanında bilinmelidir; önek ayrıca
+    /// kimliğin her yerde (adres, günlük, dosya adı) güvenle kullanılabilmesi için dar tutulur.
+    /// </summary>
+    private static (KeyGeneration Generation, string? Prefix) ReadKeyStrategy(
+        EquatableArray<ChainCall> chain,
+        LocationInfo location,
+        List<DiagnosticInfo> diagnostics)
+    {
+        if (chain.FirstOrDefault(call => call.Name == "KeyStrategy") is not { } call)
+        {
+            return (KeyGeneration.Sequential, null);
+        }
+
+        void Fail(string id, string message) =>
+            diagnostics.Add(new DiagnosticInfo(id, location, new EquatableArray<string>([message])));
+
+        var strategy = call.Arguments.Length == 0 ? string.Empty : call.Arguments[0];
+
+        if (!strategy.Contains("KeyStrategy.")
+            || !Enum.TryParse<KeyGeneration>(strategy.Substring(strategy.LastIndexOf('.') + 1), out var generation))
+        {
+            Fail("HALDUS010", "KeyStrategy must be written as a constant, for example KeyStrategy(KeyStrategy.Prefixed, \"ord\")");
+            return (KeyGeneration.Sequential, null);
+        }
+
+        var prefixArgument = call.Arguments.Length > 1 ? call.Arguments[1] : null;
+
+        if (generation != KeyGeneration.Prefixed)
+        {
+            if (prefixArgument is not null)
+            {
+                Fail("HALDUS007", $"A key prefix has no effect with KeyStrategy.{generation}; it belongs to KeyStrategy.Prefixed");
+            }
+
+            return (generation, null);
+        }
+
+        var prefix = prefixArgument is { Length: >= 2 } literal && literal[0] == '"' && literal[literal.Length - 1] == '"'
+            ? literal.Substring(1, literal.Length - 2)
+            : null;
+
+        if (prefix is null || !IsKeyPrefix(prefix))
+        {
+            Fail(
+                "HALDUS010",
+                "KeyStrategy.Prefixed needs a prefix written as a string literal: it starts with a lowercase letter, "
+                + "contains only lowercase letters and digits, and is at most 12 characters long, for example \"ord\"");
+            return (KeyGeneration.Sequential, null);
+        }
+
+        return (generation, prefix);
+    }
+
+    private static bool IsKeyPrefix(string prefix) =>
+        prefix.Length is > 0 and <= 12
+        && prefix[0] is >= 'a' and <= 'z'
+        && prefix.All(character => character is (>= 'a' and <= 'z') or (>= '0' and <= '9'));
 
     /// <summary><c>item => item.Name</c> biçimindeki bir ifadeden <c>Name</c>'i okur; başka biçimde <c>null</c> döner.</summary>
     private static string? DirectMember(ExpressionSyntax expression) =>

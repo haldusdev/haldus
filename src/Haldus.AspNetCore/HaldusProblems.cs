@@ -64,6 +64,37 @@ public static class HaldusProblems
         return FieldProblem(messages, field, messages.Format(HaldusMessageKeys.HierarchyCycle));
     }
 
+    /// <summary>Doğal anahtarı aynı olan başka bir kayıt var.</summary>
+    /// <param name="field">Doğal anahtar alanının adı.</param>
+    public static ProblemHttpResult Duplicate(IHaldusMessages messages, string resourceName, string field, object? value)
+    {
+        ArgumentNullException.ThrowIfNull(messages);
+
+        return TypedResults.Problem(
+            title: messages.Format(HaldusMessageKeys.DuplicateTitle),
+            detail: messages.Format(HaldusMessageKeys.DuplicateDetail, resourceName, field, value),
+            statusCode: StatusCodes.Status409Conflict);
+    }
+
+    /// <summary>Liste, sıralanabilir olarak bildirilmemiş bir alana göre sıralanmak isteniyor.</summary>
+    /// <param name="requested">İstekte geçen, tanınmayan alan.</param>
+    /// <param name="sortable">Sıralanabilir alanlar.</param>
+    public static ProblemHttpResult SortInvalid(IHaldusMessages messages, string requested, string sortable)
+    {
+        ArgumentNullException.ThrowIfNull(messages);
+        return FieldProblem(messages, "sort", messages.Format(HaldusMessageKeys.SortInvalid, requested, sortable));
+    }
+
+    /// <summary>Metadata çantası, birleştirildikten sonra sınırlarını aşıyor.</summary>
+    public static ProblemHttpResult MetadataInvalid(IHaldusMessages messages)
+    {
+        ArgumentNullException.ThrowIfNull(messages);
+        return FieldProblem(messages, "metadata", MetadataMessage(messages, "Metadata"));
+    }
+
+    internal static string MetadataMessage(IHaldusMessages messages, string name) => messages.Format(
+        HaldusMessageKeys.MetadataInvalid, name, HaldusMetadata.MaxEntries, HaldusMetadata.MaxKeyLength, HaldusMetadata.MaxValueLength);
+
     /// <summary>Kayıt, başka kayıtlar ona referans verdiği için silinemiyor.</summary>
     public static ProblemHttpResult InUse(IHaldusMessages messages, string resourceName, object id)
     {

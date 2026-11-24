@@ -231,6 +231,11 @@ app.MapCrud<Customer>()
 | `.Expiring(...)` | `ExpiresAt` alanı; süresi dolan kayıt okunamaz ve yazılamaz, `expire` ucu hemen sonlandırır |
 | `.Idempotent()` | Oluşturma ve geçişler `Idempotency-Key` ile tekrara karşı korunur |
 | `.Batch()` | Toplu uçlar: `POST /batch-get`, `batch-create`, `batch-update`, `batch-delete`; atomik veya `atomic: false` ile kısmi |
+| `.Metadata()` | Metin değerli serbest anahtar-değer çantası; `PATCH` birleştirir, `PUT` tamamını değiştirir |
+| `.NaturalKey(x => x.Code)` | Alan benzersiz olur (çakışma 409) ve kayıt onunla da okunur: `GET /coupons/by-code/{code}` |
+| `.CreateOnly(...)` | Sayılan alanlar yalnızca `POST` isteğinde yer alır; sonradan değişmez |
+| `.KeyStrategy(...)` | Anahtarın biçimi: sıralı GUID (varsayılan), rastgele GUID veya önekli kimlik (`ord_01j9…`) |
+| `.Sortable(...)` | Liste sıralanabilir: `?sort=-createdAt,name`; yalnızca sayılan alanlara göre |
 | `.Without(...)` / `.Only(...)` | Üretilecek standart işlemleri seçer |
 | `.Filterable<TFilter>()` | Kendi yazdığın filtre sınıfını liste ucunun sorgu parametrelerine bağlar |
 | `.Searchable(...)` | `POST /search`: sayılan alanlarda VE/VEYA koşulları ve sıralama |
@@ -275,7 +280,7 @@ kısıtı olur, ayrı bağlamlardaysa referans yalnızca kimlikle tutulur ve var
 ## Durum
 
 İlk sürümün planlanan on aşaması tamamlandı; eksikleri kapatan ikinci plan sürüyor. Model, araştırmadaki 59
-gerçek varlığa karşı sınanıyor: bugün 22'si temiz, 28'i kısmen ifade ediliyor, 9'u için gereken özellik henüz
+gerçek varlığa karşı sınanıyor: bugün 25'i temiz, 26'sı kısmen ifade ediliyor, 8'i için gereken özellik henüz
 yok. Ayrıntısı ve eksiklerin listesi [taksonomi sınaması](reports/Haldus%20taksonomi%20sınaması.md)
 belgesindedir.
 

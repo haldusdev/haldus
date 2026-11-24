@@ -39,6 +39,18 @@
   <data name="Hierarchy.Cycle" xml:space="preserve">
     <value>Bir kayıt kendisinin veya kendi altındaki bir kaydın altına yerleştirilemez.</value>
   </data>
+  <data name="Duplicate.Title" xml:space="preserve">
+    <value>Kayıt zaten var</value>
+  </data>
+  <data name="Duplicate.Detail" xml:space="preserve">
+    <value>{1} değeri '{2}' olan başka bir {0} kaydı var.</value>
+  </data>
+  <data name="Sort.Invalid" xml:space="preserve">
+    <value>'{0}' alanına göre sıralanamaz. Sıralanabilir alanlar: {1}.</value>
+  </data>
+  <data name="Metadata.Invalid" xml:space="preserve">
+    <value>{0} alanı en çok {1} anahtar taşıyabilir; anahtarlar 1 ile {2} karakter arasında, değerler en çok {3} karakter olmalıdır.</value>
+  </data>
   <data name="InUse.Title" xml:space="preserve">
     <value>Kayıt kullanımda</value>
   </data>
