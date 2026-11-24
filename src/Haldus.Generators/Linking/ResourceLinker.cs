@@ -270,6 +270,39 @@ internal static class ResourceLinker
         foreach (var resource in resources)
         {
             var own = transitions[resource.QualifiedName];
+
+            if (resource.Has(Traits.Document))
+            {
+                // Belgenin gönderilmesi ve iptali kendiliğinden gelir; kullanıcı aynı adla bir geçiş yazdıysa
+                // (iş mantığı için) onunki geçerlidir.
+                foreach (var (route, from, to) in new[] { ("submit", "Draft", "Submitted"), ("cancel", "Submitted", "Cancelled") })
+                {
+                    if (own.All(transition => transition.Route != route))
+                    {
+                        own.Add(new TransitionModel(
+                            route,
+                            char.ToUpperInvariant(route[0]) + route.Substring(1),
+                            route,
+                            RequestType: null,
+                            ImplementsTransition: false,
+                            new EquatableArray<string>([from]),
+                            to)
+                        {
+                            IsImplicit = true,
+                        });
+                    }
+                }
+            }
+
+            if (resource.Approval is { } approval
+                && approval.RequiredFor.FirstOrDefault(name => own.All(transition => transition.Route != name)) is { } unknown)
+            {
+                report(new DiagnosticInfo("HALDUS010", resource.Location, new[]
+                {
+                    $"Approvable names '{unknown}', but '{resource.EntityName}' has no transition or action with that name",
+                }.ToEquatableArray()));
+            }
+
             var result = own.Count == 0 ? resource : resource with { Transitions = own.ToEquatableArray() };
 
             if (result.Numbering is { AssignOn: { } assignOn } && own.All(transition => transition.To != assignOn))
@@ -335,6 +368,8 @@ internal static class ResourceLinker
         "expire" when resource.Expiry is not null => "Expiring",
         "clone" when resource.Has(Traits.Cloneable) => nameof(Traits.Cloneable),
         "reverse" when resource.Has(Traits.Reversible) => nameof(Traits.Reversible),
+        "amend" when resource.Has(Traits.Document) => nameof(Traits.Document),
+        "approve" or "reject" or "approvals" when resource.Has(Traits.Approvable) => nameof(Traits.Approvable),
         "rotate" when resource.Secret is { Rotatable: true } => "Rotatable",
         _ when resource.Details.Any(detail => detail.IsCommandWritten && Naming.ToKebabCase(detail.CollectionName) == route) => "MapDetail",
         "supersede" when resource.Has(Traits.Supersedes) => nameof(Traits.Supersedes),

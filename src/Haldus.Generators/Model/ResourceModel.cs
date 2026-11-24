@@ -109,6 +109,9 @@ internal sealed record ResourceModel(
     public TokenModel? Token { get; init; }
 
     /// <summary>Kaydın ters çevrilebildiği durumlar; durum makinesi yoksa <c>null</c> (her zaman).</summary>
+    /// <summary>Onay kuralları (<c>.Approvable()</c>); yoksa <c>null</c>.</summary>
+    public ApprovalModel? Approval { get; init; }
+
     public EquatableArray<string>? ReversibleIn { get; init; }
 
     /// <summary>Kaydın yerine geçilebildiği durumlar; durum makinesi yoksa <c>null</c> (her zaman).</summary>
@@ -302,6 +305,8 @@ internal enum Traits
 
     /// <summary>Kaydın yerine, ona işaret eden yeni bir kayıt geçebilir.</summary>
     Supersedes = 32768,
+    Document = 65536,
+    Approvable = 131072,
 }
 
 /// <summary>
@@ -330,12 +335,24 @@ internal sealed record ChainOperation(
     public static readonly ChainOperation Supersede = new(
         Traits.Supersedes, "supersede", "Supersede", "SupersedesId", "SupersededById", "ISupersession", "Supersede", "SupersededDetail", Terminal: false);
 
+    /// <summary>Belgenin düzeltilmesi: iptal edilmiş belgenin kopyası olan, ona işaret eden yeni bir taslak.</summary>
+    public static readonly ChainOperation Amend = new(
+        Traits.Document, "amend", "Amend", "AmendedFromId", "AmendedById", "IAmendment", "Amend", "AmendedDetail", Terminal: false);
+
+    public static readonly ChainOperation[] All = [Reverse, Supersede, Amend];
+
     public static IEnumerable<ChainOperation> For(ResourceModel resource) =>
-        new[] { Reverse, Supersede }.Where(chain => resource.Has(chain.Trait));
+        All.Where(chain => resource.Has(chain.Trait));
 
     /// <summary>İşlemin yapılabildiği durumlar; kaynağın durum makinesi yoksa <c>null</c>.</summary>
-    public EquatableArray<string>? AllowedIn(ResourceModel resource) =>
-        Trait == Traits.Reversible ? resource.ReversibleIn : resource.SupersedableIn;
+    public EquatableArray<string>? AllowedIn(ResourceModel resource) => Trait switch
+    {
+        Traits.Reversible => resource.ReversibleIn,
+        Traits.Supersedes => resource.SupersedableIn,
+
+        // Yalnızca iptal edilmiş belge düzeltilir.
+        _ => new EquatableArray<string>(["Cancelled"]),
+    };
 
     public string IndexName(ResourceModel resource)
     {
@@ -600,6 +617,10 @@ internal sealed record NumberingModel(string Pattern, bool Gapless, string? Assi
 /// <param name="Sliding">Her yazmada süre yeniden başlar mı.</param>
 internal sealed record ExpiryModel(long? LifetimeTicks, bool Sliding);
 
+/// <param name="Levels">Kaydın onaylanması için gereken, birbirinden farklı kişilerin vereceği onay sayısı.</param>
+/// <param name="RequiredFor">Kayıt onaylanmadan çalışmayan geçişlerin ve aksiyonların adları.</param>
+internal sealed record ApprovalModel(int Levels, EquatableArray<string> RequiredFor);
+
 /// <param name="Atomic">Bir öğe başarısızsa hiçbir şey kaydedilmez mi; değilse geçerli öğeler kaydedilir.</param>
 /// <param name="MaxItems">Bir istekte kabul edilen en çok öğe.</param>
 internal sealed record BatchModel(bool Atomic, int MaxItems);
@@ -651,6 +672,12 @@ internal sealed record TransitionModel(
 {
     /// <summary>Durumu değiştirmeyen entity aksiyonu mu.</summary>
     public bool IsAction { get; init; }
+
+    /// <summary>
+    /// Geçişi kullanıcı bildirmedi; bir bildirim (belgenin gönderilmesi ve iptali) kendiliğinden getirdi. Böyle bir
+    /// geçiş kaynağın standart uçlarıyla birlikte eşlenir.
+    /// </summary>
+    public bool IsImplicit { get; init; }
 
     public string? ResponseType { get; init; }
 

@@ -241,6 +241,29 @@ public static class HaldusProblems
             Status = StatusCodes.Status400BadRequest,
         });
 
+    /// <summary>Onay veya ret kararı verilemedi: kayıt karar beklemiyor ya da isteği yapan bu kararı veremez.</summary>
+    /// <param name="operation">İşlemin adı: <c>approve</c> veya <c>reject</c>.</param>
+    /// <param name="status">Kaydın bulunduğu onay durumu.</param>
+    public static ProblemHttpResult ApprovalDenied(IHaldusMessages messages, ApprovalOutcome outcome, string operation, ApprovalStatus status)
+    {
+        ArgumentNullException.ThrowIfNull(messages);
+
+        return outcome switch
+        {
+            ApprovalOutcome.NotPending => StateConflict(messages, operation, status),
+            ApprovalOutcome.UserRequired => TypedResults.Problem(
+                title: messages.Format(HaldusMessageKeys.UserRequiredTitle),
+                detail: messages.Format(HaldusMessageKeys.ApprovalUserRequired),
+                statusCode: StatusCodes.Status401Unauthorized),
+            _ => TypedResults.Problem(
+                title: messages.Format(HaldusMessageKeys.ApprovalDeniedTitle),
+                detail: messages.Format(outcome == ApprovalOutcome.OwnRequest
+                    ? HaldusMessageKeys.ApprovalOwnRequest
+                    : HaldusMessageKeys.ApprovalAlreadyApproved),
+                statusCode: StatusCodes.Status403Forbidden),
+        };
+    }
+
     /// <summary>Kullanıcıya ait bir kaynağa, kullanıcısı çözülemeyen bir istekle erişildi.</summary>
     public static ProblemHttpResult UserRequired(IHaldusMessages messages)
     {

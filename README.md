@@ -310,6 +310,27 @@ kayıtta aynı adlı alanlar kopyalanır, gerisini `ICreatedFrom<TSource>` doldu
 `IDerivation<TSource, TTarget>` uygulayan bir sınıf yazar; Haldus onu kaynak kayıtla aynı transaction'da ve
 sırayla çağırır.
 
+## Onay ve belge
+
+```csharp
+app.MapCrud<ExpenseClaim>().Approvable();
+
+var requests = app.MapCrud<PurchaseRequest>()
+    .Workflow<PurchaseRequestStatus>()
+    .Approvable(levels: 2, "order");          // iki farklı kişi; "order" onaysız çalışmaz
+
+app.MapCrud<Contract>().Document();           // taslak → gönder → iptal → düzelt
+```
+
+| Bildirim | Etkisi |
+|---|---|
+| `.Approvable(levels, ...)` | `POST /{id}/approve` ve `/reject` (isteğe bağlı `{ "note": "..." }`), kararların listesi `GET /{id}/approvals`. İçeriği son yazan kişi karar veremez (403); içerik değişince toplanan onaylar geçersiz olur; onaylanmış kayıt değiştirilemez, reddedilmiş kayıt düzenlenince yeniden karar bekler. Sayılan geçişler ve aksiyonlar kayıt onaylanmadan çalışmaz |
+| `.Document()` | Sabit durumlar (`DocumentStatus`): taslak düzenlenir ve silinir, gönderilen belge kilitlidir. `POST /{id}/submit` ve `/cancel` kendiliğinden gelir (aynı adla yazılan `MapTransition` onların yerine geçer); `POST /{id}/amend` iptal edilmiş belgenin kopyası olan, ona işaret eden yeni bir taslak oluşturur |
+
+Onay alanları (`ApprovalStatus`, `ApprovalLevel`, `RequestedBy`, `DecidedBy`, `DecidedAt`, `DecisionNote`) yanıtta
+görünür ve istekle yazılamaz. Karar, kararı verenin gördüğü içeriğe bağlıdır: araya giren bir yazma kararı 409 ile
+durdurur (sürüm kontrollü kaynakta karar `If-Match` ister).
+
 ## Sırlar
 
 ```csharp
@@ -359,7 +380,7 @@ kısıtı olur, ayrı bağlamlardaysa referans yalnızca kimlikle tutulur ve var
 ## Durum
 
 İlk sürümün planlanan on aşaması tamamlandı; eksikleri kapatan ikinci plan sürüyor. Model, araştırmadaki 59
-gerçek varlığa karşı sınanıyor: bugün 38'i temiz, 15'i kısmen ifade ediliyor, 6'sı için gereken özellik henüz
+gerçek varlığa karşı sınanıyor: bugün 39'u temiz, 14'ü kısmen ifade ediliyor, 6'sı için gereken özellik henüz
 yok. Ayrıntısı ve eksiklerin listesi [taksonomi sınaması](reports/Haldus%20taksonomi%20sınaması.md)
 belgesindedir.
 

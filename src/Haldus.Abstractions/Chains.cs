@@ -21,6 +21,16 @@ public interface ISupersession<in TEntity>
 }
 
 /// <summary>
+/// Düzeltme kaydının (<c>.Document()</c> altında <c>POST /{id}/amend</c>) içeriğini düzeltir. Haldus yeni taslağı
+/// iptal edilmiş belgenin kopyası olarak kurar ve sonra bunu çağırır; istekte gönderilen alanlar en son yazılır.
+/// </summary>
+public interface IAmendment<in TEntity>
+{
+    /// <param name="cancelled">Düzeltilen, iptal edilmiş belge.</param>
+    void Amend(TEntity cancelled);
+}
+
+/// <summary>
 /// Başka bir kayıttan üretilen kaydın (<c>.CreatedFrom&lt;TSource&gt;()</c>) içeriğini doldurur. Haldus aynı adlı
 /// alanları kopyalar ve sonra bunu çağırır; adı farklı alanlar ve satırlar burada yazılır.
 /// </summary>

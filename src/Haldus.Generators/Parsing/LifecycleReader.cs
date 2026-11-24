@@ -33,6 +33,8 @@ internal static class LifecycleReader
 
         public TokenModel? Token { get; set; }
 
+        public ApprovalModel? Approval { get; set; }
+
         /// <summary>Kaydın ters çevrilebildiği durumlar; durum makinesi yoksa <c>null</c>.</summary>
         public EquatableArray<string>? ReversibleIn { get; set; }
 
@@ -60,6 +62,7 @@ internal static class LifecycleReader
         (SimpleNameSyntax Name, SeparatedSyntaxList<ArgumentSyntax> Arguments)? supersedes = null;
         var rotatable = false;
         long? overlap = null;
+        SimpleNameSyntax? document = null;
 
         void Invalid(SyntaxNode node, string message) => diagnostics.Add(new DiagnosticInfo(
             "HALDUS010", LocationInfo.From(node.GetLocation()), new EquatableArray<string>([message])));
@@ -131,6 +134,32 @@ internal static class LifecycleReader
                 case "Supersedes":
                     supersedes = (name, arguments);
                     break;
+
+                case "Document":
+                    document = name;
+                    break;
+
+                case "Approvable":
+                    result.Approval = ReadApproval(semanticModel, arguments, Invalid, cancellationToken);
+                    break;
+            }
+        }
+
+        if (document is not null)
+        {
+            if (result.Workflow is not null || ruleLocation is not null)
+            {
+                diagnostics.Add(new DiagnosticInfo(
+                    "HALDUS007",
+                    LocationInfo.From(document.GetLocation()),
+                    new EquatableArray<string>(["Document() fixes the states of the record and their rules; remove Workflow, EditableIn and DeletableIn"])));
+            }
+            else
+            {
+                // Belge, durumları ve kuralları sabit bir durum makinesidir: taslak düzenlenir ve silinir.
+                result.Workflow = new WorkflowModel(DocumentStatus, "Draft", EditableIn: null, DeletableIn: null);
+                editableIn = new EquatableArray<string>(["Draft"]);
+                deletableIn = new EquatableArray<string>(["Draft"]);
             }
         }
 
@@ -176,7 +205,7 @@ internal static class LifecycleReader
                 ResponseAttribute: "global::System.Text.Json.Serialization.JsonConverter(typeof("
                     + $"global::System.Text.Json.Serialization.JsonStringEnumConverter<{workflow.StatusType}>))"));
         }
-        else if (ruleLocation is not null)
+        else if (ruleLocation is not null && document is null)
         {
             diagnostics.Add(new DiagnosticInfo(
                 "HALDUS007",
@@ -263,6 +292,58 @@ internal static class LifecycleReader
         DateTimeOffset,
         EquatableArray<AttributeModel>.Empty,
         IsGenerated: true);
+
+    public const string DocumentStatus = "global::Haldus.DocumentStatus";
+
+    private static ApprovalModel? ReadApproval(
+        SemanticModel semanticModel,
+        SeparatedSyntaxList<ArgumentSyntax> arguments,
+        Action<SyntaxNode, string> invalid,
+        CancellationToken cancellationToken)
+    {
+        var levels = 1;
+        var requiredFor = new List<string>();
+
+        foreach (var argument in arguments)
+        {
+            var named = argument.NameColon?.Name.Identifier.ValueText;
+            var constant = semanticModel.GetConstantValue(argument.Expression, cancellationToken);
+
+            if (named != "requiredFor" && constant is { HasValue: true, Value: int count })
+            {
+                if (count is < 1 or > 10)
+                {
+                    invalid(argument, "Approvable needs between 1 and 10 levels");
+                    return null;
+                }
+
+                levels = count;
+                continue;
+            }
+
+            // Adlar tek tek (params) veya bir koleksiyon ifadesiyle verilebilir.
+            var names = argument.Expression is CollectionExpressionSyntax collection
+                ? collection.Elements.Select(element => (element as ExpressionElementSyntax)?.Expression)
+                : [argument.Expression];
+
+            foreach (var name in names)
+            {
+                if (named != "levels"
+                    && name is not null
+                    && semanticModel.GetConstantValue(name, cancellationToken) is { HasValue: true, Value: string route })
+                {
+                    requiredFor.Add(route);
+                }
+                else
+                {
+                    invalid(argument, "The arguments of Approvable must be constants: the number of levels, then the names of the transitions that need an approved record");
+                    return null;
+                }
+            }
+        }
+
+        return new ApprovalModel(levels, requiredFor.Distinct().ToEquatableArray());
+    }
 
     /// <summary>İfade bir enum üyesiyse onu verir: <c>OrderStatus.Draft</c>.</summary>
     public static StateReference? StateOf(SemanticModel semanticModel, ExpressionSyntax expression, CancellationToken cancellationToken) =>

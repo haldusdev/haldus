@@ -137,6 +137,18 @@ Bunlar kullanıcıyla kararlaştırıldı; yeniden sorma.
     isteğinde gömülü kalır, `PUT`/`PATCH` isteklerinde taşınmaz ve `POST /{id}/order-items`,
     `PUT` / `DELETE /{id}/order-items/{rowId}` ile tek tek yazılır.
   - Raporun v1 listesindeki "uzatma kancaları" yazılmadı: raporda tanımı yok ve kullanıcı istemedi.
+- Onay ve belge (17. aşama). Kullanıcı sormamamı istedi; yazılan, önerdiğim seçeneklerdir ve ayrıca onaylanmadı:
+  - Onay tek adımdır; `.Approvable(levels: n)` ile birbirinden farklı n kişinin sırayla onayı istenir. Düzey başına
+    rol veya koşul (onay zinciri) yazılmadı.
+  - `POST /{id}/approve`, `POST /{id}/reject` (isteğe bağlı `{ "note" }`), `GET /{id}/approvals`. İçeriği son yazan
+    kişi karar veremez (403); aynı kişi iki düzeyi onaylayamaz (403); herhangi bir düzeydeki ret kaydı reddeder.
+  - İçerik değişince (`PUT`, `PATCH`, satır komutu, toplu güncelleme) toplanan onaylar geçersiz olur ve kayıt
+    yeniden karar bekler; onaylanmış kayıt değiştirilemez (409), reddedilmiş kayıt düzenlenebilir.
+  - `.Approvable(levels, "order", ...)` sayılan geçişleri ve aksiyonları kayıt onaylanana kadar durdurur (409).
+  - `.Document()` durumları ve kuralları sabit bir durum makinesidir (`DocumentStatus`: `Draft`, `Submitted`,
+    `Cancelled`; yalnızca taslak düzenlenir ve silinir). `submit` ve `cancel` geçişleri kendiliğinden gelir; aynı
+    adla yazılan `MapTransition` onların yerine geçer. `POST /{id}/amend` iptal edilmiş belgeden, ona işaret eden
+    (`AmendedFromId`) yeni bir taslak üretir; entity `IAmendment<T>` uygularsa kopyadan sonra çağrılır.
 - Eşzamanlılık trait'inin adı `ConcurrencyChecked` (eski adı `Versioned`). Sürüm yanıt gövdesinde değil
   `ETag` başlığında taşınır; güncelleme ve silme `If-Match` ister (eksikse 428, uyuşmazlıkta 412).
 - Güncelleme için hem `PUT` (tam değiştirme) hem `PATCH` (kısmi) üretilir.
@@ -206,7 +218,7 @@ Bunlar kullanıcıyla kararlaştırıldı; yeniden sorma.
 ## Aşamalar
 
 On aşamanın tamamı bitti (3. aşamaya `.Searchable()`, 8. aşamaya fiziksel temizlik de eklendi). 10. aşamanın
-sonucu `reports/Haldus taksonomi sınaması.md` dosyasındadır: araştırmadaki 59 varlığın (bugünkü sayımla) 38'i temiz, 15'i
+sonucu `reports/Haldus taksonomi sınaması.md` dosyasındadır: araştırmadaki 59 varlığın (bugünkü sayımla) 39'u temiz, 14'ü
 kısmen ifade ediliyor, 6'sı için gereken özellik yok. Aynı veri `tests/Haldus.Generators.Tests/TaxonomyTests.cs`
 içinde derlenir; yeni bir archetype veya trait bir satırı kapatıyorsa ikisini birlikte güncelle.
 
@@ -228,7 +240,7 @@ içinde derlenir; yeni bir archetype veya trait bir satırı kapatıyorsa ikisin
 Kullanıcı 2026-11-24'te onayladı. Kapsamı araştırma raporunun v2 listesi, ilk sürümden kalan küçük kalemler
 ve sınamada çıkan küçük eksiklerdir. Raporun v3 listesi (`MapBalance`, `MapChangeSet`, birden çok durum
 ekseni, çeviri, saklama süresi, okundu takibi) ve tekrar serisi bu planın dışındadır. Her aşama testleriyle
-birlikte ayrı commit olur; 11–16. aşamalar bitti, sıradaki 17.
+birlikte ayrı commit olur; 11–17. aşamalar bitti, sıradaki 18.
 
 11. Sahiplik: `OwnedByCurrentUser`, `MapAssociation().ForCurrentUser()`
 12. Alan eklentileri: `Metadata`, yalnızca oluştururken yazılan alan, `NaturalKey`, `KeyStrategy`, liste
@@ -252,7 +264,7 @@ aktarma, yeni paket eklemeden yazılır.
 
 Aşama başına açık kararlar (uygulandıkça "Tasarım kararları"na taşınır):
 
-- 17: Onay tek adım mı, zincir mi.
+
 - 18: Taslak/yayın için çift kopya mı, sürüm tablosu mu; geçmiş anlık görüntü mü, fark günlüğü mü.
 - 19: Depolama sağlayıcıları (paketlere ayrılması önerildi; S3 gibi sağlayıcılar yeni bağımlılıktır).
 - 20: Aktarma biçimleri; CSV için bir kütüphane yeni bağımlılık olabilir.
@@ -599,6 +611,34 @@ Raporun v1 listesindeki "uzatma kancaları" plana girmedi ve yazılmadı: rapord
     listede olmayan geçişin token adresi yoktur. Token ebeveyn altındaki ve kullanıcıya ait kaynaklarla
     birleşmez (görünürlükleri, token'ı taşıyanın sahip olmadığı bir kimliğe bağlıdır). Bilinen sınır: token
     kullanılınca kendiliğinden geçersiz olmaz; ömrünü `Expiring` ve durum makinesi belirler. Oran sınırlama yoktur.
+- **Onay.** `Traits.Approvable` (`IApprovable`; alanları `TraitCatalog`'dadır), kuralları `ResourceModel.Approval`
+  (`LifecycleReader.ReadApproval`). Kimin karar verebileceği ve kararın kayda nasıl yazıldığı çalışma zamanındadır
+  (`HaldusApprovals.DecideAsync`); üretilen uç kaydı bulur, yazma kurallarından geçirir (`If-Match`, kapanmış kayıt
+  koruması) ve `Save()` ile kaydeder. Kararlar `HaldusApprovalDecisions` tablosunda birikir (kaynak adı + anahtar
+  ile; yabancı anahtar yoktur, kayıt silinince kararları kalır); tablo yalnızca onaya bağlı bir kaynak varsa
+  modele girer.
+  - Yeni kaydın onay alanlarını interceptor atar (`HaldusApprovals.Reset`); bu yüzden kopya, ters kayıt, düzeltme
+    gibi her yoldan doğan kayıt karar bekleyerek doğar. **İçeriği değiştiren her yazma yolu `ApprovalReset()`
+    çağırmalıdır** (`EmitWrite`, toplu güncelleme, satır komutları, önizleme); onaylanmış kaydın kilidi
+    `ChainGuard()` içindedir (`ApprovalLock`), geçişlerin onay koşulu `ApprovalGate`.
+  - Karar, kararı verenin gördüğü içeriğe bağlanır: `ApprovalStatus`, `ApprovalLevel` ve her içerik yazmasında
+    ilerleyen `RequestedAt` eşzamanlılık belirtecidir (sürüm kontrollü kaynakta satır sürümü yeter). Entegrasyon
+    testi eşzamanlı onay ve reddin yalnızca birinin geçtiğini doğrular; durum belirteç olmadan ikisi de geçiyordu.
+  - "Aynı kişi iki düzeyi onaylayamaz" kuralı, kaydın son `ApprovalLevel` onayına bakar; içerik değişince düzey
+    sıfırlandığı için önceki turun onaylayanları yeniden onaylayabilir.
+  - Sınırlar: entity aksiyonları ve ayrı uçlu detayın yazmaları içeriği değiştirse de onayı sıfırlamaz (aksiyon
+    `requiredFor` ile onaya bağlanabilir); silme onaya bağlı değildir; onaylayanın yetkisi (rol) denetlenmez,
+    yalnızca "yazan kişi değil" ve "aynı kişi değil" kuralları vardır; onayın geri alınması yoktur. `MapCrud`,
+    `MapAppendOnly` ve `MapReadOnly` ile birleşir.
+- **Belge.** `Traits.Document`. `LifecycleReader` onu hazır bir `WorkflowModel`'e çevirir (durum tipi
+  `Haldus.DocumentStatus`, `EditableIn` ve `DeletableIn` yalnızca `Draft`); `Workflow`, `EditableIn` ve `DeletableIn`
+  ile birlikte yazılamaz. `submit` ve `cancel` geçişlerini, kullanıcı aynı adla yazmadıysa,
+  `ResourceLinker.AttachTransitions` ekler (`TransitionModel.IsImplicit`); böyle bir geçiş çalışma zamanındaki
+  kayda girmez, kaynağın `Map` metodunda standart uçlarla birlikte eşlenir. Düzeltme üçüncü zincir işlemidir
+  (`ChainOperation.Amend`: `AmendedFromId` / `AmendedById`, yalnızca `Cancelled` durumunda) ve `EmitChain`'den
+  geçer; zincir işlemlerinin bütün kuralları (anahtar veritabanında üretilemez, bir kayıt bir kez düzeltilir,
+  çiftin parçası silinemez, sırlarla birleşmez) onun için de geçerlidir; bu yüzden düzeltme taslağı da silinemez
+  (vazgeçilen düzeltme gönderilip iptal edilir). Yalnızca `MapCrud` ile birleşir.
 - **Bağlar ve kapsam.**
   - **Bağın yükü ve durumu** `OperationParser.ParseAssociation` içinde okunur: bağ sınıfı derlemede varsa
     (`LinkDeclared`) skaler alanları yük olur, zincirdeki `Workflow` `LifecycleReader.ReadWorkflow` ile okunur.

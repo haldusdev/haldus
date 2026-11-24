@@ -41,6 +41,13 @@ public sealed class HaldusSaveChangesInterceptor : SaveChangesInterceptor
             {
                 case EntityState.Added:
                     OnAdded(entry, now, tenants, users);
+
+                    if (entry.Entity is IApprovable approvable)
+                    {
+                        // Yeni kayıt, onu oluşturandan başka birinin kararını bekler; alanlar elle verilemez.
+                        HaldusApprovals.Reset(approvable, context);
+                    }
+
                     break;
                 case EntityState.Modified:
                     OnModified(entry, now, users);

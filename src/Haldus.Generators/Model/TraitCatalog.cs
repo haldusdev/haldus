@@ -47,6 +47,19 @@ internal static class TraitCatalog
             new("Position", "int", InResponse: true, new("Position", SearchKind.Range, "int", IsNullable: false)),
         ]),
 
+        // Onay alanlarını yalnızca onay uçları ve içeriği değiştiren yazmalar değiştirir.
+        new(Traits.Approvable, "global::Haldus.IApprovable",
+        [
+            new("ApprovalStatus", ApprovalStatus, InResponse: true, new("ApprovalStatus", SearchKind.Equality, ApprovalStatus, IsNullable: false),
+                ResponseAttribute: $"global::System.Text.Json.Serialization.JsonConverter(typeof(global::System.Text.Json.Serialization.JsonStringEnumConverter<{ApprovalStatus}>))"),
+            new("ApprovalLevel", "int", InResponse: true, Search: null),
+            new("RequestedBy", "string?", InResponse: true, new("RequestedBy", SearchKind.String, "string", IsNullable: true)),
+            new("RequestedAt", DateTimeOffset, InResponse: true, new("RequestedAt", SearchKind.Range, DateTimeOffset, IsNullable: false)),
+            new("DecidedBy", "string?", InResponse: true, new("DecidedBy", SearchKind.String, "string", IsNullable: true)),
+            new("DecidedAt", DateTimeOffset + "?", InResponse: true, new("DecidedAt", SearchKind.Range, DateTimeOffset, IsNullable: true)),
+            new("DecisionNote", "string?", InResponse: true, Search: null),
+        ]),
+
         // Çanta yanıtta görünür; isteklerdeki yeri ve yazılma kuralları ayrıca üretilir.
         new(Traits.Metadata, "global::Haldus.IHasMetadata",
         [
@@ -55,6 +68,8 @@ internal static class TraitCatalog
     ];
 
     public const string MetadataType = "global::System.Collections.Generic.Dictionary<string, string>";
+
+    public const string ApprovalStatus = "global::Haldus.ApprovalStatus";
 
     /// <summary>Üretilen trait alanının başlangıç değeri; null olamayan referans tipleri boş başlar.</summary>
     public static string Initializer(string type) => type switch

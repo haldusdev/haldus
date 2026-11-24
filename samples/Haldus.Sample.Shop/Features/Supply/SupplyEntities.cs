@@ -47,6 +47,49 @@ public partial class SupplierContact
     public string? Email { get; set; }
 }
 
+public enum PurchaseRequestStatus
+{
+    Open,
+    Ordered,
+}
+
+/// <summary>Satın alma talebi. İki farklı kişi onaylamadan siparişe dönüşemez.</summary>
+public partial class PurchaseRequest
+{
+    [Required]
+    [MaxLength(200)]
+    public string Title { get; set; } = "";
+
+    [Range(0.0, 10_000_000.0)]
+    public decimal Amount { get; set; }
+}
+
+/// <summary>Masraf talebi; tek bir onay yeter.</summary>
+public partial class ExpenseClaim
+{
+    [Required]
+    [MaxLength(200)]
+    public string Description { get; set; } = "";
+
+    [Range(0.0, 100_000.0)]
+    public decimal Amount { get; set; }
+}
+
+/// <summary>Tedarik sözleşmesi. Düzeltildiğinde yeni taslağın revizyonu bir artar.</summary>
+public partial class SupplyContract : IAmendment<SupplyContract>
+{
+    [Required]
+    [MaxLength(200)]
+    public string Title { get; set; } = "";
+
+    [Range(0.0, 10_000_000.0)]
+    public decimal Value { get; set; }
+
+    public int Revision { get; private set; } = 1;
+
+    public void Amend(SupplyContract cancelled) => Revision = cancelled.Revision + 1;
+}
+
 public enum SupplyStatus
 {
     Proposed,

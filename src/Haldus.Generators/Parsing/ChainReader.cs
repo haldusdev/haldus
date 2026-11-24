@@ -45,6 +45,8 @@ internal static class ChainReader
         "Previewable",
         "Reversible",
         "Supersedes",
+        "Document",
+        "Approvable",
         "CreatedFrom",
         "DerivedFrom",
         "SecretOnce",
@@ -129,6 +131,12 @@ internal static class ChainReader
                     break;
                 case "Supersedes":
                     traits |= Traits.Supersedes;
+                    break;
+                case "Document":
+                    traits |= Traits.Document;
+                    break;
+                case "Approvable":
+                    traits |= Traits.Approvable;
                     break;
                 case "OwnedByCurrentUser":
                     traits |= Traits.Owned;

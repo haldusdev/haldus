@@ -296,17 +296,17 @@ public sealed class TaxonomyTests
             employees.MapDetail<EmploymentRecord>().AsSubresource();
             employees.MapAction("terminate", employee => employee.Name = employee.Name.Trim());
             """),
-        new(24, "LeaveRequest", Fit.Partial,
+        new(24, "LeaveRequest", Fit.Clean,
             """
-            public enum LeaveStatus { Requested, Approved, Rejected }
+            public enum LeaveStatus { Requested, Taken, Cancelled }
             public partial class Employee { public string Name { get; set; } = ""; }
             public partial class LeaveRequest { public DateOnly From { get; set; } public DateOnly To { get; set; } }
             """,
             """
             app.MapCrud<Employee>();
-            var leave = app.MapCrud<LeaveRequest>().Under<Employee>().Workflow<LeaveStatus>().EditableIn(LeaveStatus.Requested);
-            leave.MapTransition("approve", LeaveStatus.Requested, LeaveStatus.Approved);
-            leave.MapTransition("reject", LeaveStatus.Requested, LeaveStatus.Rejected);
+            var leave = app.MapCrud<LeaveRequest>().Under<Employee>().Workflow<LeaveStatus>().Approvable(levels: 2, "take");
+            leave.MapTransition("take", LeaveStatus.Requested, LeaveStatus.Taken);
+            leave.MapTransition("cancel", LeaveStatus.Requested, LeaveStatus.Cancelled);
             """),
         new(25, "Time-off balance", Fit.Partial,
             """
@@ -619,8 +619,8 @@ public sealed class TaxonomyTests
     public void Tally_MatchesTheWrittenResults()
     {
         // reports/Haldus taksonomi sınaması.md dosyasındaki sayılar; biri değişirse diğeri de güncellenmelidir.
-        Assert.Equal(38, Rows.Count(row => row.Fit == Fit.Clean));
-        Assert.Equal(15, Rows.Count(row => row.Fit == Fit.Partial));
+        Assert.Equal(39, Rows.Count(row => row.Fit == Fit.Clean));
+        Assert.Equal(14, Rows.Count(row => row.Fit == Fit.Partial));
         Assert.Equal(6, Rows.Count(row => row.Fit == Fit.Missing));
     }
 }

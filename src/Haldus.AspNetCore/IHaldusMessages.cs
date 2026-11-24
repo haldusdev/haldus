@@ -33,6 +33,11 @@ public static class HaldusMessageKeys
     public const string ReversalLockedDetail = "ReversalLocked.Detail";
     public const string SupersededDetail = "Superseded.Detail";
     public const string ChainMemberDetail = "ChainMember.Detail";
+    public const string AmendedDetail = "Amended.Detail";
+    public const string ApprovalDeniedTitle = "ApprovalDenied.Title";
+    public const string ApprovalUserRequired = "Approval.UserRequired";
+    public const string ApprovalOwnRequest = "Approval.OwnRequest";
+    public const string ApprovalAlreadyApproved = "Approval.AlreadyApproved";
     public const string TokenInvalidTitle = "TokenInvalid.Title";
     public const string TokenInvalidDetail = "TokenInvalid.Detail";
     public const string InUseTitle = "InUse.Title";

@@ -304,6 +304,19 @@ internal sealed partial class EndpointEmitter
         foreach (var transition in _resource.Transitions)
         {
             EmitTransition(transition);
+
+            if (transition.IsImplicit)
+            {
+                // Kullanıcının yazmadığı geçiş (belgenin gönderilmesi, iptali) standart uçlarla birlikte eşlenir.
+                _map.Append($"        {transition.MapperName}(group, apply: null);\n\n");
+            }
+        }
+
+        if (_resource.Approval is not null)
+        {
+            EmitApproval(approve: true);
+            EmitApproval(approve: false);
+            EmitApprovalList();
         }
 
         if (_resource.Has(Operations.Update) || _resource.Has(Operations.Patch))
@@ -913,7 +926,7 @@ internal sealed partial class EndpointEmitter
                     }
 
             {{ChainGuard()}}{{StateGuard(_resource.Workflow?.EditableIn, "update")}}{{WriteChecks(patch: operation == "Patch", creating: false)}}{{CycleCheck(patch: operation == "Patch")}}{{ExpectVersion()}}{{OrderRemember()}}{{assignments}}
-            {{SyncDetails(patch: operation == "Patch")}}{{Slide()}}{{Compute()}}{{OrderReparent()}}{{Save()}}{{OrderReparentCommit()}}
+            {{SyncDetails(patch: operation == "Patch")}}{{ApprovalReset()}}{{Slide()}}{{Compute()}}{{OrderReparent()}}{{Save()}}{{OrderReparentCommit()}}
             {{WriteETag()}}        return {{Http}}.TypedResults.Ok(ToResponse(entity));
                 }
 
@@ -1645,7 +1658,7 @@ internal sealed partial class EndpointEmitter
                         return {{NotFound}};
                     }
 
-            {{ChainClosedGuard()}}{{StateGuard(transition.IsAction ? null : transition.From, transition.Route)}}{{ExpectVersion()}}{{declareResult}}        try
+            {{ChainClosedGuard()}}{{StateGuard(transition.IsAction ? null : transition.From, transition.Route)}}{{ApprovalGate(transition.Route)}}{{ExpectVersion()}}{{declareResult}}        try
                     {
             {{logic}}        }
                     catch (global::Haldus.TransitionRejectedException rejection)
@@ -1905,7 +1918,7 @@ internal sealed partial class EndpointEmitter
             {{ChainGuard()}}{{StateGuard(_resource.Workflow?.EditableIn, "update")}}{{ExpectVersion()}}{{change}}
                     // Satır değişikliği üst kaydın değişikliğidir: sürümü ilerler ve hesaplanan alanları yenilenir.
                     context.Entry(entity).State = global::Microsoft.EntityFrameworkCore.EntityState.Modified;
-            {{Slide()}}{{Compute()}}{{Save()}}
+            {{ApprovalReset()}}{{Slide()}}{{Compute()}}{{Save()}}
             {{WriteETag()}}        return {{Http}}.TypedResults.Ok(ToResponse(entity));
                 }
 
@@ -2430,7 +2443,7 @@ internal sealed partial class EndpointEmitter
     /// Kapanmış bir halka (ters çevrilmiş veya yerine geçilmiş kayıt) değiştirilemez: karşı kaydı onun o anki
     /// halinden üretilmiştir.
     /// </summary>
-    private string ChainGuard() => ChainClosedGuard() + string.Concat(ChainOperation.For(_resource).Where(chain => chain.Terminal).Select(chain => $$"""
+    private string ChainGuard() => ChainClosedGuard() + ApprovalLock() + string.Concat(ChainOperation.For(_resource).Where(chain => chain.Terminal).Select(chain => $$"""
                 if (entity.{{chain.Forward}} is not null)
                 {
                     return {{Problems}}.ChainLocked(messages, global::Haldus.HaldusMessageKeys.ReversalLockedDetail, "{{_entity}}", {{_keyParameter}});
@@ -2438,6 +2451,123 @@ internal sealed partial class EndpointEmitter
 
 
         """));
+
+    // ── Onay ───────────────────────────────────────────────────────────────────────────────────────────
+
+    /// <summary>Onaylanmış kaydın içeriği değişmez: onay, onaylayanın gördüğü içeriğe verilmiştir.</summary>
+    private string ApprovalLock() => _resource.Approval is null
+        ? string.Empty
+        : $$"""
+                    if (entity.ApprovalStatus == global::Haldus.ApprovalStatus.Approved)
+                    {
+                        return {{Problems}}.StateConflict(messages, "update", entity.ApprovalStatus);
+                    }
+
+
+            """;
+
+    /// <summary>
+    /// İçerik değişti: toplanan onaylar geçersiz olur, reddedilmiş kayıt yeniden karar bekler ve içeriği yazan kişi
+    /// ona karar veremeyecek olan kişi olur. İçeriği değiştiren her yazma yolu bunu çağırmalıdır.
+    /// </summary>
+    private string ApprovalReset() => _resource.Approval is null
+        ? string.Empty
+        : "        global::Haldus.HaldusApprovals.Reset(entity, context);\n";
+
+    /// <summary>Onay isteyen geçiş veya aksiyon, kayıt onaylanmadan çalışmaz.</summary>
+    private string ApprovalGate(string route) => _resource.Approval is not { } approval || !approval.RequiredFor.Contains(route)
+        ? string.Empty
+        : $$"""
+                    if (entity.ApprovalStatus != global::Haldus.ApprovalStatus.Approved)
+                    {
+                        return {{Problems}}.StateConflict(messages, "{{route}}", entity.ApprovalStatus);
+                    }
+
+
+            """;
+
+    private string KeyText => $"global::System.Convert.ToString({_keyParameter}, global::System.Globalization.CultureInfo.InvariantCulture)!";
+
+    /// <summary>
+    /// Onay ve ret uçları. Kimin karar verebileceği ve kararın kayda nasıl yazıldığı çalışma zamanındadır
+    /// (<c>HaldusApprovals.DecideAsync</c>); uç kaydı bulur, yazma kurallarından geçirir ve kaydeder.
+    /// </summary>
+    private void EmitApproval(bool approve)
+    {
+        var name = approve ? "Approve" : "Reject";
+        var route = approve ? "approve" : "reject";
+
+        _map.Append($$"""
+                    group.MapPost("{{_keyRoute}}/{{route}}", {{name}}Async)
+                        .WithName("{{name}}{{_entity}}")
+                        .AddEndpointFilter<global::Haldus.HaldusValidationFilter<global::Haldus.ApprovalDecisionRequest>>()
+                        .ProducesValidationProblem()
+                        .ProducesProblem(401)
+                        .ProducesProblem(403)
+                        .ProducesProblem(404)
+                        .ProducesProblem(409){{ConcurrencyMetadata()}};
+
+
+            """);
+
+        _handlers.Append($$"""
+
+                private static async {{OkOrProblem}} {{name}}Async(
+            {{ScopeParameter}}{{KeyParameter}}        global::Haldus.ApprovalDecisionRequest? request,
+            {{HttpContextParameter}}{{ContextsParameter}}{{MessagesParameter}}{{CancellationParameter}}    {
+            {{ReadIfMatch()}}{{OwnerGuard(route)}}        var context = contexts.For<{{_entity}}>();
+                    var entity = await context.Set<{{_entity}}>(){{Includes}}.FirstOrDefaultAsync(item => {{Match}}, cancellationToken);
+
+                    if (entity is null)
+                    {
+                        return {{NotFound}};
+                    }
+
+            {{ChainClosedGuard()}}{{ExpectVersion()}}        var outcome = await global::Haldus.HaldusApprovals.DecideAsync(
+                        context, entity, "{{_entity}}", {{KeyText}}, approve: {{(approve ? "true" : "false")}}, request?.Note, levels: {{_resource.Approval!.Levels}}, cancellationToken);
+
+                    if (outcome != global::Haldus.ApprovalOutcome.Recorded)
+                    {
+                        return {{Problems}}.ApprovalDenied(messages, outcome, "{{route}}", entity.ApprovalStatus);
+                    }
+
+            {{Save()}}
+            {{WriteETag()}}        return {{Http}}.TypedResults.Ok(ToResponse(entity));
+                }
+
+            """);
+    }
+
+    /// <summary>Kayıt için verilmiş kararların listesi; kayıt isteği yapana görünür değilse 404 döner.</summary>
+    private void EmitApprovalList()
+    {
+        const string Decisions = "global::System.Collections.Generic.IReadOnlyList<global::Haldus.ApprovalDecision>";
+
+        _map.Append($$"""
+                    group.MapGet("{{_keyRoute}}/approvals", ListApprovalsAsync)
+                        .WithName("List{{_entity}}Approvals")
+                        .ProducesProblem(404);
+
+
+            """);
+
+        _handlers.Append($$"""
+
+                private static async {{Task}}<{{Results}}.Results<{{Results}}.Ok<{{Decisions}}>, {{Problem}}>> ListApprovalsAsync(
+            {{ScopeParameter}}{{KeyParameter}}{{ContextsParameter}}{{MessagesParameter}}{{CancellationParameter}}    {
+                    var context = contexts.For<{{_entity}}>();
+
+                    if (!await context.Set<{{_entity}}>().AnyAsync(item => {{Match}}, cancellationToken))
+                    {
+                        return {{NotFound}};
+                    }
+
+                    return {{Http}}.TypedResults.Ok(
+                        await global::Haldus.HaldusApprovals.ListAsync(context, "{{_entity}}", {{KeyText}}, cancellationToken));
+                }
+
+            """);
+    }
 
     /// <summary>
     /// Kapanmış bir kayıtta (ters çevrilmiş veya yerine geçilmiş) hiçbir yazma çalışmaz; geçişler ve aksiyonlar da.
@@ -2959,7 +3089,7 @@ internal sealed partial class EndpointEmitter
                         }
 
                 {{ChainGuard()}}{{StateGuard(_resource.Workflow?.EditableIn, "update")}}{{WriteChecks(patch: false, creating: false)}}{{CycleCheck(patch: false)}}{{UpdateAssignments()}}
-                {{SyncDetails(patch: false)}}{{Compute()}}        var preview = ToResponse(entity);
+                {{SyncDetails(patch: false)}}{{ApprovalReset()}}{{Compute()}}        var preview = ToResponse(entity);
 
                         // Hiçbir şey kaydedilmez. Bağlamda bekleyen değişiklikler de bırakılır ki isteğin devamında
                         // çalışan bir kod (ör. istek sonunda kaydeden bir ara katman) onları kalıcı yapmasın.
@@ -3088,7 +3218,7 @@ internal sealed partial class EndpointEmitter
     /// Durum makinesi olan ama sürüm kontrolü olmayan kaynakta durum, eşzamanlılık belirtecidir: kayıt
     /// okunduktan sonra başka bir istek durumunu değiştirdiyse kaydetme başarısız olur.
     /// </summary>
-    private bool GuardsState => _resource.Workflow is not null && !_concurrency;
+    private bool GuardsState => (_resource.Workflow is not null || _resource.Approval is not null) && !_concurrency;
 
     private string Save()
     {

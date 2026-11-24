@@ -124,7 +124,7 @@ internal static class MapCallParser
 
         // Zincir alanlarının tipi anahtarın tipine bağlıdır; adları şimdiden ayrılır, kendileri anahtar belli
         // olunca eklenir.
-        var pairings = new[] { ChainOperation.Reverse, ChainOperation.Supersede }.Where(pairing => (traits & pairing.Trait) != 0).ToArray();
+        var pairings = ChainOperation.All.Where(pairing => (traits & pairing.Trait) != 0).ToArray();
         foreach (var pairing in pairings)
         {
             traitMemberNames.Add(pairing.Forward);
@@ -413,6 +413,7 @@ internal static class MapCallParser
             Expiry = lifecycle.Expiry,
             Secret = lifecycle.Secret,
             Token = lifecycle.Token,
+            Approval = lifecycle.Approval,
             ReversibleIn = lifecycle.ReversibleIn,
             SupersedableIn = lifecycle.SupersedableIn,
             Batch = lifecycle.Batch,
@@ -421,7 +422,7 @@ internal static class MapCallParser
             Contracts = (entity?.AllInterfaces ?? [])
                 .Where(candidate => candidate is
                 {
-                    Name: "IReversal" or "ISupersession" or "ICreatedFrom",
+                    Name: "IReversal" or "ISupersession" or "IAmendment" or "ICreatedFrom",
                     TypeArguments.Length: 1,
                     ContainingNamespace: { Name: "Haldus", ContainingNamespace.IsGlobalNamespace: true },
                 })
@@ -614,7 +615,7 @@ internal static class MapCallParser
             }
 
             // Değer yalnızca tekil oluşturma yanıtında gösterilebilir; başka bir yoldan doğan kayıt onsuz doğardı.
-            foreach (var other in new[] { "Batch", "Cloneable", "Previewable", "Reversible", "Supersedes", "CreatedFrom" })
+            foreach (var other in new[] { "Batch", "Cloneable", "Previewable", "Reversible", "Supersedes", "Document", "CreatedFrom" })
             {
                 if (chain.Any(call => call.Name == other))
                 {
@@ -651,7 +652,7 @@ internal static class MapCallParser
                 + "keep Create, or pass on: \"...\" so that the record is created only by a transition of its source";
         }
 
-        foreach (var declaration in new[] { "Reversible", "Supersedes" })
+        foreach (var declaration in new[] { "Reversible", "Supersedes", "Document" })
         {
             if (chain.All(call => call.Name != declaration)
                 || !(crudLike || (declaration == "Reversible" && archetype == Archetype.AppendOnly)))
@@ -784,6 +785,12 @@ internal static class MapCallParser
                 // Ters kayıt, yalnızca eklenen kayıtların düzeltilme biçimidir; değiştirilebilen kayıtta da olur.
                 "Reversible" => crudLike || archetype == Archetype.AppendOnly,
                 "Supersedes" => crudLike,
+
+                // Belge, taslağı düzenlenen ve düzeltmesi yeni bir kayıt olan bir koleksiyondur.
+                "Document" => crudLike,
+
+                // Karar, anahtarıyla adreslenen bir kayda verilir.
+                "Approvable" => crudLike || archetype is Archetype.AppendOnly or Archetype.ReadOnly,
                 "Previewable" => crudLike || archetype == Archetype.AppendOnly,
                 _ => true,
             };

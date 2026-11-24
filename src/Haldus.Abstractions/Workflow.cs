@@ -8,6 +8,19 @@ namespace Haldus;
 // veya Map çağrısına verilen lambda.
 
 /// <summary>
+/// Belgenin (<c>.Document()</c>) sabit durumları: taslak düzenlenir ve silinir, gönderilen belge kilitlidir, iptal
+/// edilen belge yalnızca düzeltilebilir (yeni bir taslak doğar).
+/// </summary>
+public enum DocumentStatus
+{
+    Draft,
+
+    Submitted,
+
+    Cancelled,
+}
+
+/// <summary>
 /// Entity üzerindeki etkisini kendisi uygulayan geçiş isteği. Bağımlılık gerektirmeyen geçişler için:
 /// <c>record CancelOrder(string Reason) : ITransition&lt;Order&gt;</c>.
 /// </summary>

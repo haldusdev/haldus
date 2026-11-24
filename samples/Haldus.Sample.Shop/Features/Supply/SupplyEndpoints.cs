@@ -35,5 +35,25 @@ public static class SupplyEndpoints
 
         supplies.MapTransition("approve", from: SupplyStatus.Proposed, to: SupplyStatus.Approved);
         supplies.MapTransition("discontinue", from: [SupplyStatus.Proposed, SupplyStatus.Approved], to: SupplyStatus.Discontinued);
+
+        // Satın alma talebi iki farklı kişinin sırayla onayına bağlıdır: POST /purchase-requests/{id}/approve ve
+        // /reject, kararların listesi GET /purchase-requests/{id}/approvals. Talebi son yazan kişi karar veremez;
+        // içerik değişince toplanan onaylar geçersiz olur. "order" geçişi talep onaylanmadan çalışmaz.
+        var requests = app.MapCrud<PurchaseRequest>()
+            .Workflow<PurchaseRequestStatus>(initial: PurchaseRequestStatus.Open)
+            .Approvable(levels: 2, "order");
+
+        requests.MapTransition("order", from: PurchaseRequestStatus.Open, to: PurchaseRequestStatus.Ordered);
+
+        // Tek onaylı, durum makinesi olmayan en yalın biçim.
+        app.MapCrud<ExpenseClaim>()
+            .Approvable();
+
+        // Belge: taslak → gönder → iptal → düzelt. Taslak düzenlenir ve silinir, gönderilen sözleşme kilitlidir.
+        // POST /supply-contracts/{id}/submit ve /cancel kendiliğinden üretilir; POST /{id}/amend iptal edilmiş
+        // sözleşmenin kopyası olan yeni bir taslak oluşturur. Numara sözleşme gönderilirken atanır.
+        app.MapCrud<SupplyContract>()
+            .Document()
+            .Numbered("CTR-{seq:4}", assignOn: DocumentStatus.Submitted);
     }
 }

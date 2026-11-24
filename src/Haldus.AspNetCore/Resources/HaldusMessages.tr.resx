@@ -66,6 +66,21 @@
   <data name="ReversalLocked.Detail" xml:space="preserve">
     <value>'{1}' kimlikli {0} kaydı başka bir kaydın ters kaydıdır; artık değiştirilemez.</value>
   </data>
+  <data name="Amended.Detail" xml:space="preserve">
+    <value>'{1}' kimlikli {0} kaydı düzeltildi; artık değiştirilemez ve yeniden düzeltilemez.</value>
+  </data>
+  <data name="ApprovalDenied.Title" xml:space="preserve">
+    <value>Bu kararı veremezsiniz</value>
+  </data>
+  <data name="Approval.UserRequired" xml:space="preserve">
+    <value>Karar bir kullanıcı gerektirir, ancak istek için kullanıcı belirlenemedi.</value>
+  </data>
+  <data name="Approval.OwnRequest" xml:space="preserve">
+    <value>Bu kaydı en son siz yazdınız; kararı başka biri vermelidir.</value>
+  </data>
+  <data name="Approval.AlreadyApproved" xml:space="preserve">
+    <value>Bu kaydı önceki bir düzeyde zaten onayladınız; sıradaki onayı başka biri vermelidir.</value>
+  </data>
   <data name="ChainMember.Detail" xml:space="preserve">
     <value>'{1}' kimlikli {0} kaydı, onu ters çeviren ya da yerine geçen (veya kendisinin ters çevirdiği ya da yerine geçtiği) kayda bağlıdır; silinemez.</value>
   </data>

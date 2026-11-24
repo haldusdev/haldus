@@ -54,6 +54,11 @@ internal static class ModuleEmitter
                 model.Append("            global::Haldus.HaldusIdempotency.Configure(modelBuilder);\n");
             }
 
+            if (resources.Any(entry => entry.Resource.Has(Traits.Approvable)))
+            {
+                model.Append("            global::Haldus.HaldusApprovals.Configure(modelBuilder);\n");
+            }
+
             foreach (var association in associations)
             {
                 model.Append(AssociationEmitter.EmitModel(association));
@@ -85,7 +90,8 @@ internal static class ModuleEmitter
                 blocks.Add($"        global::Haldus.HaldusJobRegistry.Register<{entity}>();\n");
             }
 
-            foreach (var transition in resource.Transitions)
+            // Kullanıcının yazmadığı geçişler standart uçlarla eşlenir; çalışma zamanında aranmazlar.
+            foreach (var transition in resource.Transitions.Where(transition => !transition.IsImplicit))
             {
                 var name = transition.RegistryName is null ? "null" : ResourceEmitter.Literal(transition.RegistryName);
 
@@ -358,6 +364,26 @@ internal static class ModuleEmitter
                 // belirteci olunca her güncelleme ve silme "durum hâlâ okuduğum gibi mi" koşuluyla yapılır;
                 // sürüm kontrollü kaynakta aynı işi satır sürümü görür.
                 statements.Add("entity.Property(item => item.Status).IsConcurrencyToken();");
+            }
+        }
+
+        if (resource.Has(Traits.Approvable))
+        {
+            statements.Add("entity.Property(item => item.ApprovalStatus).HasConversion<string>().HasMaxLength(16);");
+            statements.Add("entity.Property(item => item.RequestedBy).HasMaxLength(256);");
+            statements.Add("entity.Property(item => item.DecidedBy).HasMaxLength(256);");
+            statements.Add("entity.Property(item => item.DecisionNote).HasMaxLength(1000);");
+            statements.Add("entity.HasIndex(item => item.ApprovalStatus);");
+
+            if (!resource.Has(Traits.ConcurrencyChecked))
+            {
+                // Karar, kararı verenin gördüğü içeriğe bağlanır: içerik her yazıldığında RequestedAt ilerler, her
+                // onayda düzey, her sonuçta durum değişir. Üçü eşzamanlılık belirteci olunca araya giren bir yazma
+                // kararı (ve karar araya giren yazmayı ya da öteki kararı) 409 ile durdurur. Sürüm kontrollü
+                // kaynakta aynı işi satır sürümü görür.
+                statements.Add("entity.Property(item => item.ApprovalStatus).IsConcurrencyToken();");
+                statements.Add("entity.Property(item => item.ApprovalLevel).IsConcurrencyToken();");
+                statements.Add("entity.Property(item => item.RequestedAt).IsConcurrencyToken();");
             }
         }
 

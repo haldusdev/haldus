@@ -147,6 +147,27 @@ public static class ResourceBuilderTraitExtensions
         where TEntity : class => builder;
 
     /// <summary>
+    /// Kaydı sabit bir yaşam döngüsü olan bir belge yapar: taslak → gönder → iptal → düzelt. <c>Status</c> alanı
+    /// (<see cref="DocumentStatus"/>) üretilir; taslak düzenlenir ve silinir, gönderilen belge kilitlidir.
+    /// <c>POST /{id}/submit</c> ve <c>POST /{id}/cancel</c> kendiliğinden üretilir (iş mantığı gerekiyorsa aynı adla
+    /// <c>MapTransition</c> yazılır ve onun yerine geçer); <c>POST /{id}/amend</c> iptal edilmiş belgenin kopyası olan,
+    /// ona işaret eden (<c>AmendedFromId</c>) yeni bir taslak oluşturur. <c>Workflow</c> ile birlikte kullanılmaz.
+    /// </summary>
+    public static ResourceBuilder<TEntity> Document<TEntity>(this ResourceBuilder<TEntity> builder)
+        where TEntity : class => builder;
+
+    /// <summary>
+    /// Kaydı ikinci bir kişinin onayına bağlar: <c>POST /{id}/approve</c>, <c>POST /{id}/reject</c> (isteğe bağlı
+    /// gövde: <c>{ "note": "..." }</c>) ve kararların listesi <c>GET /{id}/approvals</c>. İçeriği son yazan kişi
+    /// kendi yazdığına karar veremez; içerik değişince toplanan onaylar geçersiz olur; onaylanmış kayıt
+    /// değiştirilemez, reddedilmiş kayıt düzenlenince yeniden karar bekler.
+    /// </summary>
+    /// <param name="levels">Kaydın onaylanması için gereken, birbirinden farklı kişilerin sırayla vereceği onay sayısı.</param>
+    /// <param name="requiredFor">Kayıt onaylanmadan çalışmayan geçişlerin ve aksiyonların adları.</param>
+    public static ResourceBuilder<TEntity> Approvable<TEntity>(this ResourceBuilder<TEntity> builder, int levels = 1, params string[] requiredFor)
+        where TEntity : class => builder;
+
+    /// <summary>
     /// Kaydın yerine geçen yeni bir kayıt üretir (düzeltme, yeniden planlama): <c>POST /{id}/supersede</c>. Yeni
     /// kayıt eskisinin kopyası olarak doğar, istekte gönderilen alanlar onun yerine geçer ve eskisine işaret eder
     /// (<c>SupersedesId</c>). Eski kayıt kalır ama artık değiştirilemez.
