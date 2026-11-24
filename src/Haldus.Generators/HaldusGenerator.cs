@@ -104,7 +104,8 @@ public sealed class HaldusGenerator : IIncrementalGenerator
     /// <summary>Zincir bildirimleri ya uzantı sınıfında ya da doğrudan <c>ResourceBuilder</c> üzerinde tanımlıdır.</summary>
     private static bool IsDeclarationHost(INamedTypeSymbol? type) =>
         type?.ToDisplayString() == "Haldus.ResourceBuilderTraitExtensions"
-        || type?.OriginalDefinition.ToDisplayString() == "Haldus.ResourceBuilder<TEntity>";
+        || type?.OriginalDefinition.ToDisplayString() == "Haldus.ResourceBuilder<TEntity>"
+        || type?.OriginalDefinition.ToDisplayString() == "Haldus.DetailBuilder<TEntity, TDetail>";
 
     private static void Emit(
         SourceProductionContext context,
@@ -201,7 +202,12 @@ public sealed class HaldusGenerator : IIncrementalGenerator
             }
 
             AddSource(context, $"{hintPrefix}.Dtos.g.cs", ResourceEmitter.EmitDtos(resource, entityNamespace));
-            AddSource(context, $"{hintPrefix}.Endpoints.g.cs", EndpointEmitter.Emit(resource, entityNamespace));
+
+            // Gömülü detayın kendi ucu yoktur; sahibinin uçlarında taşınır.
+            if (resource.Archetype != Archetype.Detail)
+            {
+                AddSource(context, $"{hintPrefix}.Endpoints.g.cs", EndpointEmitter.Emit(resource, entityNamespace));
+            }
         }
 
         foreach (var association in associations)

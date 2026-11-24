@@ -36,6 +36,32 @@ internal sealed record ResourceModel(
     /// <summary>Başka bir kayıt silinmesini engelleyecek biçimde bu kaynağa referans veriyor mu.</summary>
     public bool IsReferenced { get; init; }
 
+    /// <summary><c>MapDetail</c> ile bildirildiyse sahibi olan kaynağın adı ve (çözülebildiyse) tam tip adı.</summary>
+    public string? DetailOfName { get; init; }
+
+    public string? DetailOfType { get; init; }
+
+    /// <summary>Detay, üst kaydın DTO'larına gömülmek yerine kendi uçlarına mı ayrıldı (<c>.AsSubresource()</c>).</summary>
+    public bool IsSubresource { get; init; }
+
+    /// <summary>Kaynağın adresi ebeveyninin grubuna göre mi kurulur (ayrı uçlu detaylar üst kaynağın grubuna eşlenir).</summary>
+    public bool RouteRelativeToParent { get; init; }
+
+    /// <summary>
+    /// Gömülü bir detayda satırın sırasını tutan alanı kullanıcı kendi yazdı mı. Alan her durumda Haldus'a
+    /// aittir: değeri istekteki sıradan gelir ve DTO'larda yer almaz.
+    /// </summary>
+    public bool PositionDeclared { get; init; }
+
+    /// <summary>Entity <c>IComputed</c> uyguluyor mu; uyguluyorsa yazma uçları kaydetmeden önce hesaplatır.</summary>
+    public bool IsComputed { get; init; }
+
+    /// <summary>Bu kaynağın DTO'larına gömülü taşınan detayları; bağlama adımı doldurur.</summary>
+    public EquatableArray<ResourceModel> Details { get; init; } = EquatableArray<ResourceModel>.Empty;
+
+    /// <summary>Detay koleksiyonunun üst kayıttaki adı: <c>OrderItems</c>.</summary>
+    public string CollectionName => Haldus.Generators.Infrastructure.Naming.Pluralize(EntityName);
+
     public bool HasErrors => Diagnostics.Length > 0;
 
     public ResolvedReference? Parent => References.FirstOrDefault(reference => reference.Kind == ReferenceKind.Parent);
@@ -77,6 +103,9 @@ internal enum Archetype
 
     /// <summary>Kapsam başına tam bir kayıt; örtük olarak vardır.</summary>
     Singleton,
+
+    /// <summary>Başka bir kaynağın sahip olduğu satır; kendi başına adreslenmez.</summary>
+    Detail,
 }
 
 internal static class ArchetypeExtensions

@@ -40,6 +40,15 @@ public static class HaldusEndpointRegistry
         return map(endpoints);
     }
 
+    /// <summary>Entity için endpoint üretildiyse eşler; gömülü detaylarda üretilmez ve hiçbir şey yapılmaz.</summary>
+    internal static void MapIfRegistered<TEntity>(IEndpointRouteBuilder endpoints) where TEntity : class
+    {
+        if (Mappers.TryGetValue(typeof(TEntity), out var map))
+        {
+            map(endpoints);
+        }
+    }
+
     internal static RouteGroupBuilder Map<TEntity>(IEndpointRouteBuilder endpoints, string archetype) where TEntity : class
     {
         ArgumentNullException.ThrowIfNull(endpoints);

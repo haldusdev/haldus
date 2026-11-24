@@ -10,6 +10,10 @@ internal static class ResourceEmitter
 
     private const string RequiredAttributeName = "global::System.ComponentModel.DataAnnotations.RequiredAttribute";
     private const string MaxLength = "global::System.ComponentModel.DataAnnotations.MaxLengthAttribute";
+    private const string ReadOnlyList = "global::System.Collections.Generic.IReadOnlyList";
+
+    /// <summary>Bir namespace'i, ardından tip adı yazılabilecek tam önek haline getirir.</summary>
+    public static string Prefix(this string @namespace) => @namespace.Length == 0 ? "global::" : $"global::{@namespace}.";
     private const string NotNullWhenSetAttributeName = "global::Haldus.NotNullWhenSetAttribute";
 
     public static string QualifiedName(ResourceModel resource, string entityNamespace) =>
@@ -48,6 +52,19 @@ internal static class ResourceEmitter
             members.AddRange(trait.Members
                 .Where(member => !declared.Contains(member.Name))
                 .Select(member => $"    public {member.Type} {member.Name} {{ get; set; }}"));
+        }
+
+        if (resource.Archetype == Archetype.Detail && !resource.PositionDeclared)
+        {
+            // Satırın sahibindeki sırası. Kimlikler aynı anda üretildiğinde sıralı olmadığı için sıra ayrıca tutulur.
+            members.Add("    public int Position { get; set; }");
+        }
+
+        // Gömülü detayların koleksiyonu; sahibin uçları satırları bunun üzerinden yükler ve eşitler.
+        foreach (var detail in resource.Details)
+        {
+            members.Add(
+                $"    public global::System.Collections.Generic.List<{detail.QualifiedName}> {detail.CollectionName} {{ get; }} = new();");
         }
 
         if (interfaces.Count == 0 && members.Count == 0)
@@ -94,16 +111,31 @@ internal static class ResourceEmitter
             builder.Append($"    public required {member.Type} {member.Name} {{ get; init; }}\n");
         }
 
+        foreach (var detail in resource.Details)
+        {
+            builder.Append(
+                $"    public required {ReadOnlyList}<{detail.QualifiedName}Response> {detail.CollectionName} {{ get; init; }}\n");
+        }
+
         builder.Append("}\n");
+
+        if (resource.Archetype == Archetype.Detail)
+        {
+            // Gömülü detayın kendi ucu yoktur; yalnızca sahibinin isteklerinde taşınan satır tipleri üretilir.
+            // Güncellemede kimliği verilen satır değiştirilir, verilmeyen yeni satır sayılır.
+            AppendRequest(builder, $"Create{resource.EntityName}Request", resource, detailRequests: null);
+            AppendRequest(builder, $"Update{resource.EntityName}Request", resource, detailRequests: null, withOptionalId: true);
+            return builder.ToString();
+        }
 
         if (resource.Has(Operations.Create))
         {
-            AppendRequest(builder, $"Create{resource.EntityName}Request", resource);
+            AppendRequest(builder, $"Create{resource.EntityName}Request", resource, detailRequests: "Create");
         }
 
         if (resource.Has(Operations.Update))
         {
-            AppendRequest(builder, $"{WriteOperationName(resource)}{resource.EntityName}Request", resource);
+            AppendRequest(builder, $"{WriteOperationName(resource)}{resource.EntityName}Request", resource, detailRequests: "Update");
         }
 
         if (resource.Has(Operations.Patch))
@@ -202,13 +234,45 @@ internal static class ResourceEmitter
         builder.Append("}\n");
     }
 
-    private static void AppendRequest(StringBuilder builder, string name, ResourceModel resource)
+    /// <param name="detailRequests">
+    /// Gömülü detayların bu istekte hangi satır tipiyle taşınacağı: oluşturmada <c>Create</c> (isteğe bağlı),
+    /// tam değiştirmede <c>Update</c> (zorunlu; gönderilmeyen koleksiyon tüm satırların silinmesi anlamına
+    /// gelmesin diye).
+    /// </param>
+    private static void AppendRequest(
+        StringBuilder builder,
+        string name,
+        ResourceModel resource,
+        string? detailRequests,
+        bool withOptionalId = false)
     {
         builder.Append('\n');
         builder.Append($"public sealed partial record {name}\n");
         builder.Append("{\n");
 
         var first = true;
+
+        if (withOptionalId)
+        {
+            builder.Append($"    public {resource.IdType}? {resource.KeyName} {{ get; init; }}\n");
+            first = false;
+        }
+
+        foreach (var detail in detailRequests is null ? [] : resource.Details.ToArray())
+        {
+            if (!first)
+            {
+                builder.Append('\n');
+            }
+
+            first = false;
+
+            var itemType = $"{ReadOnlyList}<{detail.Namespace.Prefix()}{detailRequests}{detail.EntityName}Request>";
+            builder.Append(detailRequests == "Create"
+                ? $"    public {itemType}? {detail.CollectionName} {{ get; init; }}\n"
+                : $"    [{RequiredAttributeName}]\n    public {itemType} {detail.CollectionName} {{ get; init; }} = default!;\n");
+        }
+
         foreach (var property in resource.Properties.Where(property => property.IsWritable))
         {
             if (!first)
@@ -237,7 +301,11 @@ internal static class ResourceEmitter
     /// </summary>
     private static void AppendPatchRequest(StringBuilder builder, ResourceModel resource)
     {
-        var writable = resource.Properties.Where(property => property.IsWritable).ToArray();
+        // Gömülü detay koleksiyonu da gönderildiyse eşitlenir, gönderilmediyse satırlara dokunulmaz.
+        var writable = resource.Properties
+            .Where(property => property.IsWritable)
+            .Concat(resource.Details.Select(DetailCollection))
+            .ToArray();
 
         builder.Append('\n');
         builder.Append($"public sealed partial record Patch{resource.EntityName}Request : global::Haldus.IHaldusPatch\n");
@@ -297,6 +365,23 @@ internal static class ResourceEmitter
         builder.Append("        _ => false,\n");
         builder.Append("    };\n");
         builder.Append("}\n");
+    }
+
+    /// <summary>Gömülü bir detayın koleksiyonunu, PATCH isteğinde izlenen bir alan olarak tarif eder.</summary>
+    private static PropertyModel DetailCollection(ResourceModel detail)
+    {
+        var type = $"{ReadOnlyList}<{detail.Namespace.Prefix()}Update{detail.EntityName}Request>";
+
+        return new PropertyModel(
+            detail.CollectionName,
+            type,
+            NullableType: type + "?",
+            IsWritable: true,
+            IsNonNullableReference: true,
+            IsNonNullableValue: false,
+            SearchKind.Equality,
+            type,
+            Haldus.Generators.Infrastructure.EquatableArray<AttributeModel>.Empty);
     }
 
     private static string FieldName(PropertyModel property) =>

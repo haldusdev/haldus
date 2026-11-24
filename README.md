@@ -38,6 +38,7 @@ Her archetype bir kaynağın hangi işlemlere sahip olduğunu seçer:
 | `MapStore<T>()` | Liste, tekil, `PUT /{key}` (ekle veya güncelle), sil |
 | `MapLookup<T>()` | Sayfalamasız liste, tekil, `PUT /{code}`, sil; `Code` ve `Name` alanları |
 | `MapSingleton<T>()` | Tek kayıt: `GET`, `PUT`, `PATCH` |
+| `MapDetail<T>()` | Sahibine ait satırlar: sahibin isteğine gömülü ya da onun adresi altında ayrı uçlar |
 | `MapAction<TRequest, TResponse>()` | `POST`: entity'ye bağlı olmayan komut |
 | `MapQuery<TRequest, TResponse>()` | `GET`: entity'ye bağlı olmayan hesap |
 
@@ -78,6 +79,33 @@ app.MapAssociation<Product, Tag>();
 
 Bir kaynağın görünürlüğü başka bir kayıttan geliyorsa (ebeveyni kiracıya bağlı bir kaynak gibi), o
 kaynağa dokunan her sorgu bunu kendiliğinden uygular.
+
+## Detaylar ve hesaplanan alanlar
+
+Bir kaydın satırları (sipariş ve sipariş satırları gibi) sahibinin builder'ından bildirilir:
+
+```csharp
+var orders = app.MapCrud<Order>().ConcurrencyChecked();
+
+orders.MapDetail<OrderItem>();                  // siparişin istek ve yanıtına gömülü
+orders.MapDetail<OrderNote>().AsSubresource();  // /orders/{orderId}/order-notes
+```
+
+Gömülü satırlar sahibiyle tek istekte yazılır. `PUT` satırları eşitler: kimliği verilen satır
+güncellenir, verilmeyen eklenir, istekte bulunmayan silinir. Satırlar gönderildikleri sırayla döner.
+
+Entity `IComputed` uygularsa Haldus her yazmadan önce `Compute()` çağırır. Herkese açık setter'ı
+olmayan alanlar yalnızca yanıtta görünür:
+
+```csharp
+public partial class Order : IComputed
+{
+    public string CustomerName { get; set; } = "";
+    public decimal Total { get; private set; }
+
+    public void Compute() => Total = OrderItems.Sum(item => item.Quantity * item.UnitPrice);
+}
+```
 
 ## Trait'ler ve süzme
 

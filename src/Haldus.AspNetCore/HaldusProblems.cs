@@ -48,6 +48,15 @@ public static class HaldusProblems
         return FieldProblem(messages, field, messages.Format(HaldusMessageKeys.ReferenceNotFound, targetName, value));
     }
 
+    /// <summary>
+    /// Güncellenen bir satırın kimliği bu kayda ait değil (veya aynı kimlik istekte iki kez geçiyor).
+    /// </summary>
+    public static ProblemHttpResult DetailNotFound(IHaldusMessages messages, string field, string detailName, object id)
+    {
+        ArgumentNullException.ThrowIfNull(messages);
+        return FieldProblem(messages, field, messages.Format(HaldusMessageKeys.DetailNotFound, detailName, id));
+    }
+
     /// <summary>Bir düğüm, kendi altındaki bir düğümün çocuğu yapılmak isteniyor.</summary>
     public static ProblemHttpResult HierarchyCycle(IHaldusMessages messages, string field)
     {

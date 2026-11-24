@@ -68,6 +68,20 @@ public sealed class ResourceBuilder<TEntity>(RouteGroupBuilder group) : IEndpoin
     /// </summary>
     public ResourceBuilder<TEntity> Embeds<TValue>() => this;
 
+    /// <summary>
+    /// Bu kaynağın sahip olduğu satırları bildirir (sipariş → sipariş satırı). Satır kendi başına bir kaynak
+    /// değildir: bu kaynak silinince gider ve onun görünürlüğünü devralır. Varsayılan olarak bu kaynağın
+    /// istek ve yanıtlarında gömülü taşınır; <see cref="DetailBuilder{TEntity, TDetail}.AsSubresource"/> ile
+    /// kendi uçlarına ayrılır.
+    /// </summary>
+    public DetailBuilder<TEntity, TDetail> MapDetail<TDetail>()
+        where TDetail : class
+    {
+        // Satır ayrı uçlara sahipse onlar bu kaynağın grubuna, yani adresinin altına eşlenir.
+        HaldusEndpointRegistry.MapIfRegistered<TDetail>(Group);
+        return new DetailBuilder<TEntity, TDetail>();
+    }
+
     IApplicationBuilder IEndpointRouteBuilder.CreateApplicationBuilder() =>
         ((IEndpointRouteBuilder)Group).CreateApplicationBuilder();
 

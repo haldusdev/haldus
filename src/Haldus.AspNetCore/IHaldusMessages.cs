@@ -22,6 +22,7 @@ public static class HaldusMessageKeys
     public const string PreconditionFailedDetail = "PreconditionFailed.Detail";
     public const string ReferenceNotFound = "Reference.NotFound";
     public const string HierarchyCycle = "Hierarchy.Cycle";
+    public const string DetailNotFound = "Detail.NotFound";
     public const string InUseTitle = "InUse.Title";
     public const string InUseDetail = "InUse.Detail";
     public const string SearchTooComplexTitle = "SearchTooComplex.Title";

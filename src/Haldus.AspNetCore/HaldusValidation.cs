@@ -98,10 +98,29 @@ internal static class HaldusValidator
                 errors[prefix + rules.JsonName] = [.. propertyErrors];
             }
 
-            // Gömülü değer nesnesinin kendi kuralları da çalışır; hataları "price.amount" gibi adreslenir.
-            if (rules.IsNested && value is not null && depth < MaxDepth)
+            if (value is null || depth >= MaxDepth)
             {
+                continue;
+            }
+
+            if (rules.IsNested)
+            {
+                // Gömülü değer nesnesinin kendi kuralları da çalışır; hataları "price.amount" gibi adreslenir.
                 Validate(value, messages, $"{prefix}{rules.JsonName}.", depth + 1, errors);
+            }
+            else if (rules.IsNestedCollection)
+            {
+                // Gömülü satırların her biri doğrulanır; hataları "items[2].quantity" gibi adreslenir.
+                var index = 0;
+                foreach (var element in (System.Collections.IEnumerable)value)
+                {
+                    if (element is not null)
+                    {
+                        Validate(element, messages, $"{prefix}{rules.JsonName}[{index}].", depth + 1, errors);
+                    }
+
+                    index++;
+                }
             }
         }
     }
@@ -127,10 +146,22 @@ internal static class HaldusValidator
                             ? parameter.GetCustomAttributes<ValidationAttribute>()
                             : [],
                     ],
-                    IsNested: IsValueObject(property.PropertyType)))
-                .Where(rules => rules.Attributes.Length > 0 || rules.IsNested),
+                    IsNested: IsValueObject(property.PropertyType),
+                    IsNestedCollection: ElementType(property.PropertyType) is { } element && IsValueObject(element)))
+                .Where(rules => rules.Attributes.Length > 0 || rules.IsNested || rules.IsNestedCollection),
         ];
     }
+
+    /// <summary>Tip bir koleksiyonsa eleman tipini verir.</summary>
+    private static Type? ElementType(Type type) =>
+        type == typeof(string)
+            ? null
+            : type.IsArray
+                ? type.GetElementType()
+                : type.GetInterfaces()
+                    .Append(type)
+                    .FirstOrDefault(candidate => candidate.IsGenericType && candidate.GetGenericTypeDefinition() == typeof(IEnumerable<>))
+                    ?.GetGenericArguments()[0];
 
     /// <summary>Kendi alanları olan, kullanıcı tanımlı bir tip mi (skaler, koleksiyon veya çerçeve tipi değil).</summary>
     private static bool IsValueObject(Type type)
@@ -168,5 +199,10 @@ internal static class HaldusValidator
         };
     }
 
-    private sealed record PropertyRules(PropertyInfo Property, string JsonName, ValidationAttribute[] Attributes, bool IsNested);
+    private sealed record PropertyRules(
+        PropertyInfo Property,
+        string JsonName,
+        ValidationAttribute[] Attributes,
+        bool IsNested,
+        bool IsNestedCollection);
 }

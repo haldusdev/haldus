@@ -31,6 +31,17 @@ public static class SalesEndpoints
         app.MapCrud<Delivery>()
             .References<Address>();
 
+        var orders = app.MapCrud<Order>()
+            .MultiTenant()
+            .Auditable()
+            .ConcurrencyChecked();
+
+        // Satırlar siparişin istek ve yanıtlarına gömülüdür; ayrı uçları yoktur.
+        orders.MapDetail<OrderItem>();
+
+        // Notlar siparişe aittir ama kendi uçlarından yönetilir: /orders/{orderId}/order-notes
+        orders.MapDetail<OrderNote>().AsSubresource();
+
         // Müşteri kiracıya bağlı olduğu için bağlar da öyledir: başka bir kiracı ne bağı görebilir
         // ne de etiketin altında bu müşteriyi listeleyebilir.
         app.MapAssociation<Customer, Catalog.Tag>();

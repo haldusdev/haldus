@@ -43,6 +43,16 @@ public interface IArchivable
     DateTimeOffset? ArchivedAt { get; set; }
 }
 
+/// <summary>
+/// Değeri diğer alanlardan hesaplanan alanları olan entity. Haldus, oluşturma ve güncelleme uçlarında
+/// istek uygulandıktan ve detay satırları yüklendikten sonra, kaydetmeden hemen önce <see cref="Compute"/>
+/// metodunu çağırır. Hesaplanan alanı herkese açık setter'sız yazarsan yalnızca yanıtta görünür.
+/// </summary>
+public interface IComputed
+{
+    void Compute();
+}
+
 /// <summary>Geçerli isteğin kiracısını verir.</summary>
 public interface ITenantProvider
 {

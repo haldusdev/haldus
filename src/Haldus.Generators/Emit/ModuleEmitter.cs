@@ -46,7 +46,7 @@ internal static class ModuleEmitter
             blocks.Add(model.ToString());
         }
 
-        foreach (var (resource, entityNamespace) in resources)
+        foreach (var (resource, entityNamespace) in resources.Where(entry => entry.Resource.Archetype != Archetype.Detail))
         {
             var entity = ResourceEmitter.QualifiedName(resource, entityNamespace);
             blocks.Add($"        global::Haldus.HaldusEndpointRegistry.Register<{entity}>({entity}Endpoints.Map);\n");
@@ -209,11 +209,27 @@ internal static class ModuleEmitter
                 + $".Any(parent => parent.{parent.TargetKeyName} == item.{parent.PropertyName}));");
         }
 
-        foreach (var reference in resource.References)
+        // Gömülü detayın sahibiyle ilişkisi, koleksiyonu taşıyan sahip tarafında kurulur.
+        var embeddedDetail = resource.Archetype == Archetype.Detail;
+
+        foreach (var reference in resource.References.Where(reference => !(embeddedDetail && reference.Kind == ReferenceKind.Parent)))
         {
             statements.Add(
                 $"entity.HasOne<{reference.TargetType}>().WithMany().HasForeignKey(item => item.{reference.PropertyName})"
                 + $".OnDelete(global::Microsoft.EntityFrameworkCore.DeleteBehavior.{reference.OnDelete});");
+        }
+
+        if (embeddedDetail)
+        {
+            // Satırın kimliğini Haldus atar; EF anahtarı dolu yeni bir satırı var olan bir satır sanmasın.
+            statements.Add($"entity.Property(item => item.{resource.KeyName}).ValueGeneratedNever();");
+        }
+
+        foreach (var detail in resource.Details)
+        {
+            statements.Add(
+                $"entity.HasMany(item => item.{detail.CollectionName}).WithOne().HasForeignKey(detail => detail.{detail.Parent!.PropertyName})"
+                + ".OnDelete(global::Microsoft.EntityFrameworkCore.DeleteBehavior.Cascade);");
         }
 
         if (resource.Has(Traits.ConcurrencyChecked))

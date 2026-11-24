@@ -24,6 +24,7 @@ internal static class ChainReader
         "Under",
         "Hierarchical",
         "Embeds",
+        "AsSubresource",
     ];
 
     /// <summary>Zincirdeki çağrıları, Map çağrısından dışa doğru sırayla verir.</summary>

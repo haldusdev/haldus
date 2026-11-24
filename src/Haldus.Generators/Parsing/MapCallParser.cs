@@ -46,6 +46,7 @@ internal static class MapCallParser
         "MapStore" => Archetype.Store,
         "MapLookup" => Archetype.Lookup,
         "MapSingleton" => Archetype.Singleton,
+        "MapDetail" => Archetype.Detail,
         _ => null,
     };
 
@@ -223,6 +224,24 @@ internal static class MapCallParser
             }
         }
 
+        // Detayın sahibi, MapDetail'in çağrıldığı builder'ın tipinden okunur: ResourceBuilder<Order>.
+        string? detailOfName = null;
+        string? detailOfType = null;
+
+        if (archetype == Archetype.Detail)
+        {
+            var receiver = ((MemberAccessExpressionSyntax)invocation.Expression).Expression;
+
+            if (context.SemanticModel.GetTypeInfo(receiver, cancellationToken).Type
+                is not INamedTypeSymbol { TypeArguments: { Length: 1 } owners })
+            {
+                return null;
+            }
+
+            detailOfName = owners[0].Name;
+            detailOfType = owners[0] is IErrorTypeSymbol ? null : owners[0].ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+        }
+
         return new ResourceModel(
             archetype,
             entityName,
@@ -241,7 +260,13 @@ internal static class MapCallParser
             references.ToEquatableArray(),
             chain,
             diagnostics.ToEquatableArray(),
-            location);
+            location)
+        {
+            DetailOfName = detailOfName,
+            DetailOfType = detailOfType,
+            IsSubresource = chain.Any(call => call.Name == "AsSubresource"),
+            IsComputed = entity?.AllInterfaces.Any(candidate => candidate.ToDisplayString() == "Haldus.IComputed") == true,
+        };
     }
 
     private static bool IsHaldusCall(
@@ -256,7 +281,9 @@ internal static class MapCallParser
 
         if (method is not null)
         {
-            return method.ContainingType?.ToDisplayString() == MapExtensionsType;
+            // Archetype'lar uzantı metodudur; MapDetail ise üst kaynağın builder'ının üyesidir.
+            return method.ContainingType?.ToDisplayString() == MapExtensionsType
+                || method.ContainingType?.OriginalDefinition.ToDisplayString() == "Haldus.ResourceBuilder<TEntity>";
         }
 
         // Entity henüz var olmadığında derleyici çağrıyı bağlayamayabilir; bu durumda isim yeterlidir.

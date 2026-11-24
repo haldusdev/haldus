@@ -15,6 +15,8 @@ internal static class ResourceLinker
 
     public static List<ResourceModel> Link(IReadOnlyList<ResourceModel> resources, Action<DiagnosticInfo> report)
     {
+        resources = PrepareDetails(resources, report);
+
         var byType = resources.ToDictionary(resource => resource.QualifiedName);
         var linked = new List<ResourceModel>();
 
@@ -59,7 +61,91 @@ internal static class ResourceLinker
             .Where(reference => reference.OnDelete == OnDeleteBehavior.Restrict)
             .Select(reference => reference.TargetType));
 
-        return [.. linked.Select(resource => resource with { IsReferenced = restricted.Contains(resource.QualifiedName) })];
+        // Gömülü detaylar sahiplerine iliştirilir; sahibin DTO'ları ve uçları onları taşır.
+        return
+        [
+            .. linked.Select(resource => resource with
+            {
+                IsReferenced = restricted.Contains(resource.QualifiedName),
+                Details = linked
+                    .Where(detail => detail.Archetype == Archetype.Detail && detail.Parent?.TargetType == resource.QualifiedName)
+                    .ToEquatableArray(),
+            }),
+        ];
+    }
+
+    /// <summary>
+    /// <c>MapDetail</c> ile bildirilen kaynakları sahiplerine bağlar. Detay, sahibine zorunlu ve zincirleme
+    /// silinen bir ebeveyn referansı kazanır; böylece görünürlüğünü de ondan devralır. Ayrı uçlu bir detay,
+    /// bundan sonra sahibinin adresi altında yaşayan sıradan bir kaynaktır.
+    /// </summary>
+    private static List<ResourceModel> PrepareDetails(IReadOnlyList<ResourceModel> resources, Action<DiagnosticInfo> report)
+    {
+        var byType = resources.ToDictionary(resource => resource.QualifiedName);
+        var prepared = new List<ResourceModel>();
+
+        foreach (var resource in resources)
+        {
+            if (resource.Archetype != Archetype.Detail)
+            {
+                prepared.Add(resource);
+                continue;
+            }
+
+            var owner = Find(resource.DetailOfName!, resource.DetailOfType, resources, byType);
+
+            if (owner is null)
+            {
+                report(new DiagnosticInfo(
+                    "HALDUS009", resource.Location, new[] { resource.DetailOfName!, resource.EntityName }.ToEquatableArray()));
+                continue;
+            }
+
+            var supported = resource.IsSubresource
+                ? owner.Archetype is Archetype.Crud or Archetype.ReadOnly or Archetype.AppendOnly
+                : owner.Archetype is Archetype.Crud or Archetype.AppendOnly;
+
+            var problem =
+                !supported
+                    ? $"'{resource.EntityName}' cannot be a detail of '{owner.EntityName}': Map{owner.Archetype} does not support "
+                        + (resource.IsSubresource ? "sub-resource details" : "embedded details")
+                : !resource.IsSubresource && resource.IdKind != IdKind.Guid
+                    ? $"'{resource.EntityName}' is an embedded detail, so its Id must be a Guid; Haldus assigns it when the row is added"
+                : null;
+
+            if (problem is not null)
+            {
+                report(new DiagnosticInfo("HALDUS007", resource.Location, new[] { problem }.ToEquatableArray()));
+                continue;
+            }
+
+            // Gömülü satırlar istekte geldikleri sırayla saklanır; sırayı tutan alan DTO'lara girmez.
+            var position = resource.IsSubresource ? null : resource.Properties.FirstOrDefault(property => property.Name == "Position");
+
+            prepared.Add(resource with
+            {
+                Archetype = resource.IsSubresource ? Archetype.Crud : Archetype.Detail,
+                RouteRelativeToParent = resource.IsSubresource,
+                PositionDeclared = position is not null,
+                Properties = resource.Properties.Where(property => property != position).ToEquatableArray(),
+                ReferenceDeclarations = resource.ReferenceDeclarations
+                    .Append(new ReferenceDeclaration(
+                        ReferenceKind.Parent,
+                        owner.EntityName,
+                        owner.QualifiedName,
+                        TargetKeyType: null,
+                        PropertyName: null,
+
+                        // Satır sahibine aittir; sahibi silinince her zaman onunla gider.
+                        OnDeleteBehavior.Cascade,
+                        Required: true,
+                        resource.Location,
+                        OnDeleteExplicit: true))
+                    .ToEquatableArray(),
+            });
+        }
+
+        return prepared;
     }
 
     /// <summary>Çoktan-çoğa bağların iki ucunu da eşlenmiş kaynaklara çözer.</summary>
