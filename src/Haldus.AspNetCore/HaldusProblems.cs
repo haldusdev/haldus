@@ -180,6 +180,17 @@ public static class HaldusProblems
             Status = StatusCodes.Status400BadRequest,
         });
 
+    /// <summary>Kullanıcıya ait bir kaynağa, kullanıcısı çözülemeyen bir istekle erişildi.</summary>
+    public static ProblemHttpResult UserRequired(IHaldusMessages messages)
+    {
+        ArgumentNullException.ThrowIfNull(messages);
+
+        return TypedResults.Problem(
+            title: messages.Format(HaldusMessageKeys.UserRequiredTitle),
+            detail: messages.Format(HaldusMessageKeys.UserRequiredDetail),
+            statusCode: StatusCodes.Status401Unauthorized);
+    }
+
     /// <summary>Kiracıya bağlı bir kaynağa, kiracısı çözülemeyen bir istekle erişildi.</summary>
     public static ProblemHttpResult TenantRequired(IHaldusMessages messages)
     {

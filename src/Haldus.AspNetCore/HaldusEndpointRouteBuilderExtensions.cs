@@ -84,8 +84,8 @@ public static class HaldusEndpointRouteBuilderExtensions
     /// listele (<c>/products/{id}/tags</c> ve <c>/tags/{id}/products</c>). Bağ kayıtlarının entity'si
     /// (<c>ProductTag</c>) üretilir; iki uç da bir <c>Map*</c> çağrısıyla eşlenmiş olmalıdır.
     /// </summary>
-    public static RouteGroupBuilder MapAssociation<TLeft, TRight>(this IEndpointRouteBuilder endpoints)
+    public static AssociationBuilder<TLeft, TRight> MapAssociation<TLeft, TRight>(this IEndpointRouteBuilder endpoints)
         where TLeft : class
         where TRight : class =>
-        HaldusEndpointRegistry.MapAssociation<TLeft, TRight>(endpoints);
+        new(HaldusEndpointRegistry.MapAssociation<TLeft, TRight>(endpoints));
 }

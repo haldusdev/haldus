@@ -84,6 +84,12 @@
   <data name="SearchTooComplex.Detail" xml:space="preserve">
     <value>Bir arama en fazla {0} düzey iç içe olabilir; en fazla {1} koşul, liste başına {2} değer ve {3} sıralama alanı içerebilir.</value>
   </data>
+  <data name="UserRequired.Title" xml:space="preserve">
+    <value>Oturum gerekli</value>
+  </data>
+  <data name="UserRequired.Detail" xml:space="preserve">
+    <value>Bu kaynak bir kullanıcıya ait, ancak istek için kullanıcı belirlenemedi.</value>
+  </data>
   <data name="TenantRequired.Title" xml:space="preserve">
     <value>Kiracı gerekli</value>
   </data>

@@ -77,6 +77,7 @@ app.MapAssociation<Product, Tag>();
 | `.Hierarchical()` | `ParentId` ile ağaç; bir düğüm kendi altına taşınamaz |
 | `.Embeds<T>()` | O tipteki alanlar iç içe değer nesnesi olur, sahibinin kolonlarında saklanır |
 | `MapAssociation<TLeft, TRight>()` | Çoktan-çoğa bağ: `PUT` / `DELETE /products/{id}/tags/{tagId}`, iki yönlü liste |
+| `MapAssociation<TLink, T>().ForCurrentUser()` | Geçerli kullanıcıyı bir kayda bağlar (favori, yıldız): `PUT` / `DELETE /me/favorites/{productId}` |
 
 Bir kaynağın görünürlüğü başka bir kayıttan geliyorsa (ebeveyni kiracıya bağlı bir kaynak gibi), o
 kaynağa dokunan her sorgu bunu kendiliğinden uygular.
@@ -221,6 +222,7 @@ app.MapCrud<Customer>()
 | Zincir metodu | Etkisi |
 |---|---|
 | `.MultiTenant()` | `TenantId` alanı; sorgular kiracıya göre süzülür |
+| `.OwnedByCurrentUser()` | `OwnerId` alanı; kayıt onu oluşturana aittir, yalnızca o görür ve `/me` altında sunulur |
 | `.Auditable()` | Oluşturulma ve değiştirilme zamanı, isteğe bağlı kullanıcı |
 | `.SoftDeletable()` | Silme geri alınabilir; `restore` ve `purge` uçları |
 | `.ConcurrencyChecked()` | `ETag` / `If-Match` ile iyimser eşzamanlılık |
@@ -232,6 +234,25 @@ app.MapCrud<Customer>()
 | `.Without(...)` / `.Only(...)` | Üretilecek standart işlemleri seçer |
 | `.Filterable<TFilter>()` | Kendi yazdığın filtre sınıfını liste ucunun sorgu parametrelerine bağlar |
 | `.Searchable(...)` | `POST /search`: sayılan alanlarda VE/VEYA koşulları ve sıralama |
+
+## Kullanıcıya ait kaynaklar
+
+```csharp
+app.MapCrud<ShoppingList>().OwnedByCurrentUser();                 // /me/shopping-lists
+app.MapCrud<ShoppingListItem>().Under<ShoppingList>();            // /me/shopping-lists/{shoppingListId}/shopping-list-items
+app.MapCrud<ProductNote>().Under<Product>()
+    .OwnedByCurrentUser(underMe: false);                          // /products/{productId}/product-notes
+app.MapAssociation<Favorite, Product>().ForCurrentUser();         // /me/favorites/{productId}
+```
+
+`.OwnedByCurrentUser()` kaydı onu oluşturan kullanıcıya bağlar: sahip oluştururken atanır, istekte verilemez,
+yanıtta yinelenmez ve sonradan değişmez. Başkasının kaydı bulunamaz sayılır (404); kullanıcısı çözülemeyen
+istek 401 alır. Kaynak varsayılan olarak `/me` altındadır; `underMe: false` adresi değiştirmeden aynı
+korumayı verir.
+
+`.ForCurrentUser()` bir bağı geçerli kullanıcıya bağlar. İlk tip argümanı bir uç değil, üretilecek bağın
+adıdır (`Favorite`). `GET /me/favorites` bağlı kayıtları döndürür; adreste kullanıcı yer almadığı için kimse
+başkasının bağına ulaşamaz.
 
 ## Modüler yapı
 
@@ -253,9 +274,10 @@ kısıtı olur, ayrı bağlamlardaysa referans yalnızca kimlikle tutulur ve var
 
 ## Durum
 
-İlk sürümün planlanan on aşaması tamamlandı. Model, araştırmadaki 59 gerçek varlığa karşı sınandı: 20'si
-temiz, 28'i kısmen ifade ediliyor, 11'i için gereken özellik henüz yok. Ayrıntısı ve eksiklerin listesi
-[taksonomi sınaması](reports/Haldus%20taksonomi%20sınaması.md) belgesindedir.
+İlk sürümün planlanan on aşaması tamamlandı; eksikleri kapatan ikinci plan sürüyor. Model, araştırmadaki 59
+gerçek varlığa karşı sınanıyor: bugün 22'si temiz, 28'i kısmen ifade ediliyor, 9'u için gereken özellik henüz
+yok. Ayrıntısı ve eksiklerin listesi [taksonomi sınaması](reports/Haldus%20taksonomi%20sınaması.md)
+belgesindedir.
 
 Tasarım kararları için [CLAUDE.md](CLAUDE.md), kararların dayandığı araştırma için [reports](reports/)
 klasörüne bakın. İki örnek uygulama var: tek projeli [mağaza](samples/Haldus.Sample.Shop) ve

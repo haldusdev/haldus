@@ -84,6 +84,12 @@
   <data name="SearchTooComplex.Detail" xml:space="preserve">
     <value>A search may nest at most {0} levels and contain at most {1} conditions, {2} values per list and {3} sort fields.</value>
   </data>
+  <data name="UserRequired.Title" xml:space="preserve">
+    <value>Sign-in required</value>
+  </data>
+  <data name="UserRequired.Detail" xml:space="preserve">
+    <value>This resource belongs to a user, but no user could be determined for the request.</value>
+  </data>
   <data name="TenantRequired.Title" xml:space="preserve">
     <value>Tenant required</value>
   </data>

@@ -15,6 +15,9 @@ public static class HaldusFilters
     /// <summary>Çoktan-çoğa bir bağı, iki ucundan biri isteği yapana görünür değilse gizleyen filtre.</summary>
     public const string Association = "Haldus.Association";
 
+    /// <summary>Kaydı, sahibi olmayan kullanıcıdan gizleyen filtre.</summary>
+    public const string Owner = "Haldus.Owner";
+
     /// <summary>Süresi dolmuş kaydı gizleyen filtre.</summary>
     public const string Expiry = "Haldus.Expiry";
 }

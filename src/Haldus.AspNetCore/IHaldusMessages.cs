@@ -38,6 +38,8 @@ public static class HaldusMessageKeys
     public const string BatchItemMissingDetail = "BatchItemMissing.Detail";
     public const string SearchTooComplexTitle = "SearchTooComplex.Title";
     public const string SearchTooComplexDetail = "SearchTooComplex.Detail";
+    public const string UserRequiredTitle = "UserRequired.Title";
+    public const string UserRequiredDetail = "UserRequired.Detail";
     public const string TenantRequiredTitle = "TenantRequired.Title";
     public const string TenantRequiredDetail = "TenantRequired.Detail";
     public const string ValidationTitle = "Validation.Title";

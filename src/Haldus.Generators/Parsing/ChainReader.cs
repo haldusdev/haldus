@@ -32,6 +32,8 @@ internal static class ChainReader
         "Expiring",
         "Idempotent",
         "Batch",
+        "OwnedByCurrentUser",
+        "ForCurrentUser",
     ];
 
     /// <summary>Zincirdeki çağrıları, Map çağrısından dışa doğru sırayla verir.</summary>
@@ -94,6 +96,14 @@ internal static class ChainReader
                 case "Archivable":
                     traits |= Traits.Archivable;
                     break;
+                case "OwnedByCurrentUser":
+                    traits |= Traits.Owned;
+                    if (call.Arguments.Any(argument => argument == "false"))
+                    {
+                        traits |= Traits.OwnedPlainRoute;
+                    }
+
+                    break;
                 case "Idempotent":
                     traits |= Traits.Idempotent;
                     if (call.Arguments.Any(argument => argument == "true"))
@@ -134,7 +144,7 @@ internal static class ChainReader
         while (current.Expression is MemberAccessExpressionSyntax { Expression: InvocationExpressionSyntax inner })
         {
             if (inner.Expression is MemberAccessExpressionSyntax { Name: var name }
-                && MapCallParser.ArchetypeOf(name.Identifier.ValueText) is not null)
+                && (MapCallParser.ArchetypeOf(name.Identifier.ValueText) is not null || name.Identifier.ValueText == "MapAssociation"))
             {
                 return true;
             }

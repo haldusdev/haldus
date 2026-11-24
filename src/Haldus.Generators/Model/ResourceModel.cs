@@ -95,6 +95,18 @@ internal sealed record ResourceModel(
         }
     }
 
+    /// <summary>Kullanıcıya ait kaynak <c>/me</c> altında mı sunuluyor.</summary>
+    public bool OwnedUnderMe => Has(Traits.Owned) && !Has(Traits.OwnedPlainRoute);
+
+    /// <summary>
+    /// Kaynağın koleksiyon adresi: <c>products</c>, <c>me/carts</c>. Tek kayıtlı kaynak koleksiyon değildir;
+    /// adresi tekildir. Bu kaynağın altına yerleşenler adreslerini bununla başlatır.
+    /// </summary>
+    public string CollectionRoute =>
+        (OwnedUnderMe ? "me/" : string.Empty)
+        + Haldus.Generators.Infrastructure.Naming.ToKebabCase(
+            Archetype == Archetype.Singleton ? EntityName : Haldus.Generators.Infrastructure.Naming.Pluralize(EntityName));
+
     /// <summary>Kaydın durum alanının tipi: durum makinesinin enum'u veya bir işin sabit durumları.</summary>
     public string? StatusType => Workflow?.StatusType ?? (Archetype == Archetype.Job ? "global::Haldus.JobStatus" : null);
 
@@ -192,6 +204,12 @@ internal enum Traits
     Archivable = 32,
     Idempotent = 64,
     IdempotencyRequired = 128,
+
+    /// <summary>Kayıt onu oluşturan kullanıcıya aittir.</summary>
+    Owned = 256,
+
+    /// <summary>Kullanıcıya ait kaynak <c>/me</c> altına alınmaz; adresi değişmez.</summary>
+    OwnedPlainRoute = 512,
 }
 
 /// <summary>Üretilecek standart işlemler. Üye adları <c>Haldus.CrudOperation</c> ile aynıdır.</summary>
@@ -288,7 +306,31 @@ internal sealed record AssociationDeclaration(
     string? LeftType,
     string RightName,
     string? RightType,
-    LocationInfo Location);
+    LocationInfo Location)
+{
+    /// <summary>
+    /// Bağ geçerli kullanıcıya mı bağlı (<c>.ForCurrentUser()</c>). Öyleyse sol tip argümanı bir uç değil,
+    /// üretilecek bağ entity'sinin adıdır.
+    /// </summary>
+    public bool ForCurrentUser { get; init; }
+
+    /// <summary>Çağrının bulunduğu namespace; yazılmamış bir bağ entity'si buraya üretilir.</summary>
+    public string CallNamespace { get; init; } = string.Empty;
+}
+
+/// <summary>Geçerli kullanıcı ile bir kaynak arasındaki bağ (favori, yıldız): kullanıcı başına, kaynak başına bir kayıt.</summary>
+/// <param name="LinkName">Üretilen bağ entity'sinin adı: <c>Favorite</c>.</param>
+/// <param name="Declared">Kullanıcı bağ sınıfını kendisi de yazdı mı; yazdıysa erişim belirleyicisi onunkidir.</param>
+internal sealed record UserLinkModel(string LinkName, string Namespace, bool Declared, ResourceModel Right)
+{
+    public string QualifiedLinkName => Namespace.Length == 0 ? $"global::{LinkName}" : $"global::{Namespace}.{LinkName}";
+
+    public string RightKey => Right.EntityName + Right.KeyName;
+
+    public string CollectionName => Haldus.Generators.Infrastructure.Naming.Pluralize(LinkName);
+
+    public string Route => "me/" + Haldus.Generators.Infrastructure.Naming.ToKebabCase(CollectionName);
+}
 
 /// <summary>İki ucu da bilinen kaynaklara çözülmüş çoktan-çoğa bağ.</summary>
 /// <param name="LeftOnDelete">Sol uç silindiğinde bağlara ne olacağı.</param>

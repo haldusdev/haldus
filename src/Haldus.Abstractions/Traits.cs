@@ -9,6 +9,15 @@ public interface IMultiTenant
     Guid TenantId { get; set; }
 }
 
+/// <summary>
+/// Kayıt, onu oluşturan kullanıcıya aittir; sorgular geçerli kullanıcıya göre süzülür. Kiracı sınırının
+/// içinde ikinci bir sınırdır: aynı kiracıdaki başka bir kullanıcı da kaydı göremez.
+/// </summary>
+public interface IOwned
+{
+    string OwnerId { get; set; }
+}
+
 /// <summary>Oluşturulma ve son değiştirilme zamanı tutulur.</summary>
 public interface IAuditable
 {

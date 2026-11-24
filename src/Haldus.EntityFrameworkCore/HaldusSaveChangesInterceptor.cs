@@ -71,6 +71,20 @@ public sealed class HaldusSaveChangesInterceptor : SaveChangesInterceptor
             }
         }
 
+        if (entry.Entity is IOwned owned)
+        {
+            if (users.Value is { Length: > 0 } ownerId)
+            {
+                owned.OwnerId = ownerId;
+            }
+            else if (string.IsNullOrEmpty(owned.OwnerId))
+            {
+                throw new InvalidOperationException(
+                    $"Cannot save '{entry.Metadata.DisplayName()}' without an owner. " +
+                    "Either resolve a user for the current scope or set OwnerId explicitly.");
+            }
+        }
+
         if (entry.Entity is IAuditable auditable)
         {
             auditable.CreatedAt = now;
@@ -88,6 +102,12 @@ public sealed class HaldusSaveChangesInterceptor : SaveChangesInterceptor
         {
             // Kayıt başka bir kiracıya taşınamaz.
             entry.Property(nameof(IMultiTenant.TenantId)).IsModified = false;
+        }
+
+        if (entry.Entity is IOwned)
+        {
+            // Kayıt başka bir kullanıcıya devredilemez.
+            entry.Property(nameof(IOwned.OwnerId)).IsModified = false;
         }
 
         if (entry.Entity is IAuditable)

@@ -51,7 +51,7 @@ internal static class ResourceEmitter
             interfaces.Add(trait.Interface);
             members.AddRange(trait.Members
                 .Where(member => !declared.Contains(member.Name))
-                .Select(member => $"    public {member.Type} {member.Name} {{ get; set; }}"));
+                .Select(member => $"    public {member.Type} {member.Name} {{ get; set; }}{(member.Type == "string" ? " = \"\";" : string.Empty)}"));
         }
 
         if (resource.Archetype == Archetype.Job)
@@ -174,6 +174,38 @@ internal static class ResourceEmitter
 
         return builder.ToString();
     }
+
+    /// <summary>
+    /// Bir kaydın (<c>item</c>) yanıt DTO'suna izdüşümündeki atamalar. Aynı ifade hem veritabanı sorgusunda
+    /// hem bellekteki kayıtta çalışır; kaynağı döndüren her uç (kendi uçları, bağ listeleri) bunu kullanır ki
+    /// yanıtın zorunlu alanlarından biri eksik kalmasın.
+    /// </summary>
+    public static string ResponseAssignments(ResourceModel resource) => string.Join(
+        ", ",
+        (resource.KeyName.Length == 0 ? Array.Empty<string>() : [$"{resource.KeyName} = item.{resource.KeyName}"])
+            .Concat(resource.Properties.Select(property => $"{property.Name} = item.{property.Name}"))
+            .Concat(resource.ResponseMembers.Select(member => $"{member.Name} = item.{member.Name}"))
+            .Concat(resource.Details.Select(DetailProjection)));
+
+    /// <summary>Gömülü detayların yanıta izdüşümü; satırlar istekte gönderildikleri sırayla döner.</summary>
+    private static string DetailProjection(ResourceModel detail)
+    {
+        var assignments = new[] { $"{detail.KeyName} = detail.{detail.KeyName}" }
+            .Concat(detail.Properties.Select(property => $"{property.Name} = detail.{property.Name}"));
+
+        return $"{detail.CollectionName} = item.{detail.CollectionName}"
+            + $".OrderBy(detail => detail.Position).ThenBy(detail => detail.{detail.KeyName})"
+            + $".Select(detail => new {detail.QualifiedName}Response {{ {string.Join(", ", assignments)} }}).ToList()";
+    }
+
+    /// <summary>Anahtar tipinin rota kısıtı.</summary>
+    public static string RouteConstraint(ResourceModel resource) => resource.IdKind switch
+    {
+        IdKind.Int32 => ":int",
+        IdKind.Int64 => ":long",
+        IdKind.String => string.Empty,
+        _ => ":guid",
+    };
 
     public static string ConditionType(SearchField field) => field.Kind switch
     {

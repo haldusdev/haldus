@@ -72,6 +72,14 @@ Bunlar kullanıcıyla kararlaştırıldı; yeniden sorma.
     `PUT` ile kurulur, `DELETE` ile kaldırılır. İki uç da bir `Map*` çağrısıyla eşlenmiş olmalıdır.
 - `MapDetail` varsayılan olarak üst kaydın isteğinde gömülü yazılır; `.AsSubresource()` ile ayrı
   endpoint'lere geçer. Sahibin builder'ından çağrılır: `orders.MapDetail<OrderItem>()`.
+- Sahiplik (kullanıcı kararı): `.OwnedByCurrentUser()` kaydı onu oluşturan kullanıcıya bağlar ve kaynağı
+  varsayılan olarak `/me` altına alır (`/me/carts`); `underMe: false` adresi değiştirmez (`/notes`). İkisi de
+  desteklenir. `OwnerId` alanı üretilir, istekte verilemez, yanıtta yer almaz ve sonradan değişmez; başkasının
+  kaydı 404, kullanıcısı çözülemeyen istek 401 alır.
+- Geçerli kullanıcıya bağlı bağ adlandırılarak yazılır (kullanıcı kararı):
+  `app.MapAssociation<Favorite, Product>().ForCurrentUser()`. İlk tip argümanı bir uç değil, üretilecek bağ
+  entity'sinin adıdır. Uçlar `/me/favorites` altındadır: `PUT` / `DELETE` / `GET /{productId}` ve bağlı
+  kayıtları (bağları değil) döndüren `GET /`.
 - Eşzamanlılık trait'inin adı `ConcurrencyChecked` (eski adı `Versioned`). Sürüm yanıt gövdesinde değil
   `ETag` başlığında taşınır; güncelleme ve silme `If-Match` ister (eksikse 428, uyuşmazlıkta 412).
 - Güncelleme için hem `PUT` (tam değiştirme) hem `PATCH` (kısmi) üretilir.
@@ -141,7 +149,7 @@ Bunlar kullanıcıyla kararlaştırıldı; yeniden sorma.
 ## Aşamalar
 
 On aşamanın tamamı bitti (3. aşamaya `.Searchable()`, 8. aşamaya fiziksel temizlik de eklendi). 10. aşamanın
-sonucu `reports/Haldus taksonomi sınaması.md` dosyasındadır: araştırmadaki 59 varlığın 20'si temiz, 28'i
+sonucu `reports/Haldus taksonomi sınaması.md` dosyasındadır: araştırmadaki 59 varlığın (bugünkü sayımla) 22'si temiz, 28'i
 kısmen ifade ediliyor, 11'i için gereken özellik yok. Aynı veri `tests/Haldus.Generators.Tests/TaxonomyTests.cs`
 içinde derlenir; yeni bir archetype veya trait bir satırı kapatıyorsa ikisini birlikte güncelle.
 
@@ -158,12 +166,46 @@ içinde derlenir; yeni bir archetype veya trait bir satırı kapatıyorsa ikisin
 9. Modüler yapı ve iki `DbContext` modu
 10. Örnek mağaza uygulaması ve araştırmadaki entity tablosunun sınanması
 
+### İkinci plan
+
+Kullanıcı 2026-11-24'te onayladı. Kapsamı araştırma raporunun v2 listesi, ilk sürümden kalan küçük kalemler
+ve sınamada çıkan küçük eksiklerdir. Raporun v3 listesi (`MapBalance`, `MapChangeSet`, birden çok durum
+ekseni, çeviri, saklama süresi, okundu takibi) ve tekrar serisi bu planın dışındadır. Her aşama testleriyle
+birlikte ayrı commit olur; 11. aşama bitti, sıradaki 12.
+
+11. Sahiplik: `OwnedByCurrentUser`, `MapAssociation().ForCurrentUser()`
+12. Alan eklentileri: `Metadata`, yalnızca oluştururken yazılan alan, `NaturalKey`, `KeyStrategy`, liste
+    ucunda sıralama
+13. Kayıt işlemleri: `Cloneable`, `Orderable`, `Previewable`
+14. Kayıtlar arası zincir: `Reversible`, `.Supersedes()`, `.CreatedFrom<T>()` ve geçişte başka kayıt
+    oluşturma, `.DerivedFrom<T>()`
+15. Sırlar: `SecretOnce`, `Rotatable`, `TokenAccess`
+16. Bağlar ve kapsam: yük taşıyan ve durumu olan bağ, bağların topluca değiştirilmesi, ebeveyn altında tek
+    kayıt, `.Under()` kısa adresi, detayın komutla yazılan modu
+17. Onay ve belge: `Approvable`, `.Document()`
+18. Zaman ve sürüm: `Revisioned`, `.Publishable()`, `EffectiveDated`, `ChangeFeed`
+19. Dosyalar ve takılabilirler: `MapFile`, `.AttachedTo()`, `Attachable`, `Commentable`, `Taggable`
+20. Özel alanlar ve aktarma: kiracının tanımladığı `CustomFields`, `MapJob` üzerinde içe/dışa aktarma
+21. Sınamanın yinelenmesi: 59 satırlık tablo, rapor ve README
+
+Her aşamanın başında kullanıcıya sorulacak kararlar (yanıtlandıkça "Tasarım kararları"na taşınır):
+
+- 12: `KeyStrategy` hangi anahtar türlerini desteklesin.
+- 13: Kopyalamada satırlar ve numara nasıl davransın; sıra tam sayı mı, araya eklemeye uygun bir değer mi.
+- 14: Karşı kaydı Haldus mu üretsin, kullanıcının handler'ı mı.
+- 15: Sırrın saklanma biçimi (hash algoritması, önek).
+- 17: Onay tek adım mı, zincir mi.
+- 18: Taslak/yayın için çift kopya mı, sürüm tablosu mu; geçmiş anlık görüntü mü, fark günlüğü mü.
+- 19: Depolama sağlayıcıları (paketlere ayrılması önerildi; S3 gibi sağlayıcılar yeni bağımlılıktır).
+- 20: Aktarma biçimleri; CSV için bir kütüphane yeni bağımlılık olabilir.
+
+Raporun v1 listesindeki "uzatma kancaları" plana girmedi: raporda tanımı yok. Kullanıcı isterse 16. aşamada
+netleştirilecek.
+
 ## Açık kararlar
 
-- Frontend ve mobil desteğinin kapsamı (backend API şekli oturunca ele alınacak).
-- Sıradaki özellikler. Sınama en çok şunların eksikliğini gösterdi: geçerli kullanıcıya ait kaynak
-  (`OwnedByCurrentUser`), `Metadata`, `Reversible`, gizli değerler (`SecretOnce` / `Rotatable`). Hangisinin
-  önce yazılacağına kullanıcı karar verecek. (Listedeki ilk madde, entity aksiyonu, yazıldı.)
+- Frontend ve mobil desteğinin kapsamı (backend API şekli oturunca ele alınacak). İkinci planın parçası
+  değildir; kullanıcı isterse araya alınır.
 
 - Süresi dolmuş `Expiring` kayıtları varsayılan olarak silinmez (`HaldusOptions.PurgeExpiredAfter` boş).
   Bu varsayılanı kullanıcı ayrıca onaylamadı; kullanıcı verisini kendiliğinden silmemek için böyle seçildi.
@@ -356,6 +398,34 @@ içinde derlenir; yeni bir archetype veya trait bir satırı kapatıyorsa ikisin
   üretilen modül `HaldusMaintenanceRegistry.RegisterExpiring<T>()` ile kaydeder. Bakım bir isteğe ait
   olmadığı için burada parametresiz `IgnoreQueryFilters()` bilerek kullanılır; üretilen uç kodunda yasak
   olmaya devam eder. Aynı yöntem testlerden ve yönetim komutlarından doğrudan çağrılabilir.
+- **Sahiplik.** `Traits.Owned` (`IOwned`, `OwnerId`); `/me` dışında kalma `Traits.OwnedPlainRoute` ile tutulur.
+  Görünürlük modeldeki `HaldusFilters.Owner` filtresidir ve kullanıcıyı kiracı filtresiyle aynı yoldan okur
+  (`HaldusScope.UserId(context)`); bu yüzden uçlarda sahiplikle ilgili tek satır yoktur ve kaynağa dokunan her
+  sorgu (referans doğrulaması, ebeveyn filtresi, bağlar) kendiliğinden korunur. Sahibi interceptor atar:
+  geçerli kullanıcı varsa her zaman o yazılır (elle verilen değer ezilir), güncellemede alan değişmez.
+  - Başka bir kullanıcı adına kayıt oluşturacak sistem kodu (ör. bildirim) o kullanıcı olarak çalışmalıdır:
+    `HaldusAmbient.Use(tenantId, userId)`. Bir isteğin içinde `OwnerId`'yi elle vermek işe yaramaz.
+  - Adres: bir kaynağın koleksiyon adresi `ResourceModel.CollectionRoute`'tur (`me/carts`); altına yerleşen
+    kaynaklar adreslerini bundan kurar (`ResolvedReference.TargetRoute`). Sahipli kaynakların ve `/me` ile
+    başlayan her grubun başında `HaldusUserRequiredFilter` vardır.
+  - Sınırlar: yalnızca `MapCrud`, `MapReadOnly`, `MapAppendOnly` ve `MapJob` ile birleşir (kullanıcı başına tek
+    kayıt, yani `/me` altında `MapSingleton`, yok). `.Under<T>()` ile birlikte `underMe: false` gerekir. `/me`
+    altındaki bir kaynak `MapAssociation`'ın ucu olamaz (ters yöndeki listenin adresi belirsiz olurdu).
+  - Sahiplik silme davranışını değiştirmez: "zincirleme silme kiracı sınırını aşmaz" kuralı yalnızca kiracı
+    içindir. Ortak bir ebeveyn silinince altındaki, başka kullanıcılara ait kayıtlar da silinir. Bunu kullanıcı
+    ayrıca onaylamadı; sahiplik bir yetki sınırı değil görünürlük kuralı olduğu için böyle bırakıldı.
+  - İş (`MapJob`) sahipliyse yürütücü onu sahibinin kimliğiyle çalıştırır (`HaldusJobs`).
+- **Geçerli kullanıcıya bağlı bağ.** `MapAssociation` çağrısını `.ForCurrentUser()` izliyorsa
+  `ResourceLinker.LinkUserLinks` onu `UserLinkModel`'e çevirir ve `Emit/UserLinkEmitter` üretir; sıradan bağların
+  yolundan (`LinkAssociations`, `AssociationEmitter`) geçmez. Bağ entity'si `IOwned` uygular, anahtarı
+  `(OwnerId, {Uç}{Anahtar})` çiftidir ve iki filtre taşır: `Owner` ile `Association` (karşı uç görünür olmalı).
+  Sahip anahtarın parçası olduğu için kayıt izlenmeden önce üretilen kodda atanır. Karşı uç silinince bağ da
+  silinir (`Cascade`): bağ yalnızca bir işarettir ve bir kullanıcının işareti silmeyi engellememelidir.
+  Yazılmamış bağ entity'si, her yazılmamış entity gibi, çağrının bulunduğu namespace'e üretilir. Bağ henüz yük
+  taşımaz (16. aşama); değer taşıyan oy bu yüzden yazılamaz.
+- **Yanıt izdüşümü tek yerdedir:** `ResourceEmitter.ResponseAssignments`. Bir kaynağın yanıtını döndüren her
+  üretici (kendi uçları, bağ listeleri) onu kullanır; elle yazılan bir izdüşüm, yanıta sonradan eklenen zorunlu
+  alanlarda (durum, numara, gömülü satırlar) derlenmez.
 - **Modüller ve bağlamlar.** Hangi modülün hangi bağlamı kullandığını `HaldusContextOptions` tutar
   (`DefaultContext`, `ModuleContexts`, `Modules`). `HaldusDbContextProvider.For<TEntity>()` entity'nin
   assembly'sine bakar; `HaldusModelRegistry.Apply` her bağlama yalnızca ona bağlı modüllerin katkısını

@@ -114,7 +114,8 @@ public sealed class HaldusGenerator : IIncrementalGenerator
     private static bool IsDeclarationHost(INamedTypeSymbol? type) =>
         type?.ToDisplayString() == "Haldus.ResourceBuilderTraitExtensions"
         || type?.OriginalDefinition.ToDisplayString() == "Haldus.ResourceBuilder<TEntity>"
-        || type?.OriginalDefinition.ToDisplayString() == "Haldus.DetailBuilder<TEntity, TDetail>";
+        || type?.OriginalDefinition.ToDisplayString() == "Haldus.DetailBuilder<TEntity, TDetail>"
+        || type?.OriginalDefinition.ToDisplayString() == "Haldus.AssociationBuilder<TLeft, TRight>";
 
     private static void Emit(
         SourceProductionContext context,
@@ -160,6 +161,9 @@ public sealed class HaldusGenerator : IIncrementalGenerator
         ];
 
         var associations = ResourceLinker.LinkAssociations(
+            associationDeclarations, [.. valid.Select(entry => entry.Resource)], diagnostic => Report(context, diagnostic));
+
+        var userLinks = ResourceLinker.LinkUserLinks(
             associationDeclarations, [.. valid.Select(entry => entry.Resource)], diagnostic => Report(context, diagnostic));
 
 
@@ -231,11 +235,19 @@ public sealed class HaldusGenerator : IIncrementalGenerator
             AddSource(context, $"{hintPrefix}.Endpoints.g.cs", AssociationEmitter.EmitEndpoints(association));
         }
 
-        AddSource(context, "HaldusModule.g.cs", ModuleEmitter.EmitModule(valid, distinctHandlers, validQueries, associations));
+        foreach (var link in userLinks)
+        {
+            var hintPrefix = link.Namespace.Length == 0 ? link.LinkName : $"{link.Namespace}.{link.LinkName}";
+
+            AddSource(context, $"{hintPrefix}.Entity.g.cs", UserLinkEmitter.EmitEntity(link));
+            AddSource(context, $"{hintPrefix}.Endpoints.g.cs", UserLinkEmitter.EmitEndpoints(link));
+        }
+
+        AddSource(context, "HaldusModule.g.cs", ModuleEmitter.EmitModule(valid, distinctHandlers, validQueries, associations, userLinks));
 
         foreach (var dbContext in dbContexts.Distinct())
         {
-            if (ModuleEmitter.EmitDbContext(dbContext, valid, associations) is { } source)
+            if (ModuleEmitter.EmitDbContext(dbContext, valid, associations, userLinks) is { } source)
             {
                 AddSource(context, $"{dbContext.Name}.DbSets.g.cs", source);
             }

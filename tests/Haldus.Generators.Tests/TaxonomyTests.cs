@@ -94,7 +94,7 @@ public sealed class TaxonomyTests
             public partial class CartItem { public string Sku { get; set; } = ""; public int Quantity { get; set; } }
             """,
             """
-            var carts = app.MapCrud<Cart>().Expiring(TimeSpan.FromDays(7), sliding: true);
+            var carts = app.MapCrud<Cart>().OwnedByCurrentUser().Expiring(TimeSpan.FromDays(7), sliding: true);
             carts.MapDetail<CartItem>();
             """),
         new(6, "Checkout Session", Fit.Partial,
@@ -424,7 +424,23 @@ public sealed class TaxonomyTests
             app.MapReadOnly<AuditLog>().MultiTenant().Searchable(log => log.Action);
             app.MapJob<AuditLogExport>({{Job}}).MultiTenant();
             """),
-        new(45, "Notification", Fit.Missing),
+        new(45, "Notification", Fit.Partial,
+            """
+            public partial class Notification
+            {
+                public string Title { get; private set; } = "";
+                public DateTimeOffset? ReadAt { get; private set; }
+                public void MarkRead(DateTimeOffset now) => ReadAt ??= now;
+            }
+            """,
+            """
+            var notifications = app.MapReadOnly<Notification>().OwnedByCurrentUser();
+            notifications.MapAction("mark-read", (notification, services, cancellationToken) =>
+            {
+                notification.MarkRead(services.GetRequiredService<TimeProvider>().GetUtcNow());
+                return System.Threading.Tasks.Task.CompletedTask;
+            });
+            """),
         new(46, "Webhook endpoint", Fit.Partial,
             Webhook,
             """
@@ -457,7 +473,15 @@ public sealed class TaxonomyTests
         new(49, "Polimorfik attachment", Fit.Missing),
         new(50, "Comment / activity feed", Fit.Missing),
         new(51, "Custom fields / metadata", Fit.Missing),
-        new(52, "/me ve kullanıcıya ait kaynaklar", Fit.Missing),
+        new(52, "/me ve kullanıcıya ait kaynaklar", Fit.Clean,
+            """
+            public partial class SavedAddress { public string Line { get; set; } = ""; }
+            public partial class Draft { public string Text { get; set; } = ""; }
+            """,
+            """
+            app.MapCrud<SavedAddress>().OwnedByCurrentUser();
+            app.MapCrud<Draft>().OwnedByCurrentUser(underMe: false);
+            """),
         new(53, "Report / aggregation", Fit.Clean,
             """
             public sealed class SalesReportRequest { public int Year { get; set; } }
@@ -471,12 +495,11 @@ public sealed class TaxonomyTests
         new(54, "Search", Fit.Clean,
             Product,
             "app.MapCrud<Product>().Searchable(product => product.Name, product => product.Price);"),
-        new(55, "Favorite / star / vote", Fit.Partial,
-            User + Product,
+        new(55, "Favorite / star / vote", Fit.Clean,
+            Product,
             """
-            app.MapCrud<User>();
             app.MapCrud<Product>();
-            app.MapAssociation<User, Product>();
+            app.MapAssociation<Favorite, Product>().ForCurrentUser();
             """),
         new(56, "Ordering / position", Fit.Missing),
         new(57, "Counter", Fit.Partial,
@@ -549,8 +572,8 @@ public sealed class TaxonomyTests
     public void Tally_MatchesTheWrittenResults()
     {
         // reports/Haldus taksonomi sınaması.md dosyasındaki sayılar; biri değişirse diğeri de güncellenmelidir.
-        Assert.Equal(20, Rows.Count(row => row.Fit == Fit.Clean));
+        Assert.Equal(22, Rows.Count(row => row.Fit == Fit.Clean));
         Assert.Equal(28, Rows.Count(row => row.Fit == Fit.Partial));
-        Assert.Equal(11, Rows.Count(row => row.Fit == Fit.Missing));
+        Assert.Equal(9, Rows.Count(row => row.Fit == Fit.Missing));
     }
 }

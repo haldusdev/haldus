@@ -82,7 +82,14 @@ internal static class OperationParser
         var (leftName, leftType) = Describe(name.TypeArgumentList.Arguments[0], context.SemanticModel, cancellationToken);
         var (rightName, rightType) = Describe(name.TypeArgumentList.Arguments[1], context.SemanticModel, cancellationToken);
 
-        return new AssociationDeclaration(leftName, leftType, rightName, rightType, LocationInfo.From(name.GetLocation()));
+        return new AssociationDeclaration(leftName, leftType, rightName, rightType, LocationInfo.From(name.GetLocation()))
+        {
+            ForCurrentUser = ChainReader.Nodes(invocation).Any(node => node.Name.Identifier.ValueText == "ForCurrentUser"),
+            CallNamespace = context.SemanticModel.GetEnclosingSymbol(invocation.SpanStart, cancellationToken)
+                ?.ContainingNamespace is { IsGlobalNamespace: false } callSiteNamespace
+                    ? callSiteNamespace.ToDisplayString()
+                    : string.Empty,
+        };
     }
 
     private static (string Name, string? Type) Describe(TypeSyntax syntax, SemanticModel semanticModel, CancellationToken cancellationToken) =>

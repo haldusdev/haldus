@@ -11,6 +11,17 @@ public static class ResourceBuilderTraitExtensions
     public static ResourceBuilder<TEntity> MultiTenant<TEntity>(this ResourceBuilder<TEntity> builder)
         where TEntity : class => builder;
 
+    /// <summary>
+    /// Kayıtları onları oluşturan kullanıcıya bağlar: <c>OwnerId</c> alanı üretilir, kayıt oluşturulurken geçerli
+    /// kullanıcı atanır ve herkes yalnızca kendi kayıtlarını görür. Kullanıcısı çözülemeyen istek 401 alır.
+    /// </summary>
+    /// <param name="underMe">
+    /// Kaynak <c>/me</c> altında mı sunulsun (<c>/me/carts</c>). <c>false</c> ise adres değişmez (<c>/carts</c>);
+    /// kayıtlar yine yalnızca sahibine görünür.
+    /// </param>
+    public static ResourceBuilder<TEntity> OwnedByCurrentUser<TEntity>(this ResourceBuilder<TEntity> builder, bool underMe = true)
+        where TEntity : class => builder;
+
     /// <summary>Oluşturulma ve değiştirilme zamanını tutar.</summary>
     /// <param name="trackUser">Oluşturan ve değiştiren kullanıcı da tutulsun mu.</param>
     public static ResourceBuilder<TEntity> Auditable<TEntity>(this ResourceBuilder<TEntity> builder, bool trackUser = false)

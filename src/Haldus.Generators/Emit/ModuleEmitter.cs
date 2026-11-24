@@ -11,7 +11,8 @@ internal static class ModuleEmitter
         IReadOnlyList<(ResourceModel Resource, string Namespace)> resources,
         IReadOnlyList<HandlerModel> handlers,
         IReadOnlyList<QueryModel> queries,
-        IReadOnlyList<AssociationModel> associations)
+        IReadOnlyList<AssociationModel> associations,
+        IReadOnlyList<UserLinkModel> userLinks)
     {
         var builder = new StringBuilder();
         builder.Append(ResourceEmitter.Header).Append('\n');
@@ -58,6 +59,11 @@ internal static class ModuleEmitter
                 model.Append(AssociationEmitter.EmitModel(association));
             }
 
+            foreach (var link in userLinks)
+            {
+                model.Append(UserLinkEmitter.EmitModel(link));
+            }
+
             model.Append("        });\n");
             blocks.Add(model.ToString());
         }
@@ -96,6 +102,13 @@ internal static class ModuleEmitter
             blocks.Add(
                 $"        global::Haldus.HaldusEndpointRegistry.RegisterAssociation<{association.Left.QualifiedName}, "
                 + $"{association.Right.QualifiedName}>({association.QualifiedLinkName}Endpoints.Map);\n");
+        }
+
+        foreach (var link in userLinks)
+        {
+            blocks.Add(
+                $"        global::Haldus.HaldusEndpointRegistry.RegisterAssociation<{link.QualifiedLinkName}, "
+                + $"{link.Right.QualifiedName}>({link.QualifiedLinkName}Endpoints.Map);\n");
         }
 
         if (handlers.Count > 0)
@@ -141,10 +154,21 @@ internal static class ModuleEmitter
     public static string? EmitDbContext(
         DbContextModel dbContext,
         IReadOnlyList<(ResourceModel Resource, string Namespace)> resources,
-        IReadOnlyList<AssociationModel> associations)
+        IReadOnlyList<AssociationModel> associations,
+        IReadOnlyList<UserLinkModel> userLinks)
     {
         var existing = new HashSet<string>(dbContext.MemberNames);
         var builder = new StringBuilder();
+
+        foreach (var link in userLinks)
+        {
+            if (existing.Add(link.CollectionName))
+            {
+                builder.Append(
+                    $"    public global::Microsoft.EntityFrameworkCore.DbSet<{link.QualifiedLinkName}> {link.CollectionName} "
+                    + $"=> Set<{link.QualifiedLinkName}>();\n");
+            }
+        }
 
         foreach (var association in associations)
         {
@@ -229,6 +253,15 @@ internal static class ModuleEmitter
             {
                 statements.Add("entity.HasIndex(item => item.TenantId);");
             }
+        }
+
+        if (resource.Has(Traits.Owned))
+        {
+            // Kayıt yalnızca sahibine görünür. Kullanıcı çözülemediyse koşul hiçbir kaydı eşlemez.
+            statements.Add(
+                "entity.HasQueryFilter(global::Haldus.HaldusFilters.Owner, item => item.OwnerId == global::Haldus.HaldusScope.UserId(context));");
+            statements.Add("entity.Property(item => item.OwnerId).HasMaxLength(200);");
+            statements.Add("entity.HasIndex(item => item.OwnerId);");
         }
 
         if (resource.Has(Traits.SoftDeletable))

@@ -326,7 +326,7 @@ internal static class ResourceLinker
         var byType = resources.ToDictionary(resource => resource.QualifiedName);
         var associations = new List<AssociationModel>();
 
-        foreach (var declaration in declarations)
+        foreach (var declaration in declarations.Where(declaration => !declaration.ForCurrentUser))
         {
             void Fail(string id, params string[] arguments) =>
                 report(new DiagnosticInfo(id, declaration.Location, arguments.ToEquatableArray()));
@@ -342,6 +342,10 @@ internal static class ResourceLinker
             else if (left.QualifiedName == right.QualifiedName)
             {
                 Fail("HALDUS007", $"'{left.EntityName}' cannot be associated with itself");
+            }
+            else if (new[] { left, right }.FirstOrDefault(end => end.OwnedUnderMe) is { } personal)
+            {
+                Fail("HALDUS007", $"'{personal.EntityName}' lives under /me and cannot be an end of an association; use ForCurrentUser() to link the current user to a resource");
             }
             else if (new[] { left, right }.FirstOrDefault(end => !HasSingleColumnKey(end)) is { } unsupported)
             {
@@ -364,6 +368,51 @@ internal static class ResourceLinker
         }
 
         return associations;
+    }
+
+    /// <summary>
+    /// Geçerli kullanıcıya bağlı bağları çözer. Sol tip argümanı üretilecek bağ entity'sinin adıdır; sağ uç
+    /// eşlenmiş bir kaynak olmalıdır.
+    /// </summary>
+    public static List<UserLinkModel> LinkUserLinks(
+        IEnumerable<AssociationDeclaration> declarations,
+        IReadOnlyList<ResourceModel> resources,
+        Action<DiagnosticInfo> report)
+    {
+        var byType = resources.ToDictionary(resource => resource.QualifiedName);
+        var links = new List<UserLinkModel>();
+
+        foreach (var declaration in declarations.Where(declaration => declaration.ForCurrentUser))
+        {
+            void Fail(string id, params string[] arguments) =>
+                report(new DiagnosticInfo(id, declaration.Location, arguments.ToEquatableArray()));
+
+            if (Find(declaration.RightName, declaration.RightType, resources, byType) is not { } right)
+            {
+                Fail("HALDUS009", declaration.RightName, "MapAssociation");
+            }
+            else if (!HasSingleColumnKey(right))
+            {
+                Fail("HALDUS007", $"'{right.EntityName}' cannot take part in an association: it has no single-column key (it is a singleton or a tenant-scoped store)");
+            }
+            else if (resources.Any(resource => resource.EntityName == declaration.LeftName))
+            {
+                Fail("HALDUS007", $"'{declaration.LeftName}' names the link of a ForCurrentUser association, so it cannot also be mapped as a resource");
+            }
+            else if (links.All(existing => existing.LinkName != declaration.LeftName))
+            {
+                // Bağ entity'si yazılmışsa (partial) onun namespace'ine, yazılmamışsa her yazılmamış entity gibi
+                // çağrının bulunduğu namespace'e üretilir; böylece çağrıdaki ad derlenirken çözülür.
+                var qualified = declaration.LeftType?.Replace("global::", string.Empty);
+                var @namespace = qualified is null
+                    ? declaration.CallNamespace
+                    : qualified.Contains('.') ? qualified.Substring(0, qualified.LastIndexOf('.')) : string.Empty;
+
+                links.Add(new UserLinkModel(declaration.LeftName, @namespace, Declared: qualified is not null, right));
+            }
+        }
+
+        return links;
     }
 
     /// <summary>
@@ -508,7 +557,9 @@ internal static class ResourceLinker
             declaration.TargetName,
             targetKeyName,
             targetKeyType,
-            target is null && !external ? string.Empty : Naming.ToKebabCase(Naming.Pluralize(declaration.TargetName)),
+            target is not null
+                ? target.CollectionRoute
+                : external ? Naming.ToKebabCase(Naming.Pluralize(declaration.TargetName)) : string.Empty,
             onDelete,
             IsExternal: external);
     }

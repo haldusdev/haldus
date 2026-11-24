@@ -6,13 +6,15 @@ sınamanın sonucudur: her satır, yazılmış olan API ile ifade edilmeye çal�
 
 ## Sonuç
 
-59 satırın 48'i bugünkü API ile yazılıp derleniyor; 11'i için anlamlı bir eşleme yok. (İlk sayım 19 temiz, 29 kısmi idi; entity aksiyonu yazıldıktan sonra bir satır temize geçti.)
+59 satırın 50'si bugünkü API ile yazılıp derleniyor; 9'u için anlamlı bir eşleme yok. (İlk sayım 19 temiz, 29
+kısmi, 11 yok idi. Entity aksiyonu yazıldıktan sonra bir satır temize geçti; sahiplik yazıldıktan sonra iki satır
+temize, bir satır yoktan kısmiye geçti.)
 
 | Sonuç | Satır | Anlamı |
 |---|---|---|
-| Temiz | 20 | Raporun önerdiği eşleme, yazılmış özelliklerle eksiksiz ifade ediliyor |
+| Temiz | 22 | Raporun önerdiği eşleme, yazılmış özelliklerle eksiksiz ifade ediliyor |
 | Kısmi | 28 | Çekirdek ifade ediliyor; önerilen eşlemedeki bir veya daha çok özellik henüz yok |
-| Yok | 11 | Gereken archetype veya trait yazılmadı |
+| Yok | 9 | Gereken archetype veya trait yazılmadı |
 
 Araştırmanın başlangıçtaki düz katalog için kendi sayımı 10 oturuyor, 31 zorlanarak, 18 oturmuyor idi. İki sayım
 aynı ölçüyle yapılmadı (o, araştırmacının hükmüydü; bu, derlenen kod), bu yüzden fark kesin bir iyileşme ölçüsü
@@ -29,7 +31,8 @@ tamamı eksik trait veya archetype'tır.
   hatasız derlendiğini doğrular. Aşağıdaki tablo o dosyadaki verinin aynısıdır; sayılar bir testle bağlıdır.
 - **Çalışma:** Derleme, uçların doğru davrandığını göstermez. Tablodaki birleşimlerin bir kısmı örnek uygulamalarda
   gerçek PostgreSQL'e karşı sınanıyor: sipariş, satırlar, rezervasyon, kupon, iade, sepet, ödeme, yorumlar,
-  ayarlar, stok, iş ve toplu işlemler. Geri kalan satırlar yalnızca derleme düzeyinde doğrulandı.
+  ayarlar, stok, iş, toplu işlemler, kullanıcıya ait kaynaklar ve favoriler. Geri kalan satırlar yalnızca derleme
+  düzeyinde doğrulandı.
 - **Hüküm:** "Temiz" ile "kısmi" arasındaki ayrım benim yorumumdur: önerilen eşlemede adı geçen bir özellik
   yazılmadıysa, aynı sonuç elle (ör. bir handler içinde) elde edilebilse bile satır kısmi sayıldı.
 
@@ -41,7 +44,7 @@ tamamı eksik trait veya archetype'tır.
 | 2 | OrderItem / LineItem | Temiz | Gömülü `MapDetail` + `IComputed` toplamlar | — |
 | 3 | Product + Variant + Option | Kısmi | `MapCrud` + gömülü `MapDetail` (sırası korunur) + `Batch` | `Publishable`, varyant üretimi |
 | 4 | Category / Collection | Kısmi | `MapCrud` + `Hierarchical` + `Archivable` | Kardeşler arası sıra (`Orderable`) |
-| 5 | Cart | Kısmi | `MapCrud` + `MapDetail` + `Expiring(sliding)` | `OwnedByCurrentUser`, `Cloneable`, sepet birleştirme |
+| 5 | Cart | Kısmi | `MapCrud` + `OwnedByCurrentUser` + `MapDetail` + `Expiring(sliding)` | `Cloneable`, sepet birleştirme, anonim oturumun sahipliği |
 | 6 | Checkout Session | Kısmi | `MapCrud().Without(Delete)` + `Workflow` + `Expiring` + `Idempotent` | `Creates<T>` (handler içinde elle) |
 | 7 | Coupon | Kısmi | `MapCrud` + `Expiring()` + `IComputed` | Yalnızca oluştururken yazılan alan, doğal anahtar |
 | 8 | Payment (auth/capture/void) | Temiz | `MapCrud().Without(Delete)` + `Workflow` + `Idempotent`; hareketler `MapAppendOnly().Under<Payment>()` | — |
@@ -81,17 +84,17 @@ tamamı eksik trait veya archetype'tır.
 | 42 | ApiKey / secret | Kısmi | `MapCrud().Without(Update, Patch)` + `Expiring()` | `SecretOnce`, `Rotatable` |
 | 43 | Settings / Preferences | Temiz | `MapSingleton().MultiTenant()`, `MapStore().MultiTenant()` | — |
 | 44 | AuditLog / Event | Kısmi | `MapReadOnly` + `Searchable`; dışa aktarma ayrı bir `MapJob` | `Retention` |
-| 45 | Notification | Yok | — | `OwnedByCurrentUser`, `ReadTracking` |
+| 45 | Notification | Kısmi | `MapReadOnly` + `OwnedByCurrentUser`; okundu işareti bir entity aksiyonu | `ReadTracking` (hepsini okundu işaretleme, okunmamış sayısı) |
 | 46 | Webhook endpoint | Kısmi | `MapCrud` + `Archivable`; ping bir entity aksiyonu | `SecretOnce`, ebeveyn altında tek kayıt |
 | 47 | Webhook delivery | Temiz | `MapReadOnly` + `Under<Webhook>` + `Workflow`; yeniden gönderme bir geçiş | — |
 | 48 | Subscription / Plan | Temiz | `MapCrud` + `Workflow` + `MapDetail` | — |
 | 49 | Polimorfik attachment | Yok | — | `Attachable`, `MapFile` |
 | 50 | Comment / activity feed | Yok | — | `Commentable` |
 | 51 | Custom fields / metadata | Yok | — | `Metadata`, `CustomFields` |
-| 52 | `/me` ve kullanıcıya ait kaynaklar | Yok | — | `OwnedByCurrentUser` |
+| 52 | `/me` ve kullanıcıya ait kaynaklar | Temiz | `OwnedByCurrentUser()` (`/me` altında) veya `OwnedByCurrentUser(underMe: false)` | — |
 | 53 | Report / aggregation | Temiz | `MapQuery` veya `MapJob` | — |
 | 54 | Search | Temiz | `Searchable` | — |
-| 55 | Favorite / star / vote | Kısmi | `MapAssociation<User, Product>` | Bağın geçerli kullanıcıya bağlanması |
+| 55 | Favorite / star / vote | Temiz | `MapAssociation<Favorite, Product>().ForCurrentUser()` | — |
 | 56 | Ordering / position | Yok | — | `Orderable` (yalnızca gömülü satırlar sıra tutar) |
 | 57 | Counter | Kısmi | Gömülü satırlardan `IComputed` | Başka kaynaklardan toplama (`Rollup`) |
 | 58 | Bulk operations | Temiz | `Batch` + `MapJob` | — |
@@ -108,8 +111,9 @@ tamamı eksik trait veya archetype'tır.
   satırda (23, 26, 38, 46) bir kayıt üzerinde çalışan ama durumunu değiştirmeyen bir uç gerekiyordu: giriş/çıkış,
   parola sıfırlama, ping. Bu, bir kaynağın builder'ında çağrılan `MapAction` ile kapatıldı; 26. satır böylece
   temize geçti, diğer üçünde başka özellikler eksik kalıyor.
-- **Geçerli kullanıcıya ait kaynak dört satırı etkiliyor** (5, 45, 52, 55). Haldus kiracıyı biliyor ama "benim
-  kayıtlarım" kavramını bilmiyor.
+- **Geçerli kullanıcıya ait kaynak dört satırı etkiliyordu** (5, 45, 52, 55); sonradan yazıldı. `OwnedByCurrentUser`
+  ve `MapAssociation().ForCurrentUser()` ile 52 ve 55 temize geçti; 5 ve 45 artık sahipliği ifade ediyor, başka
+  özellikleri eksik. Değer taşıyan oy (artı/eksi) yük taşıyan bağ gerektirir; o ayrı bir kalemdir.
 - **Tersine çevirme üç muhasebe satırında eksik** (14, 15, 19): bir kaydı silmek yerine onu geri alan karşı kaydı
   üretmek.
 - **Gizli değerler üç satırda eksik** (41, 42, 46): yalnızca bir kez gösterilen anahtar, döndürme, token ile erişim.
@@ -119,8 +123,6 @@ tamamı eksik trait veya archetype'tır.
 
 | Eksik | Satırlar |
 |---|---|
-
-| `OwnedByCurrentUser` / geçerli kullanıcıya bağlı bağ | 5, 45, 52, 55 |
 | `Metadata` / `CustomFields` | 9, 23, 38, 51 |
 | `Reversible` / `Reverses` | 14, 15, 19 |
 | `SecretOnce` / `Rotatable` / `TokenAccess` | 41, 42, 46 |
@@ -136,7 +138,8 @@ tamamı eksik trait veya archetype'tır.
 | Tek satırı etkileyenler | `MapChangeSet` (1), `Previewable` (12), `Approvable` (24), `Translatable` (28), `Supersedes` (35), yüklü ve durumlu bağ (40), bağların topluca değiştirilmesi (31), `Retention` (44), `ReadTracking` (45), `Rollup` (57), `EffectiveDated` ve `ChangeFeed` (23) |
 
 Araştırma bunların çoğunu zaten ikinci ve üçüncü sürüme bırakmıştı. Bu sınamanın o sıralamaya eklediği tek şey,
-ilk sürümün kapsamındaki satırlarda da gereken entity aksiyonuydu; o artık yazıldı.
+ilk sürümün kapsamındaki satırlarda da gereken entity aksiyonuydu; o artık yazıldı. Dört satırı etkileyen sahiplik
+(`OwnedByCurrentUser`, geçerli kullanıcıya bağlı bağ) da yazıldı ve bu tablodan çıktı.
 
 ## Bu sınamanın söylemediği
 

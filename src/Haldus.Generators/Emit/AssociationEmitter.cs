@@ -240,22 +240,10 @@ internal static class AssociationEmitter
     }
 
     /// <summary>Bir kaynağın yanıt DTO'suna izdüşümü; bağ listeleri karşı ucun yanıtını döndürür.</summary>
-    private static string Projection(ResourceModel resource)
-    {
-        var assignments = new[] { $"{resource.KeyName} = item.{resource.KeyName}" }
-            .Concat(resource.Properties.Select(property => $"{property.Name} = item.{property.Name}"))
-            .Concat(TraitCatalog.ResponseMembers(resource.Traits).Select(member => $"{member.Name} = item.{member.Name}"));
+    private static string Projection(ResourceModel resource) =>
+        $"new {resource.QualifiedName}Response {{ {ResourceEmitter.ResponseAssignments(resource)} }}";
 
-        return $"new {resource.QualifiedName}Response {{ {string.Join(", ", assignments)} }}";
-    }
-
-    private static string Constraint(ResourceModel resource) => resource.IdKind switch
-    {
-        IdKind.Int32 => ":int",
-        IdKind.Int64 => ":long",
-        IdKind.String => string.Empty,
-        _ => ":guid",
-    };
+    private static string Constraint(ResourceModel resource) => ResourceEmitter.RouteConstraint(resource);
 
     private static string Initializer(ResourceModel resource) => resource.IdKind == IdKind.String ? " = \"\";" : string.Empty;
 }

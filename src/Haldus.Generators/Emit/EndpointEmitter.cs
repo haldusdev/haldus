@@ -59,29 +59,11 @@ internal sealed partial class EndpointEmitter
 
     private string KeyParameter => $"        {_resource.IdType} {_keyParameter},\n";
 
-    private string ResponseAssignments => string.Join(
-        ", ",
-        (_key.Length == 0 ? Array.Empty<string>() : [$"{_key} = item.{_key}"])
-            .Concat(_resource.Properties.Select(property => $"{property.Name} = item.{property.Name}"))
-            .Concat(_resource.ResponseMembers.Select(member => $"{member.Name} = item.{member.Name}"))
-            .Concat(_resource.Details.Select(DetailProjection)));
+    private string ResponseAssignments => ResourceEmitter.ResponseAssignments(_resource);
 
     /// <summary>Tek bir kayıt yüklenirken gömülü detayları da getirir; yanıt ve eşitleme onlara ihtiyaç duyar.</summary>
     private string Includes => string.Concat(_resource.Details.Select(detail => $".Include(item => item.{detail.CollectionName})"));
 
-    /// <summary>
-    /// Gömülü detayların yanıta izdüşümü. Aynı ifade hem veritabanı sorgusunda hem bellekteki kayıtta
-    /// çalışır; satırlar istekte gönderildikleri sırayla döner.
-    /// </summary>
-    private static string DetailProjection(ResourceModel detail)
-    {
-        var assignments = new[] { $"{detail.KeyName} = detail.{detail.KeyName}" }
-            .Concat(detail.Properties.Select(property => $"{property.Name} = detail.{property.Name}"));
-
-        return $"{detail.CollectionName} = item.{detail.CollectionName}"
-            + $".OrderBy(detail => detail.Position).ThenBy(detail => detail.{detail.KeyName})"
-            + $".Select(detail => new {detail.QualifiedName}Response {{ {string.Join(", ", assignments)} }}).ToList()";
-    }
 
     private string NotFound => $"{Problems}.NotFound(messages, \"{_entity}\", {_keyParameter})";
 
@@ -149,10 +131,21 @@ internal sealed partial class EndpointEmitter
             var parentKey = $"{{{ParentParameter}{RouteConstraint(Parent.TargetKeyType)}}}/{route}";
             route = _resource.RouteRelativeToParent ? parentKey : $"{Parent.TargetRoute}/{parentKey}";
         }
+        else if (_resource.OwnedUnderMe)
+        {
+            route = "me/" + route;
+        }
 
         var tenantFilter = _tenant
             ? "        group.AddEndpointFilter<global::Haldus.HaldusTenantRequiredFilter>();\n\n"
             : string.Empty;
+
+        // Kullanıcıya ait kaynakta (ve /me altındaki her adreste) kullanıcısı çözülemeyen istek hiçbir kayda
+        // ulaşamaz; boş bir liste yerine nedenini söyleyen 401 döner.
+        if (_resource.Has(Traits.Owned) || route.StartsWith("me/", StringComparison.Ordinal))
+        {
+            tenantFilter += "        group.AddEndpointFilter<global::Haldus.HaldusUserRequiredFilter>();\n\n";
+        }
 
         return $$"""
             {{ResourceEmitter.Header}}

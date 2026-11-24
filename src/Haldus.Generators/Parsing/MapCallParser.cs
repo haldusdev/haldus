@@ -529,6 +529,21 @@ internal static class MapCallParser
             }
         }
 
+        if ((traits & Traits.Owned) != 0)
+        {
+            // Sahiplik, sunucunun anahtar ürettiği koleksiyonlar ve işler içindir.
+            if (archetype is not (Archetype.Crud or Archetype.ReadOnly or Archetype.AppendOnly or Archetype.Job))
+            {
+                yield return $"OwnedByCurrentUser cannot be combined with {name}";
+            }
+
+            if ((traits & Traits.OwnedPlainRoute) == 0 && chain.Any(call => call.Name == "Under"))
+            {
+                yield return "OwnedByCurrentUser places the resource under /me, which cannot be combined with Under<T>(); "
+                    + "pass underMe: false to keep the parent's address";
+            }
+        }
+
         if (chain.Any(call => call.Name == "Batch")
             && (traits & Traits.ConcurrencyChecked) != 0
             && (operations & (Operations.Update | Operations.Delete)) != 0)

@@ -11,6 +11,11 @@ internal static class TraitCatalog
         [
             new("TenantId", "global::System.Guid", InResponse: false, Search: null),
         ]),
+        new(Traits.Owned, "global::Haldus.IOwned",
+        [
+            // Sahip isteği yapanın kendisidir; yanıtta yinelenmez.
+            new("OwnerId", "string", InResponse: false, Search: null),
+        ]),
         new(Traits.Auditable, "global::Haldus.IAuditable",
         [
             new("CreatedAt", DateTimeOffset, InResponse: true, new("CreatedAt", SearchKind.Range, DateTimeOffset, IsNullable: false)),

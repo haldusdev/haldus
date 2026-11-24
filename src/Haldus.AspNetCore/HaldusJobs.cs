@@ -163,7 +163,9 @@ public sealed class HaldusJobRunner(
         }
 
         // İş, onu oluşturan kiracı ve kullanıcının kimliğiyle çalışır.
-        using var identity = HaldusAmbient.Use((job as IMultiTenant)?.TenantId, (job as IUserAuditable)?.CreatedBy);
+        using var identity = HaldusAmbient.Use(
+            (job as IMultiTenant)?.TenantId,
+            (job as IOwned)?.OwnerId ?? (job as IUserAuditable)?.CreatedBy);
 
         job.Status = JobStatus.Running;
         job.StartedAt ??= HaldusTime.UtcNow(timeProvider);
@@ -336,8 +338,15 @@ public sealed class HaldusJobRunner(
     private static IQueryable<TJob> Jobs<TJob>(DbContext context)
         where TJob : class, IHaldusJob
     {
+        // Kiracı ve sahip, işin kendisinden okunur; o ana kadar bilinmedikleri için bu iki filtre uygulanmaz.
+        string[] unknown =
+        [
+            .. typeof(IMultiTenant).IsAssignableFrom(typeof(TJob)) ? new[] { HaldusFilters.Tenant } : [],
+            .. typeof(IOwned).IsAssignableFrom(typeof(TJob)) ? new[] { HaldusFilters.Owner } : [],
+        ];
+
         var jobs = context.Set<TJob>().AsQueryable();
-        return typeof(IMultiTenant).IsAssignableFrom(typeof(TJob)) ? jobs.IgnoreQueryFilters([HaldusFilters.Tenant]) : jobs;
+        return unknown.Length == 0 ? jobs : jobs.IgnoreQueryFilters(unknown);
     }
 
     private sealed class RunningJobContext<TJob>(HaldusJobRunner runner, IServiceProvider services, TJob job) : JobContext

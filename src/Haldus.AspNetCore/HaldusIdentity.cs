@@ -48,3 +48,10 @@ public sealed class HaldusTenantRequiredFilter(ITenantProvider tenants, IHaldusM
     public async ValueTask<object?> InvokeAsync(EndpointFilterInvocationContext context, EndpointFilterDelegate next) =>
         tenants.TenantId is null ? HaldusProblems.TenantRequired(messages) : await next(context);
 }
+
+/// <summary>Kullanıcıya ait kaynakların endpoint'lerinde, kullanıcısı çözülemeyen isteği reddeder.</summary>
+public sealed class HaldusUserRequiredFilter(ICurrentUser user, IHaldusMessages messages) : IEndpointFilter
+{
+    public async ValueTask<object?> InvokeAsync(EndpointFilterInvocationContext context, EndpointFilterDelegate next) =>
+        string.IsNullOrEmpty(user.UserId) ? HaldusProblems.UserRequired(messages) : await next(context);
+}
