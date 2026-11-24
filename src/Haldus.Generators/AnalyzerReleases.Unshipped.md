@@ -13,3 +13,4 @@ HALDUS005 | Haldus | Error | Field cannot be searched
 HALDUS006 | Haldus | Error | Searchable needs at least one field
 HALDUS007 | Haldus | Error | Declarations cannot be combined
 HALDUS008 | Haldus | Error | Query request needs a parameterless constructor
+HALDUS009 | Haldus | Error | Reference target cannot be resolved

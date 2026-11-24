@@ -34,6 +34,34 @@ public sealed class ResourceBuilder<TEntity>(RouteGroupBuilder group) : IEndpoin
     /// </summary>
     public ResourceBuilder<TEntity> Searchable(params Expression<Func<TEntity, object?>>[] fields) => this;
 
+    /// <summary>
+    /// Başka bir kaynağa kimlikle referans verir: yabancı anahtar alanı (ör. <c>CategoryId</c>) üretilir ve
+    /// yazılırken hedefin var olduğu doğrulanır.
+    /// </summary>
+    /// <param name="onDelete">Hedef silindiğinde bu kayda ne olacağı.</param>
+    /// <param name="required">Referans zorunlu mu.</param>
+    public ResourceBuilder<TEntity> References<TTarget>(OnDelete onDelete = OnDelete.Restrict, bool required = true)
+        where TTarget : class => this;
+
+    /// <summary>Yabancı anahtar alanını kendin yazdıysan onu gösterirsin; zorunluluğu alanın tipinden okunur.</summary>
+    public ResourceBuilder<TEntity> References<TTarget>(
+        Expression<Func<TEntity, object?>> foreignKey,
+        OnDelete onDelete = OnDelete.Restrict)
+        where TTarget : class => this;
+
+    /// <summary>
+    /// Kaynağı bir ebeveynin adresi altına yerleştirir (<c>/projects/{projectId}/tasks</c>). Kaynak yine
+    /// kendi kimliğine ve kurallarına sahiptir; ebeveyn istek gövdesinden değil adresten gelir.
+    /// </summary>
+    public ResourceBuilder<TEntity> Under<TParent>(OnDelete onDelete = OnDelete.Cascade)
+        where TParent : class => this;
+
+    /// <summary>
+    /// Kayıtları bir ağaca dizer: isteğe bağlı <c>ParentId</c> alanı üretilir ve bir düğümün kendi altına
+    /// taşınması engellenir.
+    /// </summary>
+    public ResourceBuilder<TEntity> Hierarchical() => this;
+
     IApplicationBuilder IEndpointRouteBuilder.CreateApplicationBuilder() =>
         ((IEndpointRouteBuilder)Group).CreateApplicationBuilder();
 

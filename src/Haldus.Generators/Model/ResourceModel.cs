@@ -19,12 +19,30 @@ internal sealed record ResourceModel(
     Operations Operations,
     EquatableArray<string> DeclaredTraitMembers,
     FilterModel? Filter,
-    EquatableArray<SearchField> SearchFields,
+    EquatableArray<SearchFieldRequest> SearchRequests,
+    EquatableArray<ReferenceDeclaration> ReferenceDeclarations,
     EquatableArray<ChainCall> Chain,
     EquatableArray<DiagnosticInfo> Diagnostics,
     LocationInfo Location)
 {
+    // Aşağıdaki üçü ayrıştırmada boştur; bağlama adımı, tüm kaynaklar bilindikten sonra doldurur.
+
+    /// <summary>Aranabilir alanlar; istekler başka kaynaklardan gelen alanları da (ör. yabancı anahtar) görebilsin diye sonradan çözülür.</summary>
+    public EquatableArray<SearchField> SearchFields { get; init; } = EquatableArray<SearchField>.Empty;
+
+    /// <summary>Hedefinin anahtar tipi ve adı çözülmüş referanslar.</summary>
+    public EquatableArray<ResolvedReference> References { get; init; } = EquatableArray<ResolvedReference>.Empty;
+
+    /// <summary>Başka bir kayıt silinmesini engelleyecek biçimde bu kaynağa referans veriyor mu.</summary>
+    public bool IsReferenced { get; init; }
+
     public bool HasErrors => Diagnostics.Length > 0;
+
+    public ResolvedReference? Parent => References.FirstOrDefault(reference => reference.Kind == ReferenceKind.Parent);
+
+    public ResolvedReference? SelfReference => References.FirstOrDefault(reference => reference.Kind == ReferenceKind.Self);
+
+    public string QualifiedName => Namespace.Length == 0 ? $"global::{EntityName}" : $"global::{Namespace}.{EntityName}";
 
     public bool Has(Traits trait) => (Traits & trait) == trait;
 
@@ -125,6 +143,55 @@ internal sealed record PropertyModel(
 {
     public bool IsNonNullable => IsNonNullableReference || IsNonNullableValue;
 }
+
+internal enum ReferenceKind
+{
+    /// <summary>Başka bir kaynağa kimlikle referans: <c>.References&lt;T&gt;()</c>.</summary>
+    Reference,
+
+    /// <summary>Zorunlu ebeveyn; kaynak onun adresi altında yaşar: <c>.Under&lt;T&gt;()</c>.</summary>
+    Parent,
+
+    /// <summary>Aynı kaynağa referans; ağaç oluşturur: <c>.Hierarchical()</c>.</summary>
+    Self,
+}
+
+internal enum OnDeleteBehavior
+{
+    Restrict,
+    Cascade,
+    SetNull,
+}
+
+/// <summary>Zincirden okunan, henüz hedefi çözülmemiş referans bildirimi.</summary>
+/// <param name="TargetType">Hedef tip çözülebildiyse tam adı; hedef henüz üretilmemiş bir entity ise <c>null</c>.</param>
+/// <param name="TargetKeyType">Hedef bir Haldus kaynağı değilse <c>Id</c> özelliğinden okunan anahtar tipi.</param>
+/// <param name="PropertyName">Kullanıcı yabancı anahtar özelliğini kendisi gösterdiyse adı.</param>
+internal sealed record ReferenceDeclaration(
+    ReferenceKind Kind,
+    string TargetName,
+    string? TargetType,
+    string? TargetKeyType,
+    string? PropertyName,
+    OnDeleteBehavior OnDelete,
+    bool Required,
+    LocationInfo Location);
+
+/// <param name="TargetRoute">Hedef koleksiyonun rota parçası (ör. <c>projects</c>); <c>.Under&lt;T&gt;()</c> adresi kurarken kullanır.</param>
+internal sealed record ResolvedReference(
+    ReferenceKind Kind,
+    string PropertyName,
+    string PropertyType,
+    bool IsRequired,
+    string TargetType,
+    string TargetName,
+    string TargetKeyName,
+    string TargetKeyType,
+    string TargetRoute,
+    OnDeleteBehavior OnDelete);
+
+/// <summary><c>.Searchable(...)</c> içinde sayılan, henüz doğrulanmamış bir alan.</summary>
+internal sealed record SearchFieldRequest(string? FieldName, string Expression, LocationInfo Location);
 
 /// <summary><c>IActionHandler</c> veya <c>IQueryHandler</c> uygulayan, bağımlılık enjeksiyonuna kaydedilecek sınıf.</summary>
 internal sealed record HandlerModel(string Implementation, EquatableArray<string> Services);

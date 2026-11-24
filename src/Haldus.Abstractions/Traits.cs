@@ -55,6 +55,19 @@ public interface ICurrentUser
     string? UserId { get; }
 }
 
+/// <summary>Referans verilen kayıt silindiğinde, ona referans veren kayıtlara ne olacağı.</summary>
+public enum OnDelete
+{
+    /// <summary>Referans veren kayıt varken silme reddedilir.</summary>
+    Restrict,
+
+    /// <summary>Referans veren kayıtlar da silinir.</summary>
+    Cascade,
+
+    /// <summary>Referans boşaltılır; yalnızca isteğe bağlı referanslarda kullanılabilir.</summary>
+    SetNull,
+}
+
 /// <summary><c>.Without()</c> ve <c>.Only()</c> ile seçilebilen standart işlemler.</summary>
 public enum CrudOperation
 {

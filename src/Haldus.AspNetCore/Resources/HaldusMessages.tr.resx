@@ -30,6 +30,18 @@
   <data name="PreconditionFailed.Detail" xml:space="preserve">
     <value>Kayıt, son okumanızdan sonra değiştirildi. Yeniden yükleyip tekrar deneyin.</value>
   </data>
+  <data name="Reference.NotFound" xml:space="preserve">
+    <value>'{1}' kimlikli {0} kaydı bulunamadı.</value>
+  </data>
+  <data name="Hierarchy.Cycle" xml:space="preserve">
+    <value>Bir kayıt kendisinin veya kendi altındaki bir kaydın altına yerleştirilemez.</value>
+  </data>
+  <data name="InUse.Title" xml:space="preserve">
+    <value>Kayıt kullanımda</value>
+  </data>
+  <data name="InUse.Detail" xml:space="preserve">
+    <value>'{1}' kimlikli {0} kaydı, başka kayıtlar ona bağlı olduğu için silinemiyor.</value>
+  </data>
   <data name="SearchTooComplex.Title" xml:space="preserve">
     <value>Arama çok karmaşık</value>
   </data>

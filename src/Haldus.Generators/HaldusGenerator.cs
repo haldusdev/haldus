@@ -3,6 +3,7 @@ using System.Text;
 using Haldus.Generators.Diagnostics;
 using Haldus.Generators.Emit;
 using Haldus.Generators.Infrastructure;
+using Haldus.Generators.Linking;
 using Haldus.Generators.Model;
 using Haldus.Generators.Parsing;
 using Microsoft.CodeAnalysis;
@@ -121,6 +122,14 @@ public sealed class HaldusGenerator : IIncrementalGenerator
 
             valid.Add((resource, entityNamespace));
         }
+
+        // Referansların hedefleri ve aranabilir alanlar, tüm kaynaklar bilindikten sonra çözülür.
+        valid =
+        [
+            .. ResourceLinker
+                .Link([.. valid.Select(entry => entry.Resource)], diagnostic => Report(context, diagnostic))
+                .Select(resource => (resource, resource.Namespace)),
+        ];
 
         // Aynı istek tipi birden çok rotaya eşlenebilir; endpoint kodu bir kez üretilir.
         var validQueries = new List<QueryModel>();

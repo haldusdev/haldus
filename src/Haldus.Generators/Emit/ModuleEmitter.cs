@@ -164,6 +164,13 @@ internal static class ModuleEmitter
             statements.Add("entity.HasQueryFilter(global::Haldus.HaldusFilters.SoftDelete, item => item.DeletedAt == null);");
         }
 
+        foreach (var reference in resource.References)
+        {
+            statements.Add(
+                $"entity.HasOne<{reference.TargetType}>().WithMany().HasForeignKey(item => item.{reference.PropertyName})"
+                + $".OnDelete(global::Microsoft.EntityFrameworkCore.DeleteBehavior.{reference.OnDelete});");
+        }
+
         if (resource.Has(Traits.ConcurrencyChecked))
         {
             statements.Add("entity.Property(item => item.Version).IsRowVersion();");

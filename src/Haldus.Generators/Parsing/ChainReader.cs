@@ -20,6 +20,9 @@ internal static class ChainReader
         "Only",
         "Filterable",
         "Searchable",
+        "References",
+        "Under",
+        "Hierarchical",
     ];
 
     /// <summary>Zincirdeki çağrıları, Map çağrısından dışa doğru sırayla verir.</summary>

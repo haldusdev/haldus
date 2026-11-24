@@ -70,8 +70,17 @@ internal static class HaldusDiagnostics
         DiagnosticSeverity.Error,
         isEnabledByDefault: true);
 
+    public static readonly DiagnosticDescriptor ReferenceTargetUnknown = new(
+        "HALDUS009",
+        "Reference target cannot be resolved",
+        "'{0}', which '{1}' refers to, is neither mapped with a Map call nor a declared entity type; a parent must be a mapped resource",
+        Category,
+        DiagnosticSeverity.Error,
+        isEnabledByDefault: true);
+
     public static DiagnosticDescriptor Get(string id) => id switch
     {
+        "HALDUS009" => ReferenceTargetUnknown,
         "HALDUS005" => FieldCannotBeSearched,
         "HALDUS006" => SearchableNeedsFields,
         "HALDUS007" => InvalidCombination,

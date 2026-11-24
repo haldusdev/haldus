@@ -18,6 +18,12 @@ public static class HaldusModel
     /// böylece tabloda ikinci bir satır oluşamaz.
     /// </summary>
     public const string SingletonKey = "SingletonKey";
+
+    /// <summary>
+    /// Bir ağaçta döngü aranırken köke doğru en fazla kaç düzey çıkılacağı. Daha derin bir zincir, bozuk
+    /// veri veya sonsuz döngü olasılığına karşı döngü sayılır.
+    /// </summary>
+    public const int MaxHierarchyDepth = 64;
 }
 
 /// <summary>Üretilen sorgu filtrelerinin, geçerli bağlam üzerinden istek kapsamındaki değerlere ulaştığı yer.</summary>

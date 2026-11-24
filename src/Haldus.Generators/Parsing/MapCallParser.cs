@@ -151,7 +151,8 @@ internal static class MapCallParser
         }
 
         FilterModel? filter = null;
-        var searchFields = new List<SearchField>();
+        var searchRequests = new List<SearchFieldRequest>();
+        var references = new List<ReferenceDeclaration>();
 
         foreach (var (callName, call) in ChainReader.Nodes(invocation))
         {
@@ -161,10 +162,26 @@ internal static class MapCallParser
                     filter = ReadFilter(context.SemanticModel, typeArguments[0], cancellationToken);
                     break;
                 case { Identifier.ValueText: "Searchable" }:
-                    ReadSearchFields(
-                        callName, call, entityName,
-                        SearchCandidates(keyName, idType, idKind, properties, traits),
-                        searchFields, diagnostics);
+                    ReadSearchRequests(callName, call, entityName, searchRequests, diagnostics);
+                    break;
+                case GenericNameSyntax { Identifier.ValueText: "References", TypeArgumentList.Arguments: { Count: 1 } targets }:
+                    references.Add(ReadReference(
+                        ReferenceKind.Reference, targets[0], call, context.SemanticModel, OnDeleteBehavior.Restrict, cancellationToken));
+                    break;
+                case GenericNameSyntax { Identifier.ValueText: "Under", TypeArgumentList.Arguments: { Count: 1 } parents }:
+                    references.Add(ReadReference(
+                        ReferenceKind.Parent, parents[0], call, context.SemanticModel, OnDeleteBehavior.Cascade, cancellationToken));
+                    break;
+                case { Identifier.ValueText: "Hierarchical" }:
+                    references.Add(new ReferenceDeclaration(
+                        ReferenceKind.Self,
+                        entityName,
+                        TargetType: null,
+                        TargetKeyType: null,
+                        PropertyName: null,
+                        OnDeleteBehavior.Restrict,
+                        Required: false,
+                        LocationInfo.From(callName.GetLocation())));
                     break;
             }
         }
@@ -183,7 +200,8 @@ internal static class MapCallParser
             operations,
             declaredTraitMembers.ToEquatableArray(),
             filter,
-            searchFields.ToEquatableArray(),
+            searchRequests.ToEquatableArray(),
+            references.ToEquatableArray(),
             chain,
             diagnostics.ToEquatableArray(),
             location);
@@ -366,6 +384,28 @@ internal static class MapCallParser
             }
         }
 
+        foreach (var relation in chain.Select(call => call.Name).Distinct())
+        {
+            var allowed = relation switch
+            {
+                "References" => archetype != Archetype.Singleton,
+
+                // Ebeveyn altında yaşamak ve ağaç oluşturmak, sunucunun anahtar ürettiği koleksiyonlar içindir.
+                "Under" or "Hierarchical" => archetype is Archetype.Crud or Archetype.ReadOnly or Archetype.AppendOnly,
+                _ => true,
+            };
+
+            if (!allowed)
+            {
+                yield return $"{relation} cannot be combined with {name}";
+            }
+        }
+
+        if (chain.Count(call => call.Name == "Under") > 1)
+        {
+            yield return "A resource can live under only one parent; Under is declared more than once";
+        }
+
         foreach (var declaration in new[] { "Filterable", "Searchable" })
         {
             if (chain.All(call => call.Name != declaration))
@@ -447,49 +487,15 @@ internal static class MapCallParser
         return new FilterModel(filter.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat), properties.ToEquatableArray());
     }
 
-    /// <summary>Aranabilecek alanlar: kimlik, kullanıcının skaler alanları ve etkin trait'lerin açık alanları.</summary>
-    private static Dictionary<string, SearchField> SearchCandidates(
-        string keyName,
-        string idType,
-        IdKind idKind,
-        List<PropertyModel> properties,
-        Traits traits)
-    {
-        var keyKind = idKind switch
-        {
-            IdKind.Guid => SearchKind.Equality,
-            IdKind.String => SearchKind.String,
-            _ => SearchKind.Range,
-        };
-
-        var candidates = new Dictionary<string, SearchField>
-        {
-            [keyName] = new(keyName, keyKind, idType, IsNullable: false),
-        };
-
-        foreach (var property in properties)
-        {
-            candidates[property.Name] = new SearchField(
-                property.Name, property.SearchKind, property.ValueType, IsNullable: !property.IsNonNullable);
-        }
-
-        foreach (var member in TraitCatalog.For(traits).SelectMany(definition => definition.Members))
-        {
-            if (member.Search is not null)
-            {
-                candidates[member.Name] = member.Search;
-            }
-        }
-
-        return candidates;
-    }
-
-    private static void ReadSearchFields(
+    /// <summary>
+    /// <c>.Searchable(...)</c> içinde sayılan alanları kaydeder. Alanlar burada doğrulanmaz, çünkü başka
+    /// kaynaklara bağlı olarak üretilen alanlar (ör. yabancı anahtar) ancak bağlama adımında bilinir.
+    /// </summary>
+    private static void ReadSearchRequests(
         SimpleNameSyntax callName,
         InvocationExpressionSyntax call,
         string entityName,
-        Dictionary<string, SearchField> candidates,
-        List<SearchField> fields,
+        List<SearchFieldRequest> requests,
         List<DiagnosticInfo> diagnostics)
     {
         if (call.ArgumentList.Arguments.Count == 0)
@@ -501,26 +507,66 @@ internal static class MapCallParser
 
         foreach (var argument in call.ArgumentList.Arguments)
         {
-            // Beklenen biçim: item => item.Name
-            var fieldName = argument.Expression is LambdaExpressionSyntax { Body: MemberAccessExpressionSyntax member }
-                ? member.Name.Identifier.ValueText
-                : null;
+            requests.Add(new SearchFieldRequest(
+                DirectMember(argument.Expression),
+                argument.Expression.ToString(),
+                LocationInfo.From(argument.GetLocation())));
+        }
+    }
 
-            if (fieldName is not null && candidates.TryGetValue(fieldName, out var field))
+    /// <summary><c>item => item.Name</c> biçimindeki bir ifadeden <c>Name</c>'i okur; başka biçimde <c>null</c> döner.</summary>
+    private static string? DirectMember(ExpressionSyntax expression) =>
+        expression is LambdaExpressionSyntax { Body: MemberAccessExpressionSyntax { Expression: IdentifierNameSyntax } member }
+            ? member.Name.Identifier.ValueText
+            : null;
+
+    private static ReferenceDeclaration ReadReference(
+        ReferenceKind kind,
+        TypeSyntax targetSyntax,
+        InvocationExpressionSyntax call,
+        SemanticModel semanticModel,
+        OnDeleteBehavior defaultOnDelete,
+        CancellationToken cancellationToken)
+    {
+        var target = semanticModel.GetTypeInfo(targetSyntax, cancellationToken).Type as INamedTypeSymbol;
+        var resolved = target is { TypeKind: not TypeKind.Error };
+
+        string? propertyName = null;
+        var onDelete = defaultOnDelete;
+        var required = true;
+
+        foreach (var argument in call.ArgumentList.Arguments)
+        {
+            var text = argument.Expression.ToString();
+
+            if (DirectMember(argument.Expression) is { } member)
             {
-                if (fields.All(existing => existing.Name != field.Name))
-                {
-                    fields.Add(field);
-                }
+                propertyName = member;
             }
-            else
+            else if (Enum.TryParse<OnDeleteBehavior>(text.Substring(text.LastIndexOf('.') + 1), out var behavior))
             {
-                diagnostics.Add(new DiagnosticInfo(
-                    "HALDUS005",
-                    LocationInfo.From(argument.GetLocation()),
-                    new EquatableArray<string>([argument.Expression.ToString(), entityName])));
+                onDelete = behavior;
+            }
+            else if (text == "false")
+            {
+                required = false;
             }
         }
+
+        // Hedef bir Haldus kaynağı değilse anahtar tipi Id özelliğinden okunur.
+        var targetKey = resolved
+            ? PublicInstanceProperties(target!).FirstOrDefault(property => property.Name == "Id")
+            : null;
+
+        return new ReferenceDeclaration(
+            kind,
+            resolved ? target!.Name : targetSyntax.ToString(),
+            resolved ? target!.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) : null,
+            targetKey?.Type.ToDisplayString(TypeFormat),
+            propertyName,
+            onDelete,
+            required,
+            LocationInfo.From(targetSyntax.GetLocation()));
     }
 
     private static bool InheritsFrom(INamedTypeSymbol type, string baseTypeName)

@@ -38,7 +38,8 @@ internal static class ResourceEmitter
         foreach (var property in resource.Properties.Where(property => property.IsGenerated))
         {
             var attributes = string.Concat(property.ValidationAttributes.Select(attribute => $"    [{attribute.Rendered}]\n"));
-            members.Add($"{attributes}    public {property.Type} {property.Name} {{ get; set; }} = \"\";");
+            var initializer = property.Type == "string" ? " = \"\";" : string.Empty;
+            members.Add($"{attributes}    public {property.Type} {property.Name} {{ get; set; }}{initializer}");
         }
 
         foreach (var trait in TraitCatalog.For(resource.Traits))

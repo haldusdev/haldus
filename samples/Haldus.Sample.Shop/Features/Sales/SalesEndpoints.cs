@@ -17,5 +17,10 @@ public static class SalesEndpoints
                 customer => customer.LoyaltyPoints,
                 customer => customer.CreatedAt,
                 customer => customer.UpdatedAt);
+
+        // Adres müşterinin adresi altında yaşar: /customers/{customerId}/addresses
+        // Müşteri kiracıya bağlı olduğu için adreslere de yalnızca o kiracı ulaşabilir.
+        app.MapCrud<Address>()
+            .Under<Customer>();
     }
 }

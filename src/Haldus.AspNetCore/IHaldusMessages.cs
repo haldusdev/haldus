@@ -20,6 +20,10 @@ public static class HaldusMessageKeys
     public const string PreconditionRequiredDetail = "PreconditionRequired.Detail";
     public const string PreconditionFailedTitle = "PreconditionFailed.Title";
     public const string PreconditionFailedDetail = "PreconditionFailed.Detail";
+    public const string ReferenceNotFound = "Reference.NotFound";
+    public const string HierarchyCycle = "Hierarchy.Cycle";
+    public const string InUseTitle = "InUse.Title";
+    public const string InUseDetail = "InUse.Detail";
     public const string SearchTooComplexTitle = "SearchTooComplex.Title";
     public const string SearchTooComplexDetail = "SearchTooComplex.Detail";
     public const string TenantRequiredTitle = "TenantRequired.Title";

@@ -64,6 +64,39 @@ internal sealed class EndpointEmitter
 
     private string NotFound => $"{Problems}.NotFound(messages, \"{_entity}\", {_keyParameter})";
 
+    private ResolvedReference? Parent => _resource.Parent;
+
+    private string ParentParameter => Parent is null ? string.Empty : ResourceEmitter.CamelCase(Parent.PropertyName);
+
+    /// <summary>Kaynak bir ebeveynin altındaysa her handler'ın ilk parametresi ebeveynin anahtarıdır.</summary>
+    private string ScopeParameter => Parent is null ? string.Empty : $"        {Parent.TargetKeyType} {ParentParameter},\n";
+
+    /// <summary>Kaydı anahtarıyla ve, varsa, ebeveyniyle eşleştirir; başka bir ebeveynin kaydı bulunamaz sayılır.</summary>
+    private string Match => $"item.{_key} == {_keyParameter}{ScopeCondition("item")}";
+
+    private string ScopeFilter => Parent is null ? string.Empty : $".Where(item => {ScopeCondition("item").Substring(4)})";
+
+    private bool ChecksReferences => _resource.References.Length > 0;
+
+    /// <summary>
+    /// Kaydın verilen ebeveyne ait olduğunu ve ebeveynin isteği yapana görünür olduğunu şart koşar. İkinci
+    /// koşul ebeveynin kendi filtrelerinden (kiracı, silinmişlik) geçer; o olmasaydı başka bir kiracı,
+    /// ebeveynin kimliğini bilerek onun altındaki kayıtlara ulaşabilirdi.
+    /// </summary>
+    private string ScopeCondition(string variable) => Parent is null
+        ? string.Empty
+        : $" && {variable}.{Parent.PropertyName} == {ParentParameter}"
+            + $" && contexts.For<{Parent.TargetType}>().Set<{Parent.TargetType}>()"
+            + $".Any(parent => parent.{Parent.TargetKeyName} == {ParentParameter})";
+
+    private static string RouteConstraint(string keyType) => keyType switch
+    {
+        "int" => ":int",
+        "long" => ":long",
+        "string" => string.Empty,
+        _ => ":guid",
+    };
+
     public static string Emit(ResourceModel resource, string entityNamespace) =>
         new EndpointEmitter(resource).Build(entityNamespace);
 
@@ -81,6 +114,12 @@ internal sealed class EndpointEmitter
         {
             route = Naming.ToKebabCase(_plural);
             EmitCollection();
+        }
+
+        if (Parent is not null)
+        {
+            // Ebeveynin altında yaşayan kaynağın adresi ebeveyninkiyle başlar: /projects/{projectId}/tasks
+            route = $"{Parent.TargetRoute}/{{{ParentParameter}{RouteConstraint(Parent.TargetKeyType)}}}/{route}";
         }
 
         var tenantFilter = _tenant
@@ -176,6 +215,11 @@ internal sealed class EndpointEmitter
             EmitArchive("Archive", "archive", "entity.ArchivedAt ??= global::Haldus.HaldusTime.UtcNow(timeProvider);");
             EmitArchive("Unarchive", "unarchive", "entity.ArchivedAt = null;");
         }
+
+        if (_resource.Has(Operations.Update) || _resource.Has(Operations.Patch))
+        {
+            EmitCycleHelper();
+        }
     }
 
     private void EmitList()
@@ -190,12 +234,17 @@ internal sealed class EndpointEmitter
 
             """);
 
+        var self = _resource.SelfReference;
+        var treeParameters = self is null
+            ? string.Empty
+            : $"        {self.TargetKeyType}? {ResourceEmitter.CamelCase(self.PropertyName)},\n        bool? roots,\n";
+
         _handlers.Append($$"""
 
                 private static async {{Task}}<{{Results}}.Ok<global::Haldus.PagedResult<{{_entity}}Response>>> ListAsync(
-                    [{{Http}}.AsParameters] global::Haldus.PageRequest page,
-            {{(softDelete ? "        bool? includeDeleted,\n" : string.Empty)}}{{(archive ? "        bool? includeArchived,\n" : string.Empty)}}{{FilterParameters()}}{{ContextsParameter}}{{CancellationParameter}}    {
-                    var query = contexts.For<{{_entity}}>().Set<{{_entity}}>().AsNoTracking();
+            {{ScopeParameter}}        [{{Http}}.AsParameters] global::Haldus.PageRequest page,
+            {{(softDelete ? "        bool? includeDeleted,\n" : string.Empty)}}{{(archive ? "        bool? includeArchived,\n" : string.Empty)}}{{treeParameters}}{{FilterParameters()}}{{ContextsParameter}}{{CancellationParameter}}    {
+                    var query = contexts.For<{{_entity}}>().Set<{{_entity}}>().AsNoTracking(){{ScopeFilter}};
 
             """);
 
@@ -218,6 +267,25 @@ internal sealed class EndpointEmitter
                         if (includeArchived != true)
                         {
                             query = query.Where(item => item.ArchivedAt == null);
+                        }
+
+                """);
+        }
+
+        if (self is not null)
+        {
+            // Ağaç düzey düzey gezilebilsin diye: belirli bir düğümün çocukları veya yalnızca kökler.
+            var parentFilter = ResourceEmitter.CamelCase(self.PropertyName);
+
+            _handlers.Append($$"""
+
+                        if ({{parentFilter}} is { } parentValue)
+                        {
+                            query = query.Where(item => item.{{self.PropertyName}} == parentValue);
+                        }
+                        else if (roots == true)
+                        {
+                            query = query.Where(item => item.{{self.PropertyName}} == null);
                         }
 
                 """);
@@ -258,7 +326,7 @@ internal sealed class EndpointEmitter
 
                 private static async {{Task}}<{{Results}}.Ok<global::System.Collections.Generic.List<{{_entity}}Response>>> ListAsync(
             {{(archive ? "        bool? includeArchived,\n" : string.Empty)}}{{ContextsParameter}}{{CancellationParameter}}    {
-                    var query = contexts.For<{{_entity}}>().Set<{{_entity}}>().AsNoTracking();
+                    var query = contexts.For<{{_entity}}>().Set<{{_entity}}>().AsNoTracking(){{ScopeFilter}};
 
             """);
 
@@ -300,10 +368,10 @@ internal sealed class EndpointEmitter
         _handlers.Append($$"""
 
                 private static async {{OkOrProblem}} GetAsync(
-            {{KeyParameter}}{{(_concurrency ? HttpContextParameter : string.Empty)}}{{ContextsParameter}}{{MessagesParameter}}{{CancellationParameter}}    {
+            {{ScopeParameter}}{{KeyParameter}}{{(_concurrency ? HttpContextParameter : string.Empty)}}{{ContextsParameter}}{{MessagesParameter}}{{CancellationParameter}}    {
                     var entity = await contexts.For<{{_entity}}>().Set<{{_entity}}>()
                         .AsNoTracking()
-                        .FirstOrDefaultAsync(item => item.{{_key}} == {{_keyParameter}}, cancellationToken);
+                        .FirstOrDefaultAsync(item => {{Match}}, cancellationToken);
 
                     if (entity is null)
                     {
@@ -318,26 +386,41 @@ internal sealed class EndpointEmitter
 
     private void EmitCreate()
     {
+        var keys = new List<string>();
+        if (_resource.IdKind == IdKind.Guid)
+        {
+            keys.Add($"{_key} = global::System.Guid.CreateVersion7()");
+        }
+
+        if (Parent is not null)
+        {
+            // Ebeveyn istek gövdesinden değil adresten gelir.
+            keys.Add($"{Parent.PropertyName} = {ParentParameter}");
+        }
+
         var assignments = string.Join(
-            ", ",
-            (_resource.IdKind == IdKind.Guid ? [$"{_key} = global::System.Guid.CreateVersion7()"] : Array.Empty<string>())
-                .Concat(_writable.Select(property => $"{property.Name} = request.{property.Name}")));
+            ", ", keys.Concat(_writable.Select(property => $"{property.Name} = request.{property.Name}")));
+
+        // Referans veya ebeveyn bulunamazsa oluşturma reddedilir; dönüş tipi buna göre genişler.
+        var returnType = ChecksReferences
+            ? $"{Task}<{Results}.Results<{Results}.Created<{_entity}Response>, {Problem}>>"
+            : $"{Task}<{Results}.Created<{_entity}Response>>";
 
         _map.Append($$"""
                     group.MapPost("/", CreateAsync)
                         .WithName("Create{{_entity}}")
                         .AddEndpointFilter<global::Haldus.HaldusValidationFilter<Create{{_entity}}Request>>()
-                        .ProducesValidationProblem();
+                        .ProducesValidationProblem(){{(Parent is null ? string.Empty : "\n            .ProducesProblem(404)")}};
 
 
             """);
 
         _handlers.Append($$"""
 
-                private static async {{Task}}<{{Results}}.Created<{{_entity}}Response>> CreateAsync(
-                    Create{{_entity}}Request request,
-            {{HttpContextParameter}}{{ContextsParameter}}{{CancellationParameter}}    {
-                    var entity = new {{_entity}} { {{assignments}} };
+                private static async {{returnType}} CreateAsync(
+            {{ScopeParameter}}        Create{{_entity}}Request request,
+            {{HttpContextParameter}}{{ContextsParameter}}{{(ChecksReferences ? MessagesParameter : string.Empty)}}{{CancellationParameter}}    {
+            {{ParentCheck()}}{{ReferenceChecks(patch: false)}}        var entity = new {{_entity}} { {{assignments}} };
 
                     var context = contexts.For<{{_entity}}>();
                     context.Set<{{_entity}}>().Add(entity);
@@ -366,17 +449,17 @@ internal sealed class EndpointEmitter
         _handlers.Append($$"""
 
                 private static async {{OkOrProblem}} {{operation}}Async(
-            {{KeyParameter}}        {{operation}}{{_entity}}Request request,
+            {{ScopeParameter}}{{KeyParameter}}        {{operation}}{{_entity}}Request request,
             {{(_concurrency ? HttpContextParameter : string.Empty)}}{{ContextsParameter}}{{MessagesParameter}}{{CancellationParameter}}    {
             {{ReadIfMatch()}}        var context = contexts.For<{{_entity}}>();
-                    var entity = await context.Set<{{_entity}}>().FirstOrDefaultAsync(item => item.{{_key}} == {{_keyParameter}}, cancellationToken);
+                    var entity = await context.Set<{{_entity}}>().FirstOrDefaultAsync(item => {{Match}}, cancellationToken);
 
                     if (entity is null)
                     {
                         return {{NotFound}};
                     }
 
-            {{ExpectVersion()}}{{assignments}}
+            {{ReferenceChecks(patch: operation == "Patch")}}{{CycleCheck(patch: operation == "Patch")}}{{ExpectVersion()}}{{assignments}}
             {{Save()}}
             {{WriteETag()}}        return {{Http}}.TypedResults.Ok(ToResponse(entity));
                 }
@@ -410,16 +493,20 @@ internal sealed class EndpointEmitter
 
             """);
 
+        var returnType = ChecksReferences
+            ? $"{Results}.Results<{Results}.Ok<{_entity}Response>, {Results}.Created<{_entity}Response>, {Problem}>"
+            : $"{Results}.Results<{Results}.Ok<{_entity}Response>, {Results}.Created<{_entity}Response>>";
+
         _handlers.Append($$"""
 
-                private static async {{Task}}<{{Results}}.Results<{{Results}}.Ok<{{_entity}}Response>, {{Results}}.Created<{{_entity}}Response>>> PutAsync(
-            {{KeyParameter}}        Put{{_entity}}Request request,
-            {{HttpContextParameter}}{{(_tenant ? TenantsParameter : string.Empty)}}{{ContextsParameter}}{{CancellationParameter}}    {
-                    var context = contexts.For<{{_entity}}>();
+                private static async {{Task}}<{{returnType}}> PutAsync(
+            {{ScopeParameter}}{{KeyParameter}}        Put{{_entity}}Request request,
+            {{HttpContextParameter}}{{(_tenant ? TenantsParameter : string.Empty)}}{{ContextsParameter}}{{(ChecksReferences ? MessagesParameter : string.Empty)}}{{CancellationParameter}}    {
+            {{ReferenceChecks(patch: false)}}        var context = contexts.For<{{_entity}}>();
 
                     for (var attempt = 0; ; attempt++)
                     {
-                        var entity = await context.Set<{{_entity}}>().FirstOrDefaultAsync(item => item.{{_key}} == {{_keyParameter}}, cancellationToken);
+                        var entity = await context.Set<{{_entity}}>().FirstOrDefaultAsync(item => {{Match}}, cancellationToken);
 
                         if (entity is not null)
                         {
@@ -461,9 +548,9 @@ internal sealed class EndpointEmitter
         _handlers.Append($$"""
 
                 private static async {{NoContentOrProblem}} DeleteAsync(
-            {{KeyParameter}}{{(_concurrency ? HttpContextParameter : string.Empty)}}{{ContextsParameter}}{{MessagesParameter}}{{CancellationParameter}}    {
+            {{ScopeParameter}}{{KeyParameter}}{{(_concurrency ? HttpContextParameter : string.Empty)}}{{ContextsParameter}}{{MessagesParameter}}{{CancellationParameter}}    {
             {{ReadIfMatch()}}        var context = contexts.For<{{_entity}}>();
-                    var entity = await context.Set<{{_entity}}>().FirstOrDefaultAsync(item => item.{{_key}} == {{_keyParameter}}, cancellationToken);
+                    var entity = await context.Set<{{_entity}}>().FirstOrDefaultAsync(item => {{Match}}, cancellationToken);
 
                     if (entity is null)
                     {
@@ -471,7 +558,7 @@ internal sealed class EndpointEmitter
                     }
 
             {{ExpectVersion()}}        context.Set<{{_entity}}>().Remove(entity);
-            {{Save()}}
+            {{SaveDelete()}}
             {{(_resource.Has(Traits.SoftDeletable) ? WriteETag() : string.Empty)}}        return {{Http}}.TypedResults.NoContent();
                 }
 
@@ -491,11 +578,11 @@ internal sealed class EndpointEmitter
         _handlers.Append($$"""
 
                 private static async {{OkOrProblem}} RestoreAsync(
-            {{KeyParameter}}{{(_concurrency ? HttpContextParameter : string.Empty)}}{{ContextsParameter}}{{MessagesParameter}}{{CancellationParameter}}    {
+            {{ScopeParameter}}{{KeyParameter}}{{(_concurrency ? HttpContextParameter : string.Empty)}}{{ContextsParameter}}{{MessagesParameter}}{{CancellationParameter}}    {
             {{ReadIfMatch()}}        var context = contexts.For<{{_entity}}>();
                     var entity = await context.Set<{{_entity}}>()
                         .IgnoreQueryFilters(new[] { global::Haldus.HaldusFilters.SoftDelete })
-                        .FirstOrDefaultAsync(item => item.{{_key}} == {{_keyParameter}} && item.DeletedAt != null, cancellationToken);
+                        .FirstOrDefaultAsync(item => {{Match}} && item.DeletedAt != null, cancellationToken);
 
                     if (entity is null)
                     {
@@ -529,6 +616,22 @@ internal sealed class EndpointEmitter
             """
             : "        var deleted = await query.ExecuteDeleteAsync(cancellationToken);\n";
 
+        if (_resource.IsReferenced)
+        {
+            // ExecuteDelete veritabanının reddini sarmalamadan fırlatır; o da çakışma olarak bildirilir.
+            delete = $$"""
+                        int deleted;
+                        try
+                        {
+                {{Indent(delete.Replace("var deleted = ", "deleted = "), 4)}}        }
+                        catch (global::System.Data.Common.DbException)
+                        {
+                            return {{Problems}}.InUse(messages, "{{_entity}}", {{_keyParameter}});
+                        }
+
+                """;
+        }
+
         // Sıfır satır silindiyse ya kayıt yoktur ya da sürümü değişmiştir; ikisi ayrı yanıtlanır.
         var staleCheck = _concurrency
             ? $$"""
@@ -547,10 +650,10 @@ internal sealed class EndpointEmitter
         _handlers.Append($$"""
 
                 private static async {{NoContentOrProblem}} PurgeAsync(
-            {{KeyParameter}}{{(_concurrency ? HttpContextParameter : string.Empty)}}{{ContextsParameter}}{{MessagesParameter}}{{CancellationParameter}}    {
+            {{ScopeParameter}}{{KeyParameter}}{{(_concurrency ? HttpContextParameter : string.Empty)}}{{ContextsParameter}}{{MessagesParameter}}{{CancellationParameter}}    {
             {{ReadIfMatch()}}        var query = contexts.For<{{_entity}}>().Set<{{_entity}}>()
                         .IgnoreQueryFilters(new[] { global::Haldus.HaldusFilters.SoftDelete })
-                        .Where(item => item.{{_key}} == {{_keyParameter}} && item.DeletedAt != null);
+                        .Where(item => {{Match}} && item.DeletedAt != null);
 
             {{delete}}
                     if (deleted == 0)
@@ -577,10 +680,10 @@ internal sealed class EndpointEmitter
         _handlers.Append($$"""
 
                 private static async {{OkOrProblem}} {{operation}}Async(
-            {{KeyParameter}}        global::System.TimeProvider timeProvider,
+            {{ScopeParameter}}{{KeyParameter}}        global::System.TimeProvider timeProvider,
             {{(_concurrency ? HttpContextParameter : string.Empty)}}{{ContextsParameter}}{{MessagesParameter}}{{CancellationParameter}}    {
             {{ReadIfMatch()}}        var context = contexts.For<{{_entity}}>();
-                    var entity = await context.Set<{{_entity}}>().FirstOrDefaultAsync(item => item.{{_key}} == {{_keyParameter}}, cancellationToken);
+                    var entity = await context.Set<{{_entity}}>().FirstOrDefaultAsync(item => {{Match}}, cancellationToken);
 
                     if (entity is null)
                     {
@@ -745,7 +848,7 @@ internal sealed class EndpointEmitter
         _handlers.Append($$"""
 
                 private static async {{Task}}<{{Results}}.Results<{{Results}}.Ok<global::Haldus.PagedResult<{{_entity}}Response>>, {{Problem}}>> SearchAsync(
-                    {{_entity}}SearchRequest request,
+            {{ScopeParameter}}        {{_entity}}SearchRequest request,
             {{ContextsParameter}}{{MessagesParameter}}{{CancellationParameter}}    {
                     var budget = new global::Haldus.SearchBudget();
                     budget.CountSortFields(request.Sort?.Count ?? 0);
@@ -756,7 +859,7 @@ internal sealed class EndpointEmitter
                         return {{Problems}}.SearchTooComplex(messages);
                     }
 
-                    var query = contexts.For<{{_entity}}>().Set<{{_entity}}>().AsNoTracking();
+                    var query = contexts.For<{{_entity}}>().Set<{{_entity}}>().AsNoTracking(){{ScopeFilter}};
 
             """);
 
@@ -860,6 +963,159 @@ internal sealed class EndpointEmitter
                 }
 
             """);
+    }
+
+    /// <summary>Kaynak bir ebeveynin altındaysa, oluşturmadan önce ebeveynin var (ve görünür) olduğu doğrulanır.</summary>
+    private string ParentCheck() => Parent is null
+        ? string.Empty
+        : $$"""
+                    if (!await contexts.For<{{Parent.TargetType}}>().Set<{{Parent.TargetType}}>()
+                        .AnyAsync(parent => parent.{{Parent.TargetKeyName}} == {{ParentParameter}}, cancellationToken))
+                    {
+                        return {{Problems}}.NotFound(messages, "{{Parent.TargetName}}", {{ParentParameter}});
+                    }
+
+
+            """;
+
+    /// <summary>
+    /// Yazılan her referansın hedefinin var olduğunu doğrular. Sorgu hedefin kendi filtrelerinden geçer;
+    /// böylece başka bir kiracının veya silinmiş bir kaydın kimliği verilerek referans kurulamaz.
+    /// </summary>
+    private string ReferenceChecks(bool patch)
+    {
+        var builder = new StringBuilder();
+
+        foreach (var reference in _resource.References.Where(reference => reference.Kind != ReferenceKind.Parent))
+        {
+            var property = reference.PropertyName;
+            var field = ResourceEmitter.CamelCase(property);
+
+            // Ağaçta ebeveyn, aynı üst kaynağın altındaki bir düğüm olmalıdır.
+            var scope = reference.Kind == ReferenceKind.Self ? ScopeCondition("target") : string.Empty;
+
+            string condition;
+            string value;
+
+            if (patch)
+            {
+                value = $"{field}Reference";
+                condition = $"((global::Haldus.IHaldusPatch)request).IsSet(\"{property}\") && request.{property} is {{ }} {value}\n            && ";
+            }
+            else if (reference.IsRequired)
+            {
+                value = $"request.{property}";
+                condition = string.Empty;
+            }
+            else
+            {
+                value = $"{field}Reference";
+                condition = $"request.{property} is {{ }} {value}\n            && ";
+            }
+
+            builder.Append($$"""
+                        if ({{condition}}!await contexts.For<{{reference.TargetType}}>().Set<{{reference.TargetType}}>()
+                            .AnyAsync(target => target.{{reference.TargetKeyName}} == {{value}}{{scope}}, cancellationToken))
+                        {
+                            return {{Problems}}.ReferenceNotFound(messages, "{{field}}", "{{reference.TargetName}}", {{value}});
+                        }
+
+
+                """);
+        }
+
+        return builder.ToString();
+    }
+
+    /// <summary>Ağaçta bir düğüm kendi altındaki bir düğümün çocuğu yapılamaz.</summary>
+    private string CycleCheck(bool patch)
+    {
+        if (_resource.SelfReference is not { } self)
+        {
+            return string.Empty;
+        }
+
+        var isSet = patch ? $"((global::Haldus.IHaldusPatch)request).IsSet(\"{self.PropertyName}\") && " : string.Empty;
+
+        return $$"""
+                    if ({{isSet}}await CreatesCycleAsync(contexts, {{_keyParameter}}, request.{{self.PropertyName}}, cancellationToken))
+                    {
+                        return {{Problems}}.HierarchyCycle(messages, "{{ResourceEmitter.CamelCase(self.PropertyName)}}");
+                    }
+
+
+            """;
+    }
+
+    private void EmitCycleHelper()
+    {
+        if (_resource.SelfReference is not { } self)
+        {
+            return;
+        }
+
+        _handlers.Append($$"""
+
+                /// <summary>Yeni ebeveynden köke doğru çıkar; yolda kaydın kendisine rastlanırsa döngü oluşur.</summary>
+                private static async {{Task}}<bool> CreatesCycleAsync(
+                    global::Haldus.IHaldusDbContextProvider contexts,
+                    {{_resource.IdType}} {{_keyParameter}},
+                    {{self.TargetKeyType}}? parent,
+                    global::System.Threading.CancellationToken cancellationToken)
+                {
+                    var nodes = contexts.For<{{_entity}}>().Set<{{_entity}}>().AsNoTracking();
+
+                    for (var depth = 0; parent is { } current; depth++)
+                    {
+                        if (current == {{_keyParameter}} || depth >= global::Haldus.HaldusModel.MaxHierarchyDepth)
+                        {
+                            return true;
+                        }
+
+                        parent = await nodes
+                            .Where(item => item.{{_key}} == current)
+                            .Select(item => item.{{self.PropertyName}})
+                            .FirstOrDefaultAsync(cancellationToken);
+                    }
+
+                    return false;
+                }
+
+            """);
+    }
+
+    /// <summary>
+    /// Başka kayıtların referans verdiği bir kayıt silinemez; veritabanının reddi 500 yerine çakışma olarak
+    /// bildirilir. Silme geri alınabilirse kayıt fiziksel olarak kalkmadığı için bu durum oluşmaz.
+    /// </summary>
+    private string SaveDelete()
+    {
+        if (!_resource.IsReferenced || _resource.Has(Traits.SoftDeletable))
+        {
+            return Save();
+        }
+
+        var concurrency = _concurrency
+            ? $$"""
+                    catch (global::Microsoft.EntityFrameworkCore.DbUpdateConcurrencyException)
+                    {
+                        return {{Problems}}.PreconditionFailed(messages);
+                    }
+
+            """
+            : string.Empty;
+
+        return $$"""
+                    try
+                    {
+                        await context.SaveChangesAsync(cancellationToken);
+                    }
+            {{concurrency}}        catch (global::Microsoft.EntityFrameworkCore.DbUpdateException)
+                    {
+                        return {{Problems}}.InUse(messages, "{{_entity}}", {{_keyParameter}});
+                    }
+
+            """;
     }
 
     private string UpdateAssignments() => string.Concat(
