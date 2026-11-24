@@ -345,14 +345,16 @@ public sealed class TaxonomyTests
         new(29, "Revision / Snapshot", Fit.Clean,
             "public partial class Page { public string Title { get; set; } = \"\"; public string? Body { get; set; } }",
             "app.MapCrud<Page>().Revisioned();"),
-        new(30, "Comment (threaded)", Fit.Partial,
+        new(30, "Comment (threaded)", Fit.Clean,
             """
             public partial class Post { public string Title { get; set; } = ""; }
+            public partial class Page { public string Title { get; set; } = ""; }
             public partial class Comment { public string Text { get; set; } = ""; }
             """,
             """
-            app.MapCrud<Post>();
-            app.MapCrud<Comment>().Under<Post>().Hierarchical().SoftDeletable();
+            app.MapCrud<Post>().Commentable<Comment>();
+            app.MapCrud<Page>().Commentable<Comment>();
+            app.MapCrud<Comment>().Hierarchical().SoftDeletable();
             """),
         new(31, "Tag / Label", Fit.Clean,
             "public partial class Article { public string Title { get; set; } = \"\"; }",
@@ -361,7 +363,9 @@ public sealed class TaxonomyTests
             app.MapCrud<Article>();
             app.MapAssociation<Article, Tag>();
             """),
-        new(32, "MediaFile / Asset", Fit.Missing),
+        new(32, "MediaFile / Asset", Fit.Clean,
+            "public partial class Asset { public string? Title { get; set; } }",
+            "app.MapFile<Asset>(maxBytes: 5 * 1024 * 1024, \"image/*\", \"video/mp4\").MultiTenant().Metadata();"),
 
         // ── Rezervasyon ──────────────────────────────────────────────────────────────────────────────
         new(33, "EventType / rezerve edilebilir kaynak", Fit.Clean,
@@ -502,8 +506,20 @@ public sealed class TaxonomyTests
             """),
 
         // ── Yatay kalıplar ───────────────────────────────────────────────────────────────────────────
-        new(49, "Polimorfik attachment", Fit.Missing),
-        new(50, "Comment / activity feed", Fit.Missing),
+        new(49, "Polimorfik attachment", Fit.Clean,
+            Order + Invoice + "public partial class Attachment { public string? Caption { get; set; } }",
+            """
+            app.MapCrud<Order>().Attachable<Attachment>();
+            app.MapCrud<Invoice>().Attachable<Attachment>();
+            app.MapFile<Attachment>();
+            """),
+        new(50, "Comment / activity feed", Fit.Clean,
+            Order + Invoice + "public partial class Activity { public string Text { get; set; } = \"\"; }",
+            """
+            app.MapCrud<Order>().Commentable<Activity>();
+            app.MapCrud<Invoice>().Commentable<Activity>();
+            app.MapAppendOnly<Activity>().Auditable();
+            """),
         new(51, "Custom fields / metadata", Fit.Partial,
             Product,
             "app.MapCrud<Product>().Metadata();"),
@@ -614,8 +630,8 @@ public sealed class TaxonomyTests
     public void Tally_MatchesTheWrittenResults()
     {
         // reports/Haldus taksonomi sınaması.md dosyasındaki sayılar; biri değişirse diğeri de güncellenmelidir.
-        Assert.Equal(41, Rows.Count(row => row.Fit == Fit.Clean));
-        Assert.Equal(13, Rows.Count(row => row.Fit == Fit.Partial));
-        Assert.Equal(5, Rows.Count(row => row.Fit == Fit.Missing));
+        Assert.Equal(45, Rows.Count(row => row.Fit == Fit.Clean));
+        Assert.Equal(12, Rows.Count(row => row.Fit == Fit.Partial));
+        Assert.Equal(2, Rows.Count(row => row.Fit == Fit.Missing));
     }
 }

@@ -160,6 +160,11 @@ public sealed class HaldusGenerator : IIncrementalGenerator
                 .Select(resource => (resource, resource.Namespace)),
         ];
 
+        // Taggable<T>() bir çoktan-çoğa bağdır: MapAssociation<TEntity, T>() yazılmış gibi çözülür.
+        associationDeclarations = associationDeclarations.AddRange(
+            valid.SelectMany(entry => entry.Resource.TagDeclarations.Select(tag => new AssociationDeclaration(
+                entry.Resource.EntityName, entry.Resource.QualifiedName, tag.ChildName, tag.ChildType, tag.Location))));
+
         var associations = ResourceLinker.LinkAssociations(
             associationDeclarations,
             [.. valid.Select(entry => entry.Resource)],
@@ -231,8 +236,33 @@ public sealed class HaldusGenerator : IIncrementalGenerator
 
             AddSource(context, $"{hintPrefix}.Dtos.g.cs", ResourceEmitter.EmitDtos(resource, entityNamespace));
 
+            if (resource.Attachments.ToList() is { Count: > 0 } attachments)
+            {
+                // Takılabilir kaynak her hedefin adresi altında ayrı ayrı sunulur: aynı uçlar, o hedef kaynağın
+                // ebeveyniymiş gibi bir kez üretilir. Sınıf ve işlem adları hedefin adıyla ayrışır.
+                foreach (var attachment in attachments)
+                {
+                    var placed = resource with
+                    {
+                        References = resource.References
+                            .Where(reference => reference.Kind != ReferenceKind.Attachment)
+                            .Append(attachment with { Kind = ReferenceKind.Parent, IsRequired = true })
+                            .ToEquatableArray(),
+                    };
+
+                    AddSource(
+                        context,
+                        $"{hintPrefix}.On{attachment.TargetName}.Endpoints.g.cs",
+                        EndpointEmitter.Emit(placed, entityNamespace)
+                            .Replace($"partial class {resource.EntityName}Endpoints", $"partial class {resource.EntityName}On{attachment.TargetName}Endpoints")
+                            .Replace(".WithName(\"", $".WithName(\"{attachment.TargetName}"));
+                }
+
+                AddSource(context, $"{hintPrefix}.Endpoints.g.cs", EndpointEmitter.EmitAttached(resource, entityNamespace));
+            }
+
             // Gömülü detayın kendi ucu yoktur; sahibinin uçlarında taşınır.
-            if (resource.Archetype != Archetype.Detail)
+            else if (resource.Archetype != Archetype.Detail)
             {
                 AddSource(context, $"{hintPrefix}.Endpoints.g.cs", EndpointEmitter.Emit(resource, entityNamespace));
             }

@@ -16,11 +16,31 @@ public static class ContentEndpoints
             .Revisioned()
             .ChangeFeed()
             .Publishable()
-            .NaturalKey(article => article.Slug);
+            .NaturalKey(article => article.Slug)
+
+            // Makaleye dosya eklenebilir, yorum yazılabilir ve makale etiketlenebilir; üçü de başka kaynaklarla paylaşılır.
+            .Attachable<Attachment>()
+            .Commentable<Comment>()
+            .Taggable<Label>();
+
 
         articles.MapDetail<ArticleSection>();
 
         // Bölümleri bir aksiyon değiştirse de makale değişmiş sayılır: sürümü saklanır, akışta görünür.
         articles.MapAction("clear-sections", article => article.ArticleSections.Clear());
+
+        // Dosya: kayıt POST ile oluşturulur, içeriği PUT /{id}/content ile yüklenir, GET /{id}/content ile indirilir.
+        // En çok 1 MB; yalnızca resim, PDF ve düz metin kabul edilir. Birkaç kaynağa takılabildiği için takıldığı
+        // kaynağın adresi altında sunulur: /articles/{articleId}/attachments, /suppliers/{supplierId}/attachments
+        app.MapFile<Attachment>(maxBytes: 1024 * 1024, "image/*", "application/pdf", "text/plain");
+
+        // Yorum yalnızca eklenir; takıldığı kayıt görünürse görünür ve onunla birlikte silinir. Yorumlar birbirine
+        // yanıt olabilir: yanıtlanan yorum aynı kayda takılı olmalıdır.
+        app.MapAppendOnly<Comment>()
+            .Auditable()
+            .Hierarchical();
+
+        // Etiket: MapAssociation<Article, Label>() ile aynıdır (PUT /articles/{id}/labels etiketleri topluca değiştirir).
+        app.MapLookup<Label>();
     }
 }

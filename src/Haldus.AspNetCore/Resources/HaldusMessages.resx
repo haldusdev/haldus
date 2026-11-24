@@ -90,6 +90,24 @@
   <data name="EffectivePeriodOverlap.Detail" xml:space="preserve">
     <value>Another {0} is already effective during this period.</value>
   </data>
+  <data name="FileTooLarge.Title" xml:space="preserve">
+    <value>File too large</value>
+  </data>
+  <data name="FileTooLarge.Detail" xml:space="preserve">
+    <value>The content is larger than the {0} bytes this resource accepts.</value>
+  </data>
+  <data name="FileTypeNotAllowed.Title" xml:space="preserve">
+    <value>File type not allowed</value>
+  </data>
+  <data name="FileTypeNotAllowed.Detail" xml:space="preserve">
+    <value>This resource does not accept content of type '{0}'.</value>
+  </data>
+  <data name="File.Empty" xml:space="preserve">
+    <value>The request has no content to store.</value>
+  </data>
+  <data name="FileContentMissing.Detail" xml:space="preserve">
+    <value>The content of {0} '{1}' has not been uploaded yet.</value>
+  </data>
   <data name="ChainMember.Detail" xml:space="preserve">
     <value>{0} '{1}' is linked to the record that reverses or supersedes it (or that it reverses or supersedes) and cannot be deleted.</value>
   </data>

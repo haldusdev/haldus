@@ -64,6 +64,12 @@ internal static class ModuleEmitter
                 model.Append("            global::Haldus.HaldusRevisions.Configure(modelBuilder);\n");
             }
 
+            if (resources.Any(entry => entry.Resource.File is not null))
+            {
+                // İçerik başka bir depoda tutulsa da tablo modeldedir; varsayılan depo onu kullanır.
+                model.Append("            global::Haldus.HaldusFileStore.Configure(modelBuilder);\n");
+            }
+
             if (resources.Any(entry => entry.Resource.Has(Traits.ChangeFeed)))
             {
                 model.Append("            global::Haldus.HaldusChanges.Configure(modelBuilder);\n");
@@ -410,6 +416,15 @@ internal static class ModuleEmitter
             }
         }
 
+        if (resource.File is not null)
+        {
+            statements.Add("entity.Property(item => item.FileName).HasMaxLength(255);");
+            statements.Add("entity.Property(item => item.ContentType).HasMaxLength(255);");
+            statements.Add("entity.Property(item => item.Checksum).HasMaxLength(64);");
+            statements.Add("entity.Property(item => item.StorageKey).HasMaxLength(256);");
+            statements.Add("entity.Property(item => item.Status).HasConversion<string>().HasMaxLength(16);");
+        }
+
         if (resource.Has(Traits.Publishable))
         {
             // Kopya taslağıyla birlikte silinir ve bir taslağın en çok bir kopyası olur. Kopyaları gizleyen filtre
@@ -491,6 +506,28 @@ internal static class ModuleEmitter
             statements.Add(
                 $"entity.HasQueryFilter(global::Haldus.HaldusFilters.Parent, item => context.Set<{parent.TargetType}>()"
                 + $".Any(parent => parent.{parent.TargetKeyName} == item.{parent.PropertyName}));");
+        }
+
+        if (resource.Attachments.ToList() is { Count: > 0 } attachments)
+        {
+            // Takılabilir kayıt, takıldığı kayıt görünürse görünür. Her hedefin alt sorgusu o hedefin kendi
+            // filtrelerinden geçer; bir kayıtta tam olarak bir hedef doludur (aşağıdaki kısıt).
+            foreach (var attachment in attachments.Where(attachment => attachment.IsExternal))
+            {
+                statements.Add($"global::Haldus.HaldusModel.RequireShared<{attachment.TargetType}>(context, \"{resource.EntityName}\");");
+            }
+
+            var visible = string.Join(
+                "\n                    || ",
+                attachments.Select(attachment =>
+                    $"(item.{attachment.PropertyName} != null && context.Set<{attachment.TargetType}>()"
+                    + $".Any(parent => parent.{attachment.TargetKeyName} == item.{attachment.PropertyName}))"));
+
+            statements.Add($"entity.HasQueryFilter(global::Haldus.HaldusFilters.Parent, item =>\n                    {visible});");
+
+            var columns = string.Join(", ", attachments.Select(attachment => $"\\\"{attachment.PropertyName}\\\""));
+            statements.Add(
+                $"entity.ToTable(table => table.HasCheckConstraint(\"CK_{TableName(resource)}_AttachedTo\", \"num_nonnulls({columns}) = 1\"));");
         }
 
         // Gömülü detayın sahibiyle ilişkisi, koleksiyonu taşıyan sahip tarafında kurulur.

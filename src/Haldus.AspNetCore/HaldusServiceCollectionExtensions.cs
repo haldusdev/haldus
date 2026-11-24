@@ -39,6 +39,19 @@ public static class HaldusServiceCollectionExtensions
     /// sahip olur. Ayrı bağlamlardaki entity'ler arasında yabancı anahtar kısıtı ve ortak transaction olmaz;
     /// <c>References&lt;T&gt;()</c> başka modüldeki kayda yalnızca kimliğiyle bağlanır.
     /// </summary>
+    /// <summary>
+    /// Dosya içeriklerini (<c>MapFile</c>) veritabanı yerine verilen klasörde saklar. Birden çok sunucu aynı klasörü
+    /// görmelidir.
+    /// </summary>
+    public static IServiceCollection AddHaldusFileSystemStorage(this IServiceCollection services, string root)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+
+        services.RemoveAll<IHaldusFileStorage>();
+        services.AddSingleton<IHaldusFileStorage>(new HaldusFileSystemStorage(root));
+        return services;
+    }
+
     public static IServiceCollection AddHaldusModule<TContext>(
         this IServiceCollection services,
         Action<HaldusOptions>? configure = null)
@@ -74,6 +87,9 @@ public static class HaldusServiceCollectionExtensions
         services.TryAddSingleton<ICurrentUser, ClaimsCurrentUser>();
         services.TryAddSingleton(TimeProvider.System);
         services.TryAddSingleton<IHaldusMessages, ResourceHaldusMessages>();
+
+        // Dosya içerikleri varsayılan olarak dosya kayıtlarıyla aynı veritabanında tutulur.
+        services.TryAddSingleton<IHaldusFileStorage, HaldusDatabaseFileStorage>();
 
         // İşlerin yürütücüsü altyapıdan bağımsızdır; işleri ona ulaştıran altyapı ayrı bir paketle seçilir.
         services.AddOptions<HaldusJobOptions>();

@@ -41,6 +41,9 @@ internal static class MapCallParser
     public static Archetype? ArchetypeOf(string methodName) => methodName switch
     {
         "MapCrud" => Archetype.Crud,
+
+        // Dosya, içeriği ayrıca yüklenen bir MapCrud kaynağıdır.
+        "MapFile" => Archetype.Crud,
         "MapReadOnly" => Archetype.ReadOnly,
         "MapAppendOnly" => Archetype.AppendOnly,
         "MapStore" => Archetype.Store,
@@ -113,6 +116,31 @@ internal static class MapCallParser
         if (archetype == Archetype.Job)
         {
             lifecycle.Members.AddRange(LifecycleReader.JobMembers());
+        }
+
+        FileModel? file = null;
+
+        if (name.Identifier.ValueText == "MapFile")
+        {
+            file = LifecycleReader.ReadFile(
+                context.SemanticModel,
+                invocation,
+                (node, message) => diagnostics.Add(new DiagnosticInfo("HALDUS010", LocationInfo.From(node.GetLocation()), new EquatableArray<string>([message]))),
+                cancellationToken);
+
+            // Dosyanın durumu ve içeriği kendi sabit modelidir; kopyalanan veya başka bir kayıttan doğan kayıt içeriksiz kalırdı.
+            foreach (var other in new[] { "Workflow", "Document", "SoftDeletable", "Cloneable", "Publishable", "Reversible", "Supersedes", "CreatedFrom" })
+            {
+                if (chain.Any(call => call.Name == other))
+                {
+                    diagnostics.Add(new DiagnosticInfo(
+                        "HALDUS007", location, new EquatableArray<string>([$"MapFile cannot be combined with {other}: the content of a file is stored once, under its own fixed states"])));
+                }
+            }
+
+            // Yükleme bekleyen kayıtların ne zaman oluşturulduğu bilinmelidir.
+            traits |= Traits.Auditable;
+            lifecycle.Members.AddRange(LifecycleReader.FileMembers());
         }
 
         var properties = new List<PropertyModel>();
@@ -284,6 +312,11 @@ internal static class MapCallParser
             properties.Add(LifecycleReader.ClientExpiry());
         }
 
+        if (file is not null && properties.All(property => property.Name != "FileName"))
+        {
+            properties.Insert(0, LifecycleReader.FileName());
+        }
+
         if ((traits & Traits.EffectiveDated) != 0)
         {
             // Dönemi istemci verir: iki alan da sıradan, yazılabilir alanlardır.
@@ -301,6 +334,8 @@ internal static class MapCallParser
         var createOnlyRequests = new List<SearchFieldRequest>();
         SearchFieldRequest? naturalKeyRequest = null;
         var effectiveKeyRequests = new List<SearchFieldRequest>();
+        var reverseAttachments = new List<ReverseDeclaration>();
+        var tagDeclarations = new List<ReverseDeclaration>();
         var derivedFrom = new List<SourceDeclaration>();
         var references = new List<ReferenceDeclaration>();
 
@@ -344,6 +379,28 @@ internal static class MapCallParser
                     references.Add(ReadReference(
                         ReferenceKind.Reference, targets[0], call, context.SemanticModel, OnDeleteBehavior.Restrict, cancellationToken));
                     break;
+                case GenericNameSyntax { Identifier.ValueText: "AttachedTo", TypeArgumentList.Arguments: { Count: 1 } hosts }:
+                    references.Add(ReadReference(
+                        ReferenceKind.Parent, hosts[0], call, context.SemanticModel, OnDeleteBehavior.Cascade, cancellationToken) with
+                    {
+                        Attached = true,
+                        Required = false,
+                        Shallow = false,
+                    });
+                    break;
+                case GenericNameSyntax { Identifier.ValueText: "Attachable" or "Commentable" or "Taggable", TypeArgumentList.Arguments: { Count: 1 } children } reverse:
+                {
+                    // Hedef tarafında yazılan bildirim: adı geçen kaynak, tüm kaynaklar bilindikten sonra çözülür.
+                    var child = context.SemanticModel.GetTypeInfo(children[0], cancellationToken).Type as INamedTypeSymbol;
+                    var declaration = new ReverseDeclaration(
+                        reverse.Identifier.ValueText,
+                        child is { TypeKind: not TypeKind.Error } ? child.Name : children[0].ToString(),
+                        child is { TypeKind: not TypeKind.Error } ? child.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) : null,
+                        LocationInfo.From(children[0].GetLocation()));
+
+                    (reverse.Identifier.ValueText == "Taggable" ? tagDeclarations : reverseAttachments).Add(declaration);
+                    break;
+                }
                 case GenericNameSyntax { Identifier.ValueText: "Under", TypeArgumentList.Arguments: { Count: 1 } parents }:
                     references.Add(ReadReference(
                         ReferenceKind.Parent, parents[0], call, context.SemanticModel, OnDeleteBehavior.Cascade, cancellationToken));
@@ -443,6 +500,8 @@ internal static class MapCallParser
             CreateOnlyRequests = createOnlyRequests.ToEquatableArray(),
             NaturalKeyRequest = naturalKeyRequest,
             EffectiveKeyRequests = effectiveKeyRequests.ToEquatableArray(),
+            ReverseAttachments = reverseAttachments.ToEquatableArray(),
+            TagDeclarations = tagDeclarations.ToEquatableArray(),
             DerivedFrom = derivedFrom.ToEquatableArray(),
             KeyGeneration = keyGeneration,
             KeyPrefix = keyPrefix,
@@ -452,6 +511,7 @@ internal static class MapCallParser
             Secret = lifecycle.Secret,
             Token = lifecycle.Token,
             Approval = lifecycle.Approval,
+            File = file,
             ReversibleIn = lifecycle.ReversibleIn,
             SupersedableIn = lifecycle.SupersedableIn,
             Batch = lifecycle.Batch,

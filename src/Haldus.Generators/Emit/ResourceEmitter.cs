@@ -61,6 +61,11 @@ internal static class ResourceEmitter
             interfaces.Add("global::Haldus.IHaldusJob");
         }
 
+        if (resource.File is not null)
+        {
+            interfaces.Add("global::Haldus.IHaldusFile");
+        }
+
         if (resource.Secret is { } secret)
         {
             interfaces.Add(secret.OverlapTicks is null ? "global::Haldus.IHasSecret" : "global::Haldus.IHasRotatingSecret");

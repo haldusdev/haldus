@@ -6,19 +6,20 @@ sınamanın sonucudur: her satır, yazılmış olan API ile ifade edilmeye çal�
 
 ## Sonuç
 
-59 satırın 54'ü bugünkü API ile yazılıp derleniyor (41'i eksiksiz); 5'i için anlamlı bir eşleme yok. (İlk sayım 19 temiz, 29
+59 satırın 57'si bugünkü API ile yazılıp derleniyor (45'i eksiksiz); 2'si için anlamlı bir eşleme yok. (İlk sayım 19 temiz, 29
 kısmi, 11 yok idi. Entity aksiyonu yazıldıktan sonra bir satır temize geçti; sahiplik yazıldıktan sonra iki satır
 temize, bir satır yoktan kısmiye geçti; alan eklentileri yazıldıktan sonra üç satır temize, bir satır yoktan
 kısmiye geçti; kayıt işlemleri yazıldıktan sonra üç satır daha temize geçti; kayıtlar arası zincir yazıldıktan
 sonra beş satır temize, bir satır yoktan kısmiye geçti; sırlar yazıldıktan sonra iki satır daha temize geçti;
 bağlar ve kapsam yazıldıktan sonra üç satır daha, onay yazıldıktan sonra bir satır daha temize geçti; zaman ve
-sürüm yazıldıktan sonra bir satır kısmiden, bir satır yoktan temize geçti.)
+sürüm yazıldıktan sonra bir satır kısmiden, bir satır yoktan temize geçti; dosyalar ve takılabilirler yazıldıktan
+sonra bir satır kısmiden, üç satır yoktan temize geçti.)
 
 | Sonuç | Satır | Anlamı |
 |---|---|---|
-| Temiz | 41 | Raporun önerdiği eşleme, yazılmış özelliklerle eksiksiz ifade ediliyor |
-| Kısmi | 13 | Çekirdek ifade ediliyor; önerilen eşlemedeki bir veya daha çok özellik henüz yok |
-| Yok | 5 | Gereken archetype veya trait yazılmadı |
+| Temiz | 45 | Raporun önerdiği eşleme, yazılmış özelliklerle eksiksiz ifade ediliyor |
+| Kısmi | 12 | Çekirdek ifade ediliyor; önerilen eşlemedeki bir veya daha çok özellik henüz yok |
+| Yok | 2 | Gereken archetype veya trait yazılmadı |
 
 Araştırmanın başlangıçtaki düz katalog için kendi sayımı 10 oturuyor, 31 zorlanarak, 18 oturmuyor idi. İki sayım
 aynı ölçüyle yapılmadı (o, araştırmacının hükmüydü; bu, derlenen kod), bu yüzden fark kesin bir iyileşme ölçüsü
@@ -39,7 +40,8 @@ tamamı eksik trait veya archetype'tır.
   kardeşler arası sıra, kopyalama, önizleme, ters kayıt, yerine geçme, başka bir kayıttan üretme, türetme, bir kez
   gösterilen sır, döndürme, token ile erişim, bağların topluca değiştirilmesi, yük ve durum taşıyan bağ, ebeveyn
   altında tek kayıt, kısa adres, komutla yazılan satırlar, onay (tek ve çok düzeyli), belge, saklanan sürümler ve
-  geri yükleme, değişiklik akışı, dönemli kayıtlar, taslak ve yayın.
+  geri yükleme, değişiklik akışı, dönemli kayıtlar, taslak ve yayın, dosya yükleme ve indirme, birkaç kaynağa
+  takılabilen ekler ve yorumlar, etiketler.
   Geri kalan satırlar yalnızca derleme düzeyinde doğrulandı.
 - **Hüküm:** "Temiz" ile "kısmi" arasındaki ayrım benim yorumumdur: önerilen eşlemede adı geçen bir özellik
   yazılmadıysa, aynı sonuç elle (ör. bir handler içinde) elde edilebilse bile satır kısmi sayıldı.
@@ -77,9 +79,9 @@ tamamı eksik trait veya archetype'tır.
 | 27 | Post / Entry | Temiz | `MapCrud` + `Publishable` + `SoftDeletable` + `ConcurrencyChecked` + `Revisioned` | — |
 | 28 | Localized fields | Yok | — | `Translatable` |
 | 29 | Revision / Snapshot | Temiz | `Revisioned` (liste, tek sürüm, geri yükleme) | — |
-| 30 | Comment (threaded) | Kısmi | `MapCrud` + `Under<T>` + `Hierarchical` + `SoftDeletable` | Her kaynağa takılabilen yorum (`Commentable`) |
+| 30 | Comment (threaded) | Temiz | `MapCrud` + `Hierarchical` + `SoftDeletable`; hedeflerde `Commentable<Comment>()` | — |
 | 31 | Tag / Label | Temiz | `MapLookup` + `MapAssociation` (bağlar `PUT /articles/{id}/tags` ile topluca değişir) | — |
-| 32 | MediaFile / Asset | Yok | — | `MapFile` |
+| 32 | MediaFile / Asset | Temiz | `MapFile` (boyut ve tür sınırı) + `MultiTenant` + `Metadata` | — |
 | 33 | EventType / rezerve edilebilir kaynak | Temiz | `MapCrud().Without(Delete)` + `Archivable` | — |
 | 34 | Availability / free-busy | Temiz | `MapQuery` | — |
 | 35 | Appointment / Booking | Temiz | `MapCrud` + `Workflow` + `Idempotent` + `ConcurrencyChecked` + `Supersedes` (yeniden planlama) | — |
@@ -96,8 +98,8 @@ tamamı eksik trait veya archetype'tır.
 | 46 | Webhook endpoint | Temiz | `MapCrud` + `Archivable` + `SecretOnce(recoverable)` + `Rotatable`; ping bir entity aksiyonu; yapılandırma `MapSingleton().Under<Webhook>()` | — |
 | 47 | Webhook delivery | Temiz | `MapReadOnly` + `Under<Webhook>` + `Workflow`; yeniden gönderme bir geçiş | — |
 | 48 | Subscription / Plan | Temiz | `MapCrud` + `Workflow` + `MapDetail` | — |
-| 49 | Polimorfik attachment | Yok | — | `Attachable`, `MapFile` |
-| 50 | Comment / activity feed | Yok | — | `Commentable` |
+| 49 | Polimorfik attachment | Temiz | `MapFile`; hedeflerde `Attachable<Attachment>()` | — |
+| 50 | Comment / activity feed | Temiz | `MapAppendOnly`; hedeflerde `Commentable<Activity>()` | — |
 | 51 | Custom fields / metadata | Kısmi | `Metadata` (serbest anahtar-değer çantası) | `CustomFields` (kiracının tanımladığı, doğrulanan alanlar) |
 | 52 | `/me` ve kullanıcıya ait kaynaklar | Temiz | `OwnedByCurrentUser()` (`/me` altında) veya `OwnedByCurrentUser(underMe: false)` | — |
 | 53 | Report / aggregation | Temiz | `MapQuery` veya `MapJob` | — |
@@ -140,6 +142,12 @@ tamamı eksik trait veya archetype'tır.
   (`EffectiveDated`, 23) ve "şundan beri ne değişti" akışı (`ChangeFeed`, 23). Araştırmanın 27. satır için ayrıca
   not ettiği zamanlanmış yayın yazılmadı; önerilen eşlemede adı geçmediği için satır temiz sayıldı, bu benim
   yorumumdur.
+- **Polimorfik referans, tip + kimlik çifti olarak değil hedef başına yabancı anahtar olarak yazıldı.** Araştırma
+  `.AttachedTo()` için Rails / Laravel tarzı "tip + id" alanlarını örnek gösteriyordu. Hedefler derleme zamanında
+  bilindiği için her hedefe isteğe bağlı gerçek bir yabancı anahtar üretildi ve "tam olarak biri dolu" kuralı
+  veritabanı kısıtı oldu; böylece takılı kaydın görünürlüğü ve zincirleme silinmesi, tek ebeveynli kaynaklarla aynı
+  yoldan gelir. `Attachable`, `Commentable` ve `Taggable` ayrı altyapı değil, aynı bildirimin hedef tarafında
+  yazılan kısa biçimleridir (30, 32, 49 ve 50. satırlar bunlarla kapandı).
 - **Bağın kendisi üç satırda eksikti** (31, 40, 46): bağların topluca değiştirilmesi, üyelik gibi kendi alanı ve
   durumu olan bağ, bir kaydın altındaki tek yapılandırma kaydı. Üçü de yazıldı. Durumu olan bağın geçişleri
   gövdesizdir (iş mantığı taşımaz); mantık gerektiren bir üyelik hâlâ `MapCrud` + iki `References` ile yazılır.
@@ -151,8 +159,7 @@ tamamı eksik trait veya archetype'tır.
 | `CustomFields` | 23, 51 |
 
 | `MapBalance` | 11, 25 |
-| `MapFile` / `Attachable` | 32, 49 |
-| `Commentable` | 30, 50 |
+
 | Birden çok durum ekseni | 1, 10 |
 | Tek satırı etkileyenler | `MapChangeSet` (1), türetilmiş durum (12), sepet birleştirme (5), `Translatable` (28), `Retention` (44), `ReadTracking` (45), `Rollup` (57), varyant üretimi (3) |
 

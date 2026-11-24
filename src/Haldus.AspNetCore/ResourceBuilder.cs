@@ -75,6 +75,36 @@ public sealed class ResourceBuilder<TEntity>(RouteGroupBuilder group) : IEndpoin
     public ResourceBuilder<TEntity> NaturalKey(Expression<Func<TEntity, object?>> field) => this;
 
     /// <summary>
+    /// Kaydı birkaç farklı kaynağa takılabilir yapar (ek, yorum, not): her çağrı bir hedef ekler. Kaynak her hedefin
+    /// adresi altında sunulur (<c>/orders/{orderId}/comments</c>, <c>/invoices/{invoiceId}/comments</c>); her hedef
+    /// için isteğe bağlı bir yabancı anahtar üretilir ve bir kayıtta tam olarak biri doludur. Kayıt, takıldığı kayıt
+    /// görünürse görünür ve onunla birlikte silinir.
+    /// </summary>
+    public ResourceBuilder<TEntity> AttachedTo<TTarget>(OnDelete onDelete = OnDelete.Cascade)
+        where TTarget : class => this;
+
+    /// <summary>
+    /// Bu kaynağın kayıtlarına dosya eklenebilir: <typeparamref name="TFile"/> (<c>MapFile</c> ile eşlenmiş bir
+    /// kaynak) bu kaynağın adresi altında da sunulur. Dosya kaynağında <c>.AttachedTo&lt;TEntity&gt;()</c> yazmakla aynıdır.
+    /// </summary>
+    public ResourceBuilder<TEntity> Attachable<TFile>()
+        where TFile : class => this;
+
+    /// <summary>
+    /// Bu kaynağın kayıtlarına yorum yazılabilir: <typeparamref name="TComment"/> bu kaynağın adresi altında da
+    /// sunulur. Yorum kaynağında <c>.AttachedTo&lt;TEntity&gt;()</c> yazmakla aynıdır.
+    /// </summary>
+    public ResourceBuilder<TEntity> Commentable<TComment>()
+        where TComment : class => this;
+
+    /// <summary>
+    /// Bu kaynağın kayıtları <typeparamref name="TTag"/> ile etiketlenebilir: <c>MapAssociation&lt;TEntity, TTag&gt;()</c>
+    /// yazmakla aynıdır (<c>PUT</c> / <c>DELETE /{id}/tags/{tagId}</c>, etiketleri topluca değiştiren <c>PUT /{id}/tags</c>).
+    /// </summary>
+    public ResourceBuilder<TEntity> Taggable<TTag>()
+        where TTag : class => this;
+
+    /// <summary>
     /// Kaydı belirli bir dönemde geçerli kılar: <c>EffectiveFrom</c> (zorunlu) ve <c>EffectiveTo</c> (boşsa hâlâ
     /// geçerli) alanları üretilir. Bir kapsamda (kiracı, sahip, ebeveyn ve sayılan alanlar) iki kaydın dönemi
     /// çakışamaz (409); açık uçlu bir dönemin içinde başlayan yeni kayıt, öncekini kendi başlangıç gününde kapatır.

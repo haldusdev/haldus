@@ -165,6 +165,18 @@ Bunlar kullanıcıyla kararlaştırıldı; yeniden sorma.
     kendi başladığı gün kapatır. Liste `?asOf=` ile süzülür.
   - `.ChangeFeed()`: `GET /changes?since={imleç}`; imleç günlükteki sıra numarasıdır. Yanıt değişen kayıtların
     şimdiki halini ve artık bulunamayanları (`deleted: true`) verir.
+- Dosyalar ve takılabilirler (19. aşama). Kullanıcı sormamamı istedi; yazılan, önerdiğim seçeneklerdir ve ayrıca
+  onaylanmadı:
+  - `MapFile<T>(maxBytes, türler...)` içeriği ayrıca yüklenen bir `MapCrud` kaynağıdır: `POST` kaydı oluşturur,
+    `PUT /{id}/content` içeriği yükler, `GET /{id}/content` indirir. İmzalı adres ve çok parçalı (multipart)
+    yükleme yazılmadı.
+  - Depolama yeni bağımlılık eklemeden yazıldı: varsayılan veritabanı (`HaldusFileContents`), isteğe bağlı dosya
+    sistemi (`AddHaldusFileSystemStorage`). Nesne depoları (S3 vb.) `IHaldusFileStorage` uygulanarak eklenir; Haldus
+    onlar için paket taşımaz.
+  - `.AttachedTo<T>()` her hedef için isteğe bağlı gerçek bir yabancı anahtar üretir ("tip + kimlik" çifti değil)
+    ve kaynağı her hedefin adresi altında ayrı ayrı sunar. `Attachable<TFile>()` ve `Commentable<TComment>()` aynı
+    bildirimin hedef tarafında yazılan biçimidir; `Taggable<TTag>()` bir `MapAssociation`'dır.
+  - Yükleme bekleyen dosya kayıtları kendiliğinden silinmez (süresi dolan kayıtlardaki gerekçeyle).
 - Eşzamanlılık trait'inin adı `ConcurrencyChecked` (eski adı `Versioned`). Sürüm yanıt gövdesinde değil
   `ETag` başlığında taşınır; güncelleme ve silme `If-Match` ister (eksikse 428, uyuşmazlıkta 412).
 - Güncelleme için hem `PUT` (tam değiştirme) hem `PATCH` (kısmi) üretilir.
@@ -234,8 +246,8 @@ Bunlar kullanıcıyla kararlaştırıldı; yeniden sorma.
 ## Aşamalar
 
 On aşamanın tamamı bitti (3. aşamaya `.Searchable()`, 8. aşamaya fiziksel temizlik de eklendi). 10. aşamanın
-sonucu `reports/Haldus taksonomi sınaması.md` dosyasındadır: araştırmadaki 59 varlığın (bugünkü sayımla) 41'i temiz, 13'ü
-kısmen ifade ediliyor, 5'i için gereken özellik yok. Aynı veri `tests/Haldus.Generators.Tests/TaxonomyTests.cs`
+sonucu `reports/Haldus taksonomi sınaması.md` dosyasındadır: araştırmadaki 59 varlığın (bugünkü sayımla) 45'i temiz, 12'si
+kısmen ifade ediliyor, 2'si için gereken özellik yok. Aynı veri `tests/Haldus.Generators.Tests/TaxonomyTests.cs`
 içinde derlenir; yeni bir archetype veya trait bir satırı kapatıyorsa ikisini birlikte güncelle.
 
 1. İskelet
@@ -256,7 +268,7 @@ içinde derlenir; yeni bir archetype veya trait bir satırı kapatıyorsa ikisin
 Kullanıcı 2026-11-24'te onayladı. Kapsamı araştırma raporunun v2 listesi, ilk sürümden kalan küçük kalemler
 ve sınamada çıkan küçük eksiklerdir. Raporun v3 listesi (`MapBalance`, `MapChangeSet`, birden çok durum
 ekseni, çeviri, saklama süresi, okundu takibi) ve tekrar serisi bu planın dışındadır. Her aşama testleriyle
-birlikte ayrı commit olur; 11–18. aşamalar bitti, sıradaki 19.
+birlikte ayrı commit olur; 11–19. aşamalar bitti, sıradaki 20.
 
 11. Sahiplik: `OwnedByCurrentUser`, `MapAssociation().ForCurrentUser()`
 12. Alan eklentileri: `Metadata`, yalnızca oluştururken yazılan alan, `NaturalKey`, `KeyStrategy`, liste
@@ -282,7 +294,7 @@ Aşama başına açık kararlar (uygulandıkça "Tasarım kararları"na taşın�
 
 
 
-- 19: Depolama sağlayıcıları (paketlere ayrılması önerildi; S3 gibi sağlayıcılar yeni bağımlılıktır).
+
 - 20: Aktarma biçimleri; CSV için bir kütüphane yeni bağımlılık olabilir.
 
 Raporun v1 listesindeki "uzatma kancaları" plana girmedi ve yazılmadı: raporda tanımı yok.
@@ -627,6 +639,42 @@ Raporun v1 listesindeki "uzatma kancaları" plana girmedi ve yazılmadı: rapord
     listede olmayan geçişin token adresi yoktur. Token ebeveyn altındaki ve kullanıcıya ait kaynaklarla
     birleşmez (görünürlükleri, token'ı taşıyanın sahip olmadığı bir kimliğe bağlıdır). Bilinen sınır: token
     kullanılınca kendiliğinden geçersiz olmaz; ömrünü `Expiring` ve durum makinesi belirler. Oran sınırlama yoktur.
+- **Dosyalar.** `MapFile` ayrı bir archetype değil, `ResourceModel.File` taşıyan bir `Archetype.Crud`'dır
+  (`MapCallParser.ArchetypeOf`); bu yüzden bütün trait'ler, ilişkiler ve toplu yollar onun için de geçerlidir.
+  Alanları (`ContentType`, `Size`, `Checksum`, `Status`, `UploadedAt`, `StorageKey`) `LifecycleReader.FileMembers()`
+  ile `ExtraMembers`'a girer, `FileName` yazılabilir bir alandır ve `Auditable` kendiliğinden eklenir. Sınırlar
+  `MapFile` çağrısının sabit argümanlarından okunur (`LifecycleReader.ReadFile`).
+  - Boyut ve tür sınırı, özetin hesaplanması ve depoyla konuşmak çalışma zamanındadır (`HaldusFiles`); uç kaydı
+    bulur, yazma kurallarından geçirir (`If-Match`, `ChainGuard`) ve `Save()` ile kaydeder. Gövde okunurken sayılır
+    ve sınır aşılınca okuma kesilir; `Content-Length` yalan söylese de sınır geçerlidir.
+  - Depo `IHaldusFileStorage`'dır ve bağlamı parametre alır: veritabanı deposu içeriği dosya kaydıyla aynı
+    kaydetmede yazar. İçerik, kayıt silindikten sonra kaldırılır (`SaveDelete` içinde `HaldusFiles.ReleaseAsync`).
+    Dosya sistemi deposunda anahtarı Haldus üretir; yine de klasörün dışını gösteren anahtar reddedilir.
+  - İndirilen içerik `attachment` olarak ve `X-Content-Type-Options: nosniff` ile gönderilir: tür yükleyenin
+    beyanıdır. **İçeriği tarayıcıda açılacak biçimde (`inline`) sunan bir seçenek eklenirse tür beyaz listesi
+    zorunlu olmalıdır.**
+  - Yükleme ucuna `.Accepts(...)` eklenmez: o bildirim içerik türünü yönlendirmede süzer ve bizim 415 yanıtımız
+    yerine boş bir 415 döner.
+  - Sınırlar: dosya sistemi deposunda atomik toplu silme geri alınırsa içerik geri gelmez; veritabanı deposu
+    içeriği belleğe alır; `Workflow`, `Document`, `SoftDeletable`, `Cloneable`, `Publishable`, zincir işlemleri ve
+    `CreatedFrom` ile birleşmez; virüs taraması, görsel işleme ve devam ettirilebilir yükleme yoktur.
+- **Takılabilirler.** `.AttachedTo<T>()` zincirde `Attached` işaretli bir `Parent` bildirimi olarak okunur ve
+  `ReferenceKind.Attachment` olarak çözülür (isteğe bağlı, istekle yazılamayan yabancı anahtar). Hedef tarafında
+  yazılan `Attachable` / `Commentable` bildirimleri (`ResourceModel.ReverseAttachments`) bağlayıcının ilk adımında
+  çocuğun bildirimine çevrilir (`ResourceLinker.MergeReverseAttachments`); `Taggable` ise
+  `HaldusGenerator.Emit` içinde bir `AssociationDeclaration`'a dönüşür ve bağın uçları kaynağın kendi `Map`
+  metodunda eşlenir (ayrı bir `MapAssociation` çağrısı olmadığı için).
+  - Uçlar hedef başına bir kez üretilir: `HaldusGenerator` kaynağın, o hedef tek ebeveyniymiş gibi bir kopyasını
+    kurar ve `EndpointEmitter`'dan geçirir; sınıf adı (`{Kaynak}On{Hedef}Endpoints`) ve işlem adları (`WithName`)
+    üretilen metinde hedefin adıyla değiştirilir. `EmitAttached` hepsini ortak bir grubun altında eşleyen giriş
+    noktasını üretir. Entity, DTO'lar ve model bir kez üretilir.
+  - Model: her hedef için yabancı anahtar, `HaldusFilters.Parent` filtresi (hedeflerden biri dolu ve görünür),
+    `num_nonnulls(...) = 1` kısıtı. "Zincirleme silme kiracı sınırını aşmaz" kuralı burada da geçerlidir:
+    hedeflerden biri kiracıya aitse kaynak kiracıya ait sayılır ve genel hedeflerin silmesi `Restrict` olur.
+  - Takılabilir kaynağın tek bir adresi yoktur; bu yüzden `Under`, `Orderable`, `NaturalKey`, `ChangeFeed`,
+    durum makinesi, `CreatedFrom`, `/me`, detay (`MapDetail`), builder'ında geçiş veya aksiyon, bir bağın ucu
+    olmak ve başka bir kaynağın ebeveyni olmak `HALDUS007`'dir (`AttachmentProblem` ve ilgili bağlama adımları).
+    `Hierarchical` birleşir: yanıtlanan kayıt aynı hedefe takılı olmalıdır.
 - **Satırı değişen sahip.** Gömülü satır sahibinin parçasıdır. Üretilen uçlar satır değişince sahibi `Modified`
   işaretler; aynı kuralı, satırları başka bir kodun (aksiyonun veya geçişin mantığı, uygulamanın kendi kodu)
   değiştirdiği durum için interceptor uygular (`HaldusDetails.TouchOwners`; satır tiplerini üretilen modül

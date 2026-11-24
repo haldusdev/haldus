@@ -353,6 +353,29 @@ Anlık görüntüyü ve değişiklik günlüğünü, kaydı hangi kod yazarsa ya
 uygulamanın kendi kodu) Haldus kaydederken alır. Değişiklik akışı varsayılan olarak en yeni değişikliklerin iki
 saniye gerisinde kalır (`HaldusChanges.SafetyLag`); böylece o sırada bitmemiş bir transaction'ın satırları atlanmaz.
 
+## Dosyalar ve takılabilirler
+
+```csharp
+app.MapFile<Attachment>(maxBytes: 1024 * 1024, "image/*", "application/pdf");
+app.MapAppendOnly<Comment>().Hierarchical();
+app.MapLookup<Label>();
+
+app.MapCrud<Order>().Attachable<Attachment>().Commentable<Comment>().Taggable<Label>();
+app.MapCrud<Invoice>().Attachable<Attachment>().Commentable<Comment>();
+```
+
+| Bildirim | Etkisi |
+|---|---|
+| `MapFile<T>(maxBytes, türler)` | İçeriği ayrıca yüklenen bir `MapCrud` kaynağı: `POST` kaydı (adı ve kendi alanlarıyla) oluşturur, `PUT /{id}/content` içeriği yükler (boyut ve tür sınırı: 413, 415), `GET /{id}/content` indirir (parça isteği ve `ETag` ile). Boyut, tür, SHA-256 özeti ve durum yanıtta görünür |
+| `.AttachedTo<T>()` | Kaynak birkaç farklı kaynağa takılabilir: her hedefin adresi altında sunulur (`/orders/{orderId}/comments`, `/invoices/{invoiceId}/comments`), her hedef için isteğe bağlı gerçek bir yabancı anahtar üretilir ve bir kayıtta tam olarak biri doludur. Takılı kayıt, takıldığı kayıt görünürse görünür ve onunla birlikte silinir |
+| `.Attachable<TFile>()`, `.Commentable<TComment>()` | Aynı bildirimin hedef tarafında yazılan biçimi: `TFile` / `TComment` bu kaynağa da takılabilir |
+| `.Taggable<TTag>()` | `MapAssociation<TEntity, TTag>()` ile aynıdır; etiketler `PUT /{id}/tags` ile topluca değişir |
+
+Dosya içerikleri varsayılan olarak veritabanında saklanır (ek altyapı gerekmez, içerik ve kayıt birlikte kalıcı
+olur). `builder.Services.AddHaldusFileSystemStorage(path)` içerikleri bir klasöre taşır; başka bir depo
+`IHaldusFileStorage` uygulanarak eklenir. İndirilen içerik her zaman ek olarak (`attachment`) ve `nosniff` ile
+gönderilir: tür yükleyenin beyanıdır ve içerik tarayıcıda sayfanın içinde açılmamalıdır.
+
 ## Sırlar
 
 ```csharp
@@ -402,7 +425,7 @@ kısıtı olur, ayrı bağlamlardaysa referans yalnızca kimlikle tutulur ve var
 ## Durum
 
 İlk sürümün planlanan on aşaması tamamlandı; eksikleri kapatan ikinci plan sürüyor. Model, araştırmadaki 59
-gerçek varlığa karşı sınanıyor: bugün 41'i temiz, 13'ü kısmen ifade ediliyor, 5'i için gereken özellik henüz
+gerçek varlığa karşı sınanıyor: bugün 45'i temiz, 12'si kısmen ifade ediliyor, 2'si için gereken özellik henüz
 yok. Ayrıntısı ve eksiklerin listesi [taksonomi sınaması](reports/Haldus%20taksonomi%20sınaması.md)
 belgesindedir.
 

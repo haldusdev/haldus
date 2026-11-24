@@ -1,4 +1,5 @@
 using Haldus.Sample.Shop.Features.Catalog;
+using Haldus.Sample.Shop.Features.Content;
 
 namespace Haldus.Sample.Shop.Features.Supply;
 
@@ -6,8 +7,11 @@ public static class SupplyEndpoints
 {
     public static void MapSupply(this IEndpointRouteBuilder app)
     {
+        // Tedarikçiye de dosya eklenir ve yorum yazılır; aynı dosya ve yorum kaynakları makalelerle paylaşılır.
         var suppliers = app.MapCrud<Supplier>()
-            .ConcurrencyChecked();
+            .ConcurrencyChecked()
+            .Attachable<Attachment>()
+            .Commentable<Comment>();
 
         // Sertifikalar tedarikçinin yanıtında gömülüdür, ama güncelleme isteğinde topluca gönderilmez; tek tek
         // komutlarla yazılır: POST /suppliers/{id}/supplier-certificates, PUT ve DELETE …/{rowId}

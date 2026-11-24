@@ -34,6 +34,12 @@ public static class HaldusMessageKeys
     public const string SupersededDetail = "Superseded.Detail";
     public const string ChainMemberDetail = "ChainMember.Detail";
     public const string AmendedDetail = "Amended.Detail";
+    public const string FileTooLargeTitle = "FileTooLarge.Title";
+    public const string FileTooLargeDetail = "FileTooLarge.Detail";
+    public const string FileTypeNotAllowedTitle = "FileTypeNotAllowed.Title";
+    public const string FileTypeNotAllowedDetail = "FileTypeNotAllowed.Detail";
+    public const string FileEmpty = "File.Empty";
+    public const string FileContentMissingDetail = "FileContentMissing.Detail";
     public const string EffectivePeriodInvalid = "EffectivePeriod.Invalid";
     public const string EffectivePeriodOverlapTitle = "EffectivePeriodOverlap.Title";
     public const string EffectivePeriodOverlapDetail = "EffectivePeriodOverlap.Detail";

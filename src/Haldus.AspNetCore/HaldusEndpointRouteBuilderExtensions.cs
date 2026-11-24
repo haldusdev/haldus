@@ -16,6 +16,20 @@ public static class HaldusEndpointRouteBuilderExtensions
         where TEntity : class =>
         new(HaldusEndpointRegistry.Map<TEntity>(endpoints, nameof(MapCrud)));
 
+    /// <summary>
+    /// Asıl içeriği bayt akışı olan kaynak. Kayıt <c>POST</c> ile (adı ve kendi alanlarıyla) oluşturulur, içeriği
+    /// <c>PUT /{id}/content</c> ile yüklenir ve <c>GET /{id}/content</c> ile indirilir; kaydın geri kalanı sıradan
+    /// bir <c>MapCrud</c> kaynağıdır. Boyutu, türü, özeti ve durumu Haldus yazar.
+    /// </summary>
+    /// <param name="maxBytes">Kabul edilen en büyük içerik; varsayılan 10 MB.</param>
+    /// <param name="contentTypes">Kabul edilen türler (<c>"image/png"</c>, <c>"image/*"</c>); verilmezse her tür kabul edilir.</param>
+    public static ResourceBuilder<TEntity> MapFile<TEntity>(
+        this IEndpointRouteBuilder endpoints,
+        long maxBytes = 10 * 1024 * 1024,
+        params string[] contentTypes)
+        where TEntity : class =>
+        new(HaldusEndpointRegistry.Map<TEntity>(endpoints, nameof(MapFile)));
+
     /// <summary>İstemcinin hiç yazmadığı kaynak: yalnızca liste ve tekil okuma.</summary>
     public static ResourceBuilder<TEntity> MapReadOnly<TEntity>(this IEndpointRouteBuilder endpoints)
         where TEntity : class =>

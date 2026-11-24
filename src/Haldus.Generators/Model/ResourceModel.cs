@@ -115,6 +115,9 @@ internal sealed record ResourceModel(
     public TokenModel? Token { get; init; }
 
     /// <summary>Kaydın ters çevrilebildiği durumlar; durum makinesi yoksa <c>null</c> (her zaman).</summary>
+    /// <summary>Kaynak bir dosyaysa (<c>MapFile</c>) içerik kuralları; değilse <c>null</c>.</summary>
+    public FileModel? File { get; init; }
+
     /// <summary>Onay kuralları (<c>.Approvable()</c>); yoksa <c>null</c>.</summary>
     public ApprovalModel? Approval { get; init; }
 
@@ -182,6 +185,15 @@ internal sealed record ResourceModel(
     public bool HasErrors => Diagnostics.Length > 0;
 
     public ResolvedReference? Parent => References.FirstOrDefault(reference => reference.Kind == ReferenceKind.Parent);
+
+    /// <summary>Kaydın takılabildiği ebeveynler (<c>.AttachedTo&lt;T&gt;()</c>); boşsa kaynak takılabilir değildir.</summary>
+    public IEnumerable<ResolvedReference> Attachments => References.Where(reference => reference.Kind == ReferenceKind.Attachment);
+
+    /// <summary>Bu kaynağın (hedef olarak) bildirdiği takılabilirler: ekler ve yorumlar.</summary>
+    public EquatableArray<ReverseDeclaration> ReverseAttachments { get; init; } = EquatableArray<ReverseDeclaration>.Empty;
+
+    /// <summary>Bu kaynağın bildirdiği etiket kaynakları (<c>Taggable&lt;T&gt;()</c>).</summary>
+    public EquatableArray<ReverseDeclaration> TagDeclarations { get; init; } = EquatableArray<ReverseDeclaration>.Empty;
 
     /// <summary>Adrese girmeyen ebeveyn; varsa kaydın görünürlüğünü ve kapsamını o belirler.</summary>
     public ResolvedReference? ShallowParent => References.FirstOrDefault(reference => reference.IsShallowParent);
@@ -420,7 +432,19 @@ internal enum ReferenceKind
 
     /// <summary>Aynı kaynağa referans; ağaç oluşturur: <c>.Hierarchical()</c>.</summary>
     Self,
+
+    /// <summary>
+    /// Kaydın takılabildiği birkaç ebeveynden biri: <c>.AttachedTo&lt;T&gt;()</c>. Her hedef için isteğe bağlı bir
+    /// yabancı anahtar üretilir ve tam olarak biri doludur; kaynak her hedefin adresi altında ayrı ayrı sunulur.
+    /// </summary>
+    Attachment,
 }
+
+/// <summary>
+/// Hedef tarafında yazılmış bir takılabilir bildirimi (<c>Attachable&lt;T&gt;()</c>, <c>Commentable&lt;T&gt;()</c>,
+/// <c>Taggable&lt;T&gt;()</c>); adı geçen kaynak henüz çözülmemiştir.
+/// </summary>
+internal sealed record ReverseDeclaration(string Kind, string ChildName, string? ChildType, LocationInfo Location);
 
 internal enum OnDeleteBehavior
 {
@@ -458,6 +482,9 @@ internal sealed record ReferenceDeclaration(
 
     /// <summary><c>.Under&lt;T&gt;(shallow: true)</c>: ebeveyn zorunludur ama kaynak kendi adresinde kalır.</summary>
     public bool Shallow { get; init; }
+
+    /// <summary><c>.AttachedTo&lt;T&gt;()</c>: hedef, kaydın takılabildiği birkaç ebeveynden biridir.</summary>
+    public bool Attached { get; init; }
 }
 
 /// <summary><c>.SecretOnce(...)</c> ve <c>.Rotatable(...)</c> ile bildirilen sır.</summary>
@@ -626,6 +653,11 @@ internal sealed record NumberingModel(string Pattern, bool Gapless, string? Assi
 /// <param name="LifetimeTicks">Sunucunun verdiği ömür; <c>null</c> ise son kullanma zamanını istemci verir.</param>
 /// <param name="Sliding">Her yazmada süre yeniden başlar mı.</param>
 internal sealed record ExpiryModel(long? LifetimeTicks, bool Sliding);
+
+/// <summary><c>MapFile</c> ile bildirilen dosya kaynağının içerik kuralları.</summary>
+/// <param name="MaxBytes">Kabul edilen en büyük içerik.</param>
+/// <param name="ContentTypes">Kabul edilen türler; boşsa her tür kabul edilir.</param>
+internal sealed record FileModel(long MaxBytes, EquatableArray<string> ContentTypes);
 
 /// <param name="Levels">Kaydın onaylanması için gereken, birbirinden farklı kişilerin vereceği onay sayısı.</param>
 /// <param name="RequiredFor">Kayıt onaylanmadan çalışmayan geçişlerin ve aksiyonların adları.</param>

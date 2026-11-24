@@ -297,6 +297,81 @@ internal static class LifecycleReader
 
     private const string DateOnly = "global::System.DateOnly";
 
+    private const string FileStatus = "global::Haldus.FileStatus";
+
+    /// <summary>Bir dosyanın Haldus'a ait alanları (<c>IHaldusFile</c>): içerik yüklenirken yazılırlar.</summary>
+    public static IEnumerable<TraitMember> FileMembers()
+    {
+        yield return new TraitMember("ContentType", "string?", InResponse: true, new SearchField("ContentType", SearchKind.String, "string", IsNullable: true));
+        yield return new TraitMember("Size", "long", InResponse: true, new SearchField("Size", SearchKind.Range, "long", IsNullable: false));
+        yield return new TraitMember("Checksum", "string?", InResponse: true, Search: null);
+        yield return new TraitMember(
+            "Status",
+            FileStatus,
+            InResponse: true,
+            new SearchField("Status", SearchKind.Equality, FileStatus, IsNullable: false),
+            ResponseAttribute: $"global::System.Text.Json.Serialization.JsonConverter(typeof(global::System.Text.Json.Serialization.JsonStringEnumConverter<{FileStatus}>))");
+        yield return new TraitMember("UploadedAt", DateTimeOffset + "?", InResponse: true, new SearchField("UploadedAt", SearchKind.Range, DateTimeOffset, IsNullable: true));
+
+        // Deponun anahtarı dışarıya gösterilmez.
+        yield return new TraitMember("StorageKey", "string?", InResponse: false, Search: null);
+    }
+
+    /// <summary>Dosyanın adı: istemcinin yazdığı sıradan bir alandır.</summary>
+    public static PropertyModel FileName() => new(
+        "FileName",
+        "string",
+        NullableType: "string?",
+        IsWritable: true,
+        IsNonNullableReference: true,
+        IsNonNullableValue: false,
+        SearchKind.String,
+        "string",
+        new EquatableArray<AttributeModel>(
+        [
+            new AttributeModel("global::System.ComponentModel.DataAnnotations.RequiredAttribute", IsRequired: true),
+            new AttributeModel("global::System.ComponentModel.DataAnnotations.MaxLengthAttribute(255)", IsRequired: false),
+        ]),
+        IsGenerated: true);
+
+    /// <summary><c>MapFile</c> çağrısının argümanları: en büyük boyut ve kabul edilen türler; ikisi de sabit olmalıdır.</summary>
+    public static FileModel? ReadFile(
+        SemanticModel semanticModel,
+        InvocationExpressionSyntax mapCall,
+        Action<SyntaxNode, string> invalid,
+        CancellationToken cancellationToken)
+    {
+        var maxBytes = 10L * 1024 * 1024;
+        var contentTypes = new List<string>();
+
+        foreach (var argument in mapCall.ArgumentList.Arguments)
+        {
+            var constant = semanticModel.GetConstantValue(argument.Expression, cancellationToken);
+
+            if (constant is { HasValue: true, Value: int or long } && Convert.ToInt64(constant.Value, System.Globalization.CultureInfo.InvariantCulture) is var size)
+            {
+                if (size is < 1 or > 1024L * 1024 * 1024)
+                {
+                    invalid(argument, "The largest content of a file must be between 1 byte and 1 GB");
+                    return null;
+                }
+
+                maxBytes = size;
+            }
+            else if (constant is { HasValue: true, Value: string type } && type.Split('/') is { Length: 2 } parts && parts.All(part => part.Length > 0))
+            {
+                contentTypes.Add(type.ToLowerInvariant());
+            }
+            else
+            {
+                invalid(argument, "The arguments of MapFile must be constants: the largest content in bytes, then the accepted content types such as \"image/png\" or \"image/*\"");
+                return null;
+            }
+        }
+
+        return new FileModel(maxBytes, contentTypes.Distinct().ToEquatableArray());
+    }
+
     /// <summary>Dönemli kaydın (<c>.EffectiveDated()</c>) istemcinin yazdığı iki alanı.</summary>
     public static IEnumerable<PropertyModel> EffectivePeriod()
     {

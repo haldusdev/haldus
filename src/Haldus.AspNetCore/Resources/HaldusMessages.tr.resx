@@ -90,6 +90,24 @@
   <data name="EffectivePeriodOverlap.Detail" xml:space="preserve">
     <value>Bu dönemde geçerli başka bir {0} kaydı var.</value>
   </data>
+  <data name="FileTooLarge.Title" xml:space="preserve">
+    <value>Dosya çok büyük</value>
+  </data>
+  <data name="FileTooLarge.Detail" xml:space="preserve">
+    <value>İçerik, bu kaynağın kabul ettiği {0} bayttan büyük.</value>
+  </data>
+  <data name="FileTypeNotAllowed.Title" xml:space="preserve">
+    <value>Dosya türüne izin verilmiyor</value>
+  </data>
+  <data name="FileTypeNotAllowed.Detail" xml:space="preserve">
+    <value>Bu kaynak '{0}' türünde içerik kabul etmiyor.</value>
+  </data>
+  <data name="File.Empty" xml:space="preserve">
+    <value>İstekte saklanacak içerik yok.</value>
+  </data>
+  <data name="FileContentMissing.Detail" xml:space="preserve">
+    <value>'{1}' kimlikli {0} kaydının içeriği henüz yüklenmedi.</value>
+  </data>
   <data name="ChainMember.Detail" xml:space="preserve">
     <value>'{1}' kimlikli {0} kaydı, onu ters çeviren ya da yerine geçen (veya kendisinin ters çevirdiği ya da yerine geçtiği) kayda bağlıdır; silinemez.</value>
   </data>

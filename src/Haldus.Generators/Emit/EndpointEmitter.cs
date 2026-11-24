@@ -119,6 +119,37 @@ internal sealed partial class EndpointEmitter
     public static string Emit(ResourceModel resource, string entityNamespace) =>
         new EndpointEmitter(resource).Build(entityNamespace);
 
+    /// <summary>
+    /// Takılabilir bir kaynağın (<c>.AttachedTo&lt;T&gt;()</c>) giriş noktası: uçları her hedef için ayrı bir sınıfta
+    /// üretilir, bu sınıf hepsini tek bir grubun altında eşler. Grup, Map çağrısının builder'ına bağlanan
+    /// kuralların (yetkilendirme gibi) her hedefteki uçlara uygulanması için vardır.
+    /// </summary>
+    public static string EmitAttached(ResourceModel resource, string entityNamespace)
+    {
+        var maps = string.Concat(resource.Attachments.Select(attachment =>
+            $"        {resource.EntityName}On{attachment.TargetName}Endpoints.Map(group);\n"));
+
+        return $$"""
+            {{ResourceEmitter.Header}}
+            using Microsoft.AspNetCore.Builder;
+            using Microsoft.AspNetCore.Routing;
+
+            {{ResourceEmitter.NamespaceLine(entityNamespace)}}
+            public static partial class {{resource.EntityName}}Endpoints
+            {
+                public static global::Microsoft.AspNetCore.Routing.RouteGroupBuilder Map(
+                    global::Microsoft.AspNetCore.Routing.IEndpointRouteBuilder endpoints)
+                {
+                    var group = endpoints.MapGroup(string.Empty);
+
+            {{maps}}
+                    return group;
+                }
+            }
+
+            """;
+    }
+
     private string Build(string entityNamespace)
     {
         string route;
@@ -158,6 +189,11 @@ internal sealed partial class EndpointEmitter
             tenantFilter += "        group.AddEndpointFilter<global::Haldus.HaldusUserRequiredFilter>();\n\n";
         }
 
+        // Taggable<T>() bir çoktan-çoğa bağdır, ama ayrı bir MapAssociation çağrısı yoktur; bağın uçları kaynağın
+        // kendi uçlarıyla birlikte eşlenir.
+        var tagMaps = string.Concat(_resource.TagDeclarations.Select(tag =>
+            $"        {_entity}{tag.ChildName}Endpoints.Map(endpoints);\n\n"));
+
         return $$"""
             {{ResourceEmitter.Header}}
             using System.Linq;
@@ -174,7 +210,7 @@ internal sealed partial class EndpointEmitter
                 {
                     var group = endpoints.MapGroup("/{{route}}").WithTags("{{(_resource.Archetype == Archetype.Singleton ? _entity : _plural)}}");
 
-            {{tenantFilter}}{{_map}}        return group;
+            {{tenantFilter}}{{_map}}{{tagMaps}}        return group;
                 }
             {{_transitionMaps}}{{_handlers}}
                 private static {{_entity}}Response ToResponse({{_entity}} item) => new() { {{ResponseAssignments}} };
@@ -336,6 +372,11 @@ internal sealed partial class EndpointEmitter
             EmitPublishing();
         }
 
+        if (_resource.File is not null)
+        {
+            EmitFileContent();
+        }
+
         if (_resource.Has(Operations.Update) || _resource.Has(Operations.Patch))
         {
             EmitCycleHelper();
@@ -369,6 +410,14 @@ internal sealed partial class EndpointEmitter
         {
             builder.Append(
                 $"    private static readonly global::System.TimeSpan Lifetime = global::System.TimeSpan.FromTicks({ticks}L);\n\n");
+        }
+
+        if (_resource.File is { } file)
+        {
+            builder.Append($"    private const long MaxFileBytes = {file.MaxBytes}L;\n\n");
+            builder.Append(
+                "    private static readonly string[] FileContentTypes = "
+                + $"[{string.Join(", ", file.ContentTypes.Select(ResourceEmitter.Literal))}];\n\n");
         }
 
         return builder.ToString();
@@ -2196,7 +2245,11 @@ internal sealed partial class EndpointEmitter
                         return {{Problems}}.InUse(messages, "{{_entity}}", {{_keyParameter}});
                     }
 
-            """;
+            """ + (_resource.File is null
+                ? string.Empty
+
+                // Kayıt silindikten sonra içeriği de depodan kaldırılır; tersi olsaydı silinemeyen kayıt içeriksiz kalırdı.
+                : "        await global::Haldus.HaldusFiles.ReleaseAsync(context, entity, cancellationToken);\n");
     }
 
     private string UpdateAssignments() =>
@@ -2725,6 +2778,70 @@ internal sealed partial class EndpointEmitter
                         .ToList();
 
                     return {{Http}}.TypedResults.Ok(new {{page}}(items, window.Next, window.HasMore));
+                }
+
+            """);
+    }
+
+    // ── Dosya içeriği ──────────────────────────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Dosyanın içeriğini yükleyen ve indiren uçlar. Yükleme kaydın bir yazmasıdır (sürüm ister, kapanmış kayıtta
+    /// çalışmaz); boyut ve tür sınırları, özet ve depo çalışma zamanındadır (<c>HaldusFiles</c>). İndirme, kaydı
+    /// kaynağın kendi filtrelerinden geçirerek bulur: kaydı göremeyen içeriğini de göremez.
+    /// </summary>
+    private void EmitFileContent()
+    {
+        const string Stream = "global::Microsoft.AspNetCore.Http.HttpResults.FileStreamHttpResult";
+
+        _map.Append($$"""
+                    group.MapPut("{{_keyRoute}}/content", UploadAsync)
+                        .WithName("Upload{{_entity}}")
+                        .ProducesValidationProblem()
+                        .ProducesProblem(404)
+                        .ProducesProblem(413)
+                        .ProducesProblem(415){{ConcurrencyMetadata()}};
+
+                    group.MapGet("{{_keyRoute}}/content", DownloadAsync)
+                        .WithName("Download{{_entity}}")
+                        .ProducesProblem(404);
+
+
+            """);
+
+        _handlers.Append($$"""
+
+                private static async {{OkOrProblem}} UploadAsync(
+            {{ScopeParameter}}{{KeyParameter}}{{HttpContextParameter}}{{ContextsParameter}}{{MessagesParameter}}{{CancellationParameter}}    {
+            {{ReadIfMatch()}}{{OwnerGuard("update")}}        var context = contexts.For<{{_entity}}>();
+                    var entity = await context.Set<{{_entity}}>(){{Includes}}.FirstOrDefaultAsync(item => {{Match}}, cancellationToken);
+
+                    if (entity is null)
+                    {
+                        return {{NotFound}};
+                    }
+
+            {{ChainGuard()}}{{ExpectVersion()}}        if (await global::Haldus.HaldusFiles.ReceiveAsync(
+                        httpContext, context, entity, MaxFileBytes, FileContentTypes, messages, cancellationToken) is { } rejected)
+                    {
+                        return rejected;
+                    }
+
+            {{Save()}}
+            {{WriteETag()}}        return {{Http}}.TypedResults.Ok(ToResponse(entity));
+                }
+
+                private static async {{Task}}<{{Results}}.Results<{{Stream}}, {{Problem}}>> DownloadAsync(
+            {{ScopeParameter}}{{KeyParameter}}{{HttpContextParameter}}{{ContextsParameter}}{{MessagesParameter}}{{CancellationParameter}}    {
+                    var context = contexts.For<{{_entity}}>();
+                    var entity = await context.Set<{{_entity}}>().AsNoTracking().FirstOrDefaultAsync(item => {{Match}}, cancellationToken);
+
+                    if (entity is null)
+                    {
+                        return {{NotFound}};
+                    }
+
+                    return await global::Haldus.HaldusFiles.SendAsync(httpContext, context, entity, messages, "{{_entity}}", {{_keyParameter}}, cancellationToken);
                 }
 
             """);

@@ -15,7 +15,7 @@ internal static class ResourceLinker
 
     public static List<ResourceModel> Link(IReadOnlyList<ResourceModel> resources, Action<DiagnosticInfo> report)
     {
-        resources = PrepareDetails(resources, report);
+        resources = PrepareDetails(MergeReverseAttachments(resources, report), report);
 
         var byType = resources.ToDictionary(resource => resource.QualifiedName);
         var linked = new List<ResourceModel>();
@@ -28,6 +28,12 @@ internal static class ResourceLinker
             {
                 failed = true;
                 report(new DiagnosticInfo(id, location, arguments.ToEquatableArray()));
+            }
+
+            if (resource.ReferenceDeclarations.Any(declaration => declaration.Attached) && AttachmentProblem(resource) is { } unattachable)
+            {
+                Fail("HALDUS007", resource.Location, $"'{resource.EntityName}' cannot be attached to other resources: {unattachable}");
+                continue;
             }
 
             var properties = resource.Properties.ToList();
@@ -109,6 +115,97 @@ internal static class ResourceLinker
     }
 
     /// <summary>
+    /// Hedef tarafında yazılan takılabilir bildirimlerini (<c>Attachable&lt;T&gt;()</c>, <c>Commentable&lt;T&gt;()</c>)
+    /// adı geçen kaynağın kendi <c>.AttachedTo&lt;T&gt;()</c> bildirimine çevirir; iki yazım aynı şeydir.
+    /// </summary>
+    private static List<ResourceModel> MergeReverseAttachments(IReadOnlyList<ResourceModel> resources, Action<DiagnosticInfo> report)
+    {
+        var byType = resources.GroupBy(resource => resource.QualifiedName).ToDictionary(group => group.Key, group => group.First());
+        var added = new Dictionary<string, List<ReferenceDeclaration>>();
+
+        foreach (var host in resources)
+        {
+            foreach (var declaration in host.ReverseAttachments)
+            {
+                void Fail(string id, params string[] arguments) =>
+                    report(new DiagnosticInfo(id, declaration.Location, arguments.ToEquatableArray()));
+
+                if (Find(declaration.ChildName, declaration.ChildType, resources, byType) is not { } child)
+                {
+                    Fail("HALDUS009", declaration.ChildName, host.EntityName);
+                }
+                else if (declaration.Kind == "Attachable" && child.File is null)
+                {
+                    Fail("HALDUS007", $"Attachable<{child.EntityName}>() needs a file resource; map '{child.EntityName}' with MapFile, or use Commentable for records without content");
+                }
+                else if (child.QualifiedName == host.QualifiedName)
+                {
+                    Fail("HALDUS007", $"'{host.EntityName}' cannot be attached to itself");
+                }
+                else
+                {
+                    if (!added.TryGetValue(child.QualifiedName, out var declarations))
+                    {
+                        added[child.QualifiedName] = declarations = [];
+                    }
+
+                    declarations.Add(new ReferenceDeclaration(
+                        ReferenceKind.Parent,
+                        host.EntityName,
+                        host.QualifiedName,
+                        TargetKeyType: null,
+                        PropertyName: null,
+                        OnDeleteBehavior.Cascade,
+                        Required: false,
+                        declaration.Location)
+                    {
+                        Attached = true,
+                    });
+                }
+            }
+        }
+
+        return
+        [
+            .. resources.Select(resource => added.TryGetValue(resource.QualifiedName, out var declarations)
+                ? resource with
+                {
+                    // Aynı hedef iki yönden de yazıldıysa bir kez sayılır.
+                    ReferenceDeclarations = resource.ReferenceDeclarations
+                        .Concat(declarations.Where(declaration => resource.ReferenceDeclarations.All(existing =>
+                            !existing.Attached || (existing.TargetType ?? existing.TargetName) != (declaration.TargetType ?? declaration.TargetName))))
+                        .GroupBy(declaration => (declaration.Attached, Target: declaration.TargetType ?? declaration.TargetName, declaration.Kind))
+                        .SelectMany(group => group.Key.Attached ? group.Take(1) : group)
+                        .ToEquatableArray(),
+                }
+                : resource),
+        ];
+    }
+
+    /// <summary>
+    /// Takılabilir bir kaynak her hedefin adresi altında ayrı ayrı sunulur; tek bir adrese, tek bir ebeveyne veya
+    /// kendi builder'ına bağlı bildirimlerle birleşmez.
+    /// </summary>
+    private static string? AttachmentProblem(ResourceModel resource) =>
+        resource.Archetype is not (Archetype.Crud or Archetype.AppendOnly)
+            ? "it must be mapped with MapCrud, MapAppendOnly or MapFile"
+        : resource.ReferenceDeclarations.Any(declaration => declaration is { Kind: ReferenceKind.Parent, Attached: false })
+            ? "it is already placed under a parent with Under<T>()"
+        : resource.ReferenceDeclarations.Any(declaration => declaration.Kind == ReferenceKind.Source)
+            ? "it is created from another record with CreatedFrom<T>()"
+        : resource.Has(Traits.Orderable)
+            ? "it is Orderable"
+        : resource.Has(Traits.ChangeFeed)
+            ? "it has a ChangeFeed, which could not tell whose deleted records it is listing"
+        : resource.NaturalKeyRequest is not null
+            ? "it has a NaturalKey"
+        : resource.Workflow is not null
+            ? "it has a state machine, whose transitions are declared for a single address"
+        : resource.OwnedUnderMe
+            ? "it lives under /me; use OwnedByCurrentUser(underMe: false)"
+        : null;
+
+    /// <summary>
     /// <c>MapDetail</c> ile bildirilen kaynakları sahiplerine bağlar. Detay, sahibine zorunlu ve zincirleme
     /// silinen bir ebeveyn referansı kazanır; böylece görünürlüğünü de ondan devralır. Ayrı uçlu bir detay,
     /// bundan sonra sahibinin adresi altında yaşayan sıradan bir kaynaktır.
@@ -145,6 +242,8 @@ internal static class ResourceLinker
                         + (resource.IsSubresource ? "sub-resource details" : "embedded details")
                 : !resource.IsSubresource && resource.IdKind != IdKind.Guid
                     ? $"'{resource.EntityName}' is an embedded detail, so its Id must be a Guid; Haldus assigns it when the row is added"
+                : owner.ReferenceDeclarations.Any(declaration => declaration.Attached)
+                    ? $"'{owner.EntityName}' is attached to several resources and has no single address, so it cannot have details"
                 : resource.IsSubresource && owner.Has(Traits.Approvable)
                     // Ayrı uçlu satır sahibinden bağımsız yazılır; onaylanmış içerik, onay düşmeden değişirdi.
                     ? $"'{owner.EntityName}' is Approvable, so its details cannot have endpoints of their own: a row written there would change approved content; "
@@ -213,6 +312,13 @@ internal static class ResourceLinker
             if (Find(declaration.OwnerName, declaration.OwnerType, resources, byType) is not { } owner)
             {
                 Fail("HALDUS007", $"{(declaration.IsAction ? "MapAction" : "MapTransition")} is declared on '{declaration.OwnerName}', which is not a mapped resource");
+                continue;
+            }
+
+            if (owner.Attachments.Any())
+            {
+                // Takılabilir kaynak her hedefin altında ayrı ayrı eşlenir; builder'ı tek bir adres taşımaz.
+                Fail("HALDUS007", $"{(declaration.IsAction ? "MapAction" : "MapTransition")} cannot be declared on '{owner.EntityName}', which is attached to several resources and has no single address");
                 continue;
             }
 
@@ -393,6 +499,7 @@ internal static class ResourceLinker
         "reverse" when resource.Has(Traits.Reversible) => nameof(Traits.Reversible),
         "amend" when resource.Has(Traits.Document) => nameof(Traits.Document),
         "revisions" when resource.Has(Traits.Revisioned) => nameof(Traits.Revisioned),
+        "content" when resource.File is not null => "MapFile",
         "publish" or "unpublish" when resource.Has(Traits.Publishable) => nameof(Traits.Publishable),
         "approve" or "reject" or "approvals" when resource.Has(Traits.Approvable) => nameof(Traits.Approvable),
         "rotate" when resource.Secret is { Rotatable: true } => "Rotatable",
@@ -440,6 +547,10 @@ internal static class ResourceLinker
             else if (left.QualifiedName == right.QualifiedName)
             {
                 Fail("HALDUS007", $"'{left.EntityName}' cannot be associated with itself");
+            }
+            else if (new[] { left, right }.FirstOrDefault(end => end.Attachments.Any()) is { } attached)
+            {
+                Fail("HALDUS007", $"'{attached.EntityName}' is attached to several resources and has no single address, so it cannot be an end of an association");
             }
             else if (new[] { left, right }.FirstOrDefault(end => end.OwnedUnderMe) is { } personal)
             {
@@ -751,17 +862,19 @@ internal static class ResourceLinker
             return true;
         }
 
-        var parent = resource.ReferenceDeclarations.FirstOrDefault(declaration => declaration.Kind == ReferenceKind.Parent);
-
-        if (parent is null || depth >= 8)
+        if (depth >= 8)
         {
             return false;
         }
 
-        // Başka bir modüldeki ebeveyn hakkında bilinen tek şey, kendisinin kiracıya bağlı olup olmadığıdır.
-        return FindTarget(parent, resources, byType) is { } target
-            ? IsTenantScoped(target, resources, byType, depth + 1)
-            : parent is { IsExternal: true, TargetTenantScoped: true };
+        // Takılabilir kaynağın birkaç ebeveyni olabilir; biri kiracıya aitse kayıtlarının bir kısmı da öyledir.
+        return resource.ReferenceDeclarations
+            .Where(declaration => declaration.Kind == ReferenceKind.Parent)
+            .Any(parent => FindTarget(parent, resources, byType) is { } target
+                ? IsTenantScoped(target, resources, byType, depth + 1)
+
+                // Başka bir modüldeki ebeveyn hakkında bilinen tek şey, kendisinin kiracıya bağlı olup olmadığıdır.
+                : parent is { IsExternal: true, TargetTenantScoped: true });
     }
 
     private static bool HasSingleColumnKey(ResourceModel resource) =>
@@ -796,6 +909,18 @@ internal static class ResourceLinker
 
         // Başka bir modülde derlenmiş entity bu derlemede eşlenmez; anahtarı derlenmiş tipinden okunur.
         var external = target is null && declaration.IsExternal;
+
+        if (declaration.Kind is ReferenceKind.Parent or ReferenceKind.Source
+            && target is not null
+            && target.ReferenceDeclarations.Any(candidate => candidate.Attached))
+        {
+            // Takılabilir kaynağın tek bir adresi yoktur; altına yerleşen veya ondan üretilen kaynağın adresi kurulamaz.
+            fail(
+                "HALDUS007",
+                declaration.Location,
+                [$"'{resource.EntityName}' cannot be placed under or created from '{target.EntityName}', which is attached to several resources and has no single address"]);
+            return null;
+        }
 
         if (declaration.Kind == ReferenceKind.Source && target is null)
         {
@@ -841,7 +966,8 @@ internal static class ResourceLinker
         var declared = properties.FirstOrDefault(property => property.Name == propertyName);
         var required = declaration.Kind switch
         {
-            ReferenceKind.Parent => true,
+            // Takılabilir kaynakta her hedefin alanı isteğe bağlıdır; bir kayıtta tam olarak biri doludur.
+            ReferenceKind.Parent => !declaration.Attached,
             ReferenceKind.Self or ReferenceKind.Source => false,
             _ => declared?.IsNonNullable ?? declaration.Required,
         };
@@ -891,7 +1017,7 @@ internal static class ResourceLinker
         }
 
         return new ResolvedReference(
-            shallow ? ReferenceKind.Reference : declaration.Kind,
+            shallow ? ReferenceKind.Reference : declaration.Attached ? ReferenceKind.Attachment : declaration.Kind,
             propertyName,
             propertyType,
             required,

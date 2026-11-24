@@ -58,6 +58,46 @@ public static class HaldusProblems
         return FieldProblem(messages, field, messages.Format(HaldusMessageKeys.DetailNotFound, detailName, id));
     }
 
+    /// <summary>Yüklenen içerik, kaynağın kabul ettiği boyuttan büyük.</summary>
+    public static ProblemHttpResult FileTooLarge(IHaldusMessages messages, long maxBytes)
+    {
+        ArgumentNullException.ThrowIfNull(messages);
+
+        return TypedResults.Problem(
+            title: messages.Format(HaldusMessageKeys.FileTooLargeTitle),
+            detail: messages.Format(HaldusMessageKeys.FileTooLargeDetail, maxBytes),
+            statusCode: StatusCodes.Status413PayloadTooLarge);
+    }
+
+    /// <summary>Yüklenen içeriğin türü, kaynağın kabul ettiği türlerden değil.</summary>
+    public static ProblemHttpResult FileTypeNotAllowed(IHaldusMessages messages, string contentType)
+    {
+        ArgumentNullException.ThrowIfNull(messages);
+
+        return TypedResults.Problem(
+            title: messages.Format(HaldusMessageKeys.FileTypeNotAllowedTitle),
+            detail: messages.Format(HaldusMessageKeys.FileTypeNotAllowedDetail, contentType),
+            statusCode: StatusCodes.Status415UnsupportedMediaType);
+    }
+
+    /// <summary>Yükleme isteğinin gövdesi boş.</summary>
+    public static ProblemHttpResult FileEmpty(IHaldusMessages messages)
+    {
+        ArgumentNullException.ThrowIfNull(messages);
+        return FieldProblem(messages, "content", messages.Format(HaldusMessageKeys.FileEmpty));
+    }
+
+    /// <summary>Dosya kaydı var ama içeriği henüz yüklenmemiş.</summary>
+    public static ProblemHttpResult FileContentMissing(IHaldusMessages messages, string resourceName, object id)
+    {
+        ArgumentNullException.ThrowIfNull(messages);
+
+        return TypedResults.Problem(
+            title: messages.Format(HaldusMessageKeys.NotFoundTitle),
+            detail: messages.Format(HaldusMessageKeys.FileContentMissingDetail, resourceName, id),
+            statusCode: StatusCodes.Status404NotFound);
+    }
+
     /// <summary>Dönemin bitişi başlangıcından sonra değil.</summary>
     public static ProblemHttpResult EffectivePeriodInvalid(IHaldusMessages messages)
     {
