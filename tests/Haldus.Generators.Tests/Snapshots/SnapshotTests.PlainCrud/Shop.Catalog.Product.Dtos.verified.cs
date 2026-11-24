@@ -45,7 +45,7 @@ public sealed partial record PatchProductRequest : global::Haldus.IHaldusPatch
     private readonly string? _description;
     private readonly bool _descriptionSet;
 
-    [global::Haldus.NotNullWhenSetAttribute]
+    [global::Haldus.NotNullWhenSetAttribute(AllowEmptyStrings = true)]
     [global::System.ComponentModel.DataAnnotations.MaxLengthAttribute(200)]
     public string? Name
     {
@@ -57,7 +57,7 @@ public sealed partial record PatchProductRequest : global::Haldus.IHaldusPatch
         }
     }
 
-    [global::Haldus.NotNullWhenSetAttribute]
+    [global::Haldus.NotNullWhenSetAttribute(AllowEmptyStrings = true)]
     [global::System.ComponentModel.DataAnnotations.RangeAttribute(0D, 1000000D)]
     public decimal? Price
     {

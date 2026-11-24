@@ -54,19 +54,27 @@ public static partial class CustomerEndpoints
 
         group.MapPost("/{id:guid}/restore", RestoreAsync)
             .WithName("RestoreCustomer")
-            .ProducesProblem(404);
+            .ProducesProblem(404)
+            .ProducesProblem(412)
+            .ProducesProblem(428);
 
         group.MapPost("/{id:guid}/purge", PurgeAsync)
             .WithName("PurgeCustomer")
-            .ProducesProblem(404);
+            .ProducesProblem(404)
+            .ProducesProblem(412)
+            .ProducesProblem(428);
 
         group.MapPost("/{id:guid}/archive", ArchiveAsync)
             .WithName("ArchiveCustomer")
-            .ProducesProblem(404);
+            .ProducesProblem(404)
+            .ProducesProblem(412)
+            .ProducesProblem(428);
 
         group.MapPost("/{id:guid}/unarchive", UnarchiveAsync)
             .WithName("UnarchiveCustomer")
-            .ProducesProblem(404);
+            .ProducesProblem(404)
+            .ProducesProblem(412)
+            .ProducesProblem(428);
 
         return group;
     }
@@ -290,15 +298,28 @@ public static partial class CustomerEndpoints
             return global::Haldus.HaldusProblems.PreconditionFailed(messages);
         }
 
+        global::Haldus.HaldusETag.Write(httpContext, entity.Version);
         return global::Microsoft.AspNetCore.Http.TypedResults.NoContent();
     }
 
     private static async global::System.Threading.Tasks.Task<global::Microsoft.AspNetCore.Http.HttpResults.Results<global::Microsoft.AspNetCore.Http.HttpResults.Ok<CustomerResponse>, global::Microsoft.AspNetCore.Http.HttpResults.ProblemHttpResult>> RestoreAsync(
         global::System.Guid id,
+        global::Microsoft.AspNetCore.Http.HttpContext httpContext,
         global::Haldus.IHaldusDbContextProvider contexts,
         global::Haldus.IHaldusMessages messages,
         global::System.Threading.CancellationToken cancellationToken)
     {
+        var ifMatch = global::Haldus.HaldusETag.ReadIfMatch(httpContext);
+        if (ifMatch.Kind == global::Haldus.IfMatchKind.Missing)
+        {
+            return global::Haldus.HaldusProblems.PreconditionRequired(messages);
+        }
+
+        if (ifMatch.Kind == global::Haldus.IfMatchKind.Invalid)
+        {
+            return global::Haldus.HaldusProblems.PreconditionFailed(messages);
+        }
+
         var context = contexts.For<Customer>();
         var entity = await context.Set<Customer>()
             .IgnoreQueryFilters(new[] { global::Haldus.HaldusFilters.SoftDelete })
@@ -309,25 +330,58 @@ public static partial class CustomerEndpoints
             return global::Haldus.HaldusProblems.NotFound(messages, "Customer", id);
         }
 
-        entity.DeletedAt = null;
-        await context.SaveChangesAsync(cancellationToken);
+        if (ifMatch.Version is { } expectedVersion)
+        {
+            context.Entry(entity).Property(item => item.Version).OriginalValue = expectedVersion;
+        }
 
+        entity.DeletedAt = null;
+        try
+        {
+            await context.SaveChangesAsync(cancellationToken);
+        }
+        catch (global::Microsoft.EntityFrameworkCore.DbUpdateConcurrencyException)
+        {
+            return global::Haldus.HaldusProblems.PreconditionFailed(messages);
+        }
+
+        global::Haldus.HaldusETag.Write(httpContext, entity.Version);
         return global::Microsoft.AspNetCore.Http.TypedResults.Ok(ToResponse(entity));
     }
 
     private static async global::System.Threading.Tasks.Task<global::Microsoft.AspNetCore.Http.HttpResults.Results<global::Microsoft.AspNetCore.Http.HttpResults.NoContent, global::Microsoft.AspNetCore.Http.HttpResults.ProblemHttpResult>> PurgeAsync(
         global::System.Guid id,
+        global::Microsoft.AspNetCore.Http.HttpContext httpContext,
         global::Haldus.IHaldusDbContextProvider contexts,
         global::Haldus.IHaldusMessages messages,
         global::System.Threading.CancellationToken cancellationToken)
     {
-        var deleted = await contexts.For<Customer>().Set<Customer>()
+        var ifMatch = global::Haldus.HaldusETag.ReadIfMatch(httpContext);
+        if (ifMatch.Kind == global::Haldus.IfMatchKind.Missing)
+        {
+            return global::Haldus.HaldusProblems.PreconditionRequired(messages);
+        }
+
+        if (ifMatch.Kind == global::Haldus.IfMatchKind.Invalid)
+        {
+            return global::Haldus.HaldusProblems.PreconditionFailed(messages);
+        }
+
+        var query = contexts.For<Customer>().Set<Customer>()
             .IgnoreQueryFilters(new[] { global::Haldus.HaldusFilters.SoftDelete })
-            .Where(item => item.Id == id)
-            .ExecuteDeleteAsync(cancellationToken);
+            .Where(item => item.Id == id && item.DeletedAt != null);
+
+        var deleted = ifMatch.Version is { } expectedVersion
+            ? await query.Where(item => item.Version == expectedVersion).ExecuteDeleteAsync(cancellationToken)
+            : await query.ExecuteDeleteAsync(cancellationToken);
 
         if (deleted == 0)
         {
+            if (await query.AnyAsync(cancellationToken))
+            {
+                return global::Haldus.HaldusProblems.PreconditionFailed(messages);
+            }
+
             return global::Haldus.HaldusProblems.NotFound(messages, "Customer", id);
         }
 
@@ -337,10 +391,22 @@ public static partial class CustomerEndpoints
     private static async global::System.Threading.Tasks.Task<global::Microsoft.AspNetCore.Http.HttpResults.Results<global::Microsoft.AspNetCore.Http.HttpResults.Ok<CustomerResponse>, global::Microsoft.AspNetCore.Http.HttpResults.ProblemHttpResult>> ArchiveAsync(
         global::System.Guid id,
         global::System.TimeProvider timeProvider,
+        global::Microsoft.AspNetCore.Http.HttpContext httpContext,
         global::Haldus.IHaldusDbContextProvider contexts,
         global::Haldus.IHaldusMessages messages,
         global::System.Threading.CancellationToken cancellationToken)
     {
+        var ifMatch = global::Haldus.HaldusETag.ReadIfMatch(httpContext);
+        if (ifMatch.Kind == global::Haldus.IfMatchKind.Missing)
+        {
+            return global::Haldus.HaldusProblems.PreconditionRequired(messages);
+        }
+
+        if (ifMatch.Kind == global::Haldus.IfMatchKind.Invalid)
+        {
+            return global::Haldus.HaldusProblems.PreconditionFailed(messages);
+        }
+
         var context = contexts.For<Customer>();
         var entity = await context.Set<Customer>().FirstOrDefaultAsync(item => item.Id == id, cancellationToken);
 
@@ -349,19 +415,44 @@ public static partial class CustomerEndpoints
             return global::Haldus.HaldusProblems.NotFound(messages, "Customer", id);
         }
 
-        entity.ArchivedAt ??= global::Haldus.HaldusTime.UtcNow(timeProvider);
-        await context.SaveChangesAsync(cancellationToken);
+        if (ifMatch.Version is { } expectedVersion)
+        {
+            context.Entry(entity).Property(item => item.Version).OriginalValue = expectedVersion;
+        }
 
+        entity.ArchivedAt ??= global::Haldus.HaldusTime.UtcNow(timeProvider);
+        try
+        {
+            await context.SaveChangesAsync(cancellationToken);
+        }
+        catch (global::Microsoft.EntityFrameworkCore.DbUpdateConcurrencyException)
+        {
+            return global::Haldus.HaldusProblems.PreconditionFailed(messages);
+        }
+
+        global::Haldus.HaldusETag.Write(httpContext, entity.Version);
         return global::Microsoft.AspNetCore.Http.TypedResults.Ok(ToResponse(entity));
     }
 
     private static async global::System.Threading.Tasks.Task<global::Microsoft.AspNetCore.Http.HttpResults.Results<global::Microsoft.AspNetCore.Http.HttpResults.Ok<CustomerResponse>, global::Microsoft.AspNetCore.Http.HttpResults.ProblemHttpResult>> UnarchiveAsync(
         global::System.Guid id,
         global::System.TimeProvider timeProvider,
+        global::Microsoft.AspNetCore.Http.HttpContext httpContext,
         global::Haldus.IHaldusDbContextProvider contexts,
         global::Haldus.IHaldusMessages messages,
         global::System.Threading.CancellationToken cancellationToken)
     {
+        var ifMatch = global::Haldus.HaldusETag.ReadIfMatch(httpContext);
+        if (ifMatch.Kind == global::Haldus.IfMatchKind.Missing)
+        {
+            return global::Haldus.HaldusProblems.PreconditionRequired(messages);
+        }
+
+        if (ifMatch.Kind == global::Haldus.IfMatchKind.Invalid)
+        {
+            return global::Haldus.HaldusProblems.PreconditionFailed(messages);
+        }
+
         var context = contexts.For<Customer>();
         var entity = await context.Set<Customer>().FirstOrDefaultAsync(item => item.Id == id, cancellationToken);
 
@@ -370,9 +461,22 @@ public static partial class CustomerEndpoints
             return global::Haldus.HaldusProblems.NotFound(messages, "Customer", id);
         }
 
-        entity.ArchivedAt = null;
-        await context.SaveChangesAsync(cancellationToken);
+        if (ifMatch.Version is { } expectedVersion)
+        {
+            context.Entry(entity).Property(item => item.Version).OriginalValue = expectedVersion;
+        }
 
+        entity.ArchivedAt = null;
+        try
+        {
+            await context.SaveChangesAsync(cancellationToken);
+        }
+        catch (global::Microsoft.EntityFrameworkCore.DbUpdateConcurrencyException)
+        {
+            return global::Haldus.HaldusProblems.PreconditionFailed(messages);
+        }
+
+        global::Haldus.HaldusETag.Write(httpContext, entity.Version);
         return global::Microsoft.AspNetCore.Http.TypedResults.Ok(ToResponse(entity));
     }
 

@@ -142,6 +142,71 @@ public sealed class TraitTests
     }
 
     [Fact]
+    public void ConcurrencyChecked_GuardsRestorePurgeAndArchiveToo()
+    {
+        var run = RunWithChain(".ConcurrencyChecked().SoftDeletable().Archivable()").AssertCompiles();
+
+        var endpoints = run.Sources["Shop.Product.Endpoints.g.cs"];
+
+        // PUT, PATCH, DELETE, restore, purge, archive, unarchive
+        Assert.Equal(7, CountOccurrences(endpoints, "global::Haldus.HaldusETag.ReadIfMatch(httpContext)"));
+        Assert.Contains("query.Where(item => item.Version == expectedVersion).ExecuteDeleteAsync", endpoints);
+    }
+
+    [Fact]
+    public void Purge_OnlyTargetsSoftDeletedRecords()
+    {
+        var run = RunWithChain(".SoftDeletable()").AssertCompiles();
+
+        Assert.Contains(
+            ".Where(item => item.Id == id && item.DeletedAt != null);",
+            run.Sources["Shop.Product.Endpoints.g.cs"]);
+    }
+
+    [Fact]
+    public void PatchRequest_KeepsTheSemanticsOfTheOriginalRequiredRule()
+    {
+        var run = RunWithChain(
+            string.Empty,
+            """
+            namespace Shop
+            {
+                public partial class Product
+                {
+                    [Required]
+                    public string Strict { get; set; } = "";
+
+                    [Required(AllowEmptyStrings = true, ErrorMessage = "Give a code")]
+                    public string Code { get; set; } = "";
+
+                    public string Implicit { get; set; } = "";
+
+                    [Required]
+                    public string? NullableButRequired { get; set; }
+
+                    public int Count { get; set; }
+
+                    public string? Optional { get; set; }
+                }
+            }
+            """).AssertCompiles();
+
+        var dtos = run.Sources["Shop.Product.Dtos.g.cs"];
+        var patch = dtos[dtos.IndexOf("PatchProductRequest", StringComparison.Ordinal)..];
+
+        // Kullanıcının Required'ı boş metni reddeder; PATCH'teki karşılığı da reddetmelidir.
+        Assert.Contains("[global::Haldus.NotNullWhenSetAttribute]\n    public string? Strict", patch);
+        Assert.Contains(
+            "[global::Haldus.NotNullWhenSetAttribute(AllowEmptyStrings = true, ErrorMessage = \"Give a code\")]\n    public string? Code",
+            patch);
+        Assert.Contains("[global::Haldus.NotNullWhenSetAttribute(AllowEmptyStrings = true)]\n    public string? Implicit", patch);
+        Assert.Contains("[global::Haldus.NotNullWhenSetAttribute]\n    public string? NullableButRequired", patch);
+        Assert.Contains("[global::Haldus.NotNullWhenSetAttribute(AllowEmptyStrings = true)]\n    public int? Count", patch);
+        Assert.Contains("    }\n\n    public string? Optional", patch);
+        Assert.DoesNotContain("RequiredAttribute", patch);
+    }
+
+    [Fact]
     public void SoftDeletable_AddsRestoreAndPurgeAndFilter()
     {
         var run = RunWithChain(".SoftDeletable()").AssertCompiles();

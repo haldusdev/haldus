@@ -12,11 +12,16 @@ public interface IHaldusPatch
 }
 
 /// <summary>
-/// PATCH isteğinde gönderildiyse null olamayan alanı işaretler. <see cref="RequiredAttribute"/> yerine
-/// kullanılır, çünkü o OpenAPI şemasında alanı zorunlu gösterirdi; oysa PATCH'te her alan isteğe bağlıdır.
+/// PATCH isteğinde, gönderildiyse dolu olması gereken alanı işaretler. Kuralı
+/// <see cref="RequiredAttribute"/> ile aynıdır; onun yerine kullanılır, çünkü o OpenAPI şemasında alanı
+/// zorunlu gösterirdi, oysa PATCH'te her alan isteğe bağlıdır.
 /// </summary>
 [AttributeUsage(AttributeTargets.Property)]
 public sealed class NotNullWhenSetAttribute : ValidationAttribute
 {
-    public override bool IsValid(object? value) => value is not null;
+    /// <summary>Boş veya yalnızca boşluktan oluşan metin kabul edilsin mi. Varsayılanı, RequiredAttribute gibi, hayırdır.</summary>
+    public bool AllowEmptyStrings { get; set; }
+
+    public override bool IsValid(object? value) =>
+        value is not null && (AllowEmptyStrings || value is not string text || !string.IsNullOrWhiteSpace(text));
 }

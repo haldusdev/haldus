@@ -50,7 +50,7 @@ public sealed partial record PatchCustomerRequest : global::Haldus.IHaldusPatch
     private readonly int? _loyaltyPoints;
     private readonly bool _loyaltyPointsSet;
 
-    [global::Haldus.NotNullWhenSetAttribute]
+    [global::Haldus.NotNullWhenSetAttribute(AllowEmptyStrings = true)]
     [global::System.ComponentModel.DataAnnotations.MaxLengthAttribute(200)]
     public string? Name
     {
@@ -73,7 +73,7 @@ public sealed partial record PatchCustomerRequest : global::Haldus.IHaldusPatch
         }
     }
 
-    [global::Haldus.NotNullWhenSetAttribute]
+    [global::Haldus.NotNullWhenSetAttribute(AllowEmptyStrings = true)]
     public int? LoyaltyPoints
     {
         get => _loyaltyPoints;

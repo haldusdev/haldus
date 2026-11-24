@@ -209,12 +209,96 @@ public sealed class TraitEndpointTests(ShopFixture fixture)
         Assert.Empty(defaultList.Items);
         Assert.NotNull(Assert.Single(fullList.Items).DeletedAt);
 
+        // Silme yanıtı yeni sürümü taşır; istemci silmeyi hemen geri alabilir.
+        var deletedETag = deleted.Headers.ETag?.Tag;
+        Assert.NotNull(deletedETag);
+        Assert.NotEqual(etag, deletedETag);
+
         var restored = await ReadAsync<CustomerResponse>(
-            await SendAsync(HttpMethod.Post, $"/customers/{customer.Id}/restore", tenant));
+            await SendAsync(HttpMethod.Post, $"/customers/{customer.Id}/restore", tenant, ifMatch: deletedETag));
         var visible = await SendAsync(HttpMethod.Get, $"/customers/{customer.Id}", tenant);
 
         Assert.Null(restored.DeletedAt);
         Assert.Equal(HttpStatusCode.OK, visible.StatusCode);
+    }
+
+    [Theory]
+    [InlineData("restore")]
+    [InlineData("purge")]
+    [InlineData("archive")]
+    [InlineData("unarchive")]
+    public async Task ConcurrencyChecked_GuardsEveryStateChangingEndpoint(string action)
+    {
+        var tenant = Guid.NewGuid();
+        var (customer, createdETag) = await CreateCustomerAsync(tenant, "Ada");
+        var staleETag = createdETag;
+
+        if (action is "restore" or "purge")
+        {
+            // Bu iki uç yalnızca silinmiş kayıtta çalışır; silme sürümü ilerlettiği için ilk ETag eskir.
+            await SendAsync(HttpMethod.Delete, $"/customers/{customer.Id}", tenant, ifMatch: createdETag);
+        }
+        else
+        {
+            await SendAsync(
+                HttpMethod.Put, $"/customers/{customer.Id}", tenant,
+                body: new UpdateCustomerRequest { Name = "Changed" }, ifMatch: createdETag);
+        }
+
+        var url = $"/customers/{customer.Id}/{action}";
+        var withoutHeader = await SendAsync(HttpMethod.Post, url, tenant);
+        var withStaleVersion = await SendAsync(HttpMethod.Post, url, tenant, ifMatch: staleETag);
+        var withWildcard = await SendAsync(HttpMethod.Post, url, tenant, ifMatch: "*");
+
+        Assert.Equal((HttpStatusCode)428, withoutHeader.StatusCode);
+        Assert.Equal(HttpStatusCode.PreconditionFailed, withStaleVersion.StatusCode);
+        Assert.True(withWildcard.IsSuccessStatusCode, $"{(int)withWildcard.StatusCode}");
+    }
+
+    [Fact]
+    public async Task SoftDeletable_PurgeOfLiveRecord_ReturnsNotFoundAndKeepsIt()
+    {
+        var tenant = Guid.NewGuid();
+        var (customer, etag) = await CreateCustomerAsync(tenant, "Ada");
+
+        var purge = await SendAsync(HttpMethod.Post, $"/customers/{customer.Id}/purge", tenant, ifMatch: etag);
+        var stillThere = await SendAsync(HttpMethod.Get, $"/customers/{customer.Id}", tenant);
+
+        Assert.Equal(HttpStatusCode.NotFound, purge.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, stillThere.StatusCode);
+    }
+
+    [Fact]
+    public async Task SoftDeletable_PurgeWithCurrentVersion_Succeeds()
+    {
+        var tenant = Guid.NewGuid();
+        var (customer, etag) = await CreateCustomerAsync(tenant, "Ada");
+        var deleted = await SendAsync(HttpMethod.Delete, $"/customers/{customer.Id}", tenant, ifMatch: etag);
+
+        var purge = await SendAsync(
+            HttpMethod.Post, $"/customers/{customer.Id}/purge", tenant, ifMatch: deleted.Headers.ETag?.Tag);
+
+        Assert.Equal(HttpStatusCode.NoContent, purge.StatusCode);
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    public async Task RequiredRule_RejectsBlankTextOnEveryWriteIncludingPatch(string blank)
+    {
+        var brand = await ReadAsync<BrandResponse>(
+            await _client.PostAsJsonAsync("/brands", new CreateBrandRequest { Name = $"Brand {Guid.NewGuid():N}" }, CancellationToken));
+
+        var post = await _client.PostAsJsonAsync("/brands", new { name = blank }, CancellationToken);
+        var put = await _client.PutAsJsonAsync($"/brands/{brand.Id}", new { name = blank }, CancellationToken);
+        var patch = await _client.PatchAsJsonAsync($"/brands/{brand.Id}", new { name = blank }, CancellationToken);
+
+        Assert.Equal(HttpStatusCode.BadRequest, post.StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, put.StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, patch.StatusCode);
+
+        var unchanged = await _client.GetFromJsonAsync<BrandResponse>($"/brands/{brand.Id}", CancellationToken);
+        Assert.Equal(brand.Name, unchanged?.Name);
     }
 
     [Fact]
@@ -239,7 +323,7 @@ public sealed class TraitEndpointTests(ShopFixture fixture)
         var tenant = Guid.NewGuid();
         var (customer, _) = await CreateCustomerAsync(tenant, "Ada");
 
-        var response = await SendAsync(HttpMethod.Post, $"/customers/{customer.Id}/restore", tenant);
+        var response = await SendAsync(HttpMethod.Post, $"/customers/{customer.Id}/restore", tenant, ifMatch: "*");
 
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }
@@ -252,8 +336,8 @@ public sealed class TraitEndpointTests(ShopFixture fixture)
         var (customer, etag) = await CreateCustomerAsync(tenant, "Ada");
         await SendAsync(HttpMethod.Delete, $"/customers/{customer.Id}", tenant, ifMatch: etag);
 
-        var purgeByOther = await SendAsync(HttpMethod.Post, $"/customers/{customer.Id}/purge", otherTenant);
-        var purge = await SendAsync(HttpMethod.Post, $"/customers/{customer.Id}/purge", tenant);
+        var purgeByOther = await SendAsync(HttpMethod.Post, $"/customers/{customer.Id}/purge", otherTenant, ifMatch: "*");
+        var purge = await SendAsync(HttpMethod.Post, $"/customers/{customer.Id}/purge", tenant, ifMatch: "*");
         var fullList = await ReadAsync<PagedResult<CustomerResponse>>(
             await SendAsync(HttpMethod.Get, "/customers?includeDeleted=true", tenant));
 

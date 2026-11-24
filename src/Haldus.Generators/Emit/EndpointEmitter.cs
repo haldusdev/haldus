@@ -314,7 +314,7 @@ internal sealed class EndpointEmitter
 
             {{ExpectVersion()}}        context.Set<{{_entity}}>().Remove(entity);
             {{Save()}}
-                    return {{Http}}.TypedResults.NoContent();
+            {{(_resource.Has(Traits.SoftDeletable) ? WriteETag() : string.Empty)}}        return {{Http}}.TypedResults.NoContent();
                 }
 
             """);
@@ -325,7 +325,7 @@ internal sealed class EndpointEmitter
         _map.Append($$"""
                     group.MapPost("{{_idRoute}}/restore", RestoreAsync)
                         .WithName("Restore{{_entity}}")
-                        .ProducesProblem(404);
+                        .ProducesProblem(404){{ConcurrencyMetadata()}};
 
 
             """);
@@ -334,8 +334,8 @@ internal sealed class EndpointEmitter
 
                 private static async {{OkOrProblem}} RestoreAsync(
                     {{_resource.IdType}} id,
-            {{ContextsParameter}}{{MessagesParameter}}{{CancellationParameter}}    {
-                    var context = contexts.For<{{_entity}}>();
+            {{(_concurrency ? HttpContextParameter : string.Empty)}}{{ContextsParameter}}{{MessagesParameter}}{{CancellationParameter}}    {
+            {{ReadIfMatch()}}        var context = contexts.For<{{_entity}}>();
                     var entity = await context.Set<{{_entity}}>()
                         .IgnoreQueryFilters(new[] { global::Haldus.HaldusFilters.SoftDelete })
                         .FirstOrDefaultAsync(item => item.Id == id && item.DeletedAt != null, cancellationToken);
@@ -345,10 +345,9 @@ internal sealed class EndpointEmitter
                         return {{Problems}}.NotFound(messages, "{{_entity}}", id);
                     }
 
-                    entity.DeletedAt = null;
-                    await context.SaveChangesAsync(cancellationToken);
-
-                    return {{Http}}.TypedResults.Ok(ToResponse(entity));
+            {{ExpectVersion()}}        entity.DeletedAt = null;
+            {{Save()}}
+            {{WriteETag()}}        return {{Http}}.TypedResults.Ok(ToResponse(entity));
                 }
 
             """);
@@ -359,25 +358,48 @@ internal sealed class EndpointEmitter
         _map.Append($$"""
                     group.MapPost("{{_idRoute}}/purge", PurgeAsync)
                         .WithName("Purge{{_entity}}")
-                        .ProducesProblem(404);
+                        .ProducesProblem(404){{ConcurrencyMetadata()}};
 
 
             """);
 
-        // ExecuteDelete değişiklik izleyicisini atlar; silmeyi güncellemeye çeviren interceptor devreye girmez.
+        var delete = _concurrency
+            ? """
+                    var deleted = ifMatch.Version is { } expectedVersion
+                        ? await query.Where(item => item.Version == expectedVersion).ExecuteDeleteAsync(cancellationToken)
+                        : await query.ExecuteDeleteAsync(cancellationToken);
+
+            """
+            : "        var deleted = await query.ExecuteDeleteAsync(cancellationToken);\n";
+
+        // Sıfır satır silindiyse ya kayıt yoktur ya da sürümü değişmiştir; ikisi ayrı yanıtlanır.
+        var staleCheck = _concurrency
+            ? $$"""
+                        if (await query.AnyAsync(cancellationToken))
+                        {
+                            return {{Problems}}.PreconditionFailed(messages);
+                        }
+
+
+            """
+            : string.Empty;
+
+        // Yalnızca önceden silinmiş kayıt kalıcı silinebilir; aksi halde bu uç, silmenin geri alınabilir
+        // olmasını ve sürüm kontrolünü atlamanın yolu olurdu. ExecuteDelete değişiklik izleyicisini
+        // atladığı için silmeyi güncellemeye çeviren interceptor devreye girmez.
         _handlers.Append($$"""
 
                 private static async {{NoContentOrProblem}} PurgeAsync(
                     {{_resource.IdType}} id,
-            {{ContextsParameter}}{{MessagesParameter}}{{CancellationParameter}}    {
-                    var deleted = await contexts.For<{{_entity}}>().Set<{{_entity}}>()
+            {{(_concurrency ? HttpContextParameter : string.Empty)}}{{ContextsParameter}}{{MessagesParameter}}{{CancellationParameter}}    {
+            {{ReadIfMatch()}}        var query = contexts.For<{{_entity}}>().Set<{{_entity}}>()
                         .IgnoreQueryFilters(new[] { global::Haldus.HaldusFilters.SoftDelete })
-                        .Where(item => item.Id == id)
-                        .ExecuteDeleteAsync(cancellationToken);
+                        .Where(item => item.Id == id && item.DeletedAt != null);
 
+            {{delete}}
                     if (deleted == 0)
                     {
-                        return {{Problems}}.NotFound(messages, "{{_entity}}", id);
+            {{staleCheck}}            return {{Problems}}.NotFound(messages, "{{_entity}}", id);
                     }
 
                     return {{Http}}.TypedResults.NoContent();
@@ -391,7 +413,7 @@ internal sealed class EndpointEmitter
         _map.Append($$"""
                     group.MapPost("{{_idRoute}}/{{route}}", {{operation}}Async)
                         .WithName("{{operation}}{{_entity}}")
-                        .ProducesProblem(404);
+                        .ProducesProblem(404){{ConcurrencyMetadata()}};
 
 
             """);
@@ -401,8 +423,8 @@ internal sealed class EndpointEmitter
                 private static async {{OkOrProblem}} {{operation}}Async(
                     {{_resource.IdType}} id,
                     global::System.TimeProvider timeProvider,
-            {{ContextsParameter}}{{MessagesParameter}}{{CancellationParameter}}    {
-                    var context = contexts.For<{{_entity}}>();
+            {{(_concurrency ? HttpContextParameter : string.Empty)}}{{ContextsParameter}}{{MessagesParameter}}{{CancellationParameter}}    {
+            {{ReadIfMatch()}}        var context = contexts.For<{{_entity}}>();
                     var entity = await context.Set<{{_entity}}>().FirstOrDefaultAsync(item => item.Id == id, cancellationToken);
 
                     if (entity is null)
@@ -410,10 +432,9 @@ internal sealed class EndpointEmitter
                         return {{Problems}}.NotFound(messages, "{{_entity}}", id);
                     }
 
-                    {{statement}}
-                    await context.SaveChangesAsync(cancellationToken);
-
-                    return {{Http}}.TypedResults.Ok(ToResponse(entity));
+            {{ExpectVersion()}}        {{statement}}
+            {{Save()}}
+            {{WriteETag()}}        return {{Http}}.TypedResults.Ok(ToResponse(entity));
                 }
 
             """);

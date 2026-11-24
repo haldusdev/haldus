@@ -8,6 +8,7 @@ public static class SalesEndpoints
             .MultiTenant()
             .Auditable(trackUser: true)
             .SoftDeletable()
+            .Archivable()
             .ConcurrencyChecked();
     }
 }
