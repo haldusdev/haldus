@@ -250,6 +250,13 @@ Bunlar kullanıcıyla kararlaştırıldı; yeniden sorma.
   - `.RoleOf<TPlayer>()`: rol, oyuncuya zorunlu ve benzersiz bir referanstır; oyuncu rolün doğal anahtarı olur.
   - `.SubtypeOf<TBase>()`: üç kalıtım eşlemesinden tek tablo (TPH) seçildi ve yalnızca tek düzey desteklenir. Alt
     tipin entity sınıfı üst tipten gerçekten türer; ayırt edici alan `Kind`'dır (kaynağın kebab-case adı).
+- Kalan satırlar (30. aşama). Kullanıcı sormamamı istedi; yazılan, önerdiğim seçeneklerdir ve ayrıca onaylanmadı:
+  - Tekrar serisi araştırmada kapsam dışıydı; satır kapansın diye dar bir biçimiyle yazıldı. `.Recurring()` RRULE
+    değildir: sıklık (günlük / haftalık / aylık / yıllık), aralık ve bitiş (zaman veya sayı). Haftanın günleri, "ayın
+    ikinci salısı" gibi kurallar ve saat dilimi (yaz saati) yoktur; oluşlar ilk oluşun UTC farkıyla hesaplanır.
+  - Kombinatoryal varyant üretimi ve sepet birleştirme için yeni bir bildirim yazılmadı: araştırma bunları "tek seferlik,
+    partial metotla yazılır" saymıştı. İkisi de entity aksiyonuyla ifade edilir; bunun için aksiyon ve geçişlerin
+    eklediği gömülü satırlara kimlik ve sıra verilmesi sağlandı. Misafir sepeti `TokenAccess` ile ifade edilir.
 - Eşzamanlılık trait'inin adı `ConcurrencyChecked` (eski adı `Versioned`). Sürüm yanıt gövdesinde değil
   `ETag` başlığında taşınır; güncelleme ve silme `If-Match` ister (eksikse 428, uyuşmazlıkta 412).
 - Güncelleme için hem `PUT` (tam değiştirme) hem `PATCH` (kısmi) üretilir.
@@ -320,7 +327,7 @@ Bunlar kullanıcıyla kararlaştırıldı; yeniden sorma.
 
 İlk iki plan bitti: ilk sürümün on aşaması (3. aşamaya `.Searchable()`, 8. aşamaya fiziksel temizlik de eklendi) ve
 ikinci planın on bir aşaması. Üçüncü plan sürüyor (aşağıda). Sınamanın sonucu `reports/Haldus taksonomi sınaması.md`
-dosyasındadır: araştırmadaki 59 varlığın 56'sı temiz, 2'si kısmen ifade ediliyor, 1'i için gereken özellik yok (ilk
+dosyasındadır: araştırmadaki 59 varlığın 59'u da temiz ifade ediliyor (ilk
 sınamada 19 / 29 / 11). Aynı veri `tests/Haldus.Generators.Tests/TaxonomyTests.cs` içinde derlenir; yeni bir archetype
 veya trait bir satırı kapatıyorsa ikisini birlikte güncelle. Kalan eksikler raporun "Kalan eksikler" tablosundadır.
 
@@ -730,6 +737,20 @@ içeriyor (ilişki bildirimleri, `Sensitive`, `PublishesEvents`, `Purgeable`, ye
     listede olmayan geçişin token adresi yoktur. Token ebeveyn altındaki ve kullanıcıya ait kaynaklarla
     birleşmez (görünürlükleri, token'ı taşıyanın sahip olmadığı bir kimliğe bağlıdır). Bilinen sınır: token
     kullanılınca kendiliğinden geçersiz olmaz; ömrünü `Expiring` ve durum makinesi belirler. Oran sınırlama yoktur.
+- **Tekrar serisi.** `Traits.Recurring` (`IRecurring`); beş alan `LifecycleReader.RecurrenceFields()` ile, dönemli
+  kayıtlardaki gibi sıradan, yazılabilir alan olarak eklenir. Oluşlar saklanmaz: `HaldusRecurrence.Expand` her okumada
+  kuraldan hesaplar (her oluş ilk oluştan sayılır; günlük ve haftalık seride aralığın başına doğrudan atlanır) ve
+  `HaldusOccurrenceExceptions` tablosundaki istisnalarla birleştirir. İstisna, kuralın verdiği zamanla (UTC) anahtarlanır;
+  kuralın vermediği bir zamana istisna yazılamaz (404). `RecurrenceFrequency` enum'u JSON'a her zaman adıyla yazılır
+  (dönüştürücü tipin üzerindedir). Uçlar kaydı kendi filtrelerinden geçirerek okur; istisna yazan uçlar yalnızca
+  `EditableIn` kuralına bakar (sürüm ve kapanmış kayıt koruması yok: istisna kaydın satırı değildir). Sınırlar: yalnızca
+  `MapCrud`; kural değişince eski istisnalar yok sayılır ama silinmez; kayıt silinince istisnaları kalır; oluş başına
+  alan (ör. farklı başlık) taşınmaz; oluşlara göre süzme, "bu aralıkta olanlar" sorgusu ve çakışma kontrolü yoktur;
+  bir istek en çok 500 oluş döndürür.
+- **Mantığın eklediği satırlar.** Geçiş ve entity aksiyonu gömülü satır ekleyip çıkarabilir: üretilen uç mantıktan önce
+  satırları sıralarına dizer (`SortRows`), sonra yeni satırlara kimlik ve hepsine koleksiyondaki yerlerine göre sıra
+  verir (`RowsAfterLogic` → `NormalizeRows`; zincir sözleşmeleriyle aynı parça). Bundan önce mantığın eklediği iki
+  satır aynı (boş) kimlikle izlenmeye çalışılıp 500 veriyordu (kalan satırlar sınanırken çıktı).
 - **Tip–örnek ve rol.** İkisi de zincirde `Reference` bildirimi olarak okunur (`ReferenceDeclaration.Typed` / `Role`) ve
   `Resolve` yabancı anahtarı yalnızca oluştururken yazılan bir alan yapar (`fixedOnCreate`; kısa adresli ebeveynle
   aynı yol). Hedef aynı projede eşlenmiş olmalıdır.

@@ -7,13 +7,13 @@ sonunda (10. aşama) ve ikinci planın sonunda (21. aşama); aşağıdaki tablo 
 
 ## Sonuç
 
-59 satırın 58'i bugünkü API ile yazılıp derleniyor; 56'sı önerilen eşlemeyi eksiksiz ifade ediyor.
+59 satırın tamamı bugünkü API ile yazılıp derleniyor ve önerilen eşlemeyi eksiksiz ifade ediyor.
 
 | Sonuç | İlk sınama | Bugün | Anlamı |
 |---|---|---|---|
-| Temiz | 19 | 56 | Raporun önerdiği eşleme, yazılmış özelliklerle eksiksiz ifade ediliyor |
-| Kısmi | 29 | 2 | Çekirdek ifade ediliyor; önerilen eşlemedeki bir özellik yok |
-| Yok | 11 | 1 | Gereken archetype veya trait yazılmadı |
+| Temiz | 19 | 59 | Raporun önerdiği eşleme, yazılmış özelliklerle eksiksiz ifade ediliyor |
+| Kısmi | 29 | 0 | Çekirdek ifade ediliyor; önerilen eşlemedeki bir özellik yok |
+| Yok | 11 | 0 | Gereken archetype veya trait yazılmadı |
 
 Araştırmanın başlangıçtaki düz katalog için kendi sayımı 10 oturuyor, 31 zorlanarak, 18 oturmuyor idi. Üç sayım
 aynı ölçüyle yapılmadı (ilki araştırmacının hükmüydü; sonraki ikisi derlenen kod), bu yüzden fark kesin bir
@@ -39,6 +39,7 @@ iyileşme ölçüsü olarak değil, yön olarak okunmalıdır.
 | 24. Durum eksenleri | `Axis` | 1 |
 | 25. Bakiye | `MapBalance`, `Buckets`, `AllowNegative` | 2 |
 | 26. Değişiklik kümesi | `ChangeSets` | 1 |
+| 30. Kalan satırlar | `Recurring`; varyant üretimi ve sepet birleştirme entity aksiyonu olarak | 3 |
 
 Dört katmanlı model (bir archetype, ilişkiler, en fazla bir durum modeli, trait'ler) iki sınamadan da sağlam çıktı:
 hiçbir satır iki archetype istemedi ve hiçbir satır modelin yeniden açılmasını gerektirmedi. Kapanan bütün boşluklar
@@ -63,9 +64,9 @@ yeni bir trait, ilişki bildirimi veya zincir metoduyla kapandı; kalanlar da ay
 |---|---|---|---|---|
 | 1 | Order | Temiz | `MapCrud` + `Workflow` + `Axis<PaymentState>` + `Axis<ShipmentState>` + `ChangeSets(Placed)` + `Numbered(assignOn)` + `ConcurrencyChecked` + `Auditable` + `MapDetail` + `CreatedFrom<Cart>` | |
 | 2 | OrderItem / LineItem | Temiz | Gömülü `MapDetail` + `IComputed` toplamlar | — |
-| 3 | Product + Variant + Option | Kısmi | `MapCrud` + `Publishable` + gömülü `MapDetail` (sırası korunur) + `Batch` | Varyant üretimi |
+| 3 | Product + Variant + Option | Temiz | `MapCrud` + `Publishable` + gömülü `MapDetail` (sırası korunur) + `Batch`; varyant üretimi satırlara erişen bir entity aksiyonu | |
 | 4 | Category / Collection | Temiz | `MapCrud` + `Hierarchical` + `Archivable` + `Orderable` | — |
-| 5 | Cart | Kısmi | `MapCrud` + `OwnedByCurrentUser` + `MapDetail` + `Expiring(sliding)` + `Cloneable` | Sepet birleştirme, anonim oturumun sahipliği |
+| 5 | Cart | Temiz | `MapCrud` + `OwnedByCurrentUser` + `MapDetail` + `Expiring(sliding)` + `Cloneable`; misafir sepeti `TokenAccess`, birleştirme bir entity aksiyonu | |
 | 6 | Checkout Session | Temiz | `MapCrud().Without(Delete)` + `Workflow` + `Expiring` + `Idempotent`; tamamlanınca doğan kayıt `CreatedFrom<CheckoutSession>(on: "complete")` | — |
 | 7 | Coupon | Temiz | `MapCrud` + `Expiring()` + `NaturalKey` + `CreateOnly` + `IComputed` | — |
 | 8 | Payment (auth/capture/void) | Temiz | `MapCrud().Without(Delete)` + `Workflow` + `Idempotent`; hareketler `MapAppendOnly().Under<Payment>()` | — |
@@ -96,7 +97,7 @@ yeni bir trait, ilişki bildirimi veya zincir metoduyla kapandı; kalanlar da ay
 | 33 | EventType / rezerve edilebilir kaynak | Temiz | `MapCrud().Without(Delete)` + `Archivable` | — |
 | 34 | Availability / free-busy | Temiz | `MapQuery` | — |
 | 35 | Appointment / Booking | Temiz | `MapCrud` + `Workflow` + `Idempotent` + `ConcurrencyChecked` + `Supersedes` (yeniden planlama) | — |
-| 36 | Recurring event / series | Yok | — | Araştırmada bilinçli olarak kapsam dışı |
+| 36 | Recurring event / series | Temiz | `MapCrud` + `Recurring` (kural + hesaplanan oluşlar + oluş başına istisna) | |
 | 37 | Tenant / Organization | Temiz | `MapCrud` + `Auditable` | — |
 | 38 | User | Temiz | `MapCrud` + `SoftDeletable` + `Metadata` + `Searchable` + entity aksiyonu | — |
 | 39 | Role & permission | Temiz | `MapLookup` + `MapCrud` + `MapAssociation` | — |

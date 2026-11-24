@@ -85,25 +85,60 @@ public sealed class TaxonomyTests
             public partial class OrderItem { [Range(1, 1000)] public int Quantity { get; set; } public decimal UnitPrice { get; set; } }
             """,
             "app.MapCrud<Order>().MapDetail<OrderItem>();"),
-        new(3, "Product + Variant + Option", Fit.Partial,
+        new(3, "Product + Variant + Option", Fit.Clean,
             Product + """
             public partial class ProductVariant { public string Sku { get; set; } = ""; public decimal Price { get; set; } }
+
+            // Seçeneklerin birleşimlerinden varyant üretmek alana özgüdür: kaydı satırlarıyla alan bir entity aksiyonudur.
+            public sealed class GenerateVariants : IEntityAction<Product>
+            {
+                public string[] Sizes { get; set; } = [];
+                public string[] Colors { get; set; } = [];
+
+                public void Apply(Product entity)
+                {
+                    foreach (var size in Sizes)
+                    {
+                        foreach (var color in Colors)
+                        {
+                            entity.ProductVariants.Add(new ProductVariant { Sku = $"{entity.Name}-{size}-{color}", Price = entity.Price });
+                        }
+                    }
+                }
+            }
             """,
             """
             var products = app.MapCrud<Product>().SoftDeletable().Auditable().Batch().Publishable();
             products.MapDetail<ProductVariant>();
+            products.MapAction<GenerateVariants>();
             """),
         new(4, "Category / Collection", Fit.Clean,
             "public partial class Category { public string Name { get; set; } = \"\"; }",
             "app.MapCrud<Category>().Hierarchical().Archivable().Orderable();"),
-        new(5, "Cart", Fit.Partial,
+        new(5, "Cart", Fit.Clean,
             """
             public partial class Cart { public string? Note { get; set; } }
             public partial class CartItem { public string Sku { get; set; } = ""; public int Quantity { get; set; } }
+            public partial class GuestCart { public string? Note { get; set; } }
+            public partial class GuestCartItem { public string Sku { get; set; } = ""; public int Quantity { get; set; } }
+
+            // Oturum açılınca misafir sepetinin satırları kullanıcının sepetine taşınır; birleştirme kuralı alana özgüdür.
+            public sealed class MergeCart { public string GuestToken { get; set; } = ""; }
+            public sealed class MergeCartHandler : IEntityActionHandler<Cart, MergeCart>
+            {
+                public System.Threading.Tasks.Task HandleAsync(Cart entity, MergeCart request, System.Threading.CancellationToken cancellationToken) =>
+                    System.Threading.Tasks.Task.CompletedTask;
+            }
             """,
             """
             var carts = app.MapCrud<Cart>().OwnedByCurrentUser().Expiring(TimeSpan.FromDays(7), sliding: true).Cloneable();
             carts.MapDetail<CartItem>();
+            carts.MapAction<MergeCart>();
+
+            // Oturumu olmayan ziyaretçinin sepeti: sahibi bir kullanıcı değil, yalnızca onu oluşturanın bildiği token'dır.
+            var guests = app.MapCrud<GuestCart>().Expiring(TimeSpan.FromDays(7), sliding: true).TokenAccess("cart", "add-line");
+            guests.MapDetail<GuestCartItem>();
+            guests.MapAction("add-line", cart => cart.GuestCartItems.Add(new GuestCartItem { Sku = "SKU", Quantity = 1 }));
             """),
         new(6, "Checkout Session", Fit.Clean,
             """
@@ -397,7 +432,9 @@ public sealed class TaxonomyTests
             bookings.MapTransition("confirm", BookingStatus.Pending, BookingStatus.Confirmed);
             bookings.MapTransition("cancel", [BookingStatus.Pending, BookingStatus.Confirmed], BookingStatus.Cancelled);
             """),
-        new(36, "Recurring event / series", Fit.Missing),
+        new(36, "Recurring event / series", Fit.Clean,
+            "public partial class Meeting { public string Title { get; set; } = \"\"; public int DurationMinutes { get; set; } }",
+            "app.MapCrud<Meeting>().OwnedByCurrentUser().Recurring();"),
 
         // ── SaaS ─────────────────────────────────────────────────────────────────────────────────────
         new(37, "Tenant / Organization", Fit.Clean,
@@ -630,8 +667,8 @@ public sealed class TaxonomyTests
     public void Tally_MatchesTheWrittenResults()
     {
         // reports/Haldus taksonomi sınaması.md dosyasındaki sayılar; biri değişirse diğeri de güncellenmelidir.
-        Assert.Equal(56, Rows.Count(row => row.Fit == Fit.Clean));
-        Assert.Equal(2, Rows.Count(row => row.Fit == Fit.Partial));
-        Assert.Equal(1, Rows.Count(row => row.Fit == Fit.Missing));
+        Assert.Equal(59, Rows.Count(row => row.Fit == Fit.Clean));
+        Assert.Equal(0, Rows.Count(row => row.Fit == Fit.Partial));
+        Assert.Equal(0, Rows.Count(row => row.Fit == Fit.Missing));
     }
 }

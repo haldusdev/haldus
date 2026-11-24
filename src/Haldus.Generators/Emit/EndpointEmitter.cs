@@ -330,6 +330,11 @@ internal sealed partial class EndpointEmitter
             EmitChangeSets();
         }
 
+        if (_resource.Has(Traits.Recurring))
+        {
+            EmitRecurrence();
+        }
+
         if (Translatable)
         {
             EmitTranslations();
@@ -2176,7 +2181,7 @@ internal sealed partial class EndpointEmitter
                         return {{NotFound}};
                     }
 
-            {{ChainClosedGuard()}}{{(transition.Axis is { } axis ? AxisGuard(axis, transition.From, transition.Route) : StateGuard(transition.IsAction ? null : transition.From, transition.Route))}}{{ApprovalGate(transition.Route)}}{{ExpectVersion()}}{{declareResult}}        try
+            {{ChainClosedGuard()}}{{(transition.Axis is { } axis ? AxisGuard(axis, transition.From, transition.Route) : StateGuard(transition.IsAction ? null : transition.From, transition.Route))}}{{ApprovalGate(transition.Route)}}{{ExpectVersion()}}{{declareResult}}{{SortRows("entity", _resource.Details.Select(detail => detail.CollectionName))}}        try
                     {
             {{logic}}        }
                     catch (global::Haldus.TransitionRejectedException rejection)
@@ -2184,7 +2189,7 @@ internal sealed partial class EndpointEmitter
                         return {{Problems}}.TransitionRejected(messages, rejection.Message);
                     }
 
-            {{setStatus}}{{Slide()}}{{Compute()}}{{Spawn(transition)}}{{(!transition.IsAction && _resource.Has(Traits.PublishesEvents) ? $"        global::Haldus.HaldusEvents.Raise(context, entity, {ResourceEmitter.Literal(transition.Route)});\n" : string.Empty)}}{{allocate}}{{Save()}}{{commit}}
+            {{RowsAfterLogic()}}{{setStatus}}{{Slide()}}{{Compute()}}{{Spawn(transition)}}{{(!transition.IsAction && _resource.Has(Traits.PublishesEvents) ? $"        global::Haldus.HaldusEvents.Raise(context, entity, {ResourceEmitter.Literal(transition.Route)});\n" : string.Empty)}}{{allocate}}{{Save()}}{{commit}}
             {{WriteETag()}}        return {{Http}}.TypedResults.Ok({{(response is null ? "ToResponse(entity)" : "result")}});
                 }
 
@@ -3015,6 +3020,15 @@ internal sealed partial class EndpointEmitter
     /// </summary>
     private static string SortRows(string record, IEnumerable<string> collections) => string.Concat(collections.Select(collection =>
         $"        {record}.{collection}.Sort(static (left, right) => left.Position.CompareTo(right.Position));\n"));
+
+    /// <summary>
+    /// Geçişin veya aksiyonun mantığı gömülü satır ekleyip çıkarmış olabilir. Mantığa satırlar kendi sıralarıyla verilir
+    /// (<see cref="SortRows"/>); sonrasında yeni satırlara kimlik, hepsine koleksiyondaki yerlerine göre sıra verilir.
+    /// Böylece alan mantığı satırın kimliğini ve sırasını bilmek zorunda kalmaz.
+    /// </summary>
+    private string RowsAfterLogic() => _resource.Details.Length == 0
+        ? string.Empty
+        : "        // Mantığın eklediği satırlara kimlik ve sıra verilir.\n" + NormalizeRows();
 
     /// <summary>
     /// Kullanıcının kodu satır ekleyip çıkarmış olabilir; kimliği olmayan satıra kimlik verilir ve sıra, satırların

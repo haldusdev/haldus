@@ -54,6 +54,16 @@ public static class EngagementEndpoints
         app.MapCrud<Truck>()
             .SubtypeOf<Vehicle>()
             .Sortable(truck => truck.PayloadTons);
+        // Tekrar serisi: toplantı bir kez saklanır, oluşları kuraldan hesaplanır.
+        // GET /meetings/{id}/occurrences?from=…&to=… oluşları verir; PUT /meetings/{id}/occurrences/{start} tek bir
+        // oluşu erteler veya iptal eder, DELETE onu kurala geri döndürür.
+        app.MapCrud<Meeting>()
+            .Recurring();
+        // Kombinatoryal varyant üretimi alana özgüdür ve bir entity aksiyonu olarak yazılır:
+        // POST /garments/{id}/generate-variants  { "sizes": ["S", "M"], "colors": ["red", "blue"] }
+        var garments = app.MapCrud<Garment>();
+        garments.MapDetail<GarmentVariant>();
+        garments.MapAction<GenerateVariants>();
         // Kimlik numarası hassastır: isteklerde yazılır, hiçbir yanıtta ve saklanan sürümde yer almaz.
         // Ölçüte uyan kayıtlar topluca silinir: POST /contacts/purge?source=import-2024 önce sayar,
         // &force=true ile siler. Ölçüt, liste ucunun filtresidir.

@@ -383,6 +383,7 @@ internal enum Traits
     Purgeable = 33554432,
     Rerunnable = 67108864,
     PublishesEvents = 134217728,
+    Recurring = 268435456,
 }
 
 /// <summary>

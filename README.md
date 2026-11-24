@@ -281,6 +281,27 @@ coupons.MapAction<EstimateDiscount, DiscountEstimate>();   // yanıt kaydın ken
 İş mantığı, geçişlerdeki gibi üç yoldan biriyle verilir: istek `IEntityAction<T>` uygular, bir
 `IEntityActionHandler` sınıfı yazılır veya çağrıya lambda verilir.
 
+Alana özgü mantığın yeri de burasıdır. Aksiyon (ve geçiş) kaydı gömülü satırlarıyla alır; eklediği satırlara kimliği
+ve sırayı Haldus verir, satırlar kayıtla birlikte kaydedilir:
+
+```csharp
+// Seçeneklerin bütün birleşimlerinden varyant üretir: POST /garments/{id}/generate-variants
+public sealed class GenerateVariants : IEntityAction<Garment>
+{
+    public string[] Sizes { get; set; } = [];
+    public string[] Colors { get; set; } = [];
+
+    public void Apply(Garment garment)
+    {
+        foreach (var size in Sizes)
+        foreach (var color in Colors)
+        {
+            garment.GarmentVariants.Add(new GarmentVariant { Size = size, Color = color, Sku = $"{garment.Name}-{size}-{color}" });
+        }
+    }
+}
+```
+
 ## Trait'ler ve süzme
 
 Davranışlar `Map*` çağrısının devamına zincirlenir:
@@ -449,6 +470,31 @@ app.MapJob<ProductImport>().Imports<Product>();
 
 CSV yeni bir bağımlılık olmadan okunur ve yazılır (RFC 4180). Dışa aktarılan metinlerden `=`, `+`, `-` veya `@` ile
 başlayanların önüne kesme işareti konur; böylece dosya bir tablolama programında açıldığında formül olarak çalışmaz.
+
+## Tekrar serisi
+
+```csharp
+app.MapCrud<Meeting>().Recurring();
+```
+
+Yinelenen kayıt bir kez saklanır; tek tek oluşları saklanmaz, kuraldan hesaplanır. `.Recurring()` kayda ilk oluşu ve
+kuralı taşıyan yazılabilir alanlar ekler:
+
+| Alan | Anlamı |
+|---|---|
+| `startsAt` | İlk oluşun zamanı |
+| `recurrenceFrequency` | `None`, `Daily`, `Weekly`, `Monthly`, `Yearly` |
+| `recurrenceInterval` | Kaç aralıkta bir (iki haftada bir için 2); boşsa 1 |
+| `recurrenceUntil`, `recurrenceCount` | Serinin bittiği zaman veya en çok kaç oluşu olduğu; ikisi de boşsa seri açık uçludur |
+
+| Uç | Etkisi |
+|---|---|
+| `GET /meetings/{id}/occurrences?from=&to=` | Aralıktaki oluşlar (en çok 500). Aralık verilmezse ilk oluştan başlayarak bir yıl |
+| `PUT /meetings/{id}/occurrences/{start}` | Tek bir oluşu erteler (`{ "start": "…" }`) veya iptal eder (`{ "cancelled": true }`). `{start}` kuralın verdiği zamandır; kuralın vermediği bir zaman 404 alır |
+| `DELETE /meetings/{id}/occurrences/{start}` | Oluşu kurala geri döndürür |
+
+Her oluş ilk oluştan sayılarak hesaplanır: ayın 31'inde başlayan aylık seri şubatta ayın son gününe düşer, martta yine
+31'ine döner. Kural değişirse oluşlar da değişir; eski kurala ait istisnalar artık hiçbir oluşa uymaz ve yok sayılır.
 
 ## Olay yayını
 
@@ -672,8 +718,8 @@ kısıtı olur, ayrı bağlamlardaysa referans yalnızca kimlikle tutulur ve var
 
 İlk iki plan tamamlandı: ilk sürümün on aşaması ve araştırmanın ikinci sürüm listesini kapatan on bir aşama. Üçüncü
 plan (araştırmanın üçüncü sürüm listesi ve sınamada kalan satırlar) sürüyor. Model, araştırmadaki 59 gerçek varlığa
-karşı sınanıyor: bugün 56'sı eksiksiz, 2'si kısmen ifade ediliyor, 1'i için gereken özellik yok (ilk sınamada bu
-sayılar 19, 29 ve 11 idi). Ayrıntısı [taksonomi sınaması](reports/Haldus%20taksonomi%20sınaması.md) belgesindedir.
+karşı sınanıyor: bugün 59'unun tamamı eksiksiz ifade ediliyor (ilk sınamada 19 eksiksiz, 29 kısmi, 11 karşılıksızdı).
+Ayrıntısı [taksonomi sınaması](reports/Haldus%20taksonomi%20sınaması.md) belgesindedir.
 
 Tasarım kararları için [CLAUDE.md](CLAUDE.md), kararların dayandığı araştırma için [reports](reports/)
 klasörüne bakın. İki örnek uygulama var: tek projeli [mağaza](samples/Haldus.Sample.Shop) ve

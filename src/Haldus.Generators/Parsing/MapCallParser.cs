@@ -370,6 +370,12 @@ internal static class MapCallParser
             properties.AddRange(LifecycleReader.EffectivePeriod().Where(period => properties.All(property => property.Name != period.Name)));
         }
 
+        if ((traits & Traits.Recurring) != 0)
+        {
+            // İlk oluşu ve kuralı istemci verir; hepsi sıradan, yazılabilir alanlardır.
+            properties.AddRange(LifecycleReader.RecurrenceFields().Where(field => properties.All(property => property.Name != field.Name)));
+        }
+
         foreach (var message in Conflicts(archetype, traits, operations, unsupportedOperations, chain))
         {
             diagnostics.Add(new DiagnosticInfo("HALDUS007", location, new EquatableArray<string>([message])));
@@ -1229,7 +1235,7 @@ internal static class MapCallParser
                 "Publishable" => crudLike,
 
                 // Dönem, istemcinin yazıp değiştirdiği bir alandır.
-                "EffectiveDated" => crudLike,
+                "EffectiveDated" or "Recurring" => crudLike,
 
                 // Sürümler ve geri yükleme, istemcinin değiştirebildiği kayıtlar içindir.
                 "Revisioned" => crudLike,

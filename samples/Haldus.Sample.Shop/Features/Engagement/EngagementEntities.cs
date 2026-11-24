@@ -193,3 +193,76 @@ public partial class Truck : Vehicle
     [Range(0.0, 100.0)]
     public decimal PayloadTons { get; set; }
 }
+
+/// <summary>
+/// Toplantı: bir kez saklanır, kuralına göre yinelenir. İlk oluşu ve kuralı Haldus'un eklediği alanlar taşır
+/// (StartsAt, RecurrenceFrequency, RecurrenceInterval, RecurrenceUntil, RecurrenceCount).
+/// </summary>
+public partial class Meeting
+{
+    [Required]
+    [MaxLength(200)]
+    public string Title { get; set; } = "";
+
+    [Range(5, 1440)]
+    public int DurationMinutes { get; set; } = 30;
+}
+
+/// <summary>Giysi: bedenlere ve renklere göre varyantları olan ürün.</summary>
+public partial class Garment
+{
+    [Required]
+    [MaxLength(100)]
+    public string Name { get; set; } = "";
+}
+
+/// <summary>Giysinin bir varyantı; giysinin isteğine ve yanıtına gömülüdür.</summary>
+public partial class GarmentVariant
+{
+    [Required]
+    [MaxLength(100)]
+    public string Sku { get; set; } = "";
+
+    [MaxLength(20)]
+    public string Size { get; set; } = "";
+
+    [MaxLength(20)]
+    public string Color { get; set; } = "";
+}
+
+/// <summary>
+/// Seçeneklerin bütün birleşimlerinden varyant üretir. Alana özgü bu mantık bir entity aksiyonudur: Haldus kaydı
+/// satırlarıyla yükler, isteği doğrular, aksiyonu çalıştırır ve kaydı satırlarıyla birlikte kaydeder.
+/// </summary>
+public sealed class GenerateVariants : IEntityAction<Garment>
+{
+    [Required]
+    [MinLength(1)]
+    [MaxLength(10)]
+    public string[] Sizes { get; set; } = [];
+
+    [Required]
+    [MinLength(1)]
+    [MaxLength(10)]
+    public string[] Colors { get; set; } = [];
+
+    public void Apply(Garment entity)
+    {
+        foreach (var size in Sizes)
+        {
+            foreach (var color in Colors)
+            {
+                // Var olan birleşim korunur; yalnızca eksik olanlar eklenir.
+                if (!entity.GarmentVariants.Any(variant => variant.Size == size && variant.Color == color))
+                {
+                    entity.GarmentVariants.Add(new GarmentVariant
+                    {
+                        Size = size,
+                        Color = color,
+                        Sku = $"{entity.Name}-{size}-{color}".ToUpperInvariant().Replace(' ', '-'),
+                    });
+                }
+            }
+        }
+    }
+}

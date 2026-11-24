@@ -80,6 +80,16 @@ public static class ResourceBuilderTraitExtensions
 
 
     /// <summary>
+    /// Kaydı yinelenen bir seri yapar (haftalık toplantı, aylık dönem). İlk oluş (<c>StartsAt</c>) ve kural
+    /// (<c>RecurrenceFrequency</c>, <c>RecurrenceInterval</c>, <c>RecurrenceUntil</c>, <c>RecurrenceCount</c>) kaydın
+    /// yazılabilir alanlarıdır; oluşlar saklanmaz, <c>GET /{id}/occurrences?from=&amp;to=</c> ile kuraldan hesaplanır.
+    /// Tek bir oluş <c>PUT /{id}/occurrences/{start}</c> ile ertelenir veya iptal edilir, <c>DELETE</c> ile kurala
+    /// geri döner.
+    /// </summary>
+    public static ResourceBuilder<TEntity> Recurring<TEntity>(this ResourceBuilder<TEntity> builder)
+        where TEntity : class => builder;
+
+    /// <summary>
     /// Kayıt değiştikçe olay yayınlar: <c>order.created</c>, <c>order.updated</c>, <c>order.deleted</c> ve her geçiş
     /// için <c>order.{geçiş}</c>. Olay, kaydın o andaki halini (yanıt biçiminde) taşır, kayıtla aynı kaydetmede
     /// bekleme tablosuna yazılır ve kayıt kalıcı olduktan sonra uygulamanın kaydettiği yayıncılara

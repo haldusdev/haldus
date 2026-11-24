@@ -57,6 +57,7 @@ internal static class ChainReader
         "RoleOf",
         "SubtypeOf",
         "PublishesEvents",
+        "Recurring",
         "Sensitive",
         "Purgeable",
         "Rerunnable",
@@ -191,6 +192,9 @@ internal static class ChainReader
                     break;
                 case "PublishesEvents":
                     traits |= Traits.PublishesEvents;
+                    break;
+                case "Recurring":
+                    traits |= Traits.Recurring;
                     break;
                 case "Rerunnable":
                     traits |= Traits.Rerunnable;

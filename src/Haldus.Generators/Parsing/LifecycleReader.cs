@@ -527,6 +527,31 @@ internal static class LifecycleReader
         return new FileModel(maxBytes, contentTypes.Distinct().ToEquatableArray());
     }
 
+    /// <summary>Yinelenen kaydın (<c>.Recurring()</c>) istemcinin yazdığı alanları: ilk oluş ve kural.</summary>
+    public static IEnumerable<PropertyModel> RecurrenceFields()
+    {
+        const string Frequency = "global::Haldus.RecurrenceFrequency";
+        const string Range = "global::System.ComponentModel.DataAnnotations.RangeAttribute(1, 1000)";
+
+        PropertyModel Field(string name, string type, bool required, string valueType, SearchKind kind, params string[] attributes) => new(
+            name,
+            required ? type : type + "?",
+            NullableType: type + "?",
+            IsWritable: true,
+            IsNonNullableReference: false,
+            IsNonNullableValue: required,
+            kind,
+            valueType,
+            attributes.Select(attribute => new AttributeModel(attribute, IsRequired: false)).ToEquatableArray(),
+            IsGenerated: true);
+
+        yield return Field("StartsAt", DateTimeOffset, required: true, DateTimeOffset, SearchKind.Range);
+        yield return Field("RecurrenceFrequency", Frequency, required: true, Frequency, SearchKind.Equality);
+        yield return Field("RecurrenceInterval", "int", required: false, "int", SearchKind.Range, Range);
+        yield return Field("RecurrenceUntil", DateTimeOffset, required: false, DateTimeOffset, SearchKind.Range);
+        yield return Field("RecurrenceCount", "int", required: false, "int", SearchKind.Range, Range);
+    }
+
     /// <summary>Dönemli kaydın (<c>.EffectiveDated()</c>) istemcinin yazdığı iki alanı.</summary>
     public static IEnumerable<PropertyModel> EffectivePeriod()
     {
