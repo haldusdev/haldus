@@ -239,5 +239,184 @@ internal sealed partial class EndpointEmitter
                 }
 
             """);
+
+        if (balance.HoldFrom is not null)
+        {
+            EmitBalanceHolds(balance, perTenant, keyGuard);
+        }
+    }
+
+    /// <summary>
+    /// Bakiyeye karşı süreli tutma. Kurallar çalışma zamanındadır (<c>HaldusBalanceHolds</c>): her işlem bakiyenin
+    /// kilidi altında, kova, defter ve tutma kaydıyla birlikte tek kaydetmededir. Üretilen kod kovaların okunup
+    /// yazılmasını ve bakiyenin bulunmasını ona verir.
+    /// </summary>
+    private void EmitBalanceHolds(BalanceModel balance, string perTenant, string keyGuard)
+    {
+        const string Injection = "global::Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions";
+        const string Holds = "global::Haldus.HaldusBalanceHolds";
+        const string Hold = "global::Haldus.BalanceHold";
+        const string Failure = "global::Haldus.HoldFailure";
+
+        var from = ResourceEmitter.Literal(balance.HoldFrom!);
+        var to = ResourceEmitter.Literal(balance.HoldTo!);
+        var allowNegative = balance.AllowNegative ? "true" : "false";
+        var holdsRoute = $"{_keyRoute}/holds";
+
+        _map.Append($$"""
+                    group.MapPost("{{holdsRoute}}", HoldAsync)
+                        .WithName("Hold{{_entity}}")
+                        .AddEndpointFilter<global::Haldus.HaldusValidationFilter<global::Haldus.BalanceHoldRequest>>()
+                        .ProducesValidationProblem()
+                        .ProducesProblem(409){{IdempotencyFilter("global::Haldus.BalanceHoldRequest")}};
+
+                    group.MapGet("{{holdsRoute}}", HoldsAsync)
+                        .WithName("List{{_entity}}Holds");
+
+                    group.MapPost("{{holdsRoute}}/{holdId:guid}/capture", CaptureHoldAsync)
+                        .WithName("Capture{{_entity}}Hold")
+                        .ProducesProblem(404)
+                        .ProducesProblem(409);
+
+                    group.MapPost("{{holdsRoute}}/{holdId:guid}/release", ReleaseHoldAsync)
+                        .WithName("Release{{_entity}}Hold")
+                        .ProducesProblem(404)
+                        .ProducesProblem(409);
+
+
+            """);
+
+        _handlers.Append($$"""
+
+                private static async {{Task}}<{{Results}}.Results<{{Results}}.Ok<{{Hold}}>, {{Problem}}>> HoldAsync(
+            {{KeyParameter}}        global::Haldus.BalanceHoldRequest request,
+            {{ContextsParameter}}{{MessagesParameter}}{{CancellationParameter}}    {
+            {{keyGuard}}        if (request.Quantity <= 0)
+                    {
+                        return {{Problems}}.BalanceAmountInvalid(messages, "quantity");
+                    }
+
+                    var result = await {{Holds}}.PlaceAsync<{{_entity}}>(
+                        contexts.For<{{_entity}}>(),
+                        Ledger,
+                        {{perTenant}},
+                        {{_keyParameter}},
+                        {{from}},
+                        {{to}},
+                        request.Quantity,
+                        request.ExpiresInSeconds is { } seconds ? global::System.TimeSpan.FromSeconds(seconds) : null,
+                        request.Reason,
+                        allowNegative: {{allowNegative}},
+                        FindOrStartAsync,
+                        Read,
+                        Write,
+                        cancellationToken);
+
+                    if (result.Failure == {{Failure}}.Insufficient)
+                    {
+                        return {{Problems}}.BalanceInsufficient(messages, {{from}}, result.Balance);
+                    }
+
+                    if (result.Failure == {{Failure}}.TooMany)
+                    {
+                        return {{Problems}}.BalanceHoldLimit(messages);
+                    }
+
+                    return {{Http}}.TypedResults.Ok(result.Hold!);
+                }
+
+                private static async {{Task}}<{{Results}}.Ok<global::System.Collections.Generic.IReadOnlyList<{{Hold}}>>> HoldsAsync(
+            {{KeyParameter}}{{ContextsParameter}}{{CancellationParameter}}    {
+                    return {{Http}}.TypedResults.Ok(await {{Holds}}.ListAsync(
+                        contexts.For<{{_entity}}>(), Ledger, {{perTenant}}, {{_keyParameter}}, cancellationToken));
+                }
+
+                private static {{OkOrProblem}} CaptureHoldAsync(
+            {{KeyParameter}}        global::System.Guid holdId,
+            {{ContextsParameter}}{{MessagesParameter}}{{CancellationParameter}}    =>
+                    CloseHoldAsync({{_keyParameter}}, holdId, {{Holds}}.Captured, contexts, messages, cancellationToken);
+
+                private static {{OkOrProblem}} ReleaseHoldAsync(
+            {{KeyParameter}}        global::System.Guid holdId,
+            {{ContextsParameter}}{{MessagesParameter}}{{CancellationParameter}}    =>
+                    CloseHoldAsync({{_keyParameter}}, holdId, {{Holds}}.Released, contexts, messages, cancellationToken);
+
+                private static async {{OkOrProblem}} CloseHoldAsync(
+                    string {{_keyParameter}},
+                    global::System.Guid holdId,
+                    string outcome,
+            {{ContextsParameter}}{{MessagesParameter}}{{CancellationParameter}}    {
+            {{keyGuard}}        var result = await {{Holds}}.CloseAsync<{{_entity}}>(
+                        contexts.For<{{_entity}}>(), Ledger, {{perTenant}}, {{_keyParameter}}, holdId, outcome, {{from}}, {{to}},
+                        allowNegative: {{allowNegative}}, FindOrStartAsync, Read, Write, cancellationToken);
+
+                    return result.Failure switch
+                    {
+                        {{Failure}}.None => {{Http}}.TypedResults.Ok(ToResponse(result.Entity!)),
+                        {{Failure}}.Closed => {{Problems}}.BalanceHoldClosed(messages),
+                        {{Failure}}.Insufficient => {{Problems}}.BalanceInsufficient(messages, {{to}}, result.Balance),
+                        _ => {{Problems}}.NotFound(messages, "Hold", holdId),
+                    };
+                }
+
+                /// <summary>
+                /// Süresi dolan tutmaları bırakır. Bakım çağırır; bir isteğe ait değildir, bu yüzden her tutma kendi
+                /// kiracısı adına kapatılır.
+                /// </summary>
+                internal static async {{Task}}<int> ReleaseExpiredHoldsAsync(
+                    global::System.IServiceProvider services,
+                    global::System.DateTimeOffset now,
+                    global::System.Threading.CancellationToken cancellationToken)
+                {
+                    var context = {{Injection}}.GetRequiredService<global::Haldus.IHaldusDbContextProvider>(services).For<{{_entity}}>();
+                    var released = 0;
+                    var failed = 0;
+
+                    // Kapanan tutmalar "süresi dolmuş ve açık" olmaktan çıkar; kapatılamayanlar atlanarak sıradakilere
+                    // geçilir. Böylece kapatılamayan birkaç tutma sıranın başını tutamaz.
+                    for (var attempted = 0; attempted < {{Holds}}.MaxPerRun;)
+                    {
+                        var expired = await {{Holds}}.ExpiredAsync(context, Ledger, now, skip: failed, cancellationToken);
+
+                        if (expired.Count == 0)
+                        {
+                            break;
+                        }
+
+                        attempted += expired.Count;
+
+                        foreach (var hold in expired)
+                        {
+                            using var identity = global::Haldus.HaldusAmbient.Use(hold.TenantId, null);
+                            context.ChangeTracker.Clear();
+
+                            try
+                            {
+                                var result = await {{Holds}}.CloseAsync<{{_entity}}>(
+                                    context, Ledger, {{perTenant}}, hold.Key, hold.Id, {{Holds}}.Expired, {{from}}, {{to}},
+                                    allowNegative: {{allowNegative}}, FindOrStartAsync, Read, Write, cancellationToken);
+
+                                if (result.Failure == {{Failure}}.None)
+                                {
+                                    released++;
+                                }
+                                else if (result.Failure != {{Failure}}.Closed)
+                                {
+                                    failed++;
+                                }
+                            }
+                            catch (global::Microsoft.EntityFrameworkCore.DbUpdateException)
+                            {
+                                // Bakiye bu sırada başka bir istekle değişti; bir sonraki turda yeniden denenir.
+                                failed++;
+                            }
+                        }
+                    }
+
+                    context.ChangeTracker.Clear();
+                    return released;
+                }
+
+            """);
     }
 }

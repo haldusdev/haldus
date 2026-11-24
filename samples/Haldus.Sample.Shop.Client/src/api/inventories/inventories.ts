@@ -25,6 +25,8 @@ import type {
 
 import type {
   BalanceAdjustment,
+  BalanceHold,
+  BalanceHoldRequest,
   BalanceMove,
   BalanceSetting,
   HttpValidationProblemDetails,
@@ -744,3 +746,414 @@ export function useListInventoryEntries<TData = Awaited<ReturnType<typeof listIn
 
 
 
+export type holdInventoryResponse200 = {
+  data: BalanceHold
+  status: 200
+}
+
+export type holdInventoryResponse400 = {
+  data: HttpValidationProblemDetails
+  status: 400
+}
+
+export type holdInventoryResponse409 = {
+  data: ProblemDetails
+  status: 409
+}
+
+export type holdInventoryResponseSuccess = (holdInventoryResponse200) & {
+  headers: Headers;
+};
+export type holdInventoryResponseError = (holdInventoryResponse400 | holdInventoryResponse409) & {
+  headers: Headers;
+};
+
+export type holdInventoryResponse = (holdInventoryResponseSuccess | holdInventoryResponseError)
+
+export const getHoldInventoryUrl = (key: string,) => {
+
+
+
+
+  return `/inventories/${key}/holds`
+}
+
+export const holdInventory = async (key: string,
+    balanceHoldRequest: BalanceHoldRequest, options?: RequestInit): Promise<holdInventoryResponse> => {
+
+  const res = await fetch(getHoldInventoryUrl(key),
+  {
+    ...options,
+    method: 'POST',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(balanceHoldRequest)
+  }
+)
+
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+
+  const data: holdInventoryResponse['data'] = body ? JSON.parse(body) : {}
+  return { data, status: res.status, headers: res.headers } as holdInventoryResponse
+}
+
+
+
+
+
+export const getHoldInventoryMutationKey = () => ['holdInventory'] as const;
+
+export const getHoldInventoryMutationOptions = <TError = HttpValidationProblemDetails | ProblemDetails,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof holdInventory>>, TError,HoldInventoryMutationVariables, TContext>, fetch?: RequestInit}
+): UseMutationOptions<Awaited<ReturnType<typeof holdInventory>>, TError,HoldInventoryMutationVariables, TContext> => {
+
+const mutationKey = getHoldInventoryMutationKey();
+const {mutation: mutationOptions, fetch: fetchOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, fetch: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof holdInventory>>, HoldInventoryMutationVariables> = (props) => {
+          const {key,data} = props ?? {};
+
+          return  holdInventory(key,data,fetchOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type HoldInventoryMutationResult = NonNullable<Awaited<ReturnType<typeof holdInventory>>>
+    export type HoldInventoryMutationBody = BalanceHoldRequest
+    export type HoldInventoryMutationError = HttpValidationProblemDetails | ProblemDetails
+    export type HoldInventoryMutationVariables = {key: string;data: BalanceHoldRequest}
+
+    export const useHoldInventory = <TError = HttpValidationProblemDetails | ProblemDetails,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof holdInventory>>, TError,HoldInventoryMutationVariables, TContext>, fetch?: RequestInit}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof holdInventory>>,
+        TError,
+        HoldInventoryMutationVariables,
+        TContext
+      > => {
+      return useMutation(getHoldInventoryMutationOptions(options), queryClient);
+    }
+    export type listInventoryHoldsResponse200 = {
+  data: BalanceHold[]
+  status: 200
+}
+
+export type listInventoryHoldsResponseSuccess = (listInventoryHoldsResponse200) & {
+  headers: Headers;
+};
+;
+
+export type listInventoryHoldsResponse = (listInventoryHoldsResponseSuccess)
+
+export const getListInventoryHoldsUrl = (key: string,) => {
+
+
+
+
+  return `/inventories/${key}/holds`
+}
+
+export const listInventoryHolds = async (key: string, options?: RequestInit): Promise<listInventoryHoldsResponse> => {
+
+  const res = await fetch(getListInventoryHoldsUrl(key),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+)
+
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+
+  const data: listInventoryHoldsResponse['data'] = body ? JSON.parse(body) : {}
+  return { data, status: res.status, headers: res.headers } as listInventoryHoldsResponse
+}
+
+
+
+
+
+export const getListInventoryHoldsQueryKey = (key: string,) => {
+    return [
+    `/inventories/${key}/holds`
+    ] as const;
+    }
+
+
+export const getListInventoryHoldsQueryOptions = <TData = Awaited<ReturnType<typeof listInventoryHolds>>, TError = unknown>(key: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listInventoryHolds>>, TError, TData>>, fetch?: RequestInit}
+) => {
+
+const {query: queryOptions, fetch: fetchOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListInventoryHoldsQueryKey(key);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listInventoryHolds>>> = ({ signal }) => listInventoryHolds(key, { signal, ...fetchOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: key !== null && key !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listInventoryHolds>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type ListInventoryHoldsQueryResult = NonNullable<Awaited<ReturnType<typeof listInventoryHolds>>>
+export type ListInventoryHoldsQueryError = unknown
+
+
+export function useListInventoryHolds<TData = Awaited<ReturnType<typeof listInventoryHolds>>, TError = unknown>(
+ key: string, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof listInventoryHolds>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof listInventoryHolds>>,
+          TError,
+          Awaited<ReturnType<typeof listInventoryHolds>>
+        > , 'initialData'
+      >, fetch?: RequestInit}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useListInventoryHolds<TData = Awaited<ReturnType<typeof listInventoryHolds>>, TError = unknown>(
+ key: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listInventoryHolds>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof listInventoryHolds>>,
+          TError,
+          Awaited<ReturnType<typeof listInventoryHolds>>
+        > , 'initialData'
+      >, fetch?: RequestInit}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useListInventoryHolds<TData = Awaited<ReturnType<typeof listInventoryHolds>>, TError = unknown>(
+ key: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listInventoryHolds>>, TError, TData>>, fetch?: RequestInit}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useListInventoryHolds<TData = Awaited<ReturnType<typeof listInventoryHolds>>, TError = unknown>(
+ key: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listInventoryHolds>>, TError, TData>>, fetch?: RequestInit}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getListInventoryHoldsQueryOptions(key,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export type captureInventoryHoldResponse200 = {
+  data: InventoryResponse
+  status: 200
+}
+
+export type captureInventoryHoldResponse404 = {
+  data: ProblemDetails
+  status: 404
+}
+
+export type captureInventoryHoldResponse409 = {
+  data: ProblemDetails
+  status: 409
+}
+
+export type captureInventoryHoldResponseSuccess = (captureInventoryHoldResponse200) & {
+  headers: Headers;
+};
+export type captureInventoryHoldResponseError = (captureInventoryHoldResponse404 | captureInventoryHoldResponse409) & {
+  headers: Headers;
+};
+
+export type captureInventoryHoldResponse = (captureInventoryHoldResponseSuccess | captureInventoryHoldResponseError)
+
+export const getCaptureInventoryHoldUrl = (key: string,
+    holdId: string,) => {
+
+
+
+
+  return `/inventories/${key}/holds/${holdId}/capture`
+}
+
+export const captureInventoryHold = async (key: string,
+    holdId: string, options?: RequestInit): Promise<captureInventoryHoldResponse> => {
+
+  const res = await fetch(getCaptureInventoryHoldUrl(key,holdId),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+)
+
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+
+  const data: captureInventoryHoldResponse['data'] = body ? JSON.parse(body) : {}
+  return { data, status: res.status, headers: res.headers } as captureInventoryHoldResponse
+}
+
+
+
+
+
+export const getCaptureInventoryHoldMutationKey = () => ['captureInventoryHold'] as const;
+
+export const getCaptureInventoryHoldMutationOptions = <TError = ProblemDetails,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof captureInventoryHold>>, TError,CaptureInventoryHoldMutationVariables, TContext>, fetch?: RequestInit}
+): UseMutationOptions<Awaited<ReturnType<typeof captureInventoryHold>>, TError,CaptureInventoryHoldMutationVariables, TContext> => {
+
+const mutationKey = getCaptureInventoryHoldMutationKey();
+const {mutation: mutationOptions, fetch: fetchOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, fetch: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof captureInventoryHold>>, CaptureInventoryHoldMutationVariables> = (props) => {
+          const {key,holdId} = props ?? {};
+
+          return  captureInventoryHold(key,holdId,fetchOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CaptureInventoryHoldMutationResult = NonNullable<Awaited<ReturnType<typeof captureInventoryHold>>>
+
+    export type CaptureInventoryHoldMutationError = ProblemDetails
+    export type CaptureInventoryHoldMutationVariables = {key: string;holdId: string}
+
+    export const useCaptureInventoryHold = <TError = ProblemDetails,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof captureInventoryHold>>, TError,CaptureInventoryHoldMutationVariables, TContext>, fetch?: RequestInit}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof captureInventoryHold>>,
+        TError,
+        CaptureInventoryHoldMutationVariables,
+        TContext
+      > => {
+      return useMutation(getCaptureInventoryHoldMutationOptions(options), queryClient);
+    }
+    export type releaseInventoryHoldResponse200 = {
+  data: InventoryResponse
+  status: 200
+}
+
+export type releaseInventoryHoldResponse404 = {
+  data: ProblemDetails
+  status: 404
+}
+
+export type releaseInventoryHoldResponse409 = {
+  data: ProblemDetails
+  status: 409
+}
+
+export type releaseInventoryHoldResponseSuccess = (releaseInventoryHoldResponse200) & {
+  headers: Headers;
+};
+export type releaseInventoryHoldResponseError = (releaseInventoryHoldResponse404 | releaseInventoryHoldResponse409) & {
+  headers: Headers;
+};
+
+export type releaseInventoryHoldResponse = (releaseInventoryHoldResponseSuccess | releaseInventoryHoldResponseError)
+
+export const getReleaseInventoryHoldUrl = (key: string,
+    holdId: string,) => {
+
+
+
+
+  return `/inventories/${key}/holds/${holdId}/release`
+}
+
+export const releaseInventoryHold = async (key: string,
+    holdId: string, options?: RequestInit): Promise<releaseInventoryHoldResponse> => {
+
+  const res = await fetch(getReleaseInventoryHoldUrl(key,holdId),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+)
+
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+
+  const data: releaseInventoryHoldResponse['data'] = body ? JSON.parse(body) : {}
+  return { data, status: res.status, headers: res.headers } as releaseInventoryHoldResponse
+}
+
+
+
+
+
+export const getReleaseInventoryHoldMutationKey = () => ['releaseInventoryHold'] as const;
+
+export const getReleaseInventoryHoldMutationOptions = <TError = ProblemDetails,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof releaseInventoryHold>>, TError,ReleaseInventoryHoldMutationVariables, TContext>, fetch?: RequestInit}
+): UseMutationOptions<Awaited<ReturnType<typeof releaseInventoryHold>>, TError,ReleaseInventoryHoldMutationVariables, TContext> => {
+
+const mutationKey = getReleaseInventoryHoldMutationKey();
+const {mutation: mutationOptions, fetch: fetchOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, fetch: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof releaseInventoryHold>>, ReleaseInventoryHoldMutationVariables> = (props) => {
+          const {key,holdId} = props ?? {};
+
+          return  releaseInventoryHold(key,holdId,fetchOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ReleaseInventoryHoldMutationResult = NonNullable<Awaited<ReturnType<typeof releaseInventoryHold>>>
+
+    export type ReleaseInventoryHoldMutationError = ProblemDetails
+    export type ReleaseInventoryHoldMutationVariables = {key: string;holdId: string}
+
+    export const useReleaseInventoryHold = <TError = ProblemDetails,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof releaseInventoryHold>>, TError,ReleaseInventoryHoldMutationVariables, TContext>, fetch?: RequestInit}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof releaseInventoryHold>>,
+        TError,
+        ReleaseInventoryHoldMutationVariables,
+        TContext
+      > => {
+      return useMutation(getReleaseInventoryHoldMutationOptions(options), queryClient);
+    }

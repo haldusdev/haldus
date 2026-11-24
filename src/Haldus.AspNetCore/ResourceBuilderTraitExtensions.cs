@@ -130,6 +130,15 @@ public static class ResourceBuilderTraitExtensions
         where TEntity : class => builder;
 
     /// <summary>
+    /// Bakiyeye karşı süreli tutma (rezervasyon, ön provizyon). <c>POST /{key}/holds</c> miktarı <paramref name="from"/>
+    /// kovasından <paramref name="to"/> kovasına taşır ve bir tutma kaydı açar; <c>POST /{key}/holds/{holdId}/capture</c>
+    /// miktarı bakiyeden düşer, <c>…/release</c> geri verir, <c>GET /{key}/holds</c> açık tutmaları listeler. Ömrü
+    /// (<c>expiresInSeconds</c>) verilen tutma, süresi dolunca bakım tarafından kendiliğinden bırakılır.
+    /// </summary>
+    public static ResourceBuilder<TEntity> Holds<TEntity>(this ResourceBuilder<TEntity> builder, string from, string to)
+        where TEntity : class => builder;
+
+    /// <summary>
     /// Oluşturma ve geçiş uçlarını <c>Idempotency-Key</c> başlığıyla tekrara karşı korur: aynı anahtarla
     /// yeniden gönderilen istek işlemi tekrarlamaz, ilk isteğin yanıtını döndürür. Bakiyede (<c>MapBalance</c>)
     /// düzeltme, mutlak yazma ve taşıma uçlarını korur.

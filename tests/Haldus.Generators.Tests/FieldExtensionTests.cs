@@ -428,6 +428,9 @@ public sealed class FieldExtensionTests
     [InlineData("app.MapCrud<Product>().KeyStrategy(KeyStrategy.Client).Without(CrudOperation.Create);", "KeyStrategy.Client needs the Create operation")]
     [InlineData("app.MapCrud<Product>().KeyStrategy(KeyStrategy.Client).MultiTenant();", "KeyStrategy.Client cannot be combined with MultiTenant")]
     [InlineData("app.MapCrud<Product>().KeyStrategy(KeyStrategy.Client).OwnedByCurrentUser();", "KeyStrategy.Client cannot be combined with OwnedByCurrentUser")]
+    [InlineData("app.MapCrud<Product>().KeyStrategy(KeyStrategy.Client).TokenAccess(\"prd\").TokenOnly();", "KeyStrategy.Client cannot be combined with TokenOnly")]
+    [InlineData("app.MapCrud<Product>().KeyStrategy(KeyStrategy.Client).SoftDeletable();", "KeyStrategy.Client cannot be combined with SoftDeletable")]
+    [InlineData("app.MapCrud<Product>().KeyStrategy(KeyStrategy.Client).Expiring();", "KeyStrategy.Client cannot be combined with Expiring")]
     [InlineData("app.MapCrud<Category>(); app.MapCrud<Product>().KeyStrategy(KeyStrategy.Client).Under<Category>();", "KeyStrategy.Client cannot be combined with Under")]
     [InlineData("app.MapCrud<Product>().KeyStrategy(KeyStrategy.Ulid, \"ord\");", "A key prefix has no effect")]
     public void KeyStrategy_RejectsCombinationsThatCannotWork(string body, string message)

@@ -50,6 +50,9 @@ internal static class LifecycleReader
 
         public bool AllowNegative { get; set; }
 
+        /// <summary><c>.Holds(from, to)</c> ile bildirilen kovalar.</summary>
+        public (string From, string To)? Holds { get; set; }
+
         public ChangeSetModel? ChangeSets { get; set; }
 
         /// <summary>Kaydın ters çevrilebildiği durumlar; durum makinesi yoksa <c>null</c>.</summary>
@@ -209,6 +212,22 @@ internal static class LifecycleReader
 
                 case "AllowNegative":
                     result.AllowNegative = true;
+                    break;
+
+                case "Holds":
+                    if (arguments.Count == 2
+                        && semanticModel.GetConstantValue(arguments[0].Expression, cancellationToken) is { HasValue: true, Value: string holdFrom }
+                        && semanticModel.GetConstantValue(arguments[1].Expression, cancellationToken) is { HasValue: true, Value: string holdTo }
+                        && holdFrom != holdTo)
+                    {
+                        // Adlı argümanlar yer değiştirmiş olabilir.
+                        result.Holds = arguments[0].NameColon?.Name.Identifier.ValueText == "to" ? (holdTo, holdFrom) : (holdFrom, holdTo);
+                    }
+                    else
+                    {
+                        Invalid(name, "Holds needs two different bucket names written as constants: the bucket the quantity is taken from and the bucket it waits in, for example Holds(from: \"available\", to: \"reserved\")");
+                    }
+
                     break;
 
                 case "Buckets":

@@ -62,6 +62,22 @@ public static class HaldusMaintenanceRegistry
 
     internal static IEnumerable<KeyValuePair<Type, Func<IServiceProvider, DateTimeOffset, CancellationToken, Task<int>>>> ScheduledResources =>
         Scheduled;
+
+    private static readonly ConcurrentDictionary<Type, Func<IServiceProvider, DateTimeOffset, CancellationToken, Task<int>>> Holds = new();
+
+    /// <summary>
+    /// Tutma bildiren bir bakiyeyi (<c>MapBalance().Holds(...)</c>) kaydeder: süresi dolan tutmaları bakım sırasında,
+    /// kaynağın üretilen koduyla bırakılır.
+    /// </summary>
+    public static void RegisterBalanceHolds<TEntity>(Func<IServiceProvider, DateTimeOffset, CancellationToken, Task<int>> release)
+        where TEntity : class
+    {
+        ArgumentNullException.ThrowIfNull(release);
+        Holds[typeof(TEntity)] = release;
+    }
+
+    internal static IEnumerable<KeyValuePair<Type, Func<IServiceProvider, DateTimeOffset, CancellationToken, Task<int>>>> HoldResources =>
+        Holds;
 }
 
 /// <summary>
@@ -140,6 +156,25 @@ public static class HaldusMaintenance
             catch (DbException exception)
             {
                 logger.LogWarning(exception, "Scheduled '{Resource}' drafts could not be published.", resource.Key.Name);
+            }
+        }
+
+        foreach (var resource in HaldusMaintenanceRegistry.HoldResources)
+        {
+            // Kayıt süreç genelindedir; bu uygulamanın parçası olmayan bir modülün kaynağı atlanır.
+            if (contexts.ContextOf(resource.Key.Assembly) is null)
+            {
+                continue;
+            }
+
+            try
+            {
+                var released = await resource.Value(provider, now, cancellationToken);
+                logger.LogDebug("Released {Count} expired holds on '{Resource}' balances.", released, resource.Key.Name);
+            }
+            catch (DbException exception)
+            {
+                logger.LogWarning(exception, "Expired holds on '{Resource}' balances could not be released.", resource.Key.Name);
             }
         }
 

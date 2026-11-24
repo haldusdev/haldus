@@ -26,6 +26,8 @@ export * from './articleSectionResponse';
 export * from './attachmentResponse';
 export * from './balanceAdjustment';
 export * from './balanceEntry';
+export * from './balanceHold';
+export * from './balanceHoldRequest';
 export * from './balanceMove';
 export * from './balanceSetting';
 export * from './basketItemResponse';

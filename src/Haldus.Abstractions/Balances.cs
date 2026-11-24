@@ -68,3 +68,31 @@ public sealed record BalanceEntry(
     string? Reason,
     DateTimeOffset CreatedAt,
     string? CreatedBy);
+
+/// <summary>
+/// Bakiyeye karşı bir tutma başlatır (<c>POST /{key}/holds</c>): miktar eldeki kovadan ayrılan kovaya geçer ve
+/// tutma kapanana kadar orada bekler. Tutma tahsil edilir (miktar bakiyeden düşer), bırakılır (geri döner) veya
+/// süresi dolunca kendiliğinden bırakılır.
+/// </summary>
+public sealed record BalanceHoldRequest
+{
+    /// <summary>Tutulan miktar; sıfırdan büyük olmalıdır.</summary>
+    public decimal Quantity { get; init; }
+
+    /// <summary>Tutmanın ömrü, saniye olarak; verilmezse tutma kendiliğinden bırakılmaz.</summary>
+    [Range(1, 31_536_000)]
+    public int? ExpiresInSeconds { get; init; }
+
+    [MaxLength(500)]
+    public string? Reason { get; init; }
+}
+
+/// <summary>Bakiyeye karşı bir tutma.</summary>
+/// <param name="Status"><c>Active</c>, <c>Captured</c>, <c>Released</c> veya <c>Expired</c>.</param>
+public sealed record BalanceHold(
+    Guid Id,
+    decimal Quantity,
+    string Status,
+    DateTimeOffset CreatedAt,
+    DateTimeOffset? ExpiresAt,
+    string? Reason);

@@ -3,6 +3,7 @@ using System.Net.Http.Json;
 using Haldus.Sample.Shop;
 using Haldus.Sample.Shop.Features.Stock;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 
 namespace Haldus.IntegrationTests;
 
@@ -144,6 +145,93 @@ public sealed class BalanceEndpointTests(ShopFixture fixture)
         Assert.Equal(["from"], await ErrorsAsync(await SendAsync(HttpMethod.Post, $"{Url}/move", new { from = "lost", to = "reserved", quantity = 1m })));
         Assert.Equal(["to"], await ErrorsAsync(await SendAsync(HttpMethod.Post, $"{Url}/move", new { from = "available", to = "available", quantity = 1m })));
         Assert.Equal(["quantity"], await ErrorsAsync(await SendAsync(HttpMethod.Post, $"{Url}/move", new { from = "available", to = "reserved", quantity = 0m })));
+    }
+
+    [Fact]
+    public async Task Holds_ReserveAQuantityUntilTheyAreCapturedOrReleased()
+    {
+        await ReadAsync<InventoryResponse>(await SendAsync(HttpMethod.Post, $"{Url}/adjust", new { delta = 10m }));
+
+        // Tutma miktarı eldeki stoktan ayrılmış stoğa taşır ve bir kayıt açar.
+        var first = await ReadAsync<BalanceHold>(await SendAsync(HttpMethod.Post, $"{Url}/holds", new { quantity = 4m, expiresInSeconds = 3600, reason = "Order 1" }));
+        Assert.Equal((4m, "Active", "Order 1"), (first.Quantity, first.Status, first.Reason));
+        Assert.NotNull(first.ExpiresAt);
+
+        var held = await ReadAsync<InventoryResponse>(await SendAsync(HttpMethod.Get, Url));
+        Assert.Equal((6m, 4m), (held.Available, held.Reserved));
+
+        // Eldekinden fazlası tutulamaz; reddedilen istek hiçbir şey yazmaz.
+        Assert.Equal(HttpStatusCode.Conflict, (await SendAsync(HttpMethod.Post, $"{Url}/holds", new { quantity = 7m })).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await SendAsync(HttpMethod.Post, $"{Url}/holds", new { quantity = 0m })).StatusCode);
+
+        var second = await ReadAsync<BalanceHold>(await SendAsync(HttpMethod.Post, $"{Url}/holds", new { quantity = 2m }));
+        Assert.Null(second.ExpiresAt);
+
+        var open = await ReadAsync<List<BalanceHold>>(await SendAsync(HttpMethod.Get, $"{Url}/holds"));
+        Assert.Equal([first.Id, second.Id], open.Select(hold => hold.Id));
+
+        // Tahsil: miktar bakiyeden düşer. Kapanan tutma ikinci kez kapatılamaz.
+        var captured = await ReadAsync<InventoryResponse>(await SendAsync(HttpMethod.Post, $"{Url}/holds/{first.Id}/capture"));
+        Assert.Equal((4m, 2m), (captured.Available, captured.Reserved));
+        Assert.Equal(HttpStatusCode.Conflict, (await SendAsync(HttpMethod.Post, $"{Url}/holds/{first.Id}/capture")).StatusCode);
+        Assert.Equal(HttpStatusCode.Conflict, (await SendAsync(HttpMethod.Post, $"{Url}/holds/{first.Id}/release")).StatusCode);
+
+        // Bırakma: miktar eldeki stoğa geri döner.
+        var released = await ReadAsync<InventoryResponse>(await SendAsync(HttpMethod.Post, $"{Url}/holds/{second.Id}/release"));
+        Assert.Equal((6m, 0m), (released.Available, released.Reserved));
+        Assert.Empty(await ReadAsync<List<BalanceHold>>(await SendAsync(HttpMethod.Get, $"{Url}/holds")));
+
+        // Olmayan tutma ve başka kiracının tutması bulunamaz.
+        Assert.Equal(HttpStatusCode.NotFound, (await SendAsync(HttpMethod.Post, $"{Url}/holds/{Guid.NewGuid()}/capture")).StatusCode);
+
+        var third = await ReadAsync<BalanceHold>(await SendAsync(HttpMethod.Post, $"{Url}/holds", new { quantity = 1m }));
+        Assert.Equal(HttpStatusCode.NotFound, (await SendAsync(HttpMethod.Post, $"{Url}/holds/{third.Id}/capture", tenant: _otherTenant)).StatusCode);
+        Assert.Empty(await ReadAsync<List<BalanceHold>>(await SendAsync(HttpMethod.Get, $"{Url}/holds", tenant: _otherTenant)));
+
+        // Her adım deftere geçer.
+        var entries = await ReadAsync<PagedResult<BalanceEntry>>(await SendAsync(HttpMethod.Get, $"{Url}/entries?pageSize=50"));
+        Assert.Contains(entries.Items, entry => entry.Bucket == "reserved" && entry.Delta == 4m && entry.Reason == "Order 1");
+        Assert.Contains(entries.Items, entry => entry.Bucket == "reserved" && entry.Delta == -4m);
+        Assert.Contains(entries.Items, entry => entry.Bucket == "available" && entry.Delta == 2m && entry.Reason == "Released");
+    }
+
+    [Fact]
+    public async Task ExpiredHolds_AreReleasedByMaintenance()
+    {
+        await ReadAsync<InventoryResponse>(await SendAsync(HttpMethod.Post, $"{Url}/adjust", new { delta = 5m }));
+
+        var expiring = await ReadAsync<BalanceHold>(await SendAsync(HttpMethod.Post, $"{Url}/holds", new { quantity = 3m, expiresInSeconds = 60 }));
+        var lasting = await ReadAsync<BalanceHold>(await SendAsync(HttpMethod.Post, $"{Url}/holds", new { quantity = 1m, expiresInSeconds = 86_400 }));
+
+        // Süresi dolmamış tutmalara bakım dokunmaz.
+        await HaldusMaintenance.RunAsync(fixture.Services, CancellationToken);
+        var before = await ReadAsync<InventoryResponse>(await SendAsync(HttpMethod.Get, Url));
+        Assert.Equal((1m, 4m), (before.Available, before.Reserved));
+
+        // Tutmanın süresi geçer (saat ileri alınamadığı için kayıt geriye çekilir).
+        await fixture.WithDbContextAsync(async context =>
+        {
+            var hold = await context.Set<HaldusBalanceHold>().SingleAsync(candidate => candidate.Id == expiring.Id, CancellationToken);
+            hold.ExpiresAt = DateTimeOffset.UtcNow.AddMinutes(-1);
+            await context.SaveChangesAsync(CancellationToken);
+        });
+
+        // Süresi geçmiş tutma tahsil edilemez, ama elle bırakılabilir; bakım onu kendiliğinden bırakır.
+        Assert.Equal(HttpStatusCode.Conflict, (await SendAsync(HttpMethod.Post, $"{Url}/holds/{expiring.Id}/capture")).StatusCode);
+
+        await HaldusMaintenance.RunAsync(fixture.Services, CancellationToken);
+
+        var after = await ReadAsync<InventoryResponse>(await SendAsync(HttpMethod.Get, Url));
+        Assert.Equal((4m, 1m), (after.Available, after.Reserved));
+        Assert.Equal(lasting.Id, Assert.Single(await ReadAsync<List<BalanceHold>>(await SendAsync(HttpMethod.Get, $"{Url}/holds"))).Id);
+        Assert.Equal(HttpStatusCode.Conflict, (await SendAsync(HttpMethod.Post, $"{Url}/holds/{expiring.Id}/release")).StatusCode);
+
+        var entries = await ReadAsync<PagedResult<BalanceEntry>>(await SendAsync(HttpMethod.Get, $"{Url}/entries?pageSize=50"));
+        Assert.Contains(entries.Items, entry => entry.Bucket == "available" && entry.Delta == 3m && entry.Reason == "Expired");
+
+        // İkinci tur aynı tutmayı yeniden bırakmaz.
+        await HaldusMaintenance.RunAsync(fixture.Services, CancellationToken);
+        Assert.Equal(4m, (await ReadAsync<InventoryResponse>(await SendAsync(HttpMethod.Get, Url))).Available);
     }
 
     [Fact]

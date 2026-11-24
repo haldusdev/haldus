@@ -602,6 +602,9 @@ public partial class Inventory;   // Key, Available, Reserved, Damaged alanları
 | `POST /inventories/{key}/move` | `{ "from": "available", "to": "reserved", "quantity": 2 }`: miktarı bir kovadan ötekine tek işlemde taşır. Yalnızca birden çok kova varsa üretilir |
 | `GET /inventories/{key}/entries` | Defter: her değişimin kovası, miktarı, sonraki bakiyesi, açıklaması, zamanı ve yapanı; en yeni başta. `?bucket=` ile süzülür |
 | `GET /inventories`, `GET /inventories/{key}` | Bakiyeler; kova alanları süzülebilir ve sıralanabilir |
+| `POST /inventories/{key}/holds` | `.Holds(from: "available", to: "reserved")` bildirildiyse: `{ "quantity": 4, "expiresInSeconds": 900 }` miktarı eldeki kovadan ayrılan kovaya taşır ve bir tutma açar (rezervasyon, ön provizyon) |
+| `POST /inventories/{key}/holds/{holdId}/capture`, `…/release` | Tutmayı tahsil eder (miktar bakiyeden düşer) veya bırakır (eldeki kovaya döner). Kapanmış ya da süresi geçmiş tutma tahsil edilemez (409) |
+| `GET /inventories/{key}/holds` | Açık tutmalar. Ömrü verilen tutmayı, süresi dolunca bakım servisi kendiliğinden bırakır |
 
 Hiçbir kova sıfırın altına düşemez: yetersiz bakiye 409 döner ve hiçbir şey yazılmaz (`.AllowNegative()` bu kuralı
 kaldırır). Kontrol ve yazma bakiye başına bir kilidin altındadır; aynı anda gelen yirmi düşüşten bakiyenin karşıladığı

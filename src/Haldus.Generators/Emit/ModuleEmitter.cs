@@ -99,6 +99,11 @@ internal static class ModuleEmitter
             {
                 // Bakiyelerin defteri tek bir tablodadır.
                 model.Append("            global::Haldus.HaldusBalances.Configure(modelBuilder);\n");
+
+                if (resources.Any(entry => entry.Resource.Balance is { HoldFrom: not null }))
+                {
+                    model.Append("            global::Haldus.HaldusBalanceHolds.Configure(modelBuilder);\n");
+                }
             }
 
             if (resources.Any(entry => entry.Resource.Has(Traits.ChangeFeed)))
@@ -129,6 +134,12 @@ internal static class ModuleEmitter
             {
                 // Süresi dolan kayıtlar, uygulama isterse bakım sırasında fiziksel olarak silinir.
                 blocks.Add($"        global::Haldus.HaldusMaintenanceRegistry.RegisterExpiring<{entity}>();\n");
+            }
+
+            if (resource.Balance is { HoldFrom: not null })
+            {
+                // Süresi dolan tutmaları bakım bırakır; bırakmanın kendisi kaynağın üretilen kodundadır.
+                blocks.Add($"        global::Haldus.HaldusMaintenanceRegistry.RegisterBalanceHolds<{entity}>({entity}Endpoints.ReleaseExpiredHoldsAsync);\n");
             }
 
             if (resource.ScheduledPublishing)

@@ -276,4 +276,10 @@
   <data name="Approval.RoleRequired" xml:space="preserve">
     <value>Onayın bu düzeyinin kararını, o düzey için bildirilen role sahip bir kullanıcı verebilir.</value>
   </data>
+  <data name="Balance.Hold.Closed" xml:space="preserve">
+    <value>Bu tutma artık açık değil: tahsil edildi, bırakıldı veya süresi doldu.</value>
+  </data>
+  <data name="Balance.Hold.Limit" xml:space="preserve">
+    <value>Bu bakiyenin zaten {0} açık tutması var; yenisini açmadan önce bazılarını kapatın.</value>
+  </data>
 </root>

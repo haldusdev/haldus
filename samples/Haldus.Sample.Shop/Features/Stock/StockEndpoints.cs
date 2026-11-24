@@ -23,6 +23,10 @@ public static class StockEndpoints
         app.MapBalance<Inventory>()
             .MultiTenant()
             .Buckets("available", "reserved", "damaged")
+
+            // Rezervasyon: POST /inventories/{key}/holds miktarı eldeki stoktan ayrılmış stoğa taşır; tutma tahsil edilir
+            // (…/capture: stoktan düşer), bırakılır (…/release) veya ömrü dolunca kendiliğinden geri döner.
+            .Holds(from: "available", to: "reserved")
             .Idempotent()
             .Sortable(inventory => inventory.Available);
 

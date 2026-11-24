@@ -118,6 +118,46 @@ public sealed class BalanceTests
     }
 
     [Fact]
+    public void Holds_ReserveAQuantityThroughTheRuntimeUnderTheBalanceLock()
+    {
+        var run = Run("app.MapBalance<Inventory>().MultiTenant().Buckets(\"available\", \"reserved\").Holds(to: \"reserved\", from: \"available\").Idempotent();").AssertCompiles();
+        var endpoints = run.Sources["Shop.Inventory.Endpoints.g.cs"];
+
+        Assert.Contains("""MapPost("/{key}/holds", HoldAsync)""", endpoints);
+        Assert.Contains("""MapGet("/{key}/holds", HoldsAsync)""", endpoints);
+        Assert.Contains("""MapPost("/{key}/holds/{holdId:guid}/capture", CaptureHoldAsync)""", endpoints);
+        Assert.Contains("""MapPost("/{key}/holds/{holdId:guid}/release", ReleaseHoldAsync)""", endpoints);
+
+        // Kurallar çalışma zamanındadır; üretilen kod kovaları (adlı argümanlar yer değiştirse de doğru sırayla) ve
+        // bakiyeyi okuyup yazan parçalarını verir.
+        var hold = Handler(endpoints, "HoldAsync");
+        Assert.Contains("global::Haldus.HaldusBalanceHolds.PlaceAsync<Inventory>(", hold);
+        Assert.Contains("\"available\",\n            \"reserved\",", hold);
+        Assert.Contains("allowNegative: false,\n            FindOrStartAsync,\n            Read,\n            Write,", hold);
+        Assert.Contains("BalanceInsufficient(messages, \"available\", result.Balance)", hold);
+
+        var close = Handler(endpoints, "CloseHoldAsync");
+        Assert.Contains("global::Haldus.HaldusBalanceHolds.CloseAsync<Inventory>(", close);
+        Assert.Contains("NotFound(messages, \"Hold\", holdId)", close);
+        Assert.Contains("BalanceHoldClosed(messages)", close);
+
+        // Süresi dolan tutmaları bakım, her birini kendi kiracısı adına bırakır; kapatılamayanlar sırayı tutamaz.
+        var expired = Handler(endpoints, "ReleaseExpiredHoldsAsync");
+        Assert.Contains("global::Haldus.HaldusAmbient.Use(hold.TenantId, null)", expired);
+        Assert.Contains("skip: failed,", expired);
+        Assert.Contains("global::Haldus.HaldusBalanceHolds.Expired,", expired);
+
+        var module = run.Sources["HaldusModule.g.cs"];
+        Assert.Contains("global::Haldus.HaldusBalanceHolds.Configure(modelBuilder);", module);
+        Assert.Contains("global::Haldus.HaldusMaintenanceRegistry.RegisterBalanceHolds<global::Shop.Inventory>(global::Shop.InventoryEndpoints.ReleaseExpiredHoldsAsync);", module);
+
+        // Tutma bildirilmediyse hiçbiri üretilmez.
+        var plain = Run("app.MapBalance<Inventory>().Buckets(\"available\", \"reserved\");").AssertCompiles();
+        Assert.DoesNotContain("Hold", plain.Sources["Shop.Inventory.Endpoints.g.cs"]);
+        Assert.DoesNotContain("HaldusBalanceHolds", plain.Sources["HaldusModule.g.cs"]);
+    }
+
+    [Fact]
     public void AllowNegative_DropsTheFloor()
     {
         var endpoints = Run("app.MapBalance<Inventory>().AllowNegative();").AssertCompiles().Sources["Shop.Inventory.Endpoints.g.cs"];
@@ -136,6 +176,10 @@ public sealed class BalanceTests
     [InlineData("app.MapBalance<Inventory>().Buckets(\"key\");", "HALDUS010", "would collide with the 'Key' field")]
     [InlineData("app.MapCrud<Product>().Buckets(\"available\");", "HALDUS007", "declare them on a MapBalance call")]
     [InlineData("app.MapCrud<Product>().AllowNegative();", "HALDUS007", "declare them on a MapBalance call")]
+    [InlineData("app.MapCrud<Product>().Holds(\"available\", \"reserved\");", "HALDUS007", "declare them on a MapBalance call")]
+    [InlineData("app.MapBalance<Inventory>().Buckets(\"available\", \"reserved\").Holds(\"available\", \"held\");", "HALDUS010", "Holds names the buckets 'available' and 'held'")]
+    [InlineData("app.MapBalance<Inventory>().Buckets(\"available\", \"reserved\").Holds(\"available\", \"available\");", "HALDUS010", "Holds needs two different bucket names")]
+    [InlineData("var bucket = \"reserved\"; app.MapBalance<Inventory>().Buckets(\"available\", \"reserved\").Holds(\"available\", bucket);", "HALDUS010", "Holds needs two different bucket names")]
     public void MapBalance_RejectsDeclarationsThatCannotWork(string body, string expectedId, string expectedMessage)
     {
         var run = Run(body);

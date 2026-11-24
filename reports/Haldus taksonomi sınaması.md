@@ -224,7 +224,7 @@ sınırları ayrıca [README](../README.md) ve `CLAUDE.md` dosyalarında, özell
 |---|---|---|
 | Onay zincirinin gelişmiş biçimleri (paralel onay, vekâlet, düzeyin birden çok rolü) | 24 | Düzey başına rol (`ApprovalRoles`) ve kayda göre değişen düzey sayısı (`IApprovalLevels`) sonradan yazıldı |
 | `RRULE`'un tamamı (`BYMONTHDAY`, `BYSETPOS`, `BYMONTH`, `WKST`, `EXDATE` / `RDATE`) | 36 | Haftanın günleri, ay içindeki sıra (`2TU`, `-1FR`) ve saat dilimi sonradan yazıldı; gerisi araştırmada da kapsam dışıydı |
-| Bakiyeye karşı süreli tutma | 11, 21 | Kovalar arası `move` ile elle yazılır; süresi dolan tutma kendiliğinden geri dönmez |
+| Tutmanın kısmen tahsil edilmesi | 11, 21 | Bakiyeye karşı süreli tutma sonradan yazıldı (`Holds`); tutma bütün olarak tahsil edilir veya bırakılır |
 | Kaydı kimlerin okuduğunun listesi ("görenler") | 45 | Kullanıcı başına okundu bilgisi sonradan yazıldı (`ReadReceipts`); her kullanıcı yalnızca kendi işaretini görür |
 | Hassas alanın maskelenerek gösterilmesi (son dört karakter) | — | Şifreli saklama sonradan yazıldı (`Encrypted`); şifreli alan hiçbir yanıtta gösterilmez |
 | Çok düzeyli kalıtım ve tek tablo dışındaki eşlemeler | — | `SubtypeOf` tek düzeydir ve tek tablo (TPH) kullanır |

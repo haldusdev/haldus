@@ -66,6 +66,7 @@ internal static class ChainReader
         "TokenOnly",
         "Buckets",
         "AllowNegative",
+        "Holds",
         "ChangeSets",
         "Retention",
         "ReadTracking",

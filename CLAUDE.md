@@ -725,7 +725,8 @@ denenmesi, yük ölçümü. Raporun "Bilinen sınırlar" tablosundaki kalemler d
     kimlik birincil anahtarın ihlalinden tanınıp 409 olur (ön kontrol yoktur: başka bir kiracının aynı kimliği de
     çakışmadır ve sorgu filtreleri onu göstermezdi). Kayıt oluşturan öteki yollar kimlik veremediği için `Batch`,
     `Cloneable`, `CreatedFrom`, `Reversible`, `Supersedes`, `Document` ve `Publishable` ile birleşmez (`HALDUS007`).
-    Görünürlüğü sınırlı kaynaklarla da birleşmez (`MultiTenant`, `OwnedByCurrentUser`, `Under`, `AttachedTo`): anahtar
+    Görünürlüğü sınırlı kaynaklarla da birleşmez (`MultiTenant`, `OwnedByCurrentUser`, `Under`, `AttachedTo`,
+    `TokenOnly`, `SoftDeletable`, `Expiring`, `SubtypeOf`; kayıtları gizleyen yeni bir bildirim bu listeye eklenmelidir): anahtar
     tablo genelinde benzersizdir ve "alınmış" yanıtı, isteği yapanın göremediği bir kaydın var olduğunu söylerdi
     (güvenlik incelemesinde çıktı). Öyle kaynaklarda yinelenen isteğe karşı `Idempotent()` kullanılır.
   - **Metadata.** `Traits.Metadata` (`IHasMetadata`). Alan trait alanı gibi üretilir ve yanıtta yer alır;
@@ -977,8 +978,16 @@ denenmesi, yük ölçümü. Raporun "Bilinen sınırlar" tablosundaki kalemler d
   - Zincirde yalnızca `MultiTenant`, `Idempotent`, `Sortable`, `Searchable`, `Filterable`, `Buckets`, `AllowNegative`,
     `Without` ve `Only` yazılabilir; gerisi `HALDUS007`'dir (bakiyeyi başka yoldan yazan veya gizleyen bildirimler
     onu bozardı). `Buckets` ve `AllowNegative` başka bir archetype'ta `HALDUS007`'dir.
-  - Sınırlar: bakiye silinemez; kullanıcının partial sınıfa eklediği alanları hiçbir uç yazmaz; bakiyeye karşı tutma
-    (rezervasyonun süresi dolunca kendiliğinden geri dönmesi) üretilmez, kovalar arası `move` ile elle yazılır;
+  - **Tutma** (planlardan sonra; `BalanceModel.HoldFrom` / `HoldTo`, zincirde `.Holds(from, to)`). Kurallar çalışma
+    zamanındadır (`HaldusBalanceHolds`: `PlaceAsync`, `CloseAsync`; tek bir `HaldusBalanceHolds` tablosu) ve bakiyenin
+    kilidi altında, kova + defter + tutma kaydı tek kaydetmede yazılır. Üretilen kod kovaların okunup yazılmasını ve
+    bakiyenin bulunmasını (`Read`, `Write`, `FindOrStartAsync`) delege olarak verir. Süresi dolan tutmaları bakım
+    bırakır (`ReleaseExpiredHoldsAsync`; `RegisterBalanceHolds`), her birini kendi kiracısı adına (`HaldusAmbient`);
+    kapatılamayanlar atlanır ki sırayı tutmasınlar. Süresi geçmiş tutma tahsil edilemez ama elle bırakılabilir.
+    Ayrılan kova elle boşaltılmışsa süresi dolan tutma yine kapanır ve geri dönen miktar kovada kalanla sınırlanır.
+    Sınırlar: bir bakiyenin en çok 1000 açık tutması olur; tutma kısmen tahsil edilemez; ömür en çok bir yıldır;
+    kapanan tutmalar silinmez.
+  - Sınırlar: bakiye silinemez; kullanıcının partial sınıfa eklediği alanları hiçbir uç yazmaz;
     defter kendiliğinden temizlenmez; miktarın ölçeği ve birimi yoktur (`decimal`); anahtar en çok 200 karakterdir;
     uygulamanın kendi kodu bakiyeyi doğrudan yazarsa deftere kayıt düşmez.
 - **Durum eksenleri.** `ResourceModel.Axes` (`LifecycleReader`; `ReadWorkflow` ile okunur, alanı `ExtraMembers`'a

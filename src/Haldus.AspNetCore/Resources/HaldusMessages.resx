@@ -276,4 +276,10 @@
   <data name="Approval.RoleRequired" xml:space="preserve">
     <value>This level of the approval must be decided by a user who holds the role declared for it.</value>
   </data>
+  <data name="Balance.Hold.Closed" xml:space="preserve">
+    <value>This hold is no longer open: it has been captured, released or has expired.</value>
+  </data>
+  <data name="Balance.Hold.Limit" xml:space="preserve">
+    <value>This balance already has {0} open holds; close some before placing another.</value>
+  </data>
 </root>

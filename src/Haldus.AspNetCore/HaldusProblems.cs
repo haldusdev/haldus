@@ -228,6 +228,28 @@ public static class HaldusProblems
         return FieldProblem(messages, field, messages.Format(HaldusMessageKeys.BalanceAmountInvalid));
     }
 
+    /// <summary>Tutma artık açık değil: tahsil edildi, bırakıldı veya süresi doldu.</summary>
+    public static ProblemHttpResult BalanceHoldClosed(IHaldusMessages messages)
+    {
+        ArgumentNullException.ThrowIfNull(messages);
+
+        return TypedResults.Problem(
+            title: messages.Format(HaldusMessageKeys.StateConflictTitle),
+            detail: messages.Format(HaldusMessageKeys.BalanceHoldClosed),
+            statusCode: StatusCodes.Status409Conflict);
+    }
+
+    /// <summary>Bakiyenin açık tutma sayısı sınırda; yenisi açılamaz.</summary>
+    public static ProblemHttpResult BalanceHoldLimit(IHaldusMessages messages)
+    {
+        ArgumentNullException.ThrowIfNull(messages);
+
+        return TypedResults.Problem(
+            title: messages.Format(HaldusMessageKeys.StateConflictTitle),
+            detail: messages.Format(HaldusMessageKeys.BalanceHoldLimit, HaldusBalanceHolds.MaxActive),
+            statusCode: StatusCodes.Status409Conflict);
+    }
+
     /// <summary>Taşımanın kaynağı ve hedefi aynı kova.</summary>
     public static ProblemHttpResult BalanceMoveSame(IHaldusMessages messages)
     {

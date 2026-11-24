@@ -149,6 +149,19 @@ internal static class MapCallParser
 
             balance = new BalanceModel(buckets.ToEquatableArray(), lifecycle.AllowNegative);
 
+            if (lifecycle.Holds is { } holds)
+            {
+                if (buckets.Any(bucket => bucket.Name == holds.From) && buckets.Any(bucket => bucket.Name == holds.To))
+                {
+                    balance = balance with { HoldFrom = holds.From, HoldTo = holds.To };
+                }
+                else
+                {
+                    diagnostics.Add(new DiagnosticInfo(
+                        "HALDUS010", location, new EquatableArray<string>([$"Holds names the buckets '{holds.From}' and '{holds.To}', but the balance declares {string.Join(", ", buckets.Select(bucket => $"'{bucket.Name}'"))}"])));
+                }
+            }
+
             // Bakiyenin son ne zaman değiştiği bilinmelidir.
             traits |= Traits.Auditable;
 
@@ -158,10 +171,10 @@ internal static class MapCallParser
                     bucket.Property, "decimal", InResponse: true, new SearchField(bucket.Property, SearchKind.Range, "decimal", IsNullable: false)));
             }
         }
-        else if (lifecycle.Buckets.Count > 0 || lifecycle.AllowNegative)
+        else if (lifecycle.Buckets.Count > 0 || lifecycle.AllowNegative || lifecycle.Holds is not null)
         {
             diagnostics.Add(new DiagnosticInfo(
-                "HALDUS007", location, new EquatableArray<string>(["Buckets and AllowNegative describe a balance; declare them on a MapBalance call"])));
+                "HALDUS007", location, new EquatableArray<string>(["Buckets, AllowNegative and Holds describe a balance; declare them on a MapBalance call"])));
         }
 
         FileModel? file = null;
@@ -296,8 +309,10 @@ internal static class MapCallParser
             }
 
             // Anahtar tablo genelinde benzersizdir. Kayıtları herkese görünmeyen bir kaynakta "bu kimlik alınmış"
-            // yanıtı, isteği yapanın göremediği bir kaydın var olduğunu söylerdi.
-            foreach (var scope in new[] { "MultiTenant", "OwnedByCurrentUser", "Under", "AttachedTo" })
+            // yanıtı, isteği yapanın göremediği bir kaydın var olduğunu söylerdi. Görünürlüğü daraltan her bildirim
+            // buraya girer: kiracı, sahip, üst kayıt, yalnızca token, silinmiş sayılan ve süresi dolan kayıtlar.
+            // **Kayıtları isteği yapandan gizleyen yeni bir bildirim bu listeye eklenmelidir.**
+            foreach (var scope in new[] { "MultiTenant", "OwnedByCurrentUser", "Under", "AttachedTo", "TokenOnly", "SoftDeletable", "Expiring", "SubtypeOf" })
             {
                 if (chain.Any(call => call.Name == scope))
                 {
@@ -986,7 +1001,7 @@ internal static class MapCallParser
             // Bakiye yalnızca kendi komutlarıyla değişir; kaydı başka yoldan yazan veya gizleyen bildirimler onu bozardı.
             foreach (var declaration in chain.Select(call => call.Name).Distinct())
             {
-                if (declaration is not ("MultiTenant" or "Idempotent" or "Sortable" or "Searchable" or "Filterable" or "Buckets" or "AllowNegative" or "Without" or "Only"))
+                if (declaration is not ("MultiTenant" or "Idempotent" or "Sortable" or "Searchable" or "Filterable" or "Buckets" or "AllowNegative" or "Holds" or "Without" or "Only"))
                 {
                     yield return $"{declaration} cannot be combined with MapBalance: a balance changes only through its own commands";
                 }

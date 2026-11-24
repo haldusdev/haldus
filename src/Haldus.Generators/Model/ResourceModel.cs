@@ -756,7 +756,14 @@ internal sealed record ChangeSetModel(EquatableArray<string>? AllowedIn);
 internal sealed record BucketModel(string Name, string Property);
 
 /// <param name="AllowNegative">Bakiye sıfırın altına düşebilir mi.</param>
-internal sealed record BalanceModel(EquatableArray<BucketModel> Buckets, bool AllowNegative);
+internal sealed record BalanceModel(EquatableArray<BucketModel> Buckets, bool AllowNegative)
+{
+    /// <summary><c>.Holds(from, to)</c>: tutulan miktarın çıktığı (eldeki) kova.</summary>
+    public string? HoldFrom { get; init; }
+
+    /// <summary>Tutulan miktarın beklediği (ayrılan) kova.</summary>
+    public string? HoldTo { get; init; }
+}
 
 /// <summary>
 /// Kaydın asıl durumundan bağımsız ilerleyen ek bir durum ekseni (<c>.Axis&lt;PaymentStatus&gt;()</c>): siparişin
