@@ -17,6 +17,16 @@ public sealed class HaldusOptions
     /// sonra aynı anahtar yeni bir istek sayılır.
     /// </summary>
     public TimeSpan IdempotencyRetention { get; set; } = TimeSpan.FromHours(24);
+
+    /// <summary>
+    /// Süresi dolan (<c>.Expiring()</c>) kayıtların, süreleri dolduktan ne kadar sonra fiziksel olarak
+    /// silineceği. Varsayılan <c>null</c>: kayıtlar gizlenir ama hiç silinmez. Silme geri alınamaz ve o
+    /// kayıtların zincirleme silinen alt kayıtlarını da götürür.
+    /// </summary>
+    public TimeSpan? PurgeExpiredAfter { get; set; }
+
+    /// <summary>Bakımın (saklama süresi geçmiş idempotency yanıtları, süresi dolmuş kayıtlar) ne sıklıkla çalışacağı.</summary>
+    public TimeSpan MaintenanceInterval { get; set; } = TimeSpan.FromHours(1);
 }
 
 internal sealed class ClaimsTenantProvider(IHttpContextAccessor accessor, IOptions<HaldusOptions> options) : ITenantProvider

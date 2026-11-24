@@ -19,10 +19,15 @@ public sealed class ShopFixture : IAsyncLifetime
     /// <summary>
     /// Aynı veritabanına bağlanan, servisleri değiştirilmiş ikinci bir uygulama (ör. başka bir iş altyapısıyla).
     /// </summary>
-    public HttpClient CreateClient(Action<IServiceCollection> configureServices) =>
+    public HttpClient CreateClient(Action<IServiceCollection> configureServices) => CreateFactory(configureServices).CreateClient();
+
+    public WebApplicationFactory<Program> CreateFactory(Action<IServiceCollection> configureServices) =>
         (_factory ?? throw new InvalidOperationException("The fixture has not been initialized."))
-            .WithWebHostBuilder(builder => builder.ConfigureTestServices(configureServices))
-            .CreateClient();
+            .WithWebHostBuilder(builder => builder.ConfigureTestServices(configureServices));
+
+    /// <summary>Uygulamanın servis sağlayıcısı; bakım gibi, bir isteğe bağlı olmayan işleri çalıştırmak için.</summary>
+    public IServiceProvider Services =>
+        (_factory ?? throw new InvalidOperationException("The fixture has not been initialized.")).Services;
 
     /// <summary>İstemcinin yazamadığı verileri (ör. salt-okunur kaynaklar) doğrudan veritabanına koymak için.</summary>
     public async Task WithDbContextAsync(Func<AppDbContext, Task> action)

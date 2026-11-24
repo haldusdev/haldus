@@ -67,6 +67,12 @@ internal static class ModuleEmitter
             var entity = ResourceEmitter.QualifiedName(resource, entityNamespace);
             blocks.Add($"        global::Haldus.HaldusEndpointRegistry.Register<{entity}>({entity}Endpoints.Map);\n");
 
+            if (resource.Expiry is not null)
+            {
+                // Süresi dolan kayıtlar, uygulama isterse bakım sırasında fiziksel olarak silinir.
+                blocks.Add($"        global::Haldus.HaldusMaintenanceRegistry.RegisterExpiring<{entity}>();\n");
+            }
+
             if (resource.Archetype == Archetype.Job)
             {
                 // Yürütücü işi, kuyruktan gelen tip adıyla bulur.

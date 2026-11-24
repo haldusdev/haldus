@@ -38,5 +38,7 @@ internal static class HaldusModule
         global::Haldus.HaldusTransitionRegistry.Register<global::Shop.Invoice>("issue", global::Shop.InvoiceEndpoints.MapIssueTransition);
 
         global::Haldus.HaldusEndpointRegistry.Register<global::Shop.Reservation>(global::Shop.ReservationEndpoints.Map);
+
+        global::Haldus.HaldusMaintenanceRegistry.RegisterExpiring<global::Shop.Reservation>();
     }
 }

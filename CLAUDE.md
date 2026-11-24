@@ -129,8 +129,7 @@ Bunlar kullanıcıyla kararlaştırıldı; yeniden sorma.
 ## Aşamalar
 
 1–7 tamamlandı (3. aşamaya `.Searchable()` da eklendi). 8. aşama sürüyor: `MapJob` (bellek içi ve
-PostgreSQL altyapılarıyla) ve `Batch` bitti; kalanlar Hangfire paketi ve fiziksel temizlik (süresi dolmuş
-`Expiring` kayıtları, saklama süresi geçmiş idempotency kayıtları).
+PostgreSQL altyapılarıyla), `Batch` ve fiziksel temizlik bitti; kalan tek parça Hangfire paketi.
 
 1. İskelet
 2. Generator çekirdeği ve `MapCrud`
@@ -149,8 +148,8 @@ PostgreSQL altyapılarıyla) ve `Batch` bitti; kalanlar Hangfire paketi ve fizik
 
 - Frontend ve mobil desteğinin kapsamı (backend API şekli oturunca ele alınacak).
 - Hangfire paketinin bağımlılıkları (`Hangfire.Core`; testlerde bir depolama sağlayıcısı) için onay.
-- Fiziksel temizlik: süresi dolmuş `Expiring` kayıtları ve saklama süresi geçmiş idempotency kayıtları şu an
-  birikir. Süresi dolmuş kayıtların varsayılan olarak silinip silinmeyeceği sorulacak.
+- Süresi dolmuş `Expiring` kayıtları varsayılan olarak silinmez (`HaldusOptions.PurgeExpiredAfter` boş).
+  Bu varsayılanı kullanıcı ayrıca onaylamadı; kullanıcı verisini kendiliğinden silmemek için böyle seçildi.
 
 ## Generator'ın işleyişi
 
@@ -319,6 +318,12 @@ PostgreSQL altyapılarıyla) ve `Batch` bitti; kalanlar Hangfire paketi ve fizik
   - Sınırlar: sürüm kontrollü kaynakta toplu güncelleme ve silme yoktur (öğe sürüm taşıyamaz; `HALDUS007`),
     toplu yama (`PATCH`) yoktur, geçişlerin toplu biçimi yoktur. Kısmi modda bir öğe beklenmeyen bir hatayla
     (500) düşerse ondan önceki öğeler kaydedilmiş kalır.
+- **Bakım.** `HaldusMaintenanceService` (her `AddHaldus` uygulamasında çalışır) `MaintenanceInterval`
+  aralığıyla `HaldusMaintenance.RunAsync` çağırır: saklama süresi geçmiş idempotency yanıtlarını her zaman,
+  süresi dolmuş `Expiring` kayıtlarını yalnızca `PurgeExpiredAfter` verildiyse siler. Silinecek kaynakları
+  üretilen modül `HaldusMaintenanceRegistry.RegisterExpiring<T>()` ile kaydeder. Bakım bir isteğe ait
+  olmadığı için burada parametresiz `IgnoreQueryFilters()` bilerek kullanılır; üretilen uç kodunda yasak
+  olmaya devam eder. Aynı yöntem testlerden ve yönetim komutlarından doğrudan çağrılabilir.
 - Haldus'un kendi tabloları (`HaldusCounters`, `HaldusIdempotencyRecords`) yalnızca onları kullanan bir
   kaynak varsa modele eklenir; ekleyen, üretilen modül kodudur.
 - Tanılar `HALDUS001`+ kodlarıyla `Diagnostics/HaldusDiagnostics.cs` ve `AnalyzerReleases.Unshipped.md`

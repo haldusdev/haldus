@@ -38,6 +38,7 @@ public static class HaldusServiceCollectionExtensions
         // İşlerin yürütücüsü altyapıdan bağımsızdır; işleri ona ulaştıran altyapı ayrı bir paketle seçilir.
         services.AddOptions<HaldusJobOptions>();
         services.TryAddSingleton<HaldusJobRunner>();
+        services.AddHostedService<HaldusMaintenanceService>();
 
         // Generator'ın bulduğu handler sınıfları.
         HaldusServiceRegistry.Apply(services);

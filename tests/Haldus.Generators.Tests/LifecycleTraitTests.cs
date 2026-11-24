@@ -209,7 +209,12 @@ public sealed class LifecycleTraitTests
         Assert.Contains("ExpiresAt = request.ExpiresAt", endpoints);
         Assert.DoesNotContain("Lifetime", endpoints);
         Assert.Contains("group.MapPost(\"/{id:guid}/expire\", ExpireAsync)", endpoints);
-        Assert.Contains("global::Haldus.HaldusFilters.Expiry", run.Sources["HaldusModule.g.cs"]);
+
+        var module = run.Sources["HaldusModule.g.cs"];
+        Assert.Contains("global::Haldus.HaldusFilters.Expiry", module);
+
+        // Bakım, uygulama isterse süresi dolmuş kayıtları bu kayıt üzerinden bulur ve siler.
+        Assert.Contains("global::Haldus.HaldusMaintenanceRegistry.RegisterExpiring<global::Shop.Reservation>();", module);
     }
 
     [Fact]

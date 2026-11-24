@@ -3,6 +3,7 @@ using System.Net.Http.Json;
 using Haldus.Sample.Shop;
 using Haldus.Sample.Shop.Features.Sales;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Haldus.IntegrationTests;
 
@@ -249,6 +250,56 @@ public sealed class LifecycleTraitEndpointTests(ShopFixture fixture)
         Assert.Matches(@"^RF-\d{8}$", first.Number);
         Assert.Matches(@"^RF-\d{8}$", second.Number);
         Assert.True(string.CompareOrdinal(first.Number, second.Number) < 0, $"{first.Number} should come before {second.Number}.");
+    }
+
+    [Fact]
+    public async Task Maintenance_RemovesIdempotencyRecordsPastTheirRetention()
+    {
+        var key = Guid.NewGuid().ToString();
+        var first = await ReadAsync<OrderResponse>(
+            await SendAsync(HttpMethod.Post, "/orders", new { customerName = "Ada" }, idempotencyKey: key));
+
+        // Kaydın saklama süresi dolmuş olsun.
+        await fixture.WithDbContextAsync(db => db.Set<HaldusIdempotencyRecord>()
+            .Where(record => record.Key == key)
+            .ExecuteUpdateAsync(setters => setters.SetProperty(record => record.ExpiresAt, DateTimeOffset.UtcNow.AddMinutes(-1)), CancellationToken));
+
+        await HaldusMaintenance.RunAsync(fixture.Services, CancellationToken);
+
+        var remaining = -1;
+        await fixture.WithDbContextAsync(async db =>
+            remaining = await db.Set<HaldusIdempotencyRecord>().CountAsync(record => record.Key == key, CancellationToken));
+        Assert.Equal(0, remaining);
+
+        // Anahtar artık yeni bir istektir.
+        var second = await ReadAsync<OrderResponse>(
+            await SendAsync(HttpMethod.Post, "/orders", new { customerName = "Ada" }, idempotencyKey: key));
+        Assert.NotEqual(first.Id, second.Id);
+    }
+
+    [Fact]
+    public async Task Maintenance_PurgesExpiredRecordsOnlyWhenTheApplicationAsksForIt()
+    {
+        var reservation = await ReadAsync<ReservationResponse>(await SendAsync(
+            HttpMethod.Post, "/reservations", new { productName = "Keyboard", quantity = 1 }));
+        await SendAsync(HttpMethod.Post, $"/reservations/{reservation.Id}/expire");
+
+        async Task<int> CountAsync()
+        {
+            var count = -1;
+            await fixture.WithDbContextAsync(async db => count = await db.Reservations.IgnoreQueryFilters()
+                .CountAsync(candidate => candidate.Id == reservation.Id, CancellationToken));
+            return count;
+        }
+
+        // Varsayılan: süresi dolan kayıt gizlenir ama silinmez.
+        await HaldusMaintenance.RunAsync(fixture.Services, CancellationToken);
+        Assert.Equal(1, await CountAsync());
+
+        await using var purging = fixture.CreateFactory(services =>
+            services.Configure<HaldusOptions>(options => options.PurgeExpiredAfter = TimeSpan.Zero));
+        await HaldusMaintenance.RunAsync(purging.Services, CancellationToken);
+        Assert.Equal(0, await CountAsync());
     }
 
     private async Task<OrderResponse> CreateOrderAsync() =>
