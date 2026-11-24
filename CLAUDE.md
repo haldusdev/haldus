@@ -423,6 +423,19 @@ aşamaların tamamı bitti.
 27–29. aşamalar plana 24. aşamada eklendi: raporun üçüncü sürüm satırı, daha önce bu dosyada sayılanlardan fazlasını
 içeriyor (ilişki bildirimleri, `Sensitive`, `PublishesEvents`, `Purgeable`, yeniden çalıştırılabilir iş).
 
+### Planlardan sonra
+
+Kullanıcı üç plan bittikten sonra hedefi aynı sözlerle yeniden kurdu ("projenin tamamen bitmesini istiyorum bana soru
+sorma"). Son raporda "yazılmadı" veya "yalnızca derleniyor" denen kalemler bunun üzerine kapatıldı; bunlar bir plan
+aşaması değildir ve kararları yine sorulmadan verildi:
+
+- Araştırmadaki sepet satırının çalışan hali: örnek mağazada `/me/baskets`, `/guest-baskets` ve birleştirme aksiyonu.
+- `TokenOnly` (güvenlik incelemesinin bulgusu üzerine; "Tasarım kararları"nda ve "Sırlar" altında).
+- Örnek yönetim paneli (`samples/Haldus.Sample.Shop.Web`) ve mobil uygulama (`samples/Haldus.Sample.Shop.Mobile`);
+  seçimleri "Açık kararlar"dadır.
+
+Bilerek yapılmayanlar: gerçek kimlik doğrulama örneği, arayüzler için otomatik test, mobil uygulamanın cihazda
+denenmesi, yük ölçümü. Raporun "Bilinen sınırlar" tablosundaki kalemler de yazılmadı; hiçbiri bir plana girmemişti.
 ## Açık kararlar
 
 - **Frontend ve mobil desteğinin kapsamı kapandı (31. aşama; kullanıcı sormamamı istedi, ayrıca onaylanmadı):** Haldus
