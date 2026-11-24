@@ -218,7 +218,7 @@ internal sealed partial class EndpointEmitter
                         }
 
                 {{ChainGuard()}}{{StateGuard(_resource.Workflow?.EditableIn, "update")}}{{WriteChecks(patch: false, creating: false)}}{{CycleCheck(patch: false)}}{{OrderRemember()}}{{UpdateAssignments()}}
-                {{SyncDetails(patch: false)}}{{ApprovalReset()}}{{Slide()}}{{Compute()}}{{OrderReparent()}}{{Save()}}{{OrderReparentCommit()}}        saved.Add(entity);
+                {{SyncDetails(patch: false)}}{{Slide()}}{{Compute()}}{{OrderReparent()}}{{Save()}}{{OrderReparentCommit()}}        saved.Add(entity);
                         return null;
                     }
 

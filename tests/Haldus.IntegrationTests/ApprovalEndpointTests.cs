@@ -24,11 +24,12 @@ public sealed class ApprovalEndpointTests(ShopFixture fixture)
     public async Task Approval_IsDecidedBySomeoneOtherThanTheWriter()
     {
         var claim = await ReadAsync<ExpenseClaimResponse>(await SendAsync(
-            HttpMethod.Post, "/expense-claims", _maker, new { description = "Taxi", amount = 40, approvalStatus = "Approved", requestedBy = _first }));
+            HttpMethod.Post, "/expense-claims", _maker, new { description = "Taxi", amount = 40, approvalStatus = "Approved", requestedBy = _first, contributors = new[] { _first } }));
         var url = $"/expense-claims/{claim.Id}";
 
         // Onay alanları istekle yazılamaz; kayıt karar bekleyerek doğar ve onu yazan kişiye bağlanır.
         Assert.Equal((ApprovalStatus.Pending, 0, _maker), (claim.ApprovalStatus, claim.ApprovalLevel, claim.RequestedBy));
+        Assert.Equal([_maker], claim.Contributors);
 
         var raw = await (await SendAsync(HttpMethod.Get, url, _maker)).Content.ReadAsStringAsync(CancellationToken);
         Assert.Contains("\"approvalStatus\":\"Pending\"", raw);
@@ -79,7 +80,11 @@ public sealed class ApprovalEndpointTests(ShopFixture fixture)
 
         Assert.Equal(HttpStatusCode.Forbidden, (await SendAsync(HttpMethod.Post, $"{url}/approve", _first)).StatusCode);
 
-        var approved = await ReadAsync<ExpenseClaimResponse>(await SendAsync(HttpMethod.Post, $"{url}/approve", _maker));
+        // İlk yazan da karar veremez: içeriğin bir parçası hâlâ onundur. Karar üçüncü bir kişinindir.
+        Assert.Equal([_maker, _first], edited.Contributors);
+        Assert.Equal(HttpStatusCode.Forbidden, (await SendAsync(HttpMethod.Post, $"{url}/approve", _maker)).StatusCode);
+
+        var approved = await ReadAsync<ExpenseClaimResponse>(await SendAsync(HttpMethod.Post, $"{url}/approve", _second));
         Assert.Equal(ApprovalStatus.Approved, approved.ApprovalStatus);
 
         // Kararların kaydı silinmez: ret ve sonraki onay birlikte durur.
@@ -100,14 +105,14 @@ public sealed class ApprovalEndpointTests(ShopFixture fixture)
         var url = $"/purchase-requests/{request.Id}";
 
         // Geçiş, kayıt onaylanmadan çalışmaz.
-        Assert.Equal(HttpStatusCode.Conflict, (await SendAsync(HttpMethod.Post, $"{url}/order", _maker)).StatusCode);
+        Assert.Equal(HttpStatusCode.Conflict, (await SendAsync(HttpMethod.Post, $"{url}/order", _maker, new { reference = "PO-1" })).StatusCode);
 
         var once = await ReadAsync<PurchaseRequestResponse>(await SendAsync(HttpMethod.Post, $"{url}/approve", _first));
         Assert.Equal((ApprovalStatus.Pending, 1), (once.ApprovalStatus, once.ApprovalLevel));
 
         // Aynı kişi iki düzeyi birden onaylayamaz.
         Assert.Equal(HttpStatusCode.Forbidden, (await SendAsync(HttpMethod.Post, $"{url}/approve", _first)).StatusCode);
-        Assert.Equal(HttpStatusCode.Conflict, (await SendAsync(HttpMethod.Post, $"{url}/order", _maker)).StatusCode);
+        Assert.Equal(HttpStatusCode.Conflict, (await SendAsync(HttpMethod.Post, $"{url}/order", _maker, new { reference = "PO-1" })).StatusCode);
 
         // İçerik değişince toplanan onay geçersiz olur.
         var edited = await ReadAsync<PurchaseRequestResponse>(await SendAsync(HttpMethod.Patch, url, _maker, new { amount = 6000 }));
@@ -118,11 +123,81 @@ public sealed class ApprovalEndpointTests(ShopFixture fixture)
         var twice = await ReadAsync<PurchaseRequestResponse>(await SendAsync(HttpMethod.Post, $"{url}/approve", _second, new { note = "Budget ok" }));
         Assert.Equal((ApprovalStatus.Approved, 2, _second), (twice.ApprovalStatus, twice.ApprovalLevel, twice.DecidedBy));
 
-        var ordered = await ReadAsync<PurchaseRequestResponse>(await SendAsync(HttpMethod.Post, $"{url}/order", _maker));
-        Assert.Equal(PurchaseRequestStatus.Ordered, ordered.Status);
+        // Onayın izin verdiği geçiş kayda yazar (sipariş referansı), ama bu onayı düşürmez.
+        var ordered = await ReadAsync<PurchaseRequestResponse>(await SendAsync(HttpMethod.Post, $"{url}/order", _maker, new { reference = "PO-1" }));
+        Assert.Equal(
+            (PurchaseRequestStatus.Ordered, "PO-1", ApprovalStatus.Approved, 2),
+            (ordered.Status, ordered.OrderReference, ordered.ApprovalStatus, ordered.ApprovalLevel));
 
         var decisions = await ReadAsync<List<ApprovalDecision>>(await SendAsync(HttpMethod.Get, $"{url}/approvals", _maker));
         Assert.Equal([1, 1, 2], decisions.Select(decision => decision.Level));
+    }
+
+    [Fact]
+    public async Task Approval_NobodyWhoWroteTheContentCanDecideOnIt()
+    {
+        var third = $"third-{Guid.NewGuid():N}";
+        var claim = await ReadAsync<ExpenseClaimResponse>(await SendAsync(
+            HttpMethod.Post, "/expense-claims", _maker, new { description = "Flight", amount = 700 }));
+        var url = $"/expense-claims/{claim.Id}";
+
+        // Hiçbir şeyi değiştirmeyen bir yazma içeriğe katkı değildir: onayı düşürmez, yazanı da dışarıda bırakmaz.
+        var untouched = await ReadAsync<ExpenseClaimResponse>(await SendAsync(HttpMethod.Patch, url, third, new { amount = 700 }));
+        var empty = await ReadAsync<ExpenseClaimResponse>(await SendAsync(HttpMethod.Patch, url, third, new { }));
+        Assert.Equal([_maker], untouched.Contributors);
+        Assert.Equal((_maker, claim.RequestedAt), (untouched.RequestedBy, untouched.RequestedAt));
+        Assert.Equal(claim.RequestedAt, empty.RequestedAt);
+
+        // Başka biri içeriği değiştirince son yazan o olur; ama ilk yazan da kendi yazdığını onaylayamaz.
+        var edited = await ReadAsync<ExpenseClaimResponse>(await SendAsync(HttpMethod.Patch, url, _first, new { amount = 7000 }));
+        Assert.Equal(_first, edited.RequestedBy);
+        Assert.Equal([_maker, _first], edited.Contributors);
+
+        Assert.Equal(HttpStatusCode.Forbidden, (await SendAsync(HttpMethod.Post, $"{url}/approve", _maker)).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await SendAsync(HttpMethod.Post, $"{url}/approve", _first)).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await SendAsync(HttpMethod.Post, $"{url}/reject", _maker)).StatusCode);
+
+        var approved = await ReadAsync<ExpenseClaimResponse>(await SendAsync(HttpMethod.Post, $"{url}/approve", third));
+        Assert.Equal((ApprovalStatus.Approved, third), (approved.ApprovalStatus, approved.DecidedBy));
+    }
+
+    [Fact]
+    public async Task Approval_IsVoidedWhenAnActionChangesTheContent()
+    {
+        var request = await ReadAsync<PurchaseRequestResponse>(await SendAsync(
+            HttpMethod.Post, "/purchase-requests", _maker, new { title = "Chairs", amount = 100 }));
+        var url = $"/purchase-requests/{request.Id}";
+
+        await ReadAsync<PurchaseRequestResponse>(await SendAsync(HttpMethod.Post, $"{url}/approve", _first));
+        var approved = await ReadAsync<PurchaseRequestResponse>(await SendAsync(HttpMethod.Post, $"{url}/approve", _second));
+        Assert.Equal(ApprovalStatus.Approved, approved.ApprovalStatus);
+
+        // Onaylanmış içerik güncelleme ucundan değişmez; ama bir aksiyon değiştirirse onay düşer ve aksiyonu
+        // çalıştıran kişi de artık karar veremez. Onaysız kalan kayıt siparişe dönüşemez.
+        var adjusted = await ReadAsync<PurchaseRequestResponse>(await SendAsync(HttpMethod.Post, $"{url}/adjust-purchase", _second, new { amount = 100_000 }));
+        Assert.Equal(
+            (100_000m, ApprovalStatus.Pending, 0, _second),
+            (adjusted.Amount, adjusted.ApprovalStatus, adjusted.ApprovalLevel, adjusted.RequestedBy));
+        Assert.Equal([_maker, _second], adjusted.Contributors);
+
+        Assert.Equal(HttpStatusCode.Conflict, (await SendAsync(HttpMethod.Post, $"{url}/order", _maker, new { reference = "PO-2" })).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await SendAsync(HttpMethod.Post, $"{url}/approve", _second)).StatusCode);
+
+        // İçeriği değiştirmeyen bir aksiyon çağrısı onayı düşürmez.
+        await ReadAsync<PurchaseRequestResponse>(await SendAsync(HttpMethod.Post, $"{url}/approve", _first));
+        var same = await ReadAsync<PurchaseRequestResponse>(await SendAsync(HttpMethod.Post, $"{url}/adjust-purchase", _first, new { amount = 100_000 }));
+        Assert.Equal((ApprovalStatus.Pending, 1), (same.ApprovalStatus, same.ApprovalLevel));
+
+        // Kararlar tam olarak bu kayda aittir.
+        await fixture.WithDbContextAsync(async context =>
+        {
+            var decisions = await context.Set<HaldusApprovalDecision>()
+                .Where(decision => decision.RecordId == request.Id.ToString())
+                .ToListAsync(CancellationToken);
+
+            Assert.Equal(3, decisions.Count);
+            Assert.All(decisions, decision => Assert.Equal(typeof(PurchaseRequest).FullName, decision.Resource));
+        });
     }
 
     [Fact]

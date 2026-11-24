@@ -54,6 +54,7 @@ internal static class TraitCatalog
                 ResponseAttribute: $"global::System.Text.Json.Serialization.JsonConverter(typeof(global::System.Text.Json.Serialization.JsonStringEnumConverter<{ApprovalStatus}>))"),
             new("ApprovalLevel", "int", InResponse: true, Search: null),
             new("RequestedBy", "string?", InResponse: true, new("RequestedBy", SearchKind.String, "string", IsNullable: true)),
+            new("Contributors", StringList, InResponse: true, Search: null),
             new("RequestedAt", DateTimeOffset, InResponse: true, new("RequestedAt", SearchKind.Range, DateTimeOffset, IsNullable: false)),
             new("DecidedBy", "string?", InResponse: true, new("DecidedBy", SearchKind.String, "string", IsNullable: true)),
             new("DecidedAt", DateTimeOffset + "?", InResponse: true, new("DecidedAt", SearchKind.Range, DateTimeOffset, IsNullable: true)),
@@ -71,11 +72,13 @@ internal static class TraitCatalog
 
     public const string ApprovalStatus = "global::Haldus.ApprovalStatus";
 
+    public const string StringList = "global::System.Collections.Generic.List<string>";
+
     /// <summary>Üretilen trait alanının başlangıç değeri; null olamayan referans tipleri boş başlar.</summary>
     public static string Initializer(string type) => type switch
     {
         "string" => " = \"\";",
-        MetadataType => " = new();",
+        MetadataType or StringList => " = new();",
         _ => string.Empty,
     };
 

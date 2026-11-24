@@ -140,11 +140,15 @@ Bunlar kullanıcıyla kararlaştırıldı; yeniden sorma.
 - Onay ve belge (17. aşama). Kullanıcı sormamamı istedi; yazılan, önerdiğim seçeneklerdir ve ayrıca onaylanmadı:
   - Onay tek adımdır; `.Approvable(levels: n)` ile birbirinden farklı n kişinin sırayla onayı istenir. Düzey başına
     rol veya koşul (onay zinciri) yazılmadı.
-  - `POST /{id}/approve`, `POST /{id}/reject` (isteğe bağlı `{ "note" }`), `GET /{id}/approvals`. İçeriği son yazan
-    kişi karar veremez (403); aynı kişi iki düzeyi onaylayamaz (403); herhangi bir düzeydeki ret kaydı reddeder.
-  - İçerik değişince (`PUT`, `PATCH`, satır komutu, toplu güncelleme) toplanan onaylar geçersiz olur ve kayıt
-    yeniden karar bekler; onaylanmış kayıt değiştirilemez (409), reddedilmiş kayıt düzenlenebilir.
-  - `.Approvable(levels, "order", ...)` sayılan geçişleri ve aksiyonları kayıt onaylanana kadar durdurur (409).
+  - `POST /{id}/approve`, `POST /{id}/reject` (isteğe bağlı `{ "note" }`), `GET /{id}/approvals`. Kaydın içeriğini
+    şimdiye kadar yazmış hiç kimse (`Contributors`; yalnızca son yazan değil) karar veremez (403); aynı kişi iki
+    düzeyi onaylayamaz (403); herhangi bir düzeydeki ret kaydı reddeder.
+  - İçerik hangi yoldan değişirse değişsin (`PUT`, `PATCH`, satır komutu, toplu güncelleme, aksiyon, uygulamanın
+    kendi kodu) toplanan onaylar geçersiz olur ve kayıt yeniden karar bekler. Onaylanmış kayıt güncelleme
+    uçlarından değiştirilemez (409), reddedilmiş kayıt düzenlenebilir. Hiçbir şeyi değiştirmeyen yazma içerik
+    yazmak sayılmaz.
+  - `.Approvable(levels, "order", ...)` sayılan geçişleri ve aksiyonları kayıt onaylanana kadar durdurur (409);
+    onayın izin verdiği işlemin kendi yazdıkları onayı düşürmez.
   - `.Document()` durumları ve kuralları sabit bir durum makinesidir (`DocumentStatus`: `Draft`, `Submitted`,
     `Cancelled`; yalnızca taslak düzenlenir ve silinir). `submit` ve `cancel` geçişleri kendiliğinden gelir; aynı
     adla yazılan `MapTransition` onların yerine geçer. `POST /{id}/amend` iptal edilmiş belgeden, ona işaret eden
@@ -617,19 +621,29 @@ Raporun v1 listesindeki "uzatma kancaları" plana girmedi ve yazılmadı: rapord
   koruması) ve `Save()` ile kaydeder. Kararlar `HaldusApprovalDecisions` tablosunda birikir (kaynak adı + anahtar
   ile; yabancı anahtar yoktur, kayıt silinince kararları kalır); tablo yalnızca onaya bağlı bir kaynak varsa
   modele girer.
-  - Yeni kaydın onay alanlarını interceptor atar (`HaldusApprovals.Reset`); bu yüzden kopya, ters kayıt, düzeltme
-    gibi her yoldan doğan kayıt karar bekleyerek doğar. **İçeriği değiştiren her yazma yolu `ApprovalReset()`
-    çağırmalıdır** (`EmitWrite`, toplu güncelleme, satır komutları, önizleme); onaylanmış kaydın kilidi
-    `ChainGuard()` içindedir (`ApprovalLock`), geçişlerin onay koşulu `ApprovalGate`.
+  - **Onayı düşürmek uçların değil interceptor'ın işidir** (güvenlik incelemesinden sonra böyle oldu; uçlara
+    yazılan sıfırlama aksiyonları ve uygulamanın kendi kodunu kaçırıyordu). Yeni kayıt karar bekleyerek doğar;
+    değişen bir kaydın içerik alanlarından biri değiştiyse (`HaldusApprovals.ContentChanged`) onay düşer. İçerik
+    alanlarını üretilen modül bildirir (`HaldusApprovals.Register<T>(...)`: kullanıcının alanları, üretilen
+    yabancı anahtarlar ve `Metadata`); Haldus'un yönettiği alanlar (durum, numara, zaman damgaları) içerik değildir.
+    Gömülü satır değişikliği sahibi `Modified` işaretlediği için içerik değişikliği sayılır. Önizleme
+    kaydetmediği için kuralı kendisi uygular (`ResetIfChanged`). Onaylanmış kaydın güncelleme uçlarındaki kilidi
+    `ChainGuard()` içindedir (`ApprovalLock`); geçişlerin onay koşulu `ApprovalGate`'tir ve geçen işlemi
+    `HaldusApprovals.Exempt` ile işaretler ki o işlemin yazdığı alanlar onayı düşürmesin.
+  - "Kendi yazdığını onaylayamaz" kuralı `Contributors` listesine bakar (içeriği yazmış herkes; kayıt boyunca
+    birikir). Yalnızca son yazana bakmak, ikinci bir kişinin küçük bir düzenlemesinden sonra ilk yazanın kendi
+    içeriğini onaylamasına izin veriyordu.
+  - Karar kayıtları tipin tam adı, anahtar ve (varsa) kiracı ile eşlenir; kısa ad, aynı adlı iki kaynağın
+    kararlarını karıştırırdı.
   - Karar, kararı verenin gördüğü içeriğe bağlanır: `ApprovalStatus`, `ApprovalLevel` ve her içerik yazmasında
     ilerleyen `RequestedAt` eşzamanlılık belirtecidir (sürüm kontrollü kaynakta satır sürümü yeter). Entegrasyon
     testi eşzamanlı onay ve reddin yalnızca birinin geçtiğini doğrular; durum belirteç olmadan ikisi de geçiyordu.
   - "Aynı kişi iki düzeyi onaylayamaz" kuralı, kaydın son `ApprovalLevel` onayına bakar; içerik değişince düzey
     sıfırlandığı için önceki turun onaylayanları yeniden onaylayabilir.
-  - Sınırlar: entity aksiyonları ve ayrı uçlu detayın yazmaları içeriği değiştirse de onayı sıfırlamaz (aksiyon
-    `requiredFor` ile onaya bağlanabilir); silme onaya bağlı değildir; onaylayanın yetkisi (rol) denetlenmez,
-    yalnızca "yazan kişi değil" ve "aynı kişi değil" kuralları vardır; onayın geri alınması yoktur. `MapCrud`,
-    `MapAppendOnly` ve `MapReadOnly` ile birleşir.
+  - Sınırlar: onaya bağlı kaynağın ayrı uçlu detayı olamaz (`HALDUS007`; satır sahibinden bağımsız yazılırdı);
+    `ExecuteUpdate` gibi değişiklik izleyicisini atlayan yazmalar onayı düşürmez; silme onaya bağlı değildir;
+    onaylayanın yetkisi (rol) denetlenmez, yalnızca "içeriği yazmamış" ve "aynı kişi değil" kuralları vardır;
+    onayın geri alınması yoktur. `MapCrud`, `MapAppendOnly` ve `MapReadOnly` ile birleşir.
 - **Belge.** `Traits.Document`. `LifecycleReader` onu hazır bir `WorkflowModel`'e çevirir (durum tipi
   `Haldus.DocumentStatus`, `EditableIn` ve `DeletableIn` yalnızca `Draft`); `Workflow`, `EditableIn` ve `DeletableIn`
   ile birlikte yazılamaz. `submit` ve `cancel` geçişlerini, kullanıcı aynı adla yazmadıysa,

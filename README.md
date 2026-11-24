@@ -324,10 +324,10 @@ app.MapCrud<Contract>().Document();           // taslak → gönder → iptal �
 
 | Bildirim | Etkisi |
 |---|---|
-| `.Approvable(levels, ...)` | `POST /{id}/approve` ve `/reject` (isteğe bağlı `{ "note": "..." }`), kararların listesi `GET /{id}/approvals`. İçeriği son yazan kişi karar veremez (403); içerik değişince toplanan onaylar geçersiz olur; onaylanmış kayıt değiştirilemez, reddedilmiş kayıt düzenlenince yeniden karar bekler. Sayılan geçişler ve aksiyonlar kayıt onaylanmadan çalışmaz |
+| `.Approvable(levels, ...)` | `POST /{id}/approve` ve `/reject` (isteğe bağlı `{ "note": "..." }`), kararların listesi `GET /{id}/approvals`. Kaydın içeriğini yazmış hiç kimse karar veremez (403); içerik hangi yoldan değişirse değişsin toplanan onaylar geçersiz olur; onaylanmış kayıt güncelleme uçlarından değiştirilemez, reddedilmiş kayıt düzenlenince yeniden karar bekler. Sayılan geçişler ve aksiyonlar kayıt onaylanmadan çalışmaz |
 | `.Document()` | Sabit durumlar (`DocumentStatus`): taslak düzenlenir ve silinir, gönderilen belge kilitlidir. `POST /{id}/submit` ve `/cancel` kendiliğinden gelir (aynı adla yazılan `MapTransition` onların yerine geçer); `POST /{id}/amend` iptal edilmiş belgenin kopyası olan, ona işaret eden yeni bir taslak oluşturur |
 
-Onay alanları (`ApprovalStatus`, `ApprovalLevel`, `RequestedBy`, `DecidedBy`, `DecidedAt`, `DecisionNote`) yanıtta
+Onay alanları (`ApprovalStatus`, `ApprovalLevel`, `RequestedBy`, `Contributors`, `DecidedBy`, `DecidedAt`, `DecisionNote`) yanıtta
 görünür ve istekle yazılamaz. Karar, kararı verenin gördüğü içeriğe bağlıdır: araya giren bir yazma kararı 409 ile
 durdurur (sürüm kontrollü kaynakta karar `If-Match` ister).
 

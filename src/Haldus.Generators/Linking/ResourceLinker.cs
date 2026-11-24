@@ -126,6 +126,10 @@ internal static class ResourceLinker
                         + (resource.IsSubresource ? "sub-resource details" : "embedded details")
                 : !resource.IsSubresource && resource.IdKind != IdKind.Guid
                     ? $"'{resource.EntityName}' is an embedded detail, so its Id must be a Guid; Haldus assigns it when the row is added"
+                : resource.IsSubresource && owner.Has(Traits.Approvable)
+                    // Ayrı uçlu satır sahibinden bağımsız yazılır; onaylanmış içerik, onay düşmeden değişirdi.
+                    ? $"'{owner.EntityName}' is Approvable, so its details cannot have endpoints of their own: a row written there would change approved content; "
+                        + "keep the detail embedded (or AsCommands())"
                 : null;
 
             if (problem is not null)

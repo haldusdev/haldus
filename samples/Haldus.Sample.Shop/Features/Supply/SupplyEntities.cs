@@ -62,6 +62,21 @@ public partial class PurchaseRequest
 
     [Range(0.0, 10_000_000.0)]
     public decimal Amount { get; set; }
+
+    /// <summary>Sipariş verilirken yazılır.</summary>
+    public string? OrderReference { get; internal set; }
+}
+
+/// <summary>Onaylanmış talebi siparişe çevirir; sipariş referansını kayda yazar.</summary>
+public sealed record OrderPurchase([property: Required, MaxLength(50)] string Reference) : ITransition<PurchaseRequest>
+{
+    public void Apply(PurchaseRequest entity) => entity.OrderReference = Reference;
+}
+
+/// <summary>Talebin tutarını değiştirir. İçeriği değiştirdiği için toplanan onaylar düşer.</summary>
+public sealed record AdjustPurchase([property: Range(0.0, 10_000_000.0)] decimal Amount) : IEntityAction<PurchaseRequest>
+{
+    public void Apply(PurchaseRequest entity) => entity.Amount = Amount;
 }
 
 /// <summary>Masraf talebi; tek bir onay yeter.</summary>

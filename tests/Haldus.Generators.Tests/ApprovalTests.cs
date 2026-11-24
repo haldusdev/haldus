@@ -75,26 +75,34 @@ public sealed class ApprovalTests
         Assert.Contains("""MapPost("/{id:guid}/approve", ApproveAsync)""", endpoints);
         Assert.Contains("""MapPost("/{id:guid}/reject", RejectAsync)""", endpoints);
         Assert.Contains("""MapGet("/{id:guid}/approvals", ListApprovalsAsync)""", endpoints);
-        Assert.Contains("approve: true, request?.Note, levels: 1, cancellationToken", endpoints);
+        Assert.Contains("context, entity, global::System.Convert.ToString(id, global::System.Globalization.CultureInfo.InvariantCulture)!, approve: true, request?.Note, levels: 1, cancellationToken", endpoints);
+        Assert.Contains("public global::System.Collections.Generic.List<string> Contributors { get; set; } = new();", entity);
         Assert.Contains("approve: false, request?.Note, levels: 1, cancellationToken", endpoints);
         Assert.Contains("ApprovalDenied(messages, outcome, \"approve\", entity.ApprovalStatus)", endpoints);
     }
 
     [Fact]
-    public void Approvable_LocksApprovedContentAndResetsOnEveryContentWrite()
+    public void Approvable_LocksApprovedContentOnEveryUpdatePath()
     {
-        var run = Run("app.MapCrud<Expense>().Approvable().Batch().Previewable();").AssertCompiles();
+        var run = Run("app.MapCrud<Expense>().Approvable().Batch().Previewable().Metadata();").AssertCompiles();
         var endpoints = run.Sources["Shop.Expense.Endpoints.g.cs"];
 
-        // İçeriği değiştiren her yol (PUT, PATCH, toplu güncelleme, önizleme) kilide ve sıfırlamaya uyar.
+        // İçeriği değiştiren her güncelleme yolu (PUT, PATCH, toplu güncelleme, önizleme) kilide uyar.
         foreach (var method in new[] { "UpdateAsync", "PatchAsync", "BatchUpdateItemAsync", "PreviewUpdateAsync" })
         {
             var handler = Handler(endpoints, method);
 
             Assert.Contains("entity.ApprovalStatus == global::Haldus.ApprovalStatus.Approved", handler);
             Assert.Contains("StateConflict(messages, \"update\", entity.ApprovalStatus)", handler);
-            Assert.Contains("global::Haldus.HaldusApprovals.Reset(entity, context);", handler);
         }
+
+        // Onayı düşürmek uçların değil interceptor'ın işidir: içerik hangi yoldan değişirse değişsin çalışır. Üretilen
+        // kod yalnızca hangi alanların içerik olduğunu bildirir; önizleme, kaydetmediği için kuralı kendisi uygular.
+        Assert.DoesNotContain("HaldusApprovals.Reset(", endpoints);
+        Assert.Contains("global::Haldus.HaldusApprovals.ResetIfChanged(entity, context);", Handler(endpoints, "PreviewUpdateAsync"));
+        Assert.Contains(
+            "global::Haldus.HaldusApprovals.Register<global::Shop.Expense>(\"Description\", \"Amount\", \"Metadata\");",
+            run.Sources["HaldusModule.g.cs"]);
 
         // Silme içeriği değiştirmez; onaya bağlı değildir.
         Assert.DoesNotContain("ApprovalStatus", Handler(endpoints, "DeleteAsync"));
@@ -136,14 +144,22 @@ public sealed class ApprovalTests
         Assert.Contains("levels: 2, cancellationToken", endpoints);
 
         Assert.Contains("StateConflict(messages, \"order\", entity.ApprovalStatus)", Handler(endpoints, "TransitionOrderAsync"));
-        Assert.DoesNotContain("ApprovalStatus", Handler(endpoints, "TransitionReopenAsync"));
         Assert.Contains("StateConflict(messages, \"audit\", entity.ApprovalStatus)", Handler(endpoints, "ActionAuditAsync"));
+
+        // Onayın izin verdiği işlemin yazdıkları onayı düşürmez; onay istemeyen işleminkiler düşürür.
+        Assert.Contains("global::Haldus.HaldusApprovals.Exempt(entity);", Handler(endpoints, "TransitionOrderAsync"));
+        Assert.Contains("global::Haldus.HaldusApprovals.Exempt(entity);", Handler(endpoints, "ActionAuditAsync"));
+        Assert.DoesNotContain("Approval", Handler(endpoints, "TransitionReopenAsync"));
     }
 
     [Theory]
     [InlineData("app.MapCrud<Expense>().Approvable(levels: 0);", "HALDUS010", "between 1 and 10 levels")]
     [InlineData("app.MapCrud<Expense>().Approvable(1, \"ship\");", "HALDUS010", "has no transition or action with that name")]
     [InlineData("app.MapStore<Expense>().Approvable();", "HALDUS007", "Approvable cannot be combined with MapStore")]
+    [InlineData(
+        "app.MapCrud<Expense>().Approvable().MapDetail<Contract>().AsSubresource();",
+        "HALDUS007",
+        "its details cannot have endpoints of their own")]
     [InlineData(
         """
         var expenses = app.MapCrud<Expense>().Approvable();
@@ -167,6 +183,7 @@ public sealed class ApprovalTests
         var endpoints = run.Sources["Shop.Expense.Endpoints.g.cs"];
         Assert.Contains("""MapPost("/{id:guid}/approve", ApproveAsync)""", endpoints);
         Assert.DoesNotContain("HaldusApprovals.Reset", endpoints);
+        Assert.Contains("HaldusApprovals.Register<global::Shop.Expense>(\"Description\", \"Amount\");", run.Sources["HaldusModule.g.cs"]);
     }
 
     // ── Belge ──────────────────────────────────────────────────────────────────────────────────────────

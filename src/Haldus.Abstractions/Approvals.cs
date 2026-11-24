@@ -24,8 +24,14 @@ public interface IApprovable
     /// <summary>Şimdiye kadar onaylayan düzey sayısı. İçerik değişince sıfırlanır.</summary>
     int ApprovalLevel { get; set; }
 
-    /// <summary>İçeriği son yazan kullanıcı; kendi yazdığını onaylayamaz.</summary>
+    /// <summary>İçeriği son yazan kullanıcı.</summary>
     string? RequestedBy { get; set; }
+
+    /// <summary>
+    /// Kaydın içeriğini şimdiye kadar yazmış herkes. Hiçbiri kayda karar veremez: içeriğin bir parçasını yazan kişi,
+    /// başkası sonradan düzenlemiş olsa da, kendi yazdığını onaylamış olurdu.
+    /// </summary>
+    List<string> Contributors { get; set; }
 
     /// <summary>İçeriğin son yazıldığı an. Karar, kararı verenin gördüğü içeriğe bağlansın diye her yazmada ilerler.</summary>
     DateTimeOffset RequestedAt { get; set; }

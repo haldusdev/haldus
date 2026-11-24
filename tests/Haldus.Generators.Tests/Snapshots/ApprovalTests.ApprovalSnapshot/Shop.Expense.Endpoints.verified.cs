@@ -104,7 +104,7 @@ public static partial class ExpenseEndpoints
             .OrderBy(item => item.Id)
             .Skip(page.Skip)
             .Take(page.PageSizeOrDefault)
-            .Select(item => new ExpenseResponse { Id = item.Id, Description = item.Description, Amount = item.Amount, ApprovalStatus = item.ApprovalStatus, ApprovalLevel = item.ApprovalLevel, RequestedBy = item.RequestedBy, RequestedAt = item.RequestedAt, DecidedBy = item.DecidedBy, DecidedAt = item.DecidedAt, DecisionNote = item.DecisionNote, Status = item.Status })
+            .Select(item => new ExpenseResponse { Id = item.Id, Description = item.Description, Amount = item.Amount, ApprovalStatus = item.ApprovalStatus, ApprovalLevel = item.ApprovalLevel, RequestedBy = item.RequestedBy, Contributors = item.Contributors, RequestedAt = item.RequestedAt, DecidedBy = item.DecidedBy, DecidedAt = item.DecidedAt, DecisionNote = item.DecisionNote, Status = item.Status })
             .ToListAsync(cancellationToken);
 
         return global::Microsoft.AspNetCore.Http.TypedResults.Ok(
@@ -168,7 +168,6 @@ public static partial class ExpenseEndpoints
         entity.Description = request.Description;
         entity.Amount = request.Amount;
 
-        global::Haldus.HaldusApprovals.Reset(entity, context);
         try
         {
             await context.SaveChangesAsync(cancellationToken);
@@ -212,7 +211,6 @@ public static partial class ExpenseEndpoints
         }
 
 
-        global::Haldus.HaldusApprovals.Reset(entity, context);
         try
         {
             await context.SaveChangesAsync(cancellationToken);
@@ -282,6 +280,8 @@ public static partial class ExpenseEndpoints
             return global::Haldus.HaldusProblems.StateConflict(messages, "order", entity.ApprovalStatus);
         }
 
+        global::Haldus.HaldusApprovals.Exempt(entity);
+
         try
         {
             if (apply is not null)
@@ -324,7 +324,7 @@ public static partial class ExpenseEndpoints
         }
 
         var outcome = await global::Haldus.HaldusApprovals.DecideAsync(
-            context, entity, "Expense", global::System.Convert.ToString(id, global::System.Globalization.CultureInfo.InvariantCulture)!, approve: true, request?.Note, levels: 2, cancellationToken);
+            context, entity, global::System.Convert.ToString(id, global::System.Globalization.CultureInfo.InvariantCulture)!, approve: true, request?.Note, levels: 2, cancellationToken);
 
         if (outcome != global::Haldus.ApprovalOutcome.Recorded)
         {
@@ -360,7 +360,7 @@ public static partial class ExpenseEndpoints
         }
 
         var outcome = await global::Haldus.HaldusApprovals.DecideAsync(
-            context, entity, "Expense", global::System.Convert.ToString(id, global::System.Globalization.CultureInfo.InvariantCulture)!, approve: false, request?.Note, levels: 2, cancellationToken);
+            context, entity, global::System.Convert.ToString(id, global::System.Globalization.CultureInfo.InvariantCulture)!, approve: false, request?.Note, levels: 2, cancellationToken);
 
         if (outcome != global::Haldus.ApprovalOutcome.Recorded)
         {
@@ -386,15 +386,16 @@ public static partial class ExpenseEndpoints
         global::System.Threading.CancellationToken cancellationToken)
     {
         var context = contexts.For<Expense>();
+        var entity = await context.Set<Expense>().AsNoTracking().FirstOrDefaultAsync(item => item.Id == id, cancellationToken);
 
-        if (!await context.Set<Expense>().AnyAsync(item => item.Id == id, cancellationToken))
+        if (entity is null)
         {
             return global::Haldus.HaldusProblems.NotFound(messages, "Expense", id);
         }
 
         return global::Microsoft.AspNetCore.Http.TypedResults.Ok(
-            await global::Haldus.HaldusApprovals.ListAsync(context, "Expense", global::System.Convert.ToString(id, global::System.Globalization.CultureInfo.InvariantCulture)!, cancellationToken));
+            await global::Haldus.HaldusApprovals.ListAsync(context, entity, global::System.Convert.ToString(id, global::System.Globalization.CultureInfo.InvariantCulture)!, cancellationToken));
     }
 
-    private static ExpenseResponse ToResponse(Expense item) => new() { Id = item.Id, Description = item.Description, Amount = item.Amount, ApprovalStatus = item.ApprovalStatus, ApprovalLevel = item.ApprovalLevel, RequestedBy = item.RequestedBy, RequestedAt = item.RequestedAt, DecidedBy = item.DecidedBy, DecidedAt = item.DecidedAt, DecisionNote = item.DecisionNote, Status = item.Status };
+    private static ExpenseResponse ToResponse(Expense item) => new() { Id = item.Id, Description = item.Description, Amount = item.Amount, ApprovalStatus = item.ApprovalStatus, ApprovalLevel = item.ApprovalLevel, RequestedBy = item.RequestedBy, Contributors = item.Contributors, RequestedAt = item.RequestedAt, DecidedBy = item.DecidedBy, DecidedAt = item.DecidedAt, DecisionNote = item.DecisionNote, Status = item.Status };
 }

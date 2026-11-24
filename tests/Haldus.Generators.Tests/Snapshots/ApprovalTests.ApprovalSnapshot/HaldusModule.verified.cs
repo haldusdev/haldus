@@ -40,6 +40,8 @@ internal static class HaldusModule
 
         global::Haldus.HaldusEndpointRegistry.Register<global::Shop.Expense>(global::Shop.ExpenseEndpoints.Map);
 
+        global::Haldus.HaldusApprovals.Register<global::Shop.Expense>("Description", "Amount");
+
         global::Haldus.HaldusTransitionRegistry.Register<global::Shop.Expense>("order", global::Shop.ExpenseEndpoints.MapOrderTransition);
 
         global::Haldus.HaldusEndpointRegistry.Register<global::Shop.Contract>(global::Shop.ContractEndpoints.Map);

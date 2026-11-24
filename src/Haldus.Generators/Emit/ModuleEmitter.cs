@@ -84,6 +84,16 @@ internal static class ModuleEmitter
                 blocks.Add($"        global::Haldus.HaldusMaintenanceRegistry.RegisterExpiring<{entity}>();\n");
             }
 
+            if (resource.Has(Traits.Approvable))
+            {
+                // İçerik alanlarından biri değişince toplanan onaylar düşer; Haldus'un yönettiği alanlar içerik değildir.
+                var content = resource.Properties.Select(property => property.Name)
+                    .Concat(resource.Has(Traits.Metadata) ? ["Metadata"] : [])
+                    .Select(ResourceEmitter.Literal);
+
+                blocks.Add($"        global::Haldus.HaldusApprovals.Register<{entity}>({string.Join(", ", content)});\n");
+            }
+
             if (resource.Archetype == Archetype.Job)
             {
                 // Yürütücü işi, kuyruktan gelen tip adıyla bulur.

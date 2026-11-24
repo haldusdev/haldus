@@ -13,6 +13,8 @@ partial class Expense : global::Haldus.IApprovable
 
     public string? RequestedBy { get; set; }
 
+    public global::System.Collections.Generic.List<string> Contributors { get; set; } = new();
+
     public global::System.DateTimeOffset RequestedAt { get; set; }
 
     public string? DecidedBy { get; set; }

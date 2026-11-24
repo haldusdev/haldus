@@ -15119,6 +15119,16 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OrderPurchase"
+              }
+            }
+          },
+          "required": true
+        },
         "responses": {
           "200": {
             "description": "OK",
@@ -15126,6 +15136,97 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/PurchaseRequestResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpValidationProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Entity",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/purchase-requests/{id}/adjust-purchase": {
+      "post": {
+        "tags": [
+          "PurchaseRequests"
+        ],
+        "operationId": "AdjustPurchasePurchaseRequest",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdjustPurchase"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PurchaseRequestResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpValidationProblemDetails"
                 }
               }
             }
@@ -16248,6 +16349,24 @@
               "string"
             ],
             "format": "int32"
+          }
+        }
+      },
+      "AdjustPurchase": {
+        "required": [
+          "amount"
+        ],
+        "type": "object",
+        "properties": {
+          "amount": {
+            "maximum": 10000000,
+            "minimum": 0,
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "format": "double"
           }
         }
       },
@@ -18226,6 +18345,7 @@
           "approvalStatus",
           "approvalLevel",
           "requestedBy",
+          "contributors",
           "requestedAt",
           "decidedBy",
           "decidedAt",
@@ -18264,6 +18384,12 @@
               "null",
               "string"
             ]
+          },
+          "contributors": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           },
           "requestedAt": {
             "type": "string",
@@ -18523,6 +18649,18 @@
           "orderId": {
             "type": "string",
             "format": "uuid"
+          }
+        }
+      },
+      "OrderPurchase": {
+        "required": [
+          "reference"
+        ],
+        "type": "object",
+        "properties": {
+          "reference": {
+            "maxLength": 50,
+            "type": "string"
           }
         }
       },
@@ -21207,9 +21345,11 @@
           "id",
           "title",
           "amount",
+          "orderReference",
           "approvalStatus",
           "approvalLevel",
           "requestedBy",
+          "contributors",
           "requestedAt",
           "decidedBy",
           "decidedAt",
@@ -21233,6 +21373,12 @@
             ],
             "format": "double"
           },
+          "orderReference": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
           "approvalStatus": {
             "$ref": "#/components/schemas/ApprovalStatus"
           },
@@ -21249,6 +21395,12 @@
               "null",
               "string"
             ]
+          },
+          "contributors": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           },
           "requestedAt": {
             "type": "string",

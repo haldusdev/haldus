@@ -51,6 +51,20 @@ public sealed class HaldusSaveChangesInterceptor : SaveChangesInterceptor
                     break;
                 case EntityState.Modified:
                     OnModified(entry, now, users);
+
+                    if (entry.Entity is IApprovable changed)
+                    {
+                        // Onay, onaylayanın gördüğü içeriğe verilmiştir: içerik hangi yoldan değişirse değişsin
+                        // (güncelleme, aksiyon, satır komutu, uygulamanın kendi kodu) toplanan onaylar düşer. Tek
+                        // istisna, onayın zaten izin verdiği işlemin kendi yazdıklarıdır.
+                        var exempt = HaldusApprovals.TakeExemption(changed);
+
+                        if (!exempt && HaldusApprovals.ContentChanged(entry))
+                        {
+                            HaldusApprovals.Reset(changed, context);
+                        }
+                    }
+
                     break;
                 case EntityState.Deleted when entry.Entity is ISoftDeletable:
                     // Silme, silinme zamanını yazan bir güncellemeye çevrilir.

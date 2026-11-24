@@ -12,6 +12,7 @@ public sealed partial record ExpenseResponse
     public required global::Haldus.ApprovalStatus ApprovalStatus { get; init; }
     public required int ApprovalLevel { get; init; }
     public required string? RequestedBy { get; init; }
+    public required global::System.Collections.Generic.List<string> Contributors { get; init; }
     public required global::System.DateTimeOffset RequestedAt { get; init; }
     public required string? DecidedBy { get; init; }
     public required global::System.DateTimeOffset? DecidedAt { get; init; }

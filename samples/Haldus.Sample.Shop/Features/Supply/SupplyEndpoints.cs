@@ -43,7 +43,11 @@ public static class SupplyEndpoints
             .Workflow<PurchaseRequestStatus>(initial: PurchaseRequestStatus.Open)
             .Approvable(levels: 2, "order");
 
-        requests.MapTransition("order", from: PurchaseRequestStatus.Open, to: PurchaseRequestStatus.Ordered);
+        // Onayın izin verdiği geçişin kendi yazdıkları onayı düşürmez.
+        requests.MapTransition<OrderPurchase>(from: PurchaseRequestStatus.Open, to: PurchaseRequestStatus.Ordered, name: "order");
+
+        // Onay istemeyen bir aksiyon içeriği değiştirirse toplanan onaylar düşer; aksiyonu çalıştıran da artık karar veremez.
+        requests.MapAction<AdjustPurchase>();
 
         // Tek onaylı, durum makinesi olmayan en yalın biçim.
         app.MapCrud<ExpenseClaim>()

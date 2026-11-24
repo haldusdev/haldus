@@ -926,7 +926,7 @@ internal sealed partial class EndpointEmitter
                     }
 
             {{ChainGuard()}}{{StateGuard(_resource.Workflow?.EditableIn, "update")}}{{WriteChecks(patch: operation == "Patch", creating: false)}}{{CycleCheck(patch: operation == "Patch")}}{{ExpectVersion()}}{{OrderRemember()}}{{assignments}}
-            {{SyncDetails(patch: operation == "Patch")}}{{ApprovalReset()}}{{Slide()}}{{Compute()}}{{OrderReparent()}}{{Save()}}{{OrderReparentCommit()}}
+            {{SyncDetails(patch: operation == "Patch")}}{{Slide()}}{{Compute()}}{{OrderReparent()}}{{Save()}}{{OrderReparentCommit()}}
             {{WriteETag()}}        return {{Http}}.TypedResults.Ok(ToResponse(entity));
                 }
 
@@ -1918,7 +1918,7 @@ internal sealed partial class EndpointEmitter
             {{ChainGuard()}}{{StateGuard(_resource.Workflow?.EditableIn, "update")}}{{ExpectVersion()}}{{change}}
                     // Satır değişikliği üst kaydın değişikliğidir: sürümü ilerler ve hesaplanan alanları yenilenir.
                     context.Entry(entity).State = global::Microsoft.EntityFrameworkCore.EntityState.Modified;
-            {{ApprovalReset()}}{{Slide()}}{{Compute()}}{{Save()}}
+            {{Slide()}}{{Compute()}}{{Save()}}
             {{WriteETag()}}        return {{Http}}.TypedResults.Ok(ToResponse(entity));
                 }
 
@@ -2467,14 +2467,17 @@ internal sealed partial class EndpointEmitter
             """;
 
     /// <summary>
-    /// İçerik değişti: toplanan onaylar geçersiz olur, reddedilmiş kayıt yeniden karar bekler ve içeriği yazan kişi
-    /// ona karar veremeyecek olan kişi olur. İçeriği değiştiren her yazma yolu bunu çağırmalıdır.
+    /// İçerik değişince onayı düşürmek interceptor'ın işidir (kaydeden her yolda, hangi koddan gelirse gelsin
+    /// çalışır). Önizleme kaydetmediği için sonucu doğru göstermek üzere aynı kuralı kendisi uygular.
     /// </summary>
-    private string ApprovalReset() => _resource.Approval is null
+    private string ApprovalPreview() => _resource.Approval is null
         ? string.Empty
-        : "        global::Haldus.HaldusApprovals.Reset(entity, context);\n";
+        : "        global::Haldus.HaldusApprovals.ResetIfChanged(entity, context);\n";
 
-    /// <summary>Onay isteyen geçiş veya aksiyon, kayıt onaylanmadan çalışmaz.</summary>
+    /// <summary>
+    /// Onay isteyen geçiş veya aksiyon, kayıt onaylanmadan çalışmaz. Onayın izin verdiği işlemin kendi yazdıkları
+    /// onayı düşürmez; başka her içerik değişikliği düşürür.
+    /// </summary>
     private string ApprovalGate(string route) => _resource.Approval is not { } approval || !approval.RequiredFor.Contains(route)
         ? string.Empty
         : $$"""
@@ -2482,6 +2485,8 @@ internal sealed partial class EndpointEmitter
                     {
                         return {{Problems}}.StateConflict(messages, "{{route}}", entity.ApprovalStatus);
                     }
+
+                    global::Haldus.HaldusApprovals.Exempt(entity);
 
 
             """;
@@ -2524,7 +2529,7 @@ internal sealed partial class EndpointEmitter
                     }
 
             {{ChainClosedGuard()}}{{ExpectVersion()}}        var outcome = await global::Haldus.HaldusApprovals.DecideAsync(
-                        context, entity, "{{_entity}}", {{KeyText}}, approve: {{(approve ? "true" : "false")}}, request?.Note, levels: {{_resource.Approval!.Levels}}, cancellationToken);
+                        context, entity, {{KeyText}}, approve: {{(approve ? "true" : "false")}}, request?.Note, levels: {{_resource.Approval!.Levels}}, cancellationToken);
 
                     if (outcome != global::Haldus.ApprovalOutcome.Recorded)
                     {
@@ -2556,14 +2561,15 @@ internal sealed partial class EndpointEmitter
                 private static async {{Task}}<{{Results}}.Results<{{Results}}.Ok<{{Decisions}}>, {{Problem}}>> ListApprovalsAsync(
             {{ScopeParameter}}{{KeyParameter}}{{ContextsParameter}}{{MessagesParameter}}{{CancellationParameter}}    {
                     var context = contexts.For<{{_entity}}>();
+                    var entity = await context.Set<{{_entity}}>().AsNoTracking().FirstOrDefaultAsync(item => {{Match}}, cancellationToken);
 
-                    if (!await context.Set<{{_entity}}>().AnyAsync(item => {{Match}}, cancellationToken))
+                    if (entity is null)
                     {
                         return {{NotFound}};
                     }
 
                     return {{Http}}.TypedResults.Ok(
-                        await global::Haldus.HaldusApprovals.ListAsync(context, "{{_entity}}", {{KeyText}}, cancellationToken));
+                        await global::Haldus.HaldusApprovals.ListAsync(context, entity, {{KeyText}}, cancellationToken));
                 }
 
             """);
@@ -3089,7 +3095,7 @@ internal sealed partial class EndpointEmitter
                         }
 
                 {{ChainGuard()}}{{StateGuard(_resource.Workflow?.EditableIn, "update")}}{{WriteChecks(patch: false, creating: false)}}{{CycleCheck(patch: false)}}{{UpdateAssignments()}}
-                {{SyncDetails(patch: false)}}{{ApprovalReset()}}{{Compute()}}        var preview = ToResponse(entity);
+                {{SyncDetails(patch: false)}}{{Compute()}}{{ApprovalPreview()}}        var preview = ToResponse(entity);
 
                         // Hiçbir şey kaydedilmez. Bağlamda bekleyen değişiklikler de bırakılır ki isteğin devamında
                         // çalışan bir kod (ör. istek sonunda kaydeden bir ara katman) onları kalıcı yapmasın.
