@@ -441,6 +441,7 @@ app.MapCrud<Invoice>().Attachable<Attachment>().Commentable<Comment>();
 | Bildirim | Etkisi |
 |---|---|
 | `MapFile<T>(maxBytes, türler)` | İçeriği ayrıca yüklenen bir `MapCrud` kaynağı: `POST` kaydı (adı ve kendi alanlarıyla) oluşturur, `PUT /{id}/content` içeriği yükler (boyut ve tür sınırı: 413, 415), `GET /{id}/content` indirir (parça isteği ve `ETag` ile). Boyut, tür, SHA-256 özeti ve durum yanıtta görünür |
+| `.SignedLinks()` | `MapFile` ile birlikte: `POST /{id}/content/link?expiresInSeconds=300` kaydı görebilen birine süreli bir bağlantı (`{ "url", "expiresAt" }`) verir; `GET /shared-content/{token}` içeriği kimlik sormadan gönderir. Bağlantı tahmin edilemez, en çok bir gün yaşar ve üretildiği andaki içeriğe bağlıdır: içerik değişince ya da kayıt silinince geçersiz olur |
 | `.AttachedTo<T>()` | Kaynak birkaç farklı kaynağa takılabilir: her hedefin adresi altında sunulur (`/orders/{orderId}/comments`, `/invoices/{invoiceId}/comments`), her hedef için isteğe bağlı gerçek bir yabancı anahtar üretilir ve bir kayıtta tam olarak biri doludur. Takılı kayıt, takıldığı kayıt görünürse görünür ve onunla birlikte silinir |
 | `.Attachable<TFile>()`, `.Commentable<TComment>()` | Aynı bildirimin hedef tarafında yazılan biçimi: `TFile` / `TComment` bu kaynağa da takılabilir |
 | `.Taggable<TTag>()` | `MapAssociation<TEntity, TTag>()` ile aynıdır; etiketler `PUT /{id}/tags` ile topluca değişir |

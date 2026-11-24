@@ -40,6 +40,7 @@ public static class HaldusMessageKeys
     public const string BalanceAmountInvalid = "Balance.Amount.Invalid";
     public const string BalanceMoveSame = "Balance.Move.Same";
     public const string BalanceHoldClosed = "Balance.Hold.Closed";
+    public const string FileLinkInvalid = "File.LinkInvalid";
     public const string BalanceHoldLimit = "Balance.Hold.Limit";
     public const string TranslationLimit = "Translation.Limit";
     public const string MetadataInvalid = "Metadata.Invalid";

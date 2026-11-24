@@ -179,6 +179,12 @@ internal static class MapCallParser
 
         FileModel? file = null;
 
+        if (name.Identifier.ValueText != "MapFile" && chain.Any(call => call.Name == "SignedLinks"))
+        {
+            diagnostics.Add(new DiagnosticInfo(
+                "HALDUS007", location, new EquatableArray<string>(["SignedLinks shares the content of a file; declare it on a MapFile call"])));
+        }
+
         if (name.Identifier.ValueText == "MapFile")
         {
             file = LifecycleReader.ReadFile(
@@ -194,6 +200,22 @@ internal static class MapCallParser
                 {
                     diagnostics.Add(new DiagnosticInfo(
                         "HALDUS007", location, new EquatableArray<string>([$"MapFile cannot be combined with {other}: the content of a file is stored once, under its own fixed states"])));
+                }
+            }
+
+            if (chain.Any(call => call.Name == "SignedLinks") && file is not null)
+            {
+                file = file with { SignedLinks = true };
+
+                // Bağlantının adresi kaynağın kendi koleksiyon adresindedir; bir üst kaydın altındaki veya başka
+                // kaynaklara takılan dosyanın tek bir adresi yoktur.
+                foreach (var nested in new[] { "Under", "AttachedTo" })
+                {
+                    if (chain.Any(call => call.Name == nested))
+                    {
+                        diagnostics.Add(new DiagnosticInfo(
+                            "HALDUS007", location, new EquatableArray<string>([$"SignedLinks cannot be combined with {nested}: the link lives at the address of the resource itself"])));
+                    }
                 }
             }
 

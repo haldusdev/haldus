@@ -35,6 +35,7 @@ export * from './labels/labels';
 export * from './leave-allowances/leave-allowances';
 export * from './machines/machines';
 export * from './maintenance-notice/maintenance-notice';
+export * from './media-files/media-files';
 export * from './meetings/meetings';
 export * from './notifications/notifications';
 export * from './order-notes/order-notes';

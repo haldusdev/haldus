@@ -195,8 +195,9 @@ Bunlar kullanıcıyla kararlaştırıldı; yeniden sorma.
 - Dosyalar ve takılabilirler (19. aşama). Kullanıcı sormamamı istedi; yazılan, önerdiğim seçeneklerdir ve ayrıca
   onaylanmadı:
   - `MapFile<T>(maxBytes, türler...)` içeriği ayrıca yüklenen bir `MapCrud` kaynağıdır: `POST` kaydı oluşturur,
-    `PUT /{id}/content` içeriği yükler, `GET /{id}/content` indirir. İmzalı adres ve çok parçalı (multipart)
-    yükleme yazılmadı.
+    `PUT /{id}/content` içeriği yükler, `GET /{id}/content` indirir. Planlardan sonra iki şey eklendi: yükleme ucu
+    bir multipart formun dosya parçasını da kabul eder, ve `.SignedLinks()` içeriğe süreli, oturumsuz açılan
+    bağlantılar üretir. Devam ettirilebilir (parça parça) yükleme ve nesne deposuna doğrudan yükleme yazılmadı.
   - Depolama yeni bağımlılık eklemeden yazıldı: varsayılan veritabanı (`HaldusFileContents`), isteğe bağlı dosya
     sistemi (`AddHaldusFileSystemStorage`). Nesne depoları (S3 vb.) `IHaldusFileStorage` uygulanarak eklenir; Haldus
     onlar için paket taşımaz.
@@ -1118,6 +1119,17 @@ denenmesi, yük ölçümü. Raporun "Bilinen sınırlar" tablosundaki kalemler d
     zorunlu olmalıdır.**
   - Yükleme ucuna `.Accepts(...)` eklenmez: o bildirim içerik türünü yönlendirmede süzer ve bizim 415 yanıtımız
     yerine boş bir 415 döner.
+  - **Multipart.** `HaldusFiles.ReceiveAsync` gövdenin türü `multipart/form-data` ise formun ilk dosya parçasını
+    içerik sayar (`MultipartReader`; akış halinde okunur): tür parçanın türüdür, boyut sınırı parçaya uygulanır, formun
+    kendi yükü için 64 KB pay bırakılır. Yalnızca `PUT` ucundadır; `POST` eklenmedi, çünkü çerez tabanlı kimlik
+    doğrulamada bir HTML formu başka bir siteden gönderilebilirdi (CSRF), `PUT` gönderilemez.
+  - **İmzalı bağlantı** (`FileModel.SignedLinks`; `EmitFileLinks`). Bağlantı, kimliği ve üretildiği andaki içerik
+    özetini taşıyan, Data Protection ile süreli korunmuş bir değerdir (`HaldusFileLinks`; amaç dizesi kaynağı
+    ayırır). Üreten uç kaydı kendi filtrelerinden geçirerek arar; açan uç oturumsuzdur (`HaldusTokenAccess`
+    metadatası, `AllowAnonymous`) ve yalnızca kiracı ile sahiplik filtrelerini adlarıyla kaldırır. İçerik değiştiyse
+    (özet uymuyorsa) veya kayıt yoksa 404 döner. Sınırlar: bağlantı tek tek iptal edilemez (ancak içerik değişince
+    veya süresi dolunca ölür); en çok bir gün yaşar; kaç kez açıldığı sayılmaz; `Under` ve `AttachedTo` ile birleşmez
+    (bağlantının adresi kaynağın kendi koleksiyonundadır).
   - Sınırlar: dosya sistemi deposunda atomik toplu silme geri alınırsa içerik geri gelmez; veritabanı deposu
     içeriği belleğe alır; `Workflow`, `Document`, `SoftDeletable`, `Cloneable`, `Publishable`, zincir işlemleri ve
     `CreatedFrom` ile birleşmez; virüs taraması, görsel işleme ve devam ettirilebilir yükleme yoktur.

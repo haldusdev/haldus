@@ -181,6 +181,11 @@ public sealed class BalanceEndpointTests(ShopFixture fixture)
         Assert.Equal((6m, 0m), (released.Available, released.Reserved));
         Assert.Empty(await ReadAsync<List<BalanceHold>>(await SendAsync(HttpMethod.Get, $"{Url}/holds")));
 
+        // En uzun açıklamayı taşıyan tutma da bırakılabilir: deftere yazılan açıklama önekle birlikte kolona sığar.
+        var wordy = await ReadAsync<BalanceHold>(await SendAsync(HttpMethod.Post, $"{Url}/holds", new { quantity = 1m, reason = new string('x', 500) }));
+        var unwound = await ReadAsync<InventoryResponse>(await SendAsync(HttpMethod.Post, $"{Url}/holds/{wordy.Id}/release"));
+        Assert.Equal((6m, 0m), (unwound.Available, unwound.Reserved));
+
         // Olmayan tutma ve başka kiracının tutması bulunamaz.
         Assert.Equal(HttpStatusCode.NotFound, (await SendAsync(HttpMethod.Post, $"{Url}/holds/{Guid.NewGuid()}/capture")).StatusCode);
 

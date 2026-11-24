@@ -228,6 +228,17 @@ public static class HaldusProblems
         return FieldProblem(messages, field, messages.Format(HaldusMessageKeys.BalanceAmountInvalid));
     }
 
+    /// <summary>İndirme bağlantısı geçersiz: bozuk, süresi dolmuş ya da gösterdiği içerik artık yok.</summary>
+    public static ProblemHttpResult FileLinkInvalid(IHaldusMessages messages)
+    {
+        ArgumentNullException.ThrowIfNull(messages);
+
+        return TypedResults.Problem(
+            title: messages.Format(HaldusMessageKeys.NotFoundTitle),
+            detail: messages.Format(HaldusMessageKeys.FileLinkInvalid),
+            statusCode: StatusCodes.Status404NotFound);
+    }
+
     /// <summary>Tutma artık açık değil: tahsil edildi, bırakıldı veya süresi doldu.</summary>
     public static ProblemHttpResult BalanceHoldClosed(IHaldusMessages messages)
     {

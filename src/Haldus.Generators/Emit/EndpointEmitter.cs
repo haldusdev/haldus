@@ -3586,6 +3586,105 @@ internal sealed partial class EndpointEmitter
                 }
 
             """);
+
+        if (_resource.File is { SignedLinks: true })
+        {
+            EmitFileLinks(Stream);
+        }
+    }
+
+    /// <summary>
+    /// İçeriğin süreli indirme bağlantıları. Bağlantıyı üretmek için kaydı görebilmek gerekir; bağlantıyı açmak için
+    /// gerekmez: uç oturumsuzdur ve isteği yapanı bağlantının kendisi tanıtır. Bu yüzden kayıt kiracı ve sahiplik
+    /// filtreleri kaldırılarak (ve yalnızca onlar) bulunur; bağlantı, üretildiği andaki içeriğe bağlıdır.
+    /// </summary>
+    private void EmitFileLinks(string stream)
+    {
+        const string Link = "global::Haldus.FileLink";
+
+        var hidden = new[]
+            {
+                _tenant ? "global::Haldus.HaldusFilters.Tenant" : null,
+                _resource.Has(Traits.Owned) ? "global::Haldus.HaldusFilters.Owner" : null,
+            }
+            .Where(filter => filter is not null)
+            .ToArray();
+        var ignore = hidden.Length == 0 ? string.Empty : $".IgnoreQueryFilters(new[] {{ {string.Join(", ", hidden)} }})";
+
+        // Bağlantı kimliği metin olarak taşır; anahtarın tipine geri çevrilir.
+        var (parse, id) = _resource.IdKind switch
+        {
+            IdKind.String => (string.Empty, "linked"),
+            IdKind.Guid => (" || !global::System.Guid.TryParse(linked, out var id)", "id"),
+            IdKind.Int32 => (" || !int.TryParse(linked, global::System.Globalization.NumberStyles.None, global::System.Globalization.CultureInfo.InvariantCulture, out var id)", "id"),
+            _ => (" || !long.TryParse(linked, global::System.Globalization.NumberStyles.None, global::System.Globalization.CultureInfo.InvariantCulture, out var id)", "id"),
+        };
+
+        var ambient = _tenant
+            ? """
+
+                    // Bağlantıyı açanın kiracısı yoktur; içerik kaydın kiracısı adına okunur.
+                    using var identity = global::Haldus.HaldusAmbient.Use(entity.TenantId, null);
+
+            """
+            : string.Empty;
+
+        _map.Append($$"""
+                    group.MapPost("{{_keyRoute}}/content/link", CreateLinkAsync)
+                        .WithName("Create{{_entity}}Link")
+                        .ProducesProblem(404);
+
+                    group.MapGet("/shared-content/{token}", DownloadSharedAsync)
+                        .WithName("DownloadShared{{_entity}}")
+                        .WithMetadata(global::Haldus.HaldusTokenAccess.Instance)
+                        .AllowAnonymous()
+                        .ProducesProblem(404);
+
+
+            """);
+
+        _handlers.Append($$"""
+
+                private static async {{Task}}<{{Results}}.Results<{{Results}}.Ok<{{Link}}>, {{Problem}}>> CreateLinkAsync(
+            {{ScopeParameter}}{{KeyParameter}}        int? expiresInSeconds,
+            {{HttpContextParameter}}{{ContextsParameter}}{{MessagesParameter}}{{CancellationParameter}}    {
+                    var entity = await contexts.For<{{_entity}}>().Set<{{_entity}}>().AsNoTracking().FirstOrDefaultAsync(item => {{Match}}, cancellationToken);
+
+                    if (entity is null)
+                    {
+                        return {{NotFound}};
+                    }
+
+                    if (entity.Status != global::Haldus.FileStatus.Uploaded || entity.Checksum is not { Length: > 0 } checksum)
+                    {
+                        return {{Problems}}.FileContentMissing(messages, "{{_entity}}", {{_keyParameter}});
+                    }
+
+                    return {{Http}}.TypedResults.Ok(global::Haldus.HaldusFileLinks.Create<{{_entity}}>(httpContext, {{KeyText}}, checksum, expiresInSeconds));
+                }
+
+                private static async {{Task}}<{{Results}}.Results<{{stream}}, {{Problem}}>> DownloadSharedAsync(
+                    string token,
+            {{HttpContextParameter}}{{ContextsParameter}}{{MessagesParameter}}{{CancellationParameter}}    {
+                    if (!global::Haldus.HaldusFileLinks.TryRead<{{_entity}}>(httpContext, token, out var linked, out var checksum){{parse}})
+                    {
+                        return {{Problems}}.FileLinkInvalid(messages);
+                    }
+
+                    var context = contexts.For<{{_entity}}>();
+                    var entity = await context.Set<{{_entity}}>(){{ignore}}.AsNoTracking()
+                        .FirstOrDefaultAsync(item => item.{{_key}} == {{id}}, cancellationToken);
+
+                    // Bağlantı, üretildiği andaki içeriğe aittir: içerik değiştiyse ya da kayıt silindiyse artık hiçbir şeyi açmaz.
+                    if (entity is null || entity.Checksum != checksum)
+                    {
+                        return {{Problems}}.FileLinkInvalid(messages);
+                    }
+            {{ambient}}
+                    return await global::Haldus.HaldusFiles.SendAsync(httpContext, context, entity, messages, "{{_entity}}", {{id}}, cancellationToken);
+                }
+
+            """);
     }
 
     // ── Taslak ve yayın ────────────────────────────────────────────────────────────────────────────────

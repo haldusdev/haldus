@@ -282,4 +282,7 @@
   <data name="Balance.Hold.Limit" xml:space="preserve">
     <value>Bu bakiyenin zaten {0} açık tutması var; yenisini açmadan önce bazılarını kapatın.</value>
   </data>
+  <data name="File.LinkInvalid" xml:space="preserve">
+    <value>Bu bağlantı geçersiz veya süresi dolmuş.</value>
+  </data>
 </root>

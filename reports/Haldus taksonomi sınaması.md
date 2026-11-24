@@ -228,7 +228,7 @@ sınırları ayrıca [README](../README.md) ve `CLAUDE.md` dosyalarında, özell
 | Kaydı kimlerin okuduğunun listesi ("görenler") | 45 | Kullanıcı başına okundu bilgisi sonradan yazıldı (`ReadReceipts`); her kullanıcı yalnızca kendi işaretini görür |
 | Hassas alanın maskelenerek gösterilmesi (son dört karakter) | — | Şifreli saklama sonradan yazıldı (`Encrypted`); şifreli alan hiçbir yanıtta gösterilmez |
 | Çok düzeyli kalıtım ve tek tablo dışındaki eşlemeler | — | `SubtypeOf` tek düzeydir ve tek tablo (TPH) kullanır |
-| İmzalı adres, çok parçalı ve devam ettirilebilir yükleme; nesne deposu paketleri | 32, 49 | Yeni bağımlılık gerektirirdi; `IHaldusFileStorage` uygulanarak eklenir |
+| Devam ettirilebilir yükleme, nesne deposuna doğrudan yükleme; nesne deposu paketleri | 32, 49 | Multipart yükleme ve süreli indirme bağlantısı (`SignedLinks`) sonradan yazıldı; nesne depoları yeni bağımlılık gerektirir ve `IHaldusFileStorage` uygulanarak eklenir |
 | Mesaj kuyruğu paketi | — | `PublishesEvents` olayı uygulamanın yayıncısına teslim eder; taşımak onun işidir |
 | Zamanlanmış yayından kaldırma | 27 | Zamanlanmış yayın sonradan yazıldı (`ScheduledPublishing`); yayın, zamanından en çok bir bakım aralığı sonra gerçekleşir |
 | "İş tanımı + çalıştırmalar" modeli (AIP-152) | — | İş kaydı zaten bir çalıştırmadır; yeniden çalıştırma yeni bir iş kaydıdır |

@@ -282,4 +282,7 @@
   <data name="Balance.Hold.Limit" xml:space="preserve">
     <value>This balance already has {0} open holds; close some before placing another.</value>
   </data>
+  <data name="File.LinkInvalid" xml:space="preserve">
+    <value>This link is invalid or has expired.</value>
+  </data>
 </root>

@@ -111,6 +111,38 @@ public sealed class FileTests
     }
 
     [Fact]
+    public void SignedLinks_ShareTheContentThroughAnAnonymousEndpointBoundToTheContent()
+    {
+        var run = Run("app.MapFile<Attachment>().MultiTenant().OwnedByCurrentUser(underMe: false).SignedLinks();").AssertCompiles();
+        var endpoints = run.Sources["Shop.Attachment.Endpoints.g.cs"];
+
+        // Bağlantıyı üretmek için kaydı görebilmek gerekir: kayıt kendi filtrelerinden geçerek aranır.
+        var create = Handler(endpoints, "CreateLinkAsync");
+        Assert.Contains("""MapPost("/{id:guid}/content/link", CreateLinkAsync)""", endpoints);
+        Assert.DoesNotContain("IgnoreQueryFilters", create);
+        Assert.Contains("global::Haldus.HaldusFileLinks.Create<Attachment>(httpContext,", create);
+        Assert.Contains("FileContentMissing(messages, \"Attachment\", id)", create);
+
+        // Bağlantıyı açan uç oturumsuzdur; kiracı ve sahiplik filtreleri (ve yalnızca onlar) kaldırılır.
+        Assert.Contains(
+            "group.MapGet(\"/shared-content/{token}\", DownloadSharedAsync)\n            .WithName(\"DownloadSharedAttachment\")\n            .WithMetadata(global::Haldus.HaldusTokenAccess.Instance)\n            .AllowAnonymous()",
+            endpoints);
+
+        var open = Handler(endpoints, "DownloadSharedAsync");
+        Assert.Contains("global::Haldus.HaldusFileLinks.TryRead<Attachment>(httpContext, token, out var linked, out var checksum) || !global::System.Guid.TryParse(linked, out var id)", open);
+        Assert.Contains(".IgnoreQueryFilters(new[] { global::Haldus.HaldusFilters.Tenant, global::Haldus.HaldusFilters.Owner })", open);
+        Assert.DoesNotContain("IgnoreQueryFilters()", open);
+
+        // Bağlantı üretildiği andaki içeriğe bağlıdır; içerik kaydın kiracısı adına okunur.
+        Assert.Contains("entity is null || entity.Checksum != checksum", open);
+        Assert.Contains("global::Haldus.HaldusAmbient.Use(entity.TenantId, null)", open);
+
+        // İstenmediyse hiçbiri üretilmez; kapsamı olmayan kaynakta filtre de kaldırılmaz.
+        Assert.DoesNotContain("shared-content", Run("app.MapFile<Attachment>();").AssertCompiles().Sources["Shop.Attachment.Endpoints.g.cs"]);
+        Assert.DoesNotContain("IgnoreQueryFilters", Handler(Run("app.MapFile<Attachment>().SignedLinks();").AssertCompiles().Sources["Shop.Attachment.Endpoints.g.cs"], "DownloadSharedAsync"));
+    }
+
+    [Fact]
     public void MapFile_DefaultsToTenMegabytesAndAnyType()
     {
         var endpoints = Run("app.MapFile<Attachment>();").AssertCompiles().Sources["Shop.Attachment.Endpoints.g.cs"];
@@ -123,6 +155,9 @@ public sealed class FileTests
     [InlineData("app.MapFile<Attachment>().Workflow<NoteStatus>();", "HALDUS007", "MapFile cannot be combined with Workflow")]
     [InlineData("app.MapFile<Attachment>().Cloneable();", "HALDUS007", "MapFile cannot be combined with Cloneable")]
     [InlineData("app.MapFile<Attachment>().SoftDeletable();", "HALDUS007", "MapFile cannot be combined with SoftDeletable")]
+    [InlineData("app.MapCrud<Note>().SignedLinks();", "HALDUS007", "declare it on a MapFile call")]
+    [InlineData("app.MapCrud<Order>(); app.MapFile<Attachment>().Under<Order>().SignedLinks();", "HALDUS007", "SignedLinks cannot be combined with Under")]
+    [InlineData("app.MapCrud<Order>(); app.MapFile<Attachment>().AttachedTo<Order>().SignedLinks();", "HALDUS007", "SignedLinks cannot be combined with AttachedTo")]
     [InlineData("app.MapFile<Attachment>(maxBytes: 0);", "HALDUS010", "between 1 byte and 1 GB")]
     [InlineData("app.MapFile<Attachment>(1024, \"png\");", "HALDUS010", "The arguments of MapFile must be constants")]
     [InlineData(

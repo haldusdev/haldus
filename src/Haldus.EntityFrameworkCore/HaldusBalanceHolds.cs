@@ -64,6 +64,9 @@ public static class HaldusBalanceHolds
     public const string Released = "Released";
     public const string Expired = "Expired";
 
+    /// <summary>Defterdeki ve tutmadaki açıklamanın en çok uzunluğu.</summary>
+    private const int MaxReasonLength = 500;
+
     /// <summary>Bir bakiyenin aynı anda açık olabilen en çok tutması.</summary>
     public const int MaxActive = 1000;
 
@@ -215,7 +218,14 @@ public static class HaldusBalanceHolds
             reserved = read(entity, to) - quantity;
         }
 
+        // Defterin açıklaması tutmanınkiyle aynı uzunlukla sınırlıdır; önek eklenince taşan kısım kesilir. Kesilmeseydi
+        // uzun açıklamalı bir tutma hiç bırakılamazdı.
         var note = outcome == Captured ? hold.Reason : $"{outcome}: {hold.Reason}".TrimEnd(' ', ':');
+
+        if (note is { Length: > MaxReasonLength })
+        {
+            note = note.Substring(0, MaxReasonLength);
+        }
 
         write(entity, to, reserved);
         HaldusBalances.Record(context, resource, perTenant, key, to, -quantity, reserved, note);

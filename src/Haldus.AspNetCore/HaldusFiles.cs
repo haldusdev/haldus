@@ -40,12 +40,12 @@ public static class HaldusFiles
         var request = httpContext.Request;
         var contentType = MediaTypeHeaderValue.TryParse(request.ContentType, out var media) ? media.MediaType.Value : null;
 
-        if (contentTypes.Count > 0 && !contentTypes.Any(allowed => Matches(allowed, contentType)))
-        {
-            return FileUpload.Reject(HaldusProblems.FileTypeNotAllowed(messages, contentType ?? string.Empty));
-        }
+        // İçerik gövdenin kendisi olabilir ya da bir multipart formun dosya parçası (tarayıcıların ve çoğu istemci
+        // kütüphanesinin yüklediği biçim). Formun başlıkları ve sınır satırları içerikten sayılmaz.
+        var multipart = string.Equals(contentType, "multipart/form-data", StringComparison.OrdinalIgnoreCase);
+        var overhead = multipart ? MultipartOverhead : 0;
 
-        if (request.ContentLength > maxBytes)
+        if (request.ContentLength > maxBytes + overhead)
         {
             return FileUpload.Reject(HaldusProblems.FileTooLarge(messages, maxBytes));
         }
@@ -53,7 +53,44 @@ public static class HaldusFiles
         // Sunucunun kendi gövde sınırı daha küçükse bu uç için yükseltilir; daha büyükse bizimki geçerlidir.
         if (httpContext.Features.Get<IHttpMaxRequestBodySizeFeature>() is { IsReadOnly: false } limit)
         {
-            limit.MaxRequestBodySize = maxBytes + 1;
+            limit.MaxRequestBodySize = maxBytes + 1 + overhead;
+        }
+
+        var body = request.Body;
+
+        if (multipart)
+        {
+            var boundary = HeaderUtilities.RemoveQuotes(media!.Boundary).Value;
+
+            if (string.IsNullOrEmpty(boundary) || boundary.Length > 200)
+            {
+                return FileUpload.Reject(HaldusProblems.FileEmpty(messages));
+            }
+
+            // Formun ilk dosya parçası içeriktir; ondan önceki alanlar atlanır, sonrakiler okunmaz.
+            var reader = new Microsoft.AspNetCore.WebUtilities.MultipartReader(boundary, request.Body);
+            Microsoft.AspNetCore.WebUtilities.MultipartSection? section;
+
+            while ((section = await reader.ReadNextSectionAsync(cancellationToken)) is not null)
+            {
+                if (ContentDispositionHeaderValue.TryParse(section.ContentDisposition, out var disposition) && disposition.IsFileDisposition())
+                {
+                    break;
+                }
+            }
+
+            if (section is null)
+            {
+                return FileUpload.Reject(HaldusProblems.FileEmpty(messages));
+            }
+
+            body = section.Body;
+            contentType = MediaTypeHeaderValue.TryParse(section.ContentType, out var part) ? part.MediaType.Value : null;
+        }
+
+        if (contentTypes.Count > 0 && !contentTypes.Any(allowed => Matches(allowed, contentType)))
+        {
+            return FileUpload.Reject(HaldusProblems.FileTypeNotAllowed(messages, contentType ?? string.Empty));
         }
 
         var storage = context.GetService<IHaldusFileStorage>();
@@ -61,7 +98,7 @@ public static class HaldusFiles
         var replaced = file.StorageKey;
 
         using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
-        await using var content = new MeasuredStream(request.Body, maxBytes, hash);
+        await using var content = new MeasuredStream(body, maxBytes, hash);
 
         try
         {
@@ -87,6 +124,9 @@ public static class HaldusFiles
         file.UploadedAt = HaldusTime.UtcNow(context.GetService<TimeProvider>());
         return new FileUpload(null, storage, context, replaced);
     }
+
+    /// <summary>Bir multipart formun, dosya içeriği dışında (sınır satırları, parça başlıkları) taşıyabildiği en çok bayt.</summary>
+    private const long MultipartOverhead = 64 * 1024;
 
     /// <summary>Dosyanın içeriğini gönderir; içerik henüz yüklenmediyse 404 döner.</summary>
     public static async Task<Results<FileStreamHttpResult, ProblemHttpResult>> SendAsync<TEntity>(

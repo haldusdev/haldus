@@ -42,6 +42,13 @@ public static class ContentEndpoints
         // kaynağın adresi altında sunulur: /articles/{articleId}/attachments, /suppliers/{supplierId}/attachments
         app.MapFile<Attachment>(maxBytes: 1024 * 1024, "image/*", "application/pdf", "text/plain");
 
+        // Kiracının ortam dosyası. İçerik gövde olarak da, bir multipart formun dosya parçası olarak da yüklenir
+        // (PUT /media-files/{id}/content). POST /media-files/{id}/content/link süreli bir bağlantı üretir;
+        // bağlantıyı taşıyan, oturumu ve kiracısı olmadan içeriği indirir: GET /media-files/shared-content/{token}
+        app.MapFile<MediaFile>(maxBytes: 64 * 1024, "image/*", "text/plain")
+            .MultiTenant()
+            .SignedLinks();
+
         // Yorum yalnızca eklenir; takıldığı kayıt görünürse görünür ve onunla birlikte silinir. Yorumlar birbirine
         // yanıt olabilir: yanıtlanan yorum aynı kayda takılı olmalıdır.
         app.MapAppendOnly<Comment>()

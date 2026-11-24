@@ -823,7 +823,11 @@ internal sealed record RollupModel(
 /// <summary><c>MapFile</c> ile bildirilen dosya kaynağının içerik kuralları.</summary>
 /// <param name="MaxBytes">Kabul edilen en büyük içerik.</param>
 /// <param name="ContentTypes">Kabul edilen türler; boşsa her tür kabul edilir.</param>
-internal sealed record FileModel(long MaxBytes, EquatableArray<string> ContentTypes);
+internal sealed record FileModel(long MaxBytes, EquatableArray<string> ContentTypes)
+{
+    /// <summary><c>.SignedLinks()</c>: içeriğe, oturumu olmayan birinin de açabildiği süreli bağlantılar üretilebilir.</summary>
+    public bool SignedLinks { get; init; }
+}
 
 /// <param name="Levels">Kaydın onaylanması için gereken, birbirinden farklı kişilerin vereceği onay sayısı.</param>
 /// <param name="RequiredFor">Kayıt onaylanmadan çalışmayan geçişlerin ve aksiyonların adları.</param>

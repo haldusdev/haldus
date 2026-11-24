@@ -257,6 +257,16 @@ public static class ResourceBuilderTraitExtensions
         where TEntity : class => builder;
 
     /// <summary>
+    /// Dosyanın içeriğine, oturumu olmayan birinin de açabildiği süreli bağlantılar üretilebilir (<c>MapFile</c> ile):
+    /// <c>POST /{id}/content/link?expiresInSeconds=300</c> kaydı görebilen birine <c>{ "url", "expiresAt" }</c> döndürür;
+    /// <c>GET /shared-content/{token}</c> içeriği kimlik sormadan gönderir. Bağlantı tahmin edilemez, en çok bir gün
+    /// yaşar ve üretildiği andaki içeriğe bağlıdır: içerik değişince ya da kayıt silinince geçersiz olur. Bağlantıyı
+    /// taşıyan herkes içeriği okuyabilir; yalnızca paylaşılması istenen dosyalarda açılmalıdır.
+    /// </summary>
+    public static ResourceBuilder<TEntity> SignedLinks<TEntity>(this ResourceBuilder<TEntity> builder)
+        where TEntity : class => builder;
+
+    /// <summary>
     /// Taslağın yayını ileri bir zamana kurulabilir: <c>POST /{id}/schedule</c> (<c>{ "publishAt": "…" }</c>) zamanı
     /// yazar, <c>DELETE /{id}/schedule</c> kaldırır. Zamanı gelen taslağı bakım (<c>HaldusOptions.MaintenanceInterval</c>
     /// aralığıyla) o andaki haliyle yayına alır; yayın bu yüzden zamanından en çok bir bakım aralığı kadar sonra

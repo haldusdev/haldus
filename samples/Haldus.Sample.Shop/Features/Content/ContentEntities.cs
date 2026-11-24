@@ -29,6 +29,13 @@ public partial class Attachment
     public string? Caption { get; set; }
 }
 
+/// <summary>Kiracının ortam dosyası; içeriği süreli bir bağlantıyla paylaşılabilir.</summary>
+public partial class MediaFile
+{
+    [MaxLength(200)]
+    public string? Title { get; set; }
+}
+
 /// <summary>Bir kayda yazılan yorum.</summary>
 public partial class Comment
 {
