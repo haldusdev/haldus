@@ -29,6 +29,11 @@ app.MapCatalog();
 app.MapSales();
 app.MapStock();
 app.MapPlatform();
+app.MapDiagnostics();
+
+// Entity'ye bağlı olmayan işlemler: iş mantığı ShippingQuoteHandler ve ApplyDiscountHandler sınıflarında.
+app.MapQuery<ShippingQuoteRequest, ShippingQuote>();
+app.MapAction<ApplyDiscountRequest, ApplyDiscountResult>();
 
 app.Run();
 

@@ -126,6 +126,19 @@ internal sealed record PropertyModel(
     public bool IsNonNullable => IsNonNullableReference || IsNonNullableValue;
 }
 
+/// <summary><c>IActionHandler</c> veya <c>IQueryHandler</c> uygulayan, bağımlılık enjeksiyonuna kaydedilecek sınıf.</summary>
+internal sealed record HandlerModel(string Implementation, EquatableArray<string> Services);
+
+/// <summary>Bir <c>MapQuery</c> çağrısı: istek tipi sorgu parametrelerinden doldurulur.</summary>
+internal sealed record QueryModel(
+    string RequestName,
+    string RequestNamespace,
+    string RequestType,
+    string ResponseType,
+    bool HasParameterlessConstructor,
+    EquatableArray<FilterProperty> Parameters,
+    LocationInfo Location);
+
 /// <summary><c>.Filterable&lt;TFilter&gt;()</c> ile bağlanan filtre sınıfı ve sorgu parametresi olacak özellikleri.</summary>
 internal sealed record FilterModel(string Type, EquatableArray<FilterProperty> Properties);
 

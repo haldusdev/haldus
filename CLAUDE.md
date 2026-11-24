@@ -43,6 +43,17 @@ Bunlar kullanıcıyla kararlaştırıldı; yeniden sorma.
   zincir çağrıları desteklenmez ve analyzer hatası olmalıdır).
 - İlk sürüm archetype'ları: `MapCrud`, `MapReadOnly`, `MapAppendOnly`, `MapStore`, `MapSingleton`,
   `MapLookup`, `MapDetail`, `MapAssociation`, `MapAction`, `MapQuery`, `MapJob`.
+- Anahtar özelliğinin adı archetype'a göre değişir: `Id` (Crud, ReadOnly, AppendOnly; sunucu üretir),
+  `Key` (Store; istemci verir), `Code` (Lookup; istemci verir). Singleton'ın anahtarı entity'de görünmez.
+- `MapStore` ve `MapLookup`'ta `PUT /{key}` ekle-veya-güncelledir. `MapLookup` yazma uçlarını da üretir
+  (kullanıcı kararı); listesi sayfalamasızdır ve `Code` + `Name` alanları üretilir.
+- `MapSingleton` kaydı örtük var sayar: hiç yazılmadıysa `GET` entity'nin varsayılan değerlerini döner.
+  `.MultiTenant()` ile kapsam kiracı olur.
+- `MapAction` (`POST`) ve `MapQuery` (`GET`) entity'ye bağlı değildir. İş mantığı ya bir handler
+  sınıfında (`IActionHandler`, `IQueryHandler`; Haldus bulur ve DI'a kaydeder) ya da Map çağrısına verilen
+  lambda'dadır; ikisi de desteklenir (kullanıcı kararı). Lambda bağımlılık enjeksiyonu almaz; gerekirse
+  `IServiceProvider` alan biçimi kullanılır.
+- Yazılmamış bir entity, `Map*` çağrısının bulunduğu namespace'e üretilir.
 - `MapDetail` varsayılan olarak üst kaydın isteğinde gömülü yazılır; `.AsSubresource()` ile ayrı
   endpoint'lere geçer.
 - Eşzamanlılık trait'inin adı `ConcurrencyChecked` (eski adı `Versioned`). Sürüm yanıt gövdesinde değil
@@ -85,7 +96,7 @@ Bunlar kullanıcıyla kararlaştırıldı; yeniden sorma.
 
 ## Aşamalar
 
-1, 2 ve 3 tamamlandı (3. aşamaya `.Searchable()` da eklendi); sıradaki 4.
+1–4 tamamlandı (3. aşamaya `.Searchable()` da eklendi); sıradaki 5.
 
 1. İskelet
 2. Generator çekirdeği ve `MapCrud`
@@ -123,6 +134,14 @@ Bunlar kullanıcıyla kararlaştırıldı; yeniden sorma.
 - Arama koşulları `HaldusSearch` ile ifade ağacına çevrilir; değerler ifadeye sabit olarak değil bir
   nesnenin özelliği olarak konur ki EF Core onları SQL parametresi yapsın. Bir alanın koşul tipi
   (`StringCondition`, `RangeCondition<T>`, `EqualityCondition<T>`) `MapCallParser.TryClassify` ile seçilir.
+- Yeni bir archetype eklemek: `Model/ResourceModel.cs` içindeki `Archetype` enum'u ve uzantıları (temel
+  işlemler, anahtar adı), `MapCallParser.ArchetypeOf` ve `Conflicts`, `EndpointEmitter`,
+  `ModuleEmitter.AppendModel` ve çalışma zamanındaki `Map*` metodu.
+- Archetype'ın anlamıyla çelişen zincir bildirimleri sessizce yok sayılmaz, `HALDUS007` olur. Özellikle
+  liste işlemi kaldırılmış bir kaynakta `Searchable` arama ucu açamaz.
+- `MapQuery` generator gerektirir (istek tipinin özellikleri sorgu parametrelerine tek tek bağlanır);
+  `MapAction` gerektirmez (gövdeden bağlanır, endpoint çalışma zamanında kurulur). Handler eksikse hata
+  ilk istekte değil uygulama açılırken verilir.
 - Eşzamanlılık kontrollü kaynakta durum değiştiren her uç (`restore`, `purge`, `archive` dahil) `If-Match`
   ister; yeni bir uç eklerken `ReadIfMatch` / `ExpectVersion` / `Save` üçlüsünü kullan.
 - Üretilen kod çalışma zamanına bir module initializer ile bağlanır: `HaldusEndpointRegistry` (entity →

@@ -62,6 +62,14 @@ internal static class HaldusDiagnostics
         DiagnosticSeverity.Error,
         isEnabledByDefault: true);
 
+    public static readonly DiagnosticDescriptor QueryRequestNeedsParameterlessConstructor = new(
+        "HALDUS008",
+        "Query request needs a parameterless constructor",
+        "'{0}' must have a public parameterless constructor and settable properties so Haldus can fill it from the query string",
+        Category,
+        DiagnosticSeverity.Error,
+        isEnabledByDefault: true);
+
     public static DiagnosticDescriptor Get(string id) => id switch
     {
         "HALDUS005" => FieldCannotBeSearched,

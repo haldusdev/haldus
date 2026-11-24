@@ -15,7 +15,7 @@ internal static class MapCallParser
     private const string RequiredAttributeType = "System.ComponentModel.DataAnnotations.RequiredAttribute";
     private const string GuidType = "global::System.Guid";
 
-    private static readonly SymbolDisplayFormat TypeFormat = SymbolDisplayFormat.FullyQualifiedFormat
+    internal static readonly SymbolDisplayFormat TypeFormat = SymbolDisplayFormat.FullyQualifiedFormat
         .AddMiscellaneousOptions(SymbolDisplayMiscellaneousOptions.IncludeNullableReferenceTypeModifier);
 
     /// <summary>Özel tipi olmayan ama skaler sayılan tipler ve sıralanabilir olup olmadıkları.</summary>
@@ -227,7 +227,7 @@ internal static class MapCallParser
         return true;
     }
 
-    private static IEnumerable<IPropertySymbol> PublicInstanceProperties(INamedTypeSymbol type)
+    internal static IEnumerable<IPropertySymbol> PublicInstanceProperties(INamedTypeSymbol type)
     {
         var hierarchy = new Stack<INamedTypeSymbol>();
         for (var current = type; current is { SpecialType: not SpecialType.System_Object }; current = current.BaseType)
@@ -250,7 +250,7 @@ internal static class MapCallParser
     }
 
     /// <summary>Tip skaler ise hangi arama koşulunu aldığını ve nullable sarmalayıcısı çıkarılmış adını verir.</summary>
-    private static bool TryClassify(ITypeSymbol type, out SearchKind kind, out string valueType)
+    internal static bool TryClassify(ITypeSymbol type, out SearchKind kind, out string valueType)
     {
         if (type is INamedTypeSymbol { OriginalDefinition.SpecialType: SpecialType.System_Nullable_T } nullable)
         {
@@ -426,7 +426,7 @@ internal static class MapCallParser
             attributes.ToEquatableArray());
     }
 
-    private static string AsNullable(string type) => type.EndsWith("?", StringComparison.Ordinal) ? type : type + "?";
+    internal static string AsNullable(string type) => type.EndsWith("?", StringComparison.Ordinal) ? type : type + "?";
 
     private static FilterModel? ReadFilter(SemanticModel semanticModel, TypeSyntax syntax, CancellationToken cancellationToken)
     {

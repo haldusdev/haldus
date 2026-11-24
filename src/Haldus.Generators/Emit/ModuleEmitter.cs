@@ -7,7 +7,10 @@ namespace Haldus.Generators.Emit;
 /// <summary>Modülün (assembly'nin) kayıt kodunu ve bağlamın DbSet özelliklerini üretir.</summary>
 internal static class ModuleEmitter
 {
-    public static string EmitModule(IReadOnlyList<(ResourceModel Resource, string Namespace)> resources)
+    public static string EmitModule(
+        IReadOnlyList<(ResourceModel Resource, string Namespace)> resources,
+        IReadOnlyList<HandlerModel> handlers,
+        IReadOnlyList<QueryModel> queries)
     {
         var builder = new StringBuilder();
         builder.Append(ResourceEmitter.Header).Append('\n');
@@ -18,23 +21,62 @@ internal static class ModuleEmitter
         builder.Append("    [global::System.Runtime.CompilerServices.ModuleInitializer]\n");
         builder.Append("    internal static void Initialize()\n");
         builder.Append("    {\n");
-        builder.Append("        global::Haldus.HaldusModelRegistry.Register(typeof(HaldusModule).Assembly, static (modelBuilder, context) =>\n");
-        builder.Append("        {\n");
+        var blocks = new List<string>();
 
-        foreach (var (resource, entityNamespace) in resources)
+        if (resources.Count > 0)
         {
-            AppendModel(builder, resource, ResourceEmitter.QualifiedName(resource, entityNamespace));
-        }
+            var model = new StringBuilder();
+            model.Append("        global::Haldus.HaldusModelRegistry.Register(typeof(HaldusModule).Assembly, static (modelBuilder, context) =>\n");
+            model.Append("        {\n");
 
-        builder.Append("        });\n");
+            foreach (var (resource, entityNamespace) in resources)
+            {
+                AppendModel(model, resource, ResourceEmitter.QualifiedName(resource, entityNamespace));
+            }
+
+            model.Append("        });\n");
+            blocks.Add(model.ToString());
+        }
 
         foreach (var (resource, entityNamespace) in resources)
         {
             var entity = ResourceEmitter.QualifiedName(resource, entityNamespace);
-            builder.Append('\n');
-            builder.Append($"        global::Haldus.HaldusEndpointRegistry.Register<{entity}>({entity}Endpoints.Map);\n");
+            blocks.Add($"        global::Haldus.HaldusEndpointRegistry.Register<{entity}>({entity}Endpoints.Map);\n");
         }
 
+        if (handlers.Count > 0)
+        {
+            const string TryAddScoped =
+                "global::Microsoft.Extensions.DependencyInjection.Extensions.ServiceCollectionDescriptorExtensions.TryAddScoped";
+
+            // TryAdd: kullanıcı aynı servisi kendisi kaydettiyse onunki geçerli kalır.
+            var services = new StringBuilder();
+            services.Append("        global::Haldus.HaldusServiceRegistry.Register(typeof(HaldusModule).Assembly, static services =>\n");
+            services.Append("        {\n");
+
+            foreach (var handler in handlers)
+            {
+                foreach (var service in handler.Services)
+                {
+                    services.Append($"            {TryAddScoped}<{service}, {handler.Implementation}>(services);\n");
+                }
+            }
+
+            services.Append("        });\n");
+            blocks.Add(services.ToString());
+        }
+
+        foreach (var query in queries)
+        {
+            var endpoint = query.RequestNamespace.Length == 0
+                ? $"global::{query.RequestName}QueryEndpoint"
+                : $"global::{query.RequestNamespace}.{query.RequestName}QueryEndpoint";
+
+            blocks.Add(
+                $"        global::Haldus.HaldusQueryRegistry.Register<{query.RequestType}, {query.ResponseType}>({endpoint}.Map);\n");
+        }
+
+        builder.Append(string.Join("\n", blocks));
         builder.Append("    }\n");
         builder.Append("}\n");
 

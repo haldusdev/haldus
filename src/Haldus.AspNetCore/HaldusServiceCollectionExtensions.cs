@@ -35,6 +35,9 @@ public static class HaldusServiceCollectionExtensions
         services.TryAddSingleton(TimeProvider.System);
         services.TryAddSingleton<IHaldusMessages, ResourceHaldusMessages>();
 
+        // Generator'ın bulduğu handler sınıfları.
+        HaldusServiceRegistry.Apply(services);
+
         services.AddProblemDetails();
         services.Configure<RequestLocalizationOptions>(options => options
             .SetDefaultCulture(SupportedCultures[0])

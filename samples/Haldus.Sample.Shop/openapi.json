@@ -5,6 +5,191 @@
     "version": "1.0.0"
   },
   "paths": {
+    "/echo": {
+      "get": {
+        "tags": [
+          "Haldus.Sample.Shop"
+        ],
+        "operationId": "Echo",
+        "parameters": [
+          {
+            "name": "message",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "numbers",
+            "in": "query",
+            "schema": {
+              "type": "array",
+              "items": {
+                "pattern": "^-?(?:0|[1-9]\\d*)$",
+                "type": [
+                  "integer",
+                  "string"
+                ],
+                "format": "int32"
+              }
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EchoResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpValidationProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/clear-maintenance-notice": {
+      "post": {
+        "tags": [
+          "Haldus.Sample.Shop"
+        ],
+        "operationId": "ClearMaintenanceNotice",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClearMaintenanceNotice"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpValidationProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/shipping-quote": {
+      "get": {
+        "tags": [
+          "Haldus.Sample.Shop"
+        ],
+        "operationId": "ShippingQuote",
+        "parameters": [
+          {
+            "name": "country",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "weight",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+              "type": [
+                "number",
+                "string"
+              ],
+              "format": "double"
+            }
+          },
+          {
+            "name": "express",
+            "in": "query",
+            "schema": {
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ShippingQuote"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpValidationProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/apply-discount": {
+      "post": {
+        "tags": [
+          "Haldus.Sample.Shop"
+        ],
+        "operationId": "ApplyDiscount",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ApplyDiscountRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplyDiscountResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpValidationProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/categories": {
       "get": {
         "tags": [
@@ -2504,6 +2689,44 @@
   },
   "components": {
     "schemas": {
+      "ApplyDiscountRequest": {
+        "required": [
+          "namePrefix"
+        ],
+        "type": "object",
+        "properties": {
+          "namePrefix": {
+            "minLength": 3,
+            "type": "string"
+          },
+          "percent": {
+            "maximum": 90,
+            "minimum": 1,
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          }
+        }
+      },
+      "ApplyDiscountResult": {
+        "required": [
+          "productsChanged"
+        ],
+        "type": "object",
+        "properties": {
+          "productsChanged": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          }
+        }
+      },
       "BrandResponse": {
         "required": [
           "id",
@@ -2547,6 +2770,9 @@
             "type": "string"
           }
         }
+      },
+      "ClearMaintenanceNotice": {
+        "type": "object"
       },
       "CountryResponse": {
         "required": [
@@ -2917,6 +3143,26 @@
           }
         },
         "additionalProperties": false
+      },
+      "EchoResponse": {
+        "required": [
+          "message",
+          "sum"
+        ],
+        "type": "object",
+        "properties": {
+          "message": {
+            "type": "string"
+          },
+          "sum": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          }
+        }
       },
       "EqualityConditionOfGuid": {
         "type": "object",
@@ -3977,6 +4223,26 @@
         },
         "additionalProperties": false
       },
+      "ShippingQuote": {
+        "required": [
+          "price",
+          "countryKnown"
+        ],
+        "type": "object",
+        "properties": {
+          "price": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "format": "double"
+          },
+          "countryKnown": {
+            "type": "boolean"
+          }
+        }
+      },
       "StockLevelResponse": {
         "required": [
           "id",
@@ -4266,6 +4532,9 @@
     }
   },
   "tags": [
+    {
+      "name": "Haldus.Sample.Shop"
+    },
     {
       "name": "Categories"
     },

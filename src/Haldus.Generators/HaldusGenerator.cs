@@ -30,9 +30,24 @@ public sealed class HaldusGenerator : IIncrementalGenerator
             .Where(static dbContext => dbContext is not null)
             .Select(static (dbContext, _) => dbContext!);
 
+        var queries = context.SyntaxProvider
+            .CreateSyntaxProvider(
+                static (node, _) => OperationParser.IsQueryCandidate(node),
+                static (syntaxContext, cancellationToken) => OperationParser.ParseQuery(syntaxContext, cancellationToken))
+            .Where(static query => query is not null)
+            .Select(static (query, _) => query!);
+
+        var handlers = context.SyntaxProvider
+            .CreateSyntaxProvider(
+                static (node, _) => OperationParser.IsHandlerCandidate(node),
+                static (syntaxContext, cancellationToken) => OperationParser.ParseHandler(syntaxContext, cancellationToken))
+            .Where(static handler => handler is not null)
+            .Select(static (handler, _) => handler!);
+
         context.RegisterSourceOutput(
-            resources.Collect().Combine(dbContexts.Collect()),
-            static (productionContext, data) => Emit(productionContext, data.Left, data.Right));
+            resources.Collect().Combine(dbContexts.Collect()).Combine(queries.Collect()).Combine(handlers.Collect()),
+            static (productionContext, data) => Emit(
+                productionContext, data.Left.Left.Left, data.Left.Left.Right, data.Left.Right, data.Right));
 
         // Zincir derleme zamanında okunduğu için bir Map çağrısına kesintisiz bağlı olmayan bildirimler
         // sessizce yok sayılırdı; bunun yerine hata verilir.
@@ -77,7 +92,9 @@ public sealed class HaldusGenerator : IIncrementalGenerator
     private static void Emit(
         SourceProductionContext context,
         ImmutableArray<ResourceModel> resources,
-        ImmutableArray<DbContextModel> dbContexts)
+        ImmutableArray<DbContextModel> dbContexts,
+        ImmutableArray<QueryModel> queries,
+        ImmutableArray<HandlerModel> handlers)
     {
         var valid = new List<(ResourceModel Resource, string Namespace)>();
         var seen = new HashSet<string>();
@@ -105,9 +122,37 @@ public sealed class HaldusGenerator : IIncrementalGenerator
             valid.Add((resource, entityNamespace));
         }
 
-        if (valid.Count == 0)
+        // Aynı istek tipi birden çok rotaya eşlenebilir; endpoint kodu bir kez üretilir.
+        var validQueries = new List<QueryModel>();
+        var seenQueries = new HashSet<string>();
+
+        foreach (var query in queries)
+        {
+            if (!query.HasParameterlessConstructor)
+            {
+                context.ReportDiagnostic(Diagnostic.Create(
+                    HaldusDiagnostics.QueryRequestNeedsParameterlessConstructor,
+                    query.Location.ToLocation(),
+                    query.RequestName));
+            }
+            else if (seenQueries.Add(query.RequestType))
+            {
+                validQueries.Add(query);
+            }
+        }
+
+        // Partial bir handler sınıfı her bildirimi için bir kez gelir.
+        var distinctHandlers = handlers.Distinct().OrderBy(handler => handler.Implementation, StringComparer.Ordinal).ToList();
+
+        if (valid.Count == 0 && validQueries.Count == 0 && distinctHandlers.Count == 0)
         {
             return;
+        }
+
+        foreach (var query in validQueries)
+        {
+            var hintPrefix = query.RequestNamespace.Length == 0 ? query.RequestName : $"{query.RequestNamespace}.{query.RequestName}";
+            AddSource(context, $"{hintPrefix}.Query.g.cs", QueryEmitter.Emit(query));
         }
 
         foreach (var (resource, entityNamespace) in valid)
@@ -123,7 +168,7 @@ public sealed class HaldusGenerator : IIncrementalGenerator
             AddSource(context, $"{hintPrefix}.Endpoints.g.cs", EndpointEmitter.Emit(resource, entityNamespace));
         }
 
-        AddSource(context, "HaldusModule.g.cs", ModuleEmitter.EmitModule(valid));
+        AddSource(context, "HaldusModule.g.cs", ModuleEmitter.EmitModule(valid, distinctHandlers, validQueries));
 
         foreach (var dbContext in dbContexts.Distinct())
         {

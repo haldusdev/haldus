@@ -33,6 +33,23 @@ public sealed class HaldusValidationFilter<TRequest>(IHaldusMessages messages) :
     }
 }
 
+/// <summary>Üretilen kodun, endpoint argümanı olmayan bir nesneyi (ör. sorgu isteğini) doğrulaması için.</summary>
+public static class HaldusValidation
+{
+    /// <summary>Nesne geçerliyse <c>null</c>, değilse yerelleştirilmiş doğrulama hatasını döner.</summary>
+    public static Microsoft.AspNetCore.Http.HttpResults.ValidationProblem? Validate(object instance, IHaldusMessages messages)
+    {
+        ArgumentNullException.ThrowIfNull(instance);
+        ArgumentNullException.ThrowIfNull(messages);
+
+        var errors = HaldusValidator.Validate(instance, messages);
+
+        return errors.Count == 0
+            ? null
+            : TypedResults.ValidationProblem(errors, title: messages.Format(HaldusMessageKeys.ValidationTitle));
+    }
+}
+
 internal static class HaldusValidator
 {
     private static readonly ConcurrentDictionary<Type, PropertyRules[]> Cache = new();

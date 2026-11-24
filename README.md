@@ -26,6 +26,38 @@ Bu iki parçadan Haldus şunları üretir:
   `DELETE /products/{id}`,
 - EF Core model kaydı.
 
+## Archetype'lar
+
+Her archetype bir kaynağın hangi işlemlere sahip olduğunu seçer:
+
+| Archetype | Üretilen uçlar |
+|---|---|
+| `MapCrud<T>()` | Liste, tekil, oluştur, `PUT`, `PATCH`, sil |
+| `MapReadOnly<T>()` | Liste, tekil |
+| `MapAppendOnly<T>()` | Liste, tekil, oluştur |
+| `MapStore<T>()` | Liste, tekil, `PUT /{key}` (ekle veya güncelle), sil |
+| `MapLookup<T>()` | Sayfalamasız liste, tekil, `PUT /{code}`, sil; `Code` ve `Name` alanları |
+| `MapSingleton<T>()` | Tek kayıt: `GET`, `PUT`, `PATCH` |
+| `MapAction<TRequest, TResponse>()` | `POST`: entity'ye bağlı olmayan komut |
+| `MapQuery<TRequest, TResponse>()` | `GET`: entity'ye bağlı olmayan hesap |
+
+`MapAction` ve `MapQuery`'nin iş mantığı bir handler sınıfında durur; Haldus onu bulur ve kaydeder:
+
+```csharp
+app.MapQuery<ShippingQuoteRequest, ShippingQuote>();
+
+public sealed class ShippingQuoteHandler(AppDbContext db)
+    : IQueryHandler<ShippingQuoteRequest, ShippingQuote>
+{
+    public async Task<ShippingQuote> HandleAsync(ShippingQuoteRequest request, CancellationToken cancellationToken)
+    {
+        // hesap
+    }
+}
+```
+
+Kısa işler için lambda da verilebilir: `app.MapQuery<EchoRequest, EchoResponse>((request, _) => ...)`.
+
 ## Trait'ler ve süzme
 
 Davranışlar `Map*` çağrısının devamına zincirlenir:

@@ -12,3 +12,4 @@ HALDUS004 | Haldus | Error | Declaration is not part of a Map call chain
 HALDUS005 | Haldus | Error | Field cannot be searched
 HALDUS006 | Haldus | Error | Searchable needs at least one field
 HALDUS007 | Haldus | Error | Declarations cannot be combined
+HALDUS008 | Haldus | Error | Query request needs a parameterless constructor
