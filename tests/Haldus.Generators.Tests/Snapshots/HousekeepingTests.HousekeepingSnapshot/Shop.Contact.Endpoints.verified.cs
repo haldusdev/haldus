@@ -233,6 +233,7 @@ public static partial class ContactEndpoints
 
     private static async global::System.Threading.Tasks.Task<global::Microsoft.AspNetCore.Http.HttpResults.Results<global::Microsoft.AspNetCore.Http.HttpResults.Ok<global::Haldus.PurgeResult<global::System.Guid>>, global::Microsoft.AspNetCore.Http.HttpResults.ProblemHttpResult>> PurgeMatchingAsync(
         bool? force,
+        bool? all,
         [global::Microsoft.AspNetCore.Mvc.FromQuery(Name = "name")] string? filterName,
         [global::Microsoft.AspNetCore.Mvc.FromQuery(Name = "tags")] string[]? filterTags,
         global::Haldus.IHaldusDbContextProvider contexts,
@@ -240,7 +241,7 @@ public static partial class ContactEndpoints
         global::System.Threading.CancellationToken cancellationToken)
     {
         // Ölçütsüz bir istek koleksiyonun tamamını silerdi.
-        if (filterName is null && filterTags is null or { Length: 0 })
+        if (string.IsNullOrWhiteSpace(filterName) && filterTags is null or { Length: 0 })
         {
             return global::Haldus.HaldusProblems.PurgeCriteriaRequired(messages);
         }
@@ -269,6 +270,13 @@ public static partial class ContactEndpoints
         {
             // Sayım modu: neyin silineceğini gösterir, hiçbir şey silmez.
             return global::Microsoft.AspNetCore.Http.TypedResults.Ok(new global::Haldus.PurgeResult<global::System.Guid>(matched, 0, sample));
+        }
+
+        // Verilen ölçüt hiçbir şeyi daraltmıyor olabilir (boş bir bayrak, her kayda uyan bir değer). Ölçüt
+        // görünen bütün kayıtlara uyuyorsa silme ancak açıkça istenirse yapılır.
+        if (all != true && matched > 0 && matched == await context.Set<Contact>().LongCountAsync(cancellationToken))
+        {
+            return global::Haldus.HaldusProblems.PurgeMatchesEverything(messages);
         }
 
         await using var batch = await global::Haldus.HaldusBatch.BeginAsync(context, cancellationToken);

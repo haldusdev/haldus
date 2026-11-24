@@ -78,6 +78,22 @@ public sealed class HousekeepingTests
     }
 
     [Fact]
+    public void Sensitive_FieldsOfEmbeddedRowsStayOutOfTheSnapshotOfTheOwner()
+    {
+        var run = Run("""
+            var reports = app.MapCrud<Report>().Revisioned();
+            reports.MapDetail<Contact>().Sensitive(contact => contact.NationalId);
+            """).AssertCompiles();
+
+        // Satırlar sahibin anlık görüntüsüne girer; satırın hassas alanı girmez ve geri yüklemede yazılmaz.
+        Assert.Contains("global::Haldus.HaldusRevisions.Hide<global::Shop.Contact>(\"NationalId\");", run.Sources["HaldusModule.g.cs"]);
+
+        var rollback = Handler(run.Sources["Shop.Report.Endpoints.g.cs"], "RollbackAsync");
+        Assert.Contains("row.Name = source.Name;", rollback);
+        Assert.DoesNotContain("NationalId", rollback);
+    }
+
+    [Fact]
     public void Purgeable_DeletesMatchingRecordsThroughTheRulesOfASingleDelete()
     {
         var run = Run("app.MapCrud<Contact>().Filterable<ContactFilter>().Batch().Purgeable();").AssertCompiles();
@@ -88,8 +104,13 @@ public sealed class HousekeepingTests
         var purge = Handler(endpoints, "PurgeMatchingAsync");
 
         // Ölçütsüz istek reddedilir; boş dizi de ölçüt sayılmaz.
-        Assert.Contains("if (filterName is null && filterTags is null or { Length: 0 })", purge);
+        Assert.Contains("if (string.IsNullOrWhiteSpace(filterName) && filterTags is null or { Length: 0 })", purge);
         Assert.Contains("PurgeCriteriaRequired(messages)", purge);
+
+        // Ölçüt görünen bütün kayıtlara uyuyorsa silme ancak açıkça istenirse (all) yapılır.
+        var everything = purge.IndexOf("if (all != true && matched > 0 && matched == await context.Set<Contact>().LongCountAsync(cancellationToken))", StringComparison.Ordinal);
+        Assert.True(everything >= 0 && everything < purge.IndexOf("BatchDeleteItemAsync", StringComparison.Ordinal));
+        Assert.Contains("PurgeMatchesEverything(messages)", purge);
 
         // Ölçüt, liste ucunun filtresidir ve kaynağın kendi filtrelerinden geçer.
         Assert.Contains("query = filter.Apply(query);", purge);
@@ -137,6 +158,8 @@ public sealed class HousekeepingTests
     [InlineData("app.MapCrud<Contact>().Sensitive(contact => contact.NationalId).Searchable(contact => contact.NationalId);", "HALDUS005", "NationalId")]
     [InlineData("app.MapCrud<Contact>().Sensitive(contact => contact.Name).NaturalKey(contact => contact.Name);", "HALDUS010", "Name")]
     [InlineData("app.MapCrud<Contact>().Sensitive(contact => contact.Name).Translatable(contact => contact.Name);", "HALDUS010", "cannot be translated")]
+    [InlineData("app.MapCrud<Contact>().Sensitive(contact => contact.NationalId).ChangeSets();", "HALDUS007", "ChangeSets cannot be combined with the sensitive field 'NationalId'")]
+    [InlineData("var notes = app.MapCrud<Report>().ChangeSets(); notes.MapDetail<Contact>().Sensitive(contact => contact.NationalId);", "HALDUS007", "ChangeSets cannot be combined with the sensitive field 'NationalId'")]
     [InlineData("app.MapCrud<Contact>().Batch().Purgeable();", "HALDUS007", "Purgeable needs Filterable<TFilter>() for its criteria and Batch()")]
     [InlineData("app.MapCrud<Contact>().Filterable<ContactFilter>().Purgeable();", "HALDUS007", "Purgeable needs Filterable<TFilter>() for its criteria and Batch()")]
     [InlineData("app.MapCrud<Contact>().Filterable<ContactFilter>().Batch().Without(Operations.Delete).Purgeable();", "HALDUS007", "Purgeable requires the Delete operation")]

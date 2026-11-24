@@ -721,14 +721,20 @@ içeriyor (ilişki bildirimleri, `Sensitive`, `PublishesEvents`, `Purgeable`, ye
   İşaretleme arama, sıralama, doğal anahtar ve çeviri çözülmeden önce yapılır ve `FieldCandidates` böyle alanları
   aday saymaz (değerine göre aramak veya sıralamak onu sızdırırdı). Sürümleri saklanan kaynakta üretilen modül
   `HaldusRevisions.Hide<T>(...)` çağırır; alan anlık görüntüye girmez ve geri yükleme ona dokunmaz. Kopya ve yayın
-  kopyası alanı sunucu tarafında taşır. Sınırlar: kullanıcının yazdığı filtre sınıfı (`IFilter<T>`) alanı süzmekte
+  kopyası alanı sunucu tarafında taşır. Gömülü satırlarda da bildirilir (`DetailBuilder.Sensitive`): satırın alanı
+  sahibin yanıtına (`DetailProjection`), anlık görüntüsüne ve geri yüklemesine girmez. **İsteği olduğu gibi saklayan
+  veya geri gösteren bir özellik hassas alanla birleşemez:** `ChangeSets`, kaynağın veya gömülü satırlarının hassas
+  alanı varsa `HALDUS007`'dir (güvenlik incelemesinde çıktı; küme sahnelenen gövdeyi saklayıp geri gösteriyordu).
+  Yeni bir özellik istek gövdesini saklıyorsa aynı kontrol ona da eklenmelidir. Sınırlar: kullanıcının yazdığı filtre sınıfı (`IFilter<T>`) alanı süzmekte
   serbesttir; uygulamanın kendi kodu alanı bir yanıta koyarsa Haldus engelleyemez; `PUT` her alan gibi onu da ister.
   **Yanıt üreten yeni bir yol `ResponseAssignments` dışında alan saymamalıdır.**
 - **Ölçüte göre silme.** `Traits.Purgeable`; `EmitPurgeMatching`. Ölçüt `ApplyFilter()` ile, liste ucundakiyle aynı
   koddan uygulanır ve kaynağın sorgu filtrelerinden geçer; silme `BatchDeleteItemAsync` çağrılarıdır (bu yüzden
-  `Batch` ister ve sürüm kontrollü kaynakla birleşmez), hepsi tek bir `HaldusBatch` sınırındadır. Hiçbir ölçüt
-  parametresi verilmediyse 400 döner; verilen ölçütün gerçekten daraltıp daraltmadığına bakılmaz (ör. `false`
-  gönderilen bir bayrak), sayım modu bunun içindir. Yumuşak silinen kaynakta kayıtlar yumuşak silinir.
+  `Batch` ister ve sürüm kontrollü kaynakla birleşmez), hepsi tek bir `HaldusBatch` sınırındadır. İki koruma vardır
+  (ikincisi ve boş metin kuralı güvenlik incelemesinden sonra eklendi): hiçbir ölçüt verilmediyse (boş veya yalnızca
+  boşluk olan metin de verilmemiş sayılır) 400 döner; verilen ölçüt görünen bütün kayıtlara uyuyorsa (ör. `false`
+  gönderilen bir bayrak, her kayda uyan bir değer) silme ancak `all=true` ile yapılır. Sayım modu ikisinden de önce
+  neyin silineceğini gösterir. Yumuşak silinen kaynakta kayıtlar yumuşak silinir.
 - **Yeniden çalıştırma.** `Traits.Rerunnable`; `RerunOfId` `ExtraMembers`'tadır. `EmitJobRerun` yeni kaydı
   `CreateInitializer(source: "source")` ile kurar (girdiler kopyalanır, çıktılar ve durum baştan başlar), referanslarını
   kayıttan okuyarak doğrular ve oluşturma ucundaki `Prepare` / kaydet / `DispatchAsync` sırasıyla teslim eder. İçe

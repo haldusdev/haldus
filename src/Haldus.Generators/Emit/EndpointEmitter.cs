@@ -1195,11 +1195,14 @@ internal sealed partial class EndpointEmitter
     private void EmitPurgeMatching()
     {
         var filter = _resource.Filter!;
+        // Boş bir metin de ölçüt değildir: "?search=" çoğu filtrede hiçbir şeyi daraltmaz.
         var unset = string.Join(
             " && ",
             filter.Properties.Select(property => property.IsArray
                 ? $"filter{property.Name} is null or {{ Length: 0 }}"
-                : $"filter{property.Name} is null"));
+                : property.NullableType == "string?"
+                    ? $"string.IsNullOrWhiteSpace(filter{property.Name})"
+                    : $"filter{property.Name} is null"));
         var result = $"global::Haldus.PurgeResult<{_resource.IdType}>";
 
         _map.Append($$"""
@@ -1219,6 +1222,7 @@ internal sealed partial class EndpointEmitter
 
                 private static async {{Task}}<{{Results}}.Results<{{Results}}.Ok<{{result}}>, {{Problem}}>> PurgeMatchingAsync(
             {{ScopeParameter}}        bool? force,
+                    bool? all,
             {{FilterParameters()}}{{ContextsParameter}}{{MessagesParameter}}{{CancellationParameter}}    {
                     // Ölçütsüz bir istek koleksiyonun tamamını silerdi.
                     if ({{unset}})
@@ -1237,6 +1241,13 @@ internal sealed partial class EndpointEmitter
                     {
                         // Sayım modu: neyin silineceğini gösterir, hiçbir şey silmez.
                         return {{Http}}.TypedResults.Ok(new {{result}}(matched, 0, sample));
+                    }
+
+                    // Verilen ölçüt hiçbir şeyi daraltmıyor olabilir (boş bir bayrak, her kayda uyan bir değer). Ölçüt
+                    // görünen bütün kayıtlara uyuyorsa silme ancak açıkça istenirse yapılır.
+                    if (all != true && matched > 0 && matched == await context.Set<{{_entity}}>(){{ScopeFilter}}.LongCountAsync(cancellationToken))
+                    {
+                        return {{Problems}}.PurgeMatchesEverything(messages);
                     }
 
                     await using var batch = await {{Batch}}.BeginAsync(context, cancellationToken);
@@ -3092,7 +3103,7 @@ internal sealed partial class EndpointEmitter
             var collection = detail.CollectionName;
             var local = ResourceEmitter.CamelCase(collection);
             var fields = string.Concat(detail.Properties
-                .Where(property => property.IsWritable)
+                .Where(property => property.IsWritable && !property.IsInputOnly)
                 .Select(property => $"            row.{property.Name} = source.{property.Name};\n"));
 
             // Satırlar kimlikleriyle geri gelir: duran satır güncellenir, silinmiş olan aynı kimlikle yeniden eklenir,

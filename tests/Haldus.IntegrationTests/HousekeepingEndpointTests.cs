@@ -117,6 +117,35 @@ public sealed class HousekeepingEndpointTests(ShopFixture fixture)
         Assert.Equal(HttpStatusCode.NotFound, (await SendAsync(HttpMethod.Get, $"/contacts/{doomed[0]}")).StatusCode);
     }
 
+    [Fact]
+    public async Task Purge_RefusesCriteriaThatDoNotNarrow()
+    {
+        foreach (var name in new[] { "Dora", "Eve" })
+        {
+            await ReadAsync<ContactResponse>(await SendAsync(HttpMethod.Post, "/contacts", new { name, source = _source }));
+        }
+
+        // Boş bir metin ölçüt değildir; ölçütsüz istek gibi reddedilir.
+        Assert.Equal(HttpStatusCode.BadRequest, (await SendAsync(HttpMethod.Post, "/contacts/purge?source=&force=true")).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await SendAsync(HttpMethod.Post, "/contacts/purge?nameStartsWith=%20&force=true")).StatusCode);
+
+        // Verilmiş ama hiçbir şeyi daraltmayan bir ölçüt (kapalı bir bayrak) görünen bütün kayıtlara uyar. Sayım modu
+        // bunu gösterir; silme ise açıkça istenmedikçe reddedilir.
+        var dryRun = await ReadAsync<PurgeResult<Guid>>(await SendAsync(HttpMethod.Post, "/contacts/purge?unsourced=false"));
+        var total = (await ReadAsync<PagedResult<ContactResponse>>(await SendAsync(HttpMethod.Get, "/contacts"))).TotalCount;
+        Assert.True(dryRun.Matched >= 2);
+        Assert.Equal(total, dryRun.Matched);
+
+        var refused = await SendAsync(HttpMethod.Post, "/contacts/purge?unsourced=false&force=true");
+        Assert.Equal(HttpStatusCode.BadRequest, refused.StatusCode);
+        Assert.Equal(["filter"], (await refused.Content.ReadFromJsonAsync<ValidationProblemDetails>(CancellationToken))!.Errors.Keys);
+        Assert.Equal(total, (await ReadAsync<PagedResult<ContactResponse>>(await SendAsync(HttpMethod.Get, "/contacts"))).TotalCount);
+
+        var everything = await ReadAsync<PurgeResult<Guid>>(await SendAsync(HttpMethod.Post, "/contacts/purge?unsourced=false&force=true&all=true"));
+        Assert.Equal(total, everything.Purged);
+        Assert.Equal(0, (await ReadAsync<PagedResult<ContactResponse>>(await SendAsync(HttpMethod.Get, "/contacts"))).TotalCount);
+    }
+
     // ── İşin yeniden çalıştırılması ────────────────────────────────────────────────────────────────────
 
     [Fact]

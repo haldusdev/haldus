@@ -22,4 +22,10 @@ public sealed class DetailBuilder<TEntity, TDetail>
     /// uyar, hesaplanan alanlarını yeniler ve üst kaydı döndürür.
     /// </summary>
     public DetailBuilder<TEntity, TDetail> AsCommands() => this;
+
+    /// <summary>
+    /// Satırın sayılan alanları yalnızca yazılır: isteklerde yer alırlar; üst kaydın yanıtında, dışa aktarmada ve
+    /// saklanan sürümlerinde yer almazlar.
+    /// </summary>
+    public DetailBuilder<TEntity, TDetail> Sensitive(params System.Linq.Expressions.Expression<Func<TDetail, object?>>[] fields) => this;
 }

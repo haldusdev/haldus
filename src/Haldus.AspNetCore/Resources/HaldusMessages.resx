@@ -81,6 +81,9 @@
   <data name="Purge.Criteria" xml:space="preserve">
     <value>Give at least one criterion; a purge without criteria would delete every record.</value>
   </data>
+  <data name="Purge.Everything" xml:space="preserve">
+    <value>The criteria match every record. Narrow them, or pass all=true to delete everything.</value>
+  </data>
   <data name="Locale.Invalid" xml:space="preserve">
     <value>'{0}' is not a language tag; write it like 'tr' or 'pt-BR'.</value>
   </data>

@@ -171,6 +171,13 @@ public static class HaldusProblems
         return FieldProblem(messages, "filter", messages.Format(HaldusMessageKeys.PurgeCriteria));
     }
 
+    /// <summary>Ölçüt görünen bütün kayıtlara uyuyor; hepsini silmek ancak açıkça istenirse yapılır.</summary>
+    public static ProblemHttpResult PurgeMatchesEverything(IHaldusMessages messages)
+    {
+        ArgumentNullException.ThrowIfNull(messages);
+        return FieldProblem(messages, "filter", messages.Format(HaldusMessageKeys.PurgeEverything));
+    }
+
     /// <summary>Bakiye, istenen düşüşü karşılamıyor.</summary>
     public static ProblemHttpResult BalanceInsufficient(IHaldusMessages messages, string bucket, decimal balance)
     {

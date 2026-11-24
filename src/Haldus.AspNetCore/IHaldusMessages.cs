@@ -28,6 +28,7 @@ public static class HaldusMessageKeys
     public const string SortInvalid = "Sort.Invalid";
     public const string LocaleInvalid = "Locale.Invalid";
     public const string PurgeCriteria = "Purge.Criteria";
+    public const string PurgeEverything = "Purge.Everything";
     public const string ChangeSetClosedTitle = "ChangeSet.Closed.Title";
     public const string ChangeSetCommittedDetail = "ChangeSet.Committed.Detail";
     public const string ChangeSetDiscardedDetail = "ChangeSet.Discarded.Detail";

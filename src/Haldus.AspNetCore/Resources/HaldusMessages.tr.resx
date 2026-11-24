@@ -81,6 +81,9 @@
   <data name="Purge.Criteria" xml:space="preserve">
     <value>En az bir ölçüt verin; ölçütsüz bir silme bütün kayıtları silerdi.</value>
   </data>
+  <data name="Purge.Everything" xml:space="preserve">
+    <value>Ölçüt bütün kayıtlara uyuyor. Ölçütü daraltın ya da hepsini silmek için all=true gönderin.</value>
+  </data>
   <data name="Locale.Invalid" xml:space="preserve">
     <value>'{0}' bir dil etiketi değil; 'tr' veya 'pt-BR' gibi yazın.</value>
   </data>

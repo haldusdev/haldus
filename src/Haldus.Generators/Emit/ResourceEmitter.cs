@@ -270,8 +270,9 @@ internal static class ResourceEmitter
     /// <summary>Gömülü detayların yanıta izdüşümü; satırlar istekte gönderildikleri sırayla döner.</summary>
     private static string DetailProjection(ResourceModel detail)
     {
+        // Satırın yalnızca yazılan (hassas) alanları, sahibin yanıtında da yer almaz.
         var assignments = new[] { $"{detail.KeyName} = detail.{detail.KeyName}" }
-            .Concat(detail.Properties.Select(property => $"{property.Name} = detail.{property.Name}"));
+            .Concat(detail.Properties.Where(property => !property.IsInputOnly).Select(property => $"{property.Name} = detail.{property.Name}"));
 
         return $"{detail.CollectionName} = item.{detail.CollectionName}"
             + $".OrderBy(detail => detail.Position).ThenBy(detail => detail.{detail.KeyName})"

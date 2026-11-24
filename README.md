@@ -437,8 +437,8 @@ app.MapJob<ReportExport>().Rerunnable();
 
 | Bildirim | Etkisi |
 |---|---|
-| `.Sensitive(alanlar...)` | Sayılan alanlar yalnızca yazılır: oluşturma ve güncelleme isteklerinde yer alırlar; hiçbir yanıtta, dışa aktarmada ve saklanan sürümde (`Revisioned`) yer almazlar. Böyle bir alana göre aranamaz, sıralanamaz; alan doğal anahtar veya çevrilebilir olamaz |
-| `.Purgeable()` | `POST /contacts/purge?source=import-2024` ölçüte uyan kayıtları sayar ve ilk yüzünün anahtarını gösterir; `&force=true` ile siler. Ölçüt, liste ucunun filtresidir ve en az biri verilmelidir. Her kayıt tekil silmenin kurallarından geçer; biri bile silinemiyorsa hiçbiri silinmez. Bir istek en çok 1000 kayıt siler; `matched` > `purged` ise istek yinelenir |
+| `.Sensitive(alanlar...)` | Sayılan alanlar yalnızca yazılır: oluşturma ve güncelleme isteklerinde yer alırlar; hiçbir yanıtta, dışa aktarmada ve saklanan sürümde (`Revisioned`) yer almazlar. Böyle bir alana göre aranamaz, sıralanamaz; alan doğal anahtar veya çevrilebilir olamaz ve kaynak `ChangeSets` ile birleşmez. Gömülü satırlarda da yazılır: `orders.MapDetail<OrderItem>().Sensitive(...)` |
+| `.Purgeable()` | `POST /contacts/purge?source=import-2024` ölçüte uyan kayıtları sayar ve ilk yüzünün anahtarını gösterir; `&force=true` ile siler. Ölçüt, liste ucunun filtresidir ve en az biri verilmelidir (boş metin ölçüt sayılmaz). Ölçüt görünen bütün kayıtlara uyuyorsa silme ancak `&all=true` ile yapılır. Her kayıt tekil silmenin kurallarından geçer; biri bile silinemiyorsa hiçbiri silinmez. Bir istek en çok 1000 kayıt siler; `matched` > `purged` ise istek yinelenir |
 | `MapJob<T>().Rerunnable()` | `POST /{id}/rerun` bitmiş (başarılı, başarısız veya iptal edilmiş) bir işi aynı girdilerle yeniden çalıştırır: yeni bir iş kaydı oluşur (202) ve `rerunOfId` ile asıl işe işaret eder. Bekleyen veya çalışan iş için 409 döner |
 
 ## Değişiklik kümeleri

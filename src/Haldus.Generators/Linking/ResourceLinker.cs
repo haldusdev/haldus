@@ -140,7 +140,7 @@ internal static class ResourceLinker
 
 
         // Gömülü detaylar sahiplerine iliştirilir; sahibin DTO'ları ve uçları onları taşır.
-        return
+        List<ResourceModel> attached =
         [
             .. linked.Select(resource => resource with
             {
@@ -151,6 +151,20 @@ internal static class ResourceLinker
                 Rollups = ResolveRollups(resource, linked, resources, byType, report).ToEquatableArray(),
             }),
         ];
+
+        foreach (var resource in attached.Where(resource => resource.ChangeSets is not null))
+        {
+            // Değişiklik kümesi isteğin gövdesini saklar ve geri gösterir; yalnızca yazılan bir alan orada okunur olurdu.
+            if (resource.Properties.Concat(resource.Details.SelectMany(detail => detail.Properties)).FirstOrDefault(property => property.IsInputOnly) is { } sensitive)
+            {
+                report(new DiagnosticInfo("HALDUS007", resource.Location, new[]
+                {
+                    $"ChangeSets cannot be combined with the sensitive field '{sensitive.Name}': a change set stores the staged request and shows it back",
+                }.ToEquatableArray()));
+            }
+        }
+
+        return attached;
     }
 
     /// <summary>

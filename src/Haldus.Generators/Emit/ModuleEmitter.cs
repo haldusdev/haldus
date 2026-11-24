@@ -147,10 +147,18 @@ internal static class ModuleEmitter
                     $"        global::Haldus.HaldusDetails.Register<{entity}, {detail.QualifiedName}>({ResourceEmitter.Literal(detail.Parent!.PropertyName)});\n");
             }
 
-            if (resource.Has(Traits.Revisioned) && resource.Properties.Where(property => property.IsInputOnly).Select(property => ResourceEmitter.Literal(property.Name)).ToList() is { Count: > 0 } hidden)
+            if (resource.Has(Traits.Revisioned))
             {
-                // Hassas alanlar kaydın saklanan hallerine de girmez.
-                blocks.Add($"        global::Haldus.HaldusRevisions.Hide<{entity}>({string.Join(", ", hidden)});\n");
+                // Hassas alanlar kaydın saklanan hallerine de girmez; gömülü satırların hassas alanları da.
+                foreach (var (type, properties) in resource.Details
+                    .Select(detail => (detail.QualifiedName, detail.Properties))
+                    .Prepend((entity, resource.Properties)))
+                {
+                    if (properties.Where(property => property.IsInputOnly).Select(property => ResourceEmitter.Literal(property.Name)).ToList() is { Count: > 0 } hidden)
+                    {
+                        blocks.Add($"        global::Haldus.HaldusRevisions.Hide<{type}>({string.Join(", ", hidden)});\n");
+                    }
+                }
             }
 
             if (resource.Has(Traits.Revisioned))

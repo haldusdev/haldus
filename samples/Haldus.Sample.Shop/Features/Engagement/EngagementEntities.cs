@@ -49,9 +49,13 @@ public sealed class ContactFilter : IFilter<Contact>
 
     public string? NameStartsWith { get; set; }
 
+    /// <summary>Yalnızca kaynağı bilinmeyen kayıtlar.</summary>
+    public bool Unsourced { get; set; }
+
     public IQueryable<Contact> Apply(IQueryable<Contact> query) => query
         .WhereIf(Source is not null, contact => contact.Source == Source)
-        .WhereIf(NameStartsWith is not null, contact => contact.Name.StartsWith(NameStartsWith!));
+        .WhereIf(NameStartsWith is not null, contact => contact.Name.StartsWith(NameStartsWith!))
+        .WhereIf(Unsourced, contact => contact.Source == null);
 }
 
 public enum TicketStatus
