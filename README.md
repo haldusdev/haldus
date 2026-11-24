@@ -236,8 +236,13 @@ kısıtı olur, ayrı bağlamlardaysa referans yalnızca kimlikle tutulur ve var
 
 ## Durum
 
-Geliştirme aşamasında. Tasarım kararları ve aşamalar için [CLAUDE.md](CLAUDE.md), kararların
-dayandığı araştırma için [reports](reports/) klasörüne bakın.
+İlk sürümün planlanan on aşaması tamamlandı. Model, araştırmadaki 59 gerçek varlığa karşı sınandı: 19'u
+temiz, 29'u kısmen ifade ediliyor, 11'i için gereken özellik henüz yok. Ayrıntısı ve eksiklerin listesi
+[taksonomi sınaması](reports/Haldus%20taksonomi%20sınaması.md) belgesindedir.
+
+Tasarım kararları için [CLAUDE.md](CLAUDE.md), kararların dayandığı araştırma için [reports](reports/)
+klasörüne bakın. İki örnek uygulama var: tek projeli [mağaza](samples/Haldus.Sample.Shop) ve
+[modüler](samples/Haldus.Sample.Modular) uygulama.
 
 ## Geliştirme
 

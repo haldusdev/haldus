@@ -68,8 +68,26 @@ public static class SalesEndpoints
         reservations.MapTransition("confirm", from: ReservationStatus.Held, to: ReservationStatus.Confirmed);
         reservations.MapTransition("release", from: ReservationStatus.Held, to: ReservationStatus.Released);
 
-        app.MapCrud<Cart>()
+        // Sepet kullanıldıkça yaşar; satırları sepetin isteğine gömülüdür.
+        var carts = app.MapCrud<Cart>()
             .Expiring(TimeSpan.FromDays(7), sliding: true);
+
+        carts.MapDetail<CartItem>();
+
+        // Ödeme silinmez; yalnızca tahsil edilir veya iptal edilir. Hareketleri eklenir ve sonra değişmez.
+        var payments = app.MapCrud<Payment>()
+            .MultiTenant()
+            .Without(CrudOperation.Delete)
+            .References<Order>()
+            .Workflow<PaymentStatus>(initial: PaymentStatus.RequiresCapture)
+            .EditableIn(PaymentStatus.RequiresCapture)
+            .Idempotent();
+
+        payments.MapTransition("capture", from: PaymentStatus.RequiresCapture, to: PaymentStatus.Captured);
+        payments.MapTransition("void", from: PaymentStatus.RequiresCapture, to: PaymentStatus.Voided);
+
+        app.MapAppendOnly<PaymentTransaction>()
+            .Under<Payment>();
 
         app.MapCrud<Coupon>()
             .Expiring();
@@ -81,11 +99,15 @@ public static class SalesEndpoints
             .Idempotent();
 
         // Numara bir sequence'ten gelir: iadeler birbirini beklemez, ama numaralarda boşluk olabilir.
-        app.MapAppendOnly<Refund>()
+        // İade değiştirilemez, ama işlenmeden önce iptal edilebilir.
+        var refunds = app.MapAppendOnly<Refund>()
             .MultiTenant()
             .References<Order>()
+            .Workflow<RefundStatus>(initial: RefundStatus.Pending)
             .Numbered("RF-{seq:8}", gapless: false)
             .Idempotent(required: true);
+
+        refunds.MapTransition("cancel", from: RefundStatus.Pending, to: RefundStatus.Cancelled);
 
         // Müşteri kiracıya bağlı olduğu için bağlar da öyledir: başka bir kiracı ne bağı görebilir
         // ne de etiketin altında bu müşteriyi listeleyebilir.

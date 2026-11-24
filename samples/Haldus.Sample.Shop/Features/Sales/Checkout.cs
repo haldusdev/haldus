@@ -48,3 +48,41 @@ public partial class Refund
     [MaxLength(500)]
     public string? Reason { get; set; }
 }
+
+public partial class CartItem
+{
+    [MaxLength(200)]
+    public string ProductName { get; set; } = "";
+
+    [Range(1, 1_000)]
+    public int Quantity { get; set; }
+}
+
+public enum PaymentStatus
+{
+    RequiresCapture,
+    Captured,
+    Voided,
+}
+
+public partial class Payment
+{
+    [Range(0.01, 1_000_000.0)]
+    public decimal Amount { get; set; }
+}
+
+/// <summary>Ödeme sağlayıcısıyla yapılan tek bir hareket; eklenir ve sonra değişmez.</summary>
+public partial class PaymentTransaction
+{
+    [MaxLength(50)]
+    public string Kind { get; set; } = "";
+
+    public decimal Amount { get; set; }
+}
+
+public enum RefundStatus
+{
+    Pending,
+    Succeeded,
+    Cancelled,
+}

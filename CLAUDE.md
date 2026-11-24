@@ -140,7 +140,10 @@ Bunlar kullanıcıyla kararlaştırıldı; yeniden sorma.
 
 ## Aşamalar
 
-1–9 tamamlandı (3. aşamaya `.Searchable()`, 8. aşamaya fiziksel temizlik de eklendi); sıradaki 10.
+On aşamanın tamamı bitti (3. aşamaya `.Searchable()`, 8. aşamaya fiziksel temizlik de eklendi). 10. aşamanın
+sonucu `reports/Haldus taksonomi sınaması.md` dosyasındadır: araştırmadaki 59 varlığın 19'u temiz, 29'u
+kısmen ifade ediliyor, 11'i için gereken özellik yok. Aynı veri `tests/Haldus.Generators.Tests/TaxonomyTests.cs`
+içinde derlenir; yeni bir archetype veya trait bir satırı kapatıyorsa ikisini birlikte güncelle.
 
 1. İskelet
 2. Generator çekirdeği ve `MapCrud`
@@ -158,6 +161,9 @@ Bunlar kullanıcıyla kararlaştırıldı; yeniden sorma.
 ## Açık kararlar
 
 - Frontend ve mobil desteğinin kapsamı (backend API şekli oturunca ele alınacak).
+- Sıradaki özellikler. Sınama en çok şunların eksikliğini gösterdi: durum değiştirmeyen entity aksiyonu,
+  geçerli kullanıcıya ait kaynak (`OwnedByCurrentUser`), `Metadata`, `Reversible`, gizli değerler
+  (`SecretOnce` / `Rotatable`). Hangisinin önce yazılacağına kullanıcı karar verecek.
 
 - Süresi dolmuş `Expiring` kayıtları varsayılan olarak silinmez (`HaldusOptions.PurgeExpiredAfter` boş).
   Bu varsayılanı kullanıcı ayrıca onaylamadı; kullanıcı verisini kendiliğinden silmemek için böyle seçildi.

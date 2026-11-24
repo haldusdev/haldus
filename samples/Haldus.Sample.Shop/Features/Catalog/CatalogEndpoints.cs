@@ -30,6 +30,12 @@ public static class CatalogEndpoints
             .Batch(atomic: false, maxItems: 5);
         app.MapAssociation<Product, Tag>();
 
+        // Yorumlar ürünün altında yaşar ve birbirine yanıt olabilir; silinen yorum geri alınabilir.
+        app.MapCrud<ProductReview>()
+            .Under<Product>()
+            .Hierarchical()
+            .SoftDeletable();
+
         // Marka silinmez, yalnızca arşivlenir.
         app.MapCrud<Brand>()
             .Archivable()

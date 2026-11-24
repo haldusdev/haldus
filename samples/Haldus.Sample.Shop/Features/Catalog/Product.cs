@@ -12,3 +12,12 @@ public partial class Product
 
     public string? Description { get; set; }
 }
+
+public partial class ProductReview
+{
+    [MaxLength(2000)]
+    public string Text { get; set; } = "";
+
+    [Range(1, 5)]
+    public int Rating { get; set; }
+}
