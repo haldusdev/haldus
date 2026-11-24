@@ -30,11 +30,20 @@ internal static class HaldusDiagnostics
         DiagnosticSeverity.Error,
         isEnabledByDefault: true);
 
+    public static readonly DiagnosticDescriptor DeclarationDetachedFromMapCall = new(
+        "HALDUS004",
+        "Declaration is not part of a Map call chain",
+        "'{0}' must be chained directly onto the Map call; Haldus reads the chain at compile time and cannot see calls made on a variable",
+        Category,
+        DiagnosticSeverity.Error,
+        isEnabledByDefault: true);
+
     public static DiagnosticDescriptor Get(string id) => id switch
     {
         "HALDUS001" => EntityMustBePartialClass,
         "HALDUS002" => EntityMappedMoreThanOnce,
         "HALDUS003" => UnsupportedIdType,
+        "HALDUS004" => DeclarationDetachedFromMapCall,
         _ => throw new ArgumentOutOfRangeException(nameof(id), id, "Unknown Haldus diagnostic."),
     };
 }

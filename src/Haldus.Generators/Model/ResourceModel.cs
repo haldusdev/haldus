@@ -14,11 +14,18 @@ internal sealed record ResourceModel(
     IdKind IdKind,
     bool IdDeclared,
     EquatableArray<PropertyModel> Properties,
+    Traits Traits,
+    Operations Operations,
+    EquatableArray<string> DeclaredTraitMembers,
     EquatableArray<ChainCall> Chain,
     EquatableArray<DiagnosticInfo> Diagnostics,
     LocationInfo Location)
 {
     public bool HasErrors => Diagnostics.Length > 0;
+
+    public bool Has(Traits trait) => (Traits & trait) == trait;
+
+    public bool Has(Operations operation) => (Operations & operation) == operation;
 }
 
 internal enum IdKind
@@ -28,12 +35,46 @@ internal enum IdKind
     Int64,
 }
 
+[Flags]
+internal enum Traits
+{
+    None = 0,
+    MultiTenant = 1,
+    Auditable = 2,
+    AuditUser = 4,
+    SoftDeletable = 8,
+    ConcurrencyChecked = 16,
+    Archivable = 32,
+}
+
+/// <summary>Üretilecek standart işlemler. Üye adları <c>Haldus.CrudOperation</c> ile aynıdır.</summary>
+[Flags]
+internal enum Operations
+{
+    None = 0,
+    List = 1,
+    Get = 2,
+    Create = 4,
+    Update = 8,
+    Patch = 16,
+    Delete = 32,
+    All = List | Get | Create | Update | Patch | Delete,
+}
+
 internal sealed record PropertyModel(
     string Name,
     string Type,
+    string NullableType,
     bool IsWritable,
     bool IsNonNullableReference,
-    EquatableArray<string> ValidationAttributes);
+    bool IsNonNullableValue,
+    EquatableArray<AttributeModel> ValidationAttributes)
+{
+    public bool IsNonNullable => IsNonNullableReference || IsNonNullableValue;
+}
+
+/// <summary>Entity'den istek DTO'larına kopyalanan bir validasyon attribute'u.</summary>
+internal sealed record AttributeModel(string Rendered, bool IsRequired);
 
 /// <summary>Map çağrısını izleyen zincirdeki bir metot (trait, ilişki veya durum modeli bildirimi).</summary>
 internal sealed record ChainCall(string Name, EquatableArray<string> TypeArguments, EquatableArray<string> Arguments);

@@ -1,0 +1,499 @@
+using System.Text;
+using Haldus.Generators.Infrastructure;
+using Haldus.Generators.Model;
+
+namespace Haldus.Generators.Emit;
+
+/// <summary>Bir kaynağın Minimal API endpoint'lerini, seçilen işlemlere ve trait'lere göre üretir.</summary>
+internal sealed class EndpointEmitter
+{
+    private const string Task = "global::System.Threading.Tasks.Task";
+    private const string Http = "global::Microsoft.AspNetCore.Http";
+    private const string Results = "global::Microsoft.AspNetCore.Http.HttpResults";
+    private const string Problem = "global::Microsoft.AspNetCore.Http.HttpResults.ProblemHttpResult";
+    private const string Problems = "global::Haldus.HaldusProblems";
+
+    private const string ContextsParameter = "        global::Haldus.IHaldusDbContextProvider contexts,\n";
+    private const string MessagesParameter = "        global::Haldus.IHaldusMessages messages,\n";
+    private const string HttpContextParameter = "        global::Microsoft.AspNetCore.Http.HttpContext httpContext,\n";
+    private const string CancellationParameter = "        global::System.Threading.CancellationToken cancellationToken)\n";
+
+    private readonly ResourceModel _resource;
+    private readonly string _entity;
+    private readonly string _plural;
+    private readonly string _idRoute;
+    private readonly bool _concurrency;
+    private readonly PropertyModel[] _writable;
+    private readonly StringBuilder _map = new();
+    private readonly StringBuilder _handlers = new();
+
+    private EndpointEmitter(ResourceModel resource)
+    {
+        _resource = resource;
+        _entity = resource.EntityName;
+        _plural = Naming.Pluralize(resource.EntityName);
+        _idRoute = resource.IdKind switch
+        {
+            IdKind.Int32 => "/{id:int}",
+            IdKind.Int64 => "/{id:long}",
+            _ => "/{id:guid}",
+        };
+        _concurrency = resource.Has(Traits.ConcurrencyChecked);
+        _writable = [.. resource.Properties.Where(property => property.IsWritable)];
+    }
+
+    private string OkOrProblem => $"{Task}<{Results}.Results<{Results}.Ok<{_entity}Response>, {Problem}>>";
+
+    private string NoContentOrProblem => $"{Task}<{Results}.Results<{Results}.NoContent, {Problem}>>";
+
+    private string ResponseAssignments => string.Join(
+        ", ",
+        new[] { "Id = item.Id" }
+            .Concat(_resource.Properties.Select(property => $"{property.Name} = item.{property.Name}"))
+            .Concat(TraitCatalog.ResponseMembers(_resource.Traits).Select(member => $"{member.Name} = item.{member.Name}")));
+
+    public static string Emit(ResourceModel resource, string entityNamespace) =>
+        new EndpointEmitter(resource).Build(entityNamespace);
+
+    private string Build(string entityNamespace)
+    {
+        if (_resource.Has(Operations.List))
+        {
+            EmitList();
+        }
+
+        if (_resource.Has(Operations.Get))
+        {
+            EmitGet();
+        }
+
+        if (_resource.Has(Operations.Create))
+        {
+            EmitCreate();
+        }
+
+        if (_resource.Has(Operations.Update))
+        {
+            EmitWrite("Update", "MapPut", UpdateAssignments());
+        }
+
+        if (_resource.Has(Operations.Patch))
+        {
+            EmitWrite("Patch", "MapPatch", PatchAssignments());
+        }
+
+        if (_resource.Has(Operations.Delete))
+        {
+            EmitDelete();
+        }
+
+        if (_resource.Has(Traits.SoftDeletable))
+        {
+            EmitRestore();
+            EmitPurge();
+        }
+
+        if (_resource.Has(Traits.Archivable))
+        {
+            EmitArchive("Archive", "archive", "entity.ArchivedAt ??= global::Haldus.HaldusTime.UtcNow(timeProvider);");
+            EmitArchive("Unarchive", "unarchive", "entity.ArchivedAt = null;");
+        }
+
+        var tenantFilter = _resource.Has(Traits.MultiTenant)
+            ? "        group.AddEndpointFilter<global::Haldus.HaldusTenantRequiredFilter>();\n\n"
+            : string.Empty;
+
+        return $$"""
+            {{ResourceEmitter.Header}}
+            using System.Linq;
+            using Microsoft.AspNetCore.Builder;
+            using Microsoft.AspNetCore.Http;
+            using Microsoft.AspNetCore.Routing;
+            using Microsoft.EntityFrameworkCore;
+
+            {{ResourceEmitter.NamespaceLine(entityNamespace)}}
+            public static partial class {{_entity}}Endpoints
+            {
+                public static global::Microsoft.AspNetCore.Routing.RouteGroupBuilder Map(
+                    global::Microsoft.AspNetCore.Routing.IEndpointRouteBuilder endpoints)
+                {
+                    var group = endpoints.MapGroup("/{{Naming.ToKebabCase(_plural)}}").WithTags("{{_plural}}");
+
+            {{tenantFilter}}{{_map}}        return group;
+                }
+            {{_handlers}}
+                private static {{_entity}}Response ToResponse({{_entity}} item) => new() { {{ResponseAssignments}} };
+            }
+
+            """;
+    }
+
+    private void EmitList()
+    {
+        var softDelete = _resource.Has(Traits.SoftDeletable);
+        var archive = _resource.Has(Traits.Archivable);
+
+        _map.Append($$"""
+                    group.MapGet("/", ListAsync)
+                        .WithName("List{{_plural}}");
+
+
+            """);
+
+        _handlers.Append($$"""
+
+                private static async {{Task}}<{{Results}}.Ok<global::Haldus.PagedResult<{{_entity}}Response>>> ListAsync(
+                    [{{Http}}.AsParameters] global::Haldus.PageRequest page,
+            {{(softDelete ? "        bool? includeDeleted,\n" : string.Empty)}}{{(archive ? "        bool? includeArchived,\n" : string.Empty)}}{{ContextsParameter}}{{CancellationParameter}}    {
+                    var query = contexts.For<{{_entity}}>().Set<{{_entity}}>().AsNoTracking();
+
+            """);
+
+        if (softDelete)
+        {
+            _handlers.Append("""
+
+                        if (includeDeleted == true)
+                        {
+                            query = query.IgnoreQueryFilters(new[] { global::Haldus.HaldusFilters.SoftDelete });
+                        }
+
+                """);
+        }
+
+        if (archive)
+        {
+            _handlers.Append("""
+
+                        if (includeArchived != true)
+                        {
+                            query = query.Where(item => item.ArchivedAt == null);
+                        }
+
+                """);
+        }
+
+        _handlers.Append($$"""
+
+                    var totalCount = await query.LongCountAsync(cancellationToken);
+                    var items = await query
+                        .OrderBy(item => item.Id)
+                        .Skip(page.Skip)
+                        .Take(page.PageSizeOrDefault)
+                        .Select(item => new {{_entity}}Response { {{ResponseAssignments}} })
+                        .ToListAsync(cancellationToken);
+
+                    return {{Http}}.TypedResults.Ok(
+                        new global::Haldus.PagedResult<{{_entity}}Response>(items, page.PageOrDefault, page.PageSizeOrDefault, totalCount));
+                }
+
+            """);
+    }
+
+    private void EmitGet()
+    {
+        _map.Append($$"""
+                    group.MapGet("{{_idRoute}}", GetAsync)
+                        .WithName("Get{{_entity}}")
+                        .ProducesProblem(404);
+
+
+            """);
+
+        _handlers.Append($$"""
+
+                private static async {{OkOrProblem}} GetAsync(
+                    {{_resource.IdType}} id,
+            {{(_concurrency ? HttpContextParameter : string.Empty)}}{{ContextsParameter}}{{MessagesParameter}}{{CancellationParameter}}    {
+                    var entity = await contexts.For<{{_entity}}>().Set<{{_entity}}>()
+                        .AsNoTracking()
+                        .FirstOrDefaultAsync(item => item.Id == id, cancellationToken);
+
+                    if (entity is null)
+                    {
+                        return {{Problems}}.NotFound(messages, "{{_entity}}", id);
+                    }
+
+            {{WriteETag()}}        return {{Http}}.TypedResults.Ok(ToResponse(entity));
+                }
+
+            """);
+    }
+
+    private void EmitCreate()
+    {
+        var assignments = string.Join(
+            ", ",
+            (_resource.IdKind == IdKind.Guid ? ["Id = global::System.Guid.CreateVersion7()"] : Array.Empty<string>())
+                .Concat(_writable.Select(property => $"{property.Name} = request.{property.Name}")));
+
+        _map.Append($$"""
+                    group.MapPost("/", CreateAsync)
+                        .WithName("Create{{_entity}}")
+                        .AddEndpointFilter<global::Haldus.HaldusValidationFilter<Create{{_entity}}Request>>()
+                        .ProducesValidationProblem();
+
+
+            """);
+
+        _handlers.Append($$"""
+
+                private static async {{Task}}<{{Results}}.Created<{{_entity}}Response>> CreateAsync(
+                    Create{{_entity}}Request request,
+            {{HttpContextParameter}}{{ContextsParameter}}{{CancellationParameter}}    {
+                    var entity = new {{_entity}} { {{assignments}} };
+
+                    var context = contexts.For<{{_entity}}>();
+                    context.Set<{{_entity}}>().Add(entity);
+                    await context.SaveChangesAsync(cancellationToken);
+
+            {{WriteETag()}}        var location = $"{httpContext.Request.PathBase}{httpContext.Request.Path.Value?.TrimEnd('/')}/{entity.Id}";
+                    return {{Http}}.TypedResults.Created(location, ToResponse(entity));
+                }
+
+            """);
+    }
+
+    /// <summary>PUT ve PATCH aynı iskeleti paylaşır; yalnızca alanların nasıl yazıldığı değişir.</summary>
+    private void EmitWrite(string operation, string mapMethod, string assignments)
+    {
+        _map.Append($$"""
+                    group.{{mapMethod}}("{{_idRoute}}", {{operation}}Async)
+                        .WithName("{{operation}}{{_entity}}")
+                        .AddEndpointFilter<global::Haldus.HaldusValidationFilter<{{operation}}{{_entity}}Request>>()
+                        .ProducesValidationProblem()
+                        .ProducesProblem(404){{ConcurrencyMetadata()}};
+
+
+            """);
+
+        _handlers.Append($$"""
+
+                private static async {{OkOrProblem}} {{operation}}Async(
+                    {{_resource.IdType}} id,
+                    {{operation}}{{_entity}}Request request,
+            {{(_concurrency ? HttpContextParameter : string.Empty)}}{{ContextsParameter}}{{MessagesParameter}}{{CancellationParameter}}    {
+            {{ReadIfMatch()}}        var context = contexts.For<{{_entity}}>();
+                    var entity = await context.Set<{{_entity}}>().FirstOrDefaultAsync(item => item.Id == id, cancellationToken);
+
+                    if (entity is null)
+                    {
+                        return {{Problems}}.NotFound(messages, "{{_entity}}", id);
+                    }
+
+            {{ExpectVersion()}}{{assignments}}
+            {{Save()}}
+            {{WriteETag()}}        return {{Http}}.TypedResults.Ok(ToResponse(entity));
+                }
+
+            """);
+    }
+
+    private void EmitDelete()
+    {
+        _map.Append($$"""
+                    group.MapDelete("{{_idRoute}}", DeleteAsync)
+                        .WithName("Delete{{_entity}}")
+                        .ProducesProblem(404){{ConcurrencyMetadata()}};
+
+
+            """);
+
+        _handlers.Append($$"""
+
+                private static async {{NoContentOrProblem}} DeleteAsync(
+                    {{_resource.IdType}} id,
+            {{(_concurrency ? HttpContextParameter : string.Empty)}}{{ContextsParameter}}{{MessagesParameter}}{{CancellationParameter}}    {
+            {{ReadIfMatch()}}        var context = contexts.For<{{_entity}}>();
+                    var entity = await context.Set<{{_entity}}>().FirstOrDefaultAsync(item => item.Id == id, cancellationToken);
+
+                    if (entity is null)
+                    {
+                        return {{Problems}}.NotFound(messages, "{{_entity}}", id);
+                    }
+
+            {{ExpectVersion()}}        context.Set<{{_entity}}>().Remove(entity);
+            {{Save()}}
+                    return {{Http}}.TypedResults.NoContent();
+                }
+
+            """);
+    }
+
+    private void EmitRestore()
+    {
+        _map.Append($$"""
+                    group.MapPost("{{_idRoute}}/restore", RestoreAsync)
+                        .WithName("Restore{{_entity}}")
+                        .ProducesProblem(404);
+
+
+            """);
+
+        _handlers.Append($$"""
+
+                private static async {{OkOrProblem}} RestoreAsync(
+                    {{_resource.IdType}} id,
+            {{ContextsParameter}}{{MessagesParameter}}{{CancellationParameter}}    {
+                    var context = contexts.For<{{_entity}}>();
+                    var entity = await context.Set<{{_entity}}>()
+                        .IgnoreQueryFilters(new[] { global::Haldus.HaldusFilters.SoftDelete })
+                        .FirstOrDefaultAsync(item => item.Id == id && item.DeletedAt != null, cancellationToken);
+
+                    if (entity is null)
+                    {
+                        return {{Problems}}.NotFound(messages, "{{_entity}}", id);
+                    }
+
+                    entity.DeletedAt = null;
+                    await context.SaveChangesAsync(cancellationToken);
+
+                    return {{Http}}.TypedResults.Ok(ToResponse(entity));
+                }
+
+            """);
+    }
+
+    private void EmitPurge()
+    {
+        _map.Append($$"""
+                    group.MapPost("{{_idRoute}}/purge", PurgeAsync)
+                        .WithName("Purge{{_entity}}")
+                        .ProducesProblem(404);
+
+
+            """);
+
+        // ExecuteDelete değişiklik izleyicisini atlar; silmeyi güncellemeye çeviren interceptor devreye girmez.
+        _handlers.Append($$"""
+
+                private static async {{NoContentOrProblem}} PurgeAsync(
+                    {{_resource.IdType}} id,
+            {{ContextsParameter}}{{MessagesParameter}}{{CancellationParameter}}    {
+                    var deleted = await contexts.For<{{_entity}}>().Set<{{_entity}}>()
+                        .IgnoreQueryFilters(new[] { global::Haldus.HaldusFilters.SoftDelete })
+                        .Where(item => item.Id == id)
+                        .ExecuteDeleteAsync(cancellationToken);
+
+                    if (deleted == 0)
+                    {
+                        return {{Problems}}.NotFound(messages, "{{_entity}}", id);
+                    }
+
+                    return {{Http}}.TypedResults.NoContent();
+                }
+
+            """);
+    }
+
+    private void EmitArchive(string operation, string route, string statement)
+    {
+        _map.Append($$"""
+                    group.MapPost("{{_idRoute}}/{{route}}", {{operation}}Async)
+                        .WithName("{{operation}}{{_entity}}")
+                        .ProducesProblem(404);
+
+
+            """);
+
+        _handlers.Append($$"""
+
+                private static async {{OkOrProblem}} {{operation}}Async(
+                    {{_resource.IdType}} id,
+                    global::System.TimeProvider timeProvider,
+            {{ContextsParameter}}{{MessagesParameter}}{{CancellationParameter}}    {
+                    var context = contexts.For<{{_entity}}>();
+                    var entity = await context.Set<{{_entity}}>().FirstOrDefaultAsync(item => item.Id == id, cancellationToken);
+
+                    if (entity is null)
+                    {
+                        return {{Problems}}.NotFound(messages, "{{_entity}}", id);
+                    }
+
+                    {{statement}}
+                    await context.SaveChangesAsync(cancellationToken);
+
+                    return {{Http}}.TypedResults.Ok(ToResponse(entity));
+                }
+
+            """);
+    }
+
+    private string UpdateAssignments() => string.Concat(
+        _writable.Select(property => $"        entity.{property.Name} = request.{property.Name};\n"));
+
+    private string PatchAssignments()
+    {
+        var builder = new StringBuilder();
+
+        foreach (var property in _writable)
+        {
+            var value = property switch
+            {
+                { IsNonNullableReference: true } => $"request.{property.Name}!",
+                { IsNonNullableValue: true } => $"request.{property.Name}.GetValueOrDefault()",
+                _ => $"request.{property.Name}",
+            };
+
+            builder.Append($$"""
+                        if (((global::Haldus.IHaldusPatch)request).IsSet("{{property.Name}}"))
+                        {
+                            entity.{{property.Name}} = {{value}};
+                        }
+
+
+                """);
+        }
+
+        return builder.ToString();
+    }
+
+    private string ConcurrencyMetadata() => _concurrency ? "\n            .ProducesProblem(412)\n            .ProducesProblem(428)" : string.Empty;
+
+    private string ReadIfMatch() => _concurrency
+        ? $$"""
+                    var ifMatch = global::Haldus.HaldusETag.ReadIfMatch(httpContext);
+                    if (ifMatch.Kind == global::Haldus.IfMatchKind.Missing)
+                    {
+                        return {{Problems}}.PreconditionRequired(messages);
+                    }
+
+                    if (ifMatch.Kind == global::Haldus.IfMatchKind.Invalid)
+                    {
+                        return {{Problems}}.PreconditionFailed(messages);
+                    }
+
+
+            """
+        : string.Empty;
+
+    /// <summary>İstemcinin okuduğu sürümü özgün değer yapar; kayıt o zamandan beri değiştiyse kaydetme başarısız olur.</summary>
+    private string ExpectVersion() => _concurrency
+        ? """
+                    if (ifMatch.Version is { } expectedVersion)
+                    {
+                        context.Entry(entity).Property(item => item.Version).OriginalValue = expectedVersion;
+                    }
+
+
+            """
+        : string.Empty;
+
+    private string Save() => _concurrency
+        ? $$"""
+                    try
+                    {
+                        await context.SaveChangesAsync(cancellationToken);
+                    }
+                    catch (global::Microsoft.EntityFrameworkCore.DbUpdateConcurrencyException)
+                    {
+                        return {{Problems}}.PreconditionFailed(messages);
+                    }
+
+            """
+        : "        await context.SaveChangesAsync(cancellationToken);\n";
+
+    private string WriteETag() => _concurrency
+        ? "        global::Haldus.HaldusETag.Write(httpContext, entity.Version);\n"
+        : string.Empty;
+}

@@ -2,9 +2,11 @@ using System.Collections.Immutable;
 using System.Text;
 using Haldus.Generators.Diagnostics;
 using Haldus.Generators.Emit;
+using Haldus.Generators.Infrastructure;
 using Haldus.Generators.Model;
 using Haldus.Generators.Parsing;
 using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Text;
 
 namespace Haldus.Generators;
@@ -41,6 +43,40 @@ public sealed class HaldusGenerator : IIncrementalGenerator
         context.RegisterSourceOutput(
             input,
             static (productionContext, data) => Emit(productionContext, data.Left.Left, data.Left.Right, data.Right));
+
+        // Zincir derleme zamanında okunduğu için bir Map çağrısına kesintisiz bağlı olmayan bildirimler
+        // sessizce yok sayılırdı; bunun yerine hata verilir.
+        var detachedDeclarations = context.SyntaxProvider
+            .CreateSyntaxProvider(
+                static (node, _) => node is InvocationExpressionSyntax
+                {
+                    Expression: MemberAccessExpressionSyntax { Name: var name },
+                }
+                && ChainReader.DeclarationMethods.Contains(name.Identifier.ValueText),
+                static (syntaxContext, cancellationToken) => FindDetachedDeclaration(syntaxContext, cancellationToken))
+            .Where(static diagnostic => diagnostic is not null)
+            .Select(static (diagnostic, _) => diagnostic!);
+
+        context.RegisterSourceOutput(detachedDeclarations, static (productionContext, diagnostic) => Report(productionContext, diagnostic));
+    }
+
+    private static DiagnosticInfo? FindDetachedDeclaration(GeneratorSyntaxContext context, CancellationToken cancellationToken)
+    {
+        var invocation = (InvocationExpressionSyntax)context.Node;
+
+        if (ChainReader.IsRootedAtMapCall(invocation)
+            || context.SemanticModel.GetSymbolInfo(invocation, cancellationToken).Symbol is not IMethodSymbol method
+            || method.ContainingType?.ToDisplayString() != "Haldus.ResourceBuilderTraitExtensions")
+        {
+            return null;
+        }
+
+        var name = ((MemberAccessExpressionSyntax)invocation.Expression).Name;
+
+        return new DiagnosticInfo(
+            "HALDUS004",
+            LocationInfo.From(name.GetLocation()),
+            new EquatableArray<string>([name.Identifier.ValueText]));
     }
 
     private static void Emit(
@@ -90,7 +126,7 @@ public sealed class HaldusGenerator : IIncrementalGenerator
             }
 
             AddSource(context, $"{hintPrefix}.Dtos.g.cs", ResourceEmitter.EmitDtos(resource, entityNamespace));
-            AddSource(context, $"{hintPrefix}.Endpoints.g.cs", ResourceEmitter.EmitEndpoints(resource, entityNamespace));
+            AddSource(context, $"{hintPrefix}.Endpoints.g.cs", EndpointEmitter.Emit(resource, entityNamespace));
         }
 
         AddSource(context, "HaldusModule.g.cs", ModuleEmitter.EmitModule(valid));

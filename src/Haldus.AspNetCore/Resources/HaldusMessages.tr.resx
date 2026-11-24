@@ -18,6 +18,24 @@
   <data name="NotFound.Detail" xml:space="preserve">
     <value>'{1}' kimlikli {0} kaydı bulunamadı.</value>
   </data>
+  <data name="PreconditionRequired.Title" xml:space="preserve">
+    <value>Sürüm bilgisi gerekli</value>
+  </data>
+  <data name="PreconditionRequired.Detail" xml:space="preserve">
+    <value>Son okuduğunuz sürümü If-Match başlığında gönderin.</value>
+  </data>
+  <data name="PreconditionFailed.Title" xml:space="preserve">
+    <value>Kayıt değişmiş</value>
+  </data>
+  <data name="PreconditionFailed.Detail" xml:space="preserve">
+    <value>Kayıt, son okumanızdan sonra değiştirildi. Yeniden yükleyip tekrar deneyin.</value>
+  </data>
+  <data name="TenantRequired.Title" xml:space="preserve">
+    <value>Kiracı gerekli</value>
+  </data>
+  <data name="TenantRequired.Detail" xml:space="preserve">
+    <value>Bu kaynak bir kiracıya ait, ancak istek için kiracı belirlenemedi.</value>
+  </data>
   <data name="Validation.Title" xml:space="preserve">
     <value>Bir veya daha fazla doğrulama hatası oluştu.</value>
   </data>

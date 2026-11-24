@@ -9,6 +9,8 @@ EF Core yapılandırması üretilir.
 - Derleme: `dotnet build`
 - Testler: `dotnet test` (entegrasyon testleri Docker ister; Testcontainers PostgreSQL başlatır)
 - Tek test projesi: `dotnet test --project tests/Haldus.Generators.Tests`
+- Snapshot'ları onaylamak: `HALDUS_ACCEPT_SNAPSHOTS=1` ortam değişkeniyle generator testlerini çalıştır.
+  Fark olduğunda test, `Snapshots/` altına `.received.cs` yazar; önce onu incele.
 - Test çalıştırıcısı Microsoft.Testing.Platform'dur (`global.json`); xUnit v3, .NET 10 SDK'da VSTest ile çalışmaz.
 - Örnek uygulamanın `openapi.json` dosyası build sırasında yeniden üretilir.
 - Örnek uygulamada üretilen kod `samples/Haldus.Sample.Shop/obj/Generated` altında incelenebilir.
@@ -43,7 +45,9 @@ Bunlar kullanıcıyla kararlaştırıldı; yeniden sorma.
   `MapLookup`, `MapDetail`, `MapAssociation`, `MapAction`, `MapQuery`, `MapJob`.
 - `MapDetail` varsayılan olarak üst kaydın isteğinde gömülü yazılır; `.AsSubresource()` ile ayrı
   endpoint'lere geçer.
-- Eşzamanlılık trait'inin adı `ConcurrencyChecked` (eski adı `Versioned`).
+- Eşzamanlılık trait'inin adı `ConcurrencyChecked` (eski adı `Versioned`). Sürüm yanıt gövdesinde değil
+  `ETag` başlığında taşınır; güncelleme ve silme `If-Match` ister (eksikse 428, uyuşmazlıkta 412).
+- Güncelleme için hem `PUT` (tam değiştirme) hem `PATCH` (kısmi) üretilir.
 - Geçiş endpoint'leri `/orders/{id}/cancel` biçimindedir.
 - `MultiTenant` kiracıyı token'daki claim'den okur.
 
@@ -60,18 +64,21 @@ Bunlar kullanıcıyla kararlaştırıldı; yeniden sorma.
 
 - Mekanizma: Roslyn incremental source generator. Çalışma zamanı reflection'ı yalnızca validasyon
   filtresinde var.
-- API stili: Minimal API. Güncelleme `PUT` ile tam değiştirmedir.
+- API stili: Minimal API.
+- PATCH DTO'sunda "gönderilmedi" ile "null gönderildi" ayrımı, init erişimcisinin yalnızca JSON'da bulunan
+  alanlar için çağrılmasına dayanır (`IHaldusPatch`); şemada sarmalayıcı tip görünmez.
 - Validasyon: entity'deki DataAnnotations üretilen istek DTO'larına kopyalanır. .NET 10'un
   `AddValidation` generator'ı başka bir generator'ın ürettiği DTO'ları göremediği için kurallar
   Haldus'un kendi endpoint filtresinde çalıştırılır.
 - i18n: son kullanıcıya dönen mesajlar `.resx` dosyalarından gelir; diller en (varsayılan) ve tr.
   Metinler `IHaldusMessages` servisi üzerinden okunur; tüketen proje servisi değiştirerek ezebilir.
 - Veritabanı: PostgreSQL. ORM: EF Core.
-- Test: xUnit v3, entegrasyon testlerinde Testcontainers.
+- Test: xUnit v3, entegrasyon testlerinde Testcontainers. Snapshot karşılaştırması repo içindeki
+  `Snapshot` yardımcısıyla yapılır; Verify kullanılmaz (33.x sürümü sponsorluk lisansı istiyor).
 
 ## Aşamalar
 
-1 ve 2 tamamlandı; sıradaki 3.
+1 ve 2 tamamlandı. 3. aşamada `Filterable` dışındaki her şey tamamlandı; sıradaki 4.
 
 1. İskelet
 2. Generator çekirdeği ve `MapCrud`
@@ -88,14 +95,24 @@ Bunlar kullanıcıyla kararlaştırıldı; yeniden sorma.
 
 ## Açık kararlar
 
+- `Filterable` sözdizimi: kullanıcı hem alan başına sorgu parametresini (`?priceMin=100`) hem tek
+  `filter` ifadesini (AIP-160 tarzı) reddetti ve başka bir yöntem istedi. Karar verilene kadar üretilmez.
 - Frontend ve mobil desteğinin kapsamı (backend API şekli oturunca ele alınacak).
 - `MapJob` altyapısı (8. aşamada sorulacak).
-- Snapshot test kütüphanesi: Verify 33.x sponsorluk lisansı veya muafiyet beyanı istiyor.
 
 ## Generator'ın işleyişi
 
-- `Parsing/MapCallParser` her `Map*` çağrısını ve onu izleyen zinciri `ResourceModel`'e çevirir. Zincir
-  şimdilik yalnızca okunur; trait'ler 3. aşamada bu modelden üretilecek.
+- `Parsing/MapCallParser` her `Map*` çağrısını `ResourceModel`'e çevirir; `Parsing/ChainReader` onu
+  izleyen zinciri trait ve işlem seçimlerine dönüştürür. Zincir metotları çalışma zamanında boştur.
+- Yeni bir trait eklemek: `Model/TraitCatalog` (arayüz ve alanlar), `ChainReader` (zincir adı),
+  `ResourceBuilderTraitExtensions` (boş zincir metodu), gerekiyorsa `EndpointEmitter` ve
+  `ModuleEmitter.AppendModel`.
+- Trait davranışları çalışma zamanında arayüz üzerinden işler: `HaldusSaveChangesInterceptor` alanları
+  doldurur ve soft delete'i güncellemeye çevirir; sorgu filtreleri EF Core 10'un adlandırılmış
+  filtreleridir (`HaldusFilters`), böylece tek bir filtre yok sayılabilir.
+- Kiracı filtresi modelin kurulduğu bağlamı yakalar (`HaldusScope.TenantId(context)`); EF Core bu
+  başvuruyu her sorguda geçerli bağlamla değiştirir. Entegrasyon testleri bunu iki kiracıyla doğrular.
+- Zaman damgaları `HaldusTime.UtcNow` ile mikrosaniyeye kırpılır; PostgreSQL daha hassasını saklamaz.
 - Üretilen kod çalışma zamanına bir module initializer ile bağlanır: `HaldusEndpointRegistry` (entity →
   endpoint eşleyici) ve `HaldusModelRegistry` (assembly → model katkısı). `MapCrud<T>()` çalışma
   zamanında yalnızca bu kayda bakar.

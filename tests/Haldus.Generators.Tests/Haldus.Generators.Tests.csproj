@@ -18,6 +18,12 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- Snapshot dosyaları üretilen kodun kopyasıdır; test projesinin parçası olarak derlenmez. -->
+    <Compile Remove="Snapshots\**" />
+    <None Include="Snapshots\**" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\..\src\Haldus.Generators\Haldus.Generators.csproj" />
     <ProjectReference Include="..\..\src\Haldus.AspNetCore\Haldus.AspNetCore.csproj" />
   </ItemGroup>

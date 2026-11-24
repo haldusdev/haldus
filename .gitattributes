@@ -1,0 +1,2 @@
+# Snapshot dosyaları üretilen kodla bayt bayt karşılaştırılır; satır sonları sabit tutulur.
+*.verified.cs text eol=lf

@@ -6,5 +6,10 @@ public static class CatalogEndpoints
     {
         app.MapCrud<Category>();
         app.MapCrud<Product>();
+
+        // Marka silinmez, yalnızca arşivlenir.
+        app.MapCrud<Brand>()
+            .Archivable()
+            .Without(CrudOperation.Delete);
     }
 }

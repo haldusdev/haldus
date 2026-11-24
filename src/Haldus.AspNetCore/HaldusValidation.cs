@@ -40,9 +40,16 @@ internal static class HaldusValidator
     public static Dictionary<string, string[]> Validate(object instance, IHaldusMessages messages)
     {
         var errors = new Dictionary<string, string[]>();
+        var patch = instance as IHaldusPatch;
 
         foreach (var rules in Cache.GetOrAdd(instance.GetType(), BuildRules))
         {
+            // Kısmi güncellemede gönderilmeyen alanın kuralı çalışmaz.
+            if (patch is not null && !patch.IsSet(rules.Property.Name))
+            {
+                continue;
+            }
+
             var value = rules.Property.GetValue(instance);
             var context = new ValidationContext(instance) { MemberName = rules.Property.Name };
             List<string>? propertyErrors = null;
@@ -84,7 +91,7 @@ internal static class HaldusValidator
 
         return attribute switch
         {
-            RequiredAttribute => messages.Format(HaldusMessageKeys.ValidationRequired, name),
+            RequiredAttribute or NotNullWhenSetAttribute => messages.Format(HaldusMessageKeys.ValidationRequired, name),
             MaxLengthAttribute maxLength => messages.Format(HaldusMessageKeys.ValidationMaxLength, name, maxLength.Length),
             MinLengthAttribute minLength => messages.Format(HaldusMessageKeys.ValidationMinLength, name, minLength.Length),
             StringLengthAttribute { MinimumLength: > 0 } stringLength => messages.Format(

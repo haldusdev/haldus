@@ -50,7 +50,8 @@ internal static class MapCallParser
 
         var archetype = ArchetypeOf(name.Identifier.ValueText)!;
         var location = LocationInfo.From(name.GetLocation());
-        var chain = ReadChain(invocation);
+        var chain = ChainReader.Read(invocation);
+        var (traits, operations) = ChainReader.Interpret(chain);
 
         if (type is null or IErrorTypeSymbol)
         {
@@ -65,6 +66,9 @@ internal static class MapCallParser
                     IdKind.Guid,
                     IdDeclared: false,
                     EquatableArray<PropertyModel>.Empty,
+                    traits,
+                    operations,
+                    EquatableArray<string>.Empty,
                     chain,
                     EquatableArray<DiagnosticInfo>.Empty,
                     location)
@@ -82,6 +86,9 @@ internal static class MapCallParser
         }
 
         var properties = new List<PropertyModel>();
+        var declaredTraitMembers = new List<string>();
+        var traitMemberNames = new HashSet<string>(
+            TraitCatalog.For(traits).SelectMany(definition => definition.Members).Select(member => member.Name));
         IPropertySymbol? id = null;
 
         foreach (var property in PublicInstanceProperties(entity))
@@ -89,6 +96,13 @@ internal static class MapCallParser
             if (property.Name == "Id")
             {
                 id = property;
+                continue;
+            }
+
+            // Trait alanını kullanıcı kendi yazdıysa yeniden üretilmez; istek DTO'larına da girmez.
+            if (traitMemberNames.Contains(property.Name))
+            {
+                declaredTraitMembers.Add(property.Name);
                 continue;
             }
 
@@ -115,12 +129,15 @@ internal static class MapCallParser
             idKind,
             IdDeclared: id is not null,
             properties.ToEquatableArray(),
+            traits,
+            operations,
+            declaredTraitMembers.ToEquatableArray(),
             chain,
             EquatableArray<DiagnosticInfo>.Empty,
             location);
     }
 
-    private static string? ArchetypeOf(string methodName) => methodName switch
+    public static string? ArchetypeOf(string methodName) => methodName switch
     {
         "MapCrud" => "Crud",
         _ => null,
@@ -232,7 +249,7 @@ internal static class MapCallParser
 
     private static PropertyModel ToModel(IPropertySymbol property)
     {
-        var attributes = new List<string>();
+        var attributes = new List<AttributeModel>();
         var hasRequired = false;
 
         foreach (var attribute in property.GetAttributes())
@@ -242,24 +259,31 @@ internal static class MapCallParser
                 continue;
             }
 
-            hasRequired |= attributeClass.ToDisplayString() == RequiredAttributeType;
-            attributes.Add(Render(attribute, attributeClass));
+            var isRequired = attributeClass.ToDisplayString() == RequiredAttributeType;
+            hasRequired |= isRequired;
+            attributes.Add(new AttributeModel(Render(attribute, attributeClass), isRequired));
         }
 
         var isNonNullableReference = property.Type.IsReferenceType
             && property.NullableAnnotation == NullableAnnotation.NotAnnotated;
+        var isNonNullableValue = property.Type.IsValueType
+            && property.Type is not INamedTypeSymbol { OriginalDefinition.SpecialType: SpecialType.System_Nullable_T };
 
         // Null olamayan referans alanı isteğe gelmezse veritabanına null yazılmasın diye zorunlu sayılır.
         if (isNonNullableReference && !hasRequired)
         {
-            attributes.Insert(0, $"global::{RequiredAttributeType}(AllowEmptyStrings = true)");
+            attributes.Insert(0, new AttributeModel($"global::{RequiredAttributeType}(AllowEmptyStrings = true)", IsRequired: true));
         }
+
+        var type = property.Type.ToDisplayString(TypeFormat);
 
         return new PropertyModel(
             property.Name,
-            property.Type.ToDisplayString(TypeFormat),
+            type,
+            NullableType: type.EndsWith("?", StringComparison.Ordinal) ? type : type + "?",
             IsWritable: property.SetMethod is { DeclaredAccessibility: Accessibility.Public, IsInitOnly: false },
             isNonNullableReference,
+            isNonNullableValue,
             attributes.ToEquatableArray());
     }
 
@@ -309,30 +333,6 @@ internal static class MapCallParser
         };
     }
 
-    private static EquatableArray<ChainCall> ReadChain(InvocationExpressionSyntax mapCall)
-    {
-        var calls = new List<ChainCall>();
-        SyntaxNode current = mapCall;
-
-        while (current.Parent is MemberAccessExpressionSyntax memberAccess
-            && memberAccess.Expression == current
-            && memberAccess.Parent is InvocationExpressionSyntax outer)
-        {
-            var typeArguments = memberAccess.Name is GenericNameSyntax generic
-                ? generic.TypeArgumentList.Arguments.Select(argument => argument.ToString())
-                : [];
-
-            calls.Add(new ChainCall(
-                memberAccess.Name.Identifier.ValueText,
-                typeArguments.ToEquatableArray(),
-                outer.ArgumentList.Arguments.Select(argument => argument.ToString()).ToEquatableArray()));
-
-            current = outer;
-        }
-
-        return calls.ToEquatableArray();
-    }
-
     private static ResourceModel Invalid(
         string archetype,
         string entityName,
@@ -350,6 +350,9 @@ internal static class MapCallParser
             IdKind.Guid,
             IdDeclared: false,
             EquatableArray<PropertyModel>.Empty,
+            Traits.None,
+            Operations.All,
+            EquatableArray<string>.Empty,
             chain,
             new EquatableArray<DiagnosticInfo>([new DiagnosticInfo(diagnosticId, location, arguments.ToEquatableArray())]),
             location);

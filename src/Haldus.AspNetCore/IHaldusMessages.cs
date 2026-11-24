@@ -16,6 +16,12 @@ public static class HaldusMessageKeys
 {
     public const string NotFoundTitle = "NotFound.Title";
     public const string NotFoundDetail = "NotFound.Detail";
+    public const string PreconditionRequiredTitle = "PreconditionRequired.Title";
+    public const string PreconditionRequiredDetail = "PreconditionRequired.Detail";
+    public const string PreconditionFailedTitle = "PreconditionFailed.Title";
+    public const string PreconditionFailedDetail = "PreconditionFailed.Detail";
+    public const string TenantRequiredTitle = "TenantRequired.Title";
+    public const string TenantRequiredDetail = "TenantRequired.Detail";
     public const string ValidationTitle = "Validation.Title";
     public const string ValidationRequired = "Validation.Required";
     public const string ValidationMaxLength = "Validation.MaxLength";

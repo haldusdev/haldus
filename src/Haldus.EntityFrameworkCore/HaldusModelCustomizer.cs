@@ -8,7 +8,7 @@ internal sealed class HaldusModelCustomizer(ModelCustomizerDependencies dependen
     public override void Customize(ModelBuilder modelBuilder, DbContext context)
     {
         // Haldus katkıları önce uygulanır ki kullanıcının OnModelCreating'i bunları ezebilsin.
-        HaldusModelRegistry.Apply(modelBuilder);
+        HaldusModelRegistry.Apply(modelBuilder, context);
         base.Customize(modelBuilder, context);
     }
 }

@@ -18,6 +18,24 @@
   <data name="NotFound.Detail" xml:space="preserve">
     <value>{0} with identifier '{1}' was not found.</value>
   </data>
+  <data name="PreconditionRequired.Title" xml:space="preserve">
+    <value>Version required</value>
+  </data>
+  <data name="PreconditionRequired.Detail" xml:space="preserve">
+    <value>Send the version you last read in the If-Match header.</value>
+  </data>
+  <data name="PreconditionFailed.Title" xml:space="preserve">
+    <value>Resource has changed</value>
+  </data>
+  <data name="PreconditionFailed.Detail" xml:space="preserve">
+    <value>The resource was modified after you last read it. Reload it and try again.</value>
+  </data>
+  <data name="TenantRequired.Title" xml:space="preserve">
+    <value>Tenant required</value>
+  </data>
+  <data name="TenantRequired.Detail" xml:space="preserve">
+    <value>This resource belongs to a tenant, but no tenant could be determined for the request.</value>
+  </data>
   <data name="Validation.Title" xml:space="preserve">
     <value>One or more validation errors occurred.</value>
   </data>

@@ -12,6 +12,7 @@ internal static class GeneratorHarness
         global using System.ComponentModel.DataAnnotations;
         global using Haldus;
         global using Microsoft.AspNetCore.Builder;
+        global using Microsoft.AspNetCore.Http;
         global using Microsoft.AspNetCore.Routing;
         global using Microsoft.EntityFrameworkCore;
         global using Microsoft.Extensions.DependencyInjection;
