@@ -11,16 +11,90 @@ public sealed class HaldusSaveChangesInterceptor : SaveChangesInterceptor
     public override InterceptionResult<int> SavingChanges(DbContextEventData eventData, InterceptionResult<int> result)
     {
         Apply(eventData.Context);
+
+        if (eventData.Context is { } context)
+        {
+            HaldusRollups.Begin(context);
+        }
+
         return base.SavingChanges(eventData, result);
     }
 
-    public override ValueTask<InterceptionResult<int>> SavingChangesAsync(
+    public override async ValueTask<InterceptionResult<int>> SavingChangesAsync(
         DbContextEventData eventData,
         InterceptionResult<int> result,
         CancellationToken cancellationToken = default)
     {
         Apply(eventData.Context);
-        return base.SavingChangesAsync(eventData, result, cancellationToken);
+
+        if (eventData.Context is { } context)
+        {
+            await HaldusRollups.BeginAsync(context, cancellationToken);
+        }
+
+        return await base.SavingChangesAsync(eventData, result, cancellationToken);
+    }
+
+    public override int SavedChanges(SaveChangesCompletedEventData eventData, int result)
+    {
+        if (eventData.Context is { } context)
+        {
+            // Eşzamanlı kaydetmede de aynı kural geçerlidir; üretilen kod her zaman asenkron kaydeder.
+            HaldusRollups.ApplyAsync(context, CancellationToken.None).GetAwaiter().GetResult();
+        }
+
+        return base.SavedChanges(eventData, result);
+    }
+
+    public override async ValueTask<int> SavedChangesAsync(SaveChangesCompletedEventData eventData, int result, CancellationToken cancellationToken = default)
+    {
+        if (eventData.Context is { } context)
+        {
+            await HaldusRollups.ApplyAsync(context, cancellationToken);
+        }
+
+        return await base.SavedChangesAsync(eventData, result, cancellationToken);
+    }
+
+    public override void SaveChangesFailed(DbContextErrorEventData eventData)
+    {
+        if (eventData.Context is { } context)
+        {
+            HaldusRollups.Forget(context);
+        }
+
+        base.SaveChangesFailed(eventData);
+    }
+
+    public override Task SaveChangesFailedAsync(DbContextErrorEventData eventData, CancellationToken cancellationToken = default)
+    {
+        if (eventData.Context is { } context)
+        {
+            HaldusRollups.Forget(context);
+        }
+
+        return base.SaveChangesFailedAsync(eventData, cancellationToken);
+    }
+
+    public override void SaveChangesCanceled(DbContextEventData eventData)
+    {
+        if (eventData.Context is { } context)
+        {
+            // İptal edilen kaydetme de başarısız olan gibi geri alınır; açılan transaction bağlamda asılı kalmaz.
+            HaldusRollups.Forget(context);
+        }
+
+        base.SaveChangesCanceled(eventData);
+    }
+
+    public override Task SaveChangesCanceledAsync(DbContextEventData eventData, CancellationToken cancellationToken = default)
+    {
+        if (eventData.Context is { } context)
+        {
+            HaldusRollups.Forget(context);
+        }
+
+        return base.SaveChangesCanceledAsync(eventData, cancellationToken);
     }
 
     private static void Apply(DbContext? context)
@@ -81,6 +155,9 @@ public sealed class HaldusSaveChangesInterceptor : SaveChangesInterceptor
         // Anlık görüntü ve değişiklik günlüğü, trait alanları yazıldıktan sonra ve kaydı hangi kod yazarsa yazsın alınır.
         HaldusRevisions.Capture(context, now, users);
         HaldusChanges.Capture(context, now);
+
+        // Başka kayıtlardan toplanan alanlar, bağlı kayıt kaydedildikten sonra baştan hesaplanır.
+        HaldusRollups.Collect(context);
     }
 
     private static void OnAdded(EntityEntry entry, DateTimeOffset now, Lazy<Guid?> tenants, Lazy<string?> users)

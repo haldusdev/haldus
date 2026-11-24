@@ -318,6 +318,14 @@ internal sealed partial class EndpointEmitter
             EmitArchive("Unarchive", "unarchive", "entity.ArchivedAt = null;");
         }
 
+        if (_resource.Has(Traits.ReadTracking))
+        {
+            // Okundu bilgisi içerik değildir; kaydı yazamayan archetype'ta da değişir.
+            EmitArchive("MarkRead", "read", "entity.ReadAt ??= global::Haldus.HaldusTime.UtcNow(timeProvider);");
+            EmitArchive("MarkUnread", "unread", "entity.ReadAt = null;");
+            EmitReadAll();
+        }
+
         if (_resource.Expiry is not null)
         {
             EmitExpire();
@@ -491,8 +499,10 @@ internal sealed partial class EndpointEmitter
         var status = _resource.Filter?.Properties.Any(property => property.Name == "Status") != true
             ? _resource.StatusType
             : null;
+        var readTracking = _resource.Has(Traits.ReadTracking);
         var statusParameter = (status is null ? string.Empty : $"        {status}? status,\n")
-            + (EffectiveDated ? "        global::System.DateOnly? asOf,\n" : string.Empty);
+            + (EffectiveDated ? "        global::System.DateOnly? asOf,\n" : string.Empty)
+            + (readTracking ? "        bool? unread,\n" : string.Empty);
 
         var paged = $"{Results}.Ok<global::Haldus.PagedResult<{_entity}Response>>";
         var listResult = sortable ? $"{Results}.Results<{paged}, {Problem}>" : paged;
@@ -525,6 +535,18 @@ internal sealed partial class EndpointEmitter
                         if (includeArchived != true)
                         {
                             query = query.Where(item => item.ArchivedAt == null);
+                        }
+
+                """);
+        }
+
+        if (readTracking)
+        {
+            _handlers.Append("""
+
+                        if (unread is { } unreadOnly)
+                        {
+                            query = query.Where(item => (item.ReadAt == null) == unreadOnly);
                         }
 
                 """);
@@ -1288,6 +1310,48 @@ internal sealed partial class EndpointEmitter
                     }
 
                     return {{Http}}.TypedResults.NoContent();
+                }
+
+            """);
+    }
+
+    /// <summary>
+    /// Okunmamışların topluca okundu sayılması ve sayısı. İkisi de isteği yapanın görebildiği kayıtlarla sınırlıdır;
+    /// toplu işaretleme tek bir güncellemedir ve kayıtları tek tek yüklemez.
+    /// </summary>
+    private void EmitReadAll()
+    {
+        var archived = _resource.Has(Traits.Archivable) ? " && item.ArchivedAt == null" : string.Empty;
+
+        _map.Append($$"""
+                    group.MapPost("/read-all", ReadAllAsync)
+                        .WithName("ReadAll{{_plural}}");
+
+                    group.MapGet("/unread-count", UnreadCountAsync)
+                        .WithName("CountUnread{{_plural}}");
+
+
+            """);
+
+        _handlers.Append($$"""
+
+                private static async {{Task}}<{{Results}}.Ok<global::Haldus.ReadAllResult>> ReadAllAsync(
+            {{ScopeParameter}}        global::System.TimeProvider timeProvider,
+            {{ContextsParameter}}{{CancellationParameter}}    {
+                    var now = (global::System.DateTimeOffset?)global::Haldus.HaldusTime.UtcNow(timeProvider);
+                    var updated = await contexts.For<{{_entity}}>().Set<{{_entity}}>(){{ScopeFilter}}
+                        .Where(item => item.ReadAt == null)
+                        .ExecuteUpdateAsync(setters => setters.SetProperty(item => item.ReadAt, now), cancellationToken);
+
+                    return {{Http}}.TypedResults.Ok(new global::Haldus.ReadAllResult(updated));
+                }
+
+                private static async {{Task}}<{{Results}}.Ok<global::Haldus.UnreadCount>> UnreadCountAsync(
+            {{ScopeParameter}}{{ContextsParameter}}{{CancellationParameter}}    {
+                    var count = await contexts.For<{{_entity}}>().Set<{{_entity}}>(){{ScopeFilter}}
+                        .LongCountAsync(item => item.ReadAt == null{{archived}}, cancellationToken);
+
+                    return {{Http}}.TypedResults.Ok(new global::Haldus.UnreadCount(count));
                 }
 
             """);

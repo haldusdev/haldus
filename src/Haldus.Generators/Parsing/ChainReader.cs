@@ -52,6 +52,10 @@ internal static class ChainReader
         "Publishable",
         "EffectiveDated",
         "CustomFields",
+        "Retention",
+        "ReadTracking",
+        "Counts",
+        "Sums",
         "Exports",
         "Imports",
         "AttachedTo",
@@ -163,6 +167,13 @@ internal static class ChainReader
                     break;
                 case "CustomFields":
                     traits |= Traits.CustomFields;
+                    break;
+                case "ReadTracking":
+                    traits |= Traits.ReadTracking;
+                    break;
+                case "Retention":
+                    // Kaydın yaşı oluşturulma zamanından ölçülür.
+                    traits |= Traits.Auditable;
                     break;
                 case "OwnedByCurrentUser":
                     traits |= Traits.Owned;

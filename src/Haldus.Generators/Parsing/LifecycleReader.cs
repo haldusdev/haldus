@@ -35,6 +35,8 @@ internal static class LifecycleReader
 
         public ApprovalModel? Approval { get; set; }
 
+        public long? RetentionTicks { get; set; }
+
         /// <summary>Kaydın ters çevrilebildiği durumlar; durum makinesi yoksa <c>null</c>.</summary>
         public EquatableArray<string>? ReversibleIn { get; set; }
 
@@ -141,6 +143,18 @@ internal static class LifecycleReader
 
                 case "Approvable":
                     result.Approval = ReadApproval(semanticModel, arguments, Invalid, cancellationToken);
+                    break;
+
+                case "Retention":
+                    if (arguments.Count == 1 && TimeSpanTicks(semanticModel, arguments[0].Expression, cancellationToken) is { } period and > 0)
+                    {
+                        result.RetentionTicks = period;
+                    }
+                    else
+                    {
+                        Invalid(name, "The retention period must be readable at compile time and longer than zero; write it as TimeSpan.FromDays(90) with constant arguments");
+                    }
+
                     break;
             }
         }

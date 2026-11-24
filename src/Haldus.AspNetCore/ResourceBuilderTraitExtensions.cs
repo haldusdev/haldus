@@ -187,6 +187,24 @@ public static class ResourceBuilderTraitExtensions
         where TEntity : class => builder;
 
     /// <summary>
+    /// Kayıtları, oluşturulduktan verilen süre sonra kendiliğinden siler (olay günlüğü, bildirim gibi biriken
+    /// kayıtlar için). Silme arka plandaki bakım sırasında yapılır ve geri alınamaz; <c>CreatedAt</c> alanı
+    /// kendiliğinden eklenir.
+    /// </summary>
+    /// <param name="period">Kaydın saklandığı süre; derleme zamanında okunabilen bir değer olmalıdır.</param>
+    public static ResourceBuilder<TEntity> Retention<TEntity>(this ResourceBuilder<TEntity> builder, TimeSpan period)
+        where TEntity : class => builder;
+
+    /// <summary>
+    /// Kullanıcıya ait kayıtların (bildirim, mesaj) okunup okunmadığını izler: <c>ReadAt</c> alanı üretilir,
+    /// <c>POST /{id}/read</c> ve <c>/unread</c> kaydı işaretler, <c>POST /read-all</c> hepsini okundu yapar,
+    /// <c>GET /unread-count</c> okunmamışları sayar ve liste <c>?unread=true</c> ile süzülür.
+    /// <c>OwnedByCurrentUser</c> ile birlikte kullanılır.
+    /// </summary>
+    public static ResourceBuilder<TEntity> ReadTracking<TEntity>(this ResourceBuilder<TEntity> builder)
+        where TEntity : class => builder;
+
+    /// <summary>
     /// Kayda, alanlarını kiracının tanımladığı bir değer çantası ekler (<c>customFields</c>). Tanımlar kaynağın
     /// adresinde yönetilir: <c>GET /custom-fields</c>, <c>PUT</c> ve <c>DELETE /custom-fields/{key}</c>; her alanın
     /// bir türü (metin, sayı, evet/hayır, gün, seçenek) vardır ve zorunlu olabilir. Değerler her yazmada tanımlara

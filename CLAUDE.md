@@ -187,6 +187,15 @@ Bunlar kullanıcıyla kararlaştırıldı; yeniden sorma.
   - `MapJob<T>().Exports<TResource>()`: dosya içerik deposuna yazılır ve işten indirilir.
   - `MapJob<T>().Imports<TResource>()`: içerik isteğin gövdesinde gelir (en çok 5 milyon karakter, 10 000 satır)
     ve atomiktir: bir satır bile reddedilirse hiçbiri oluşturulmaz.
+- Saklama, okundu takibi ve toplama (22. aşama). Kullanıcı sormamamı istedi; yazılan, önerdiğim seçeneklerdir ve
+  ayrıca onaylanmadı:
+  - `.Retention(süre)`: yaş `CreatedAt` üzerinden ölçülür (`Auditable` kendiliğinden eklenir) ve süresi geçen kayıtlar
+    bakım sırasında fiziksel olarak silinir. Süreyi geliştirici açıkça yazdığı için, `Expiring` kayıtlarının aksine
+    ayrıca bir seçenekle açılmaz.
+  - `.ReadTracking()` okundu bilgisini kaydın kendisinde tutar (`ReadAt`), bu yüzden `OwnedByCurrentUser` ister.
+    Paylaşılan bir kaydın kullanıcı başına okundu bilgisi (ayrı bir tablo) yazılmadı.
+  - `.Counts<TChild>()` / `.Sums<TChild>(...)`: alan artırılıp azaltılmaz, alt kayıt her yazıldığında baştan sayılır.
+    Türetilmiş durum ayrı bir bildirim değildir: toplamdan sonra üst kaydın `Compute()` metodu çağrılır.
 - Eşzamanlılık trait'inin adı `ConcurrencyChecked` (eski adı `Versioned`). Sürüm yanıt gövdesinde değil
   `ETag` başlığında taşınır; güncelleme ve silme `If-Match` ister (eksikse 428, uyuşmazlıkta 412).
 - Güncelleme için hem `PUT` (tam değiştirme) hem `PATCH` (kısmi) üretilir.
@@ -255,12 +264,11 @@ Bunlar kullanıcıyla kararlaştırıldı; yeniden sorma.
 
 ## Aşamalar
 
-İki plan da bitti: ilk sürümün on aşaması (3. aşamaya `.Searchable()`, 8. aşamaya fiziksel temizlik de eklendi) ve
-ikinci planın on bir aşaması. Sınamanın sonucu `reports/Haldus taksonomi sınaması.md` dosyasındadır: araştırmadaki
-59 varlığın 47'si temiz, 10'u kısmen ifade ediliyor, 2'si için gereken özellik yok (ilk sınamada 19 / 29 / 11).
-Aynı veri `tests/Haldus.Generators.Tests/TaxonomyTests.cs` içinde derlenir; yeni bir archetype veya trait bir satırı
-kapatıyorsa ikisini birlikte güncelle. Kalan eksikler raporun "Kalan eksikler" tablosundadır; hepsi araştırmanın
-üçüncü sürüme bıraktığı veya kapsam dışı saydığı kalemlerdir ve yeni bir plan gerektirir.
+İlk iki plan bitti: ilk sürümün on aşaması (3. aşamaya `.Searchable()`, 8. aşamaya fiziksel temizlik de eklendi) ve
+ikinci planın on bir aşaması. Üçüncü plan sürüyor (aşağıda). Sınamanın sonucu `reports/Haldus taksonomi sınaması.md`
+dosyasındadır: araştırmadaki 59 varlığın 51'i temiz, 6'sı kısmen ifade ediliyor, 2'si için gereken özellik yok (ilk
+sınamada 19 / 29 / 11). Aynı veri `tests/Haldus.Generators.Tests/TaxonomyTests.cs` içinde derlenir; yeni bir archetype
+veya trait bir satırı kapatıyorsa ikisini birlikte güncelle. Kalan eksikler raporun "Kalan eksikler" tablosundadır.
 
 1. İskelet
 2. Generator çekirdeği ve `MapCrud`
@@ -301,9 +309,26 @@ birlikte ayrı commit oldu; 11–21. aşamaların tamamı bitti.
 bana soru sorma"). 15–20. aşamaların tasarım kararları bu yüzden sorulmadı: önerilen seçenek uygulandı ve "Tasarım
 kararları"na, kullanıcı ayrıca onaylamadı notuyla yazıldı. Kullanıcı bu kararlardan birini değiştirmek isterse ilgili
 madde oradadır. Yeni bağımlılık gerektiren hiçbir yol seçilmedi; depolama ve aktarma yeni paket eklemeden yazıldı.
-Bu talimat ikinci plan içindi: yeni bir işte tasarım soruları yeniden sorulur.
+Bu talimat projenin bitirilmesi içindir ve üçüncü planı da kapsar (aşağıda); proje bittikten sonra açılan yeni bir işte
+tasarım soruları yeniden sorulur.
 
 Raporun v1 listesindeki "uzatma kancaları" plana girmedi ve yazılmadı: raporda tanımı yok.
+
+### Üçüncü plan
+
+İkinci plan bitince iş bitmiş sayılmıştı; oturumun hedefi ("projenin tamamen bitmesini istiyorum, bana soru sorma")
+bunu kabul etmedi: araştırmanın üçüncü sürüm listesi, sınamada kalan satırlar ve açık duran frontend/mobil kapsamı
+da "tamamen"in parçasıdır. Bu planı kullanıcı ayrıca onaylamadı; kapsamı o hedeften çıkarıldı ve kararları, önceki
+aşamalardaki gibi, sorulmadan önerilen seçenekle verildi. Her aşama testleriyle birlikte ayrı commit olur.
+
+22. Saklama, okundu takibi, toplama: `Retention`, `ReadTracking`, `Counts` / `Sums` (türetilmiş durum dahil)
+23. Yerelleştirilmiş alanlar: `Translatable`
+24. Birden çok durum ekseni
+25. `MapBalance`
+26. `MapChangeSet`
+27. Kalan satırlar: sepet, varyant üretimi, tekrar serisi
+28. Frontend ve mobil kapsamı
+29. Sınamanın yinelenmesi: tablo, rapor ve README
 
 ## Açık kararlar
 
@@ -645,6 +670,43 @@ Raporun v1 listesindeki "uzatma kancaları" plana girmedi ve yazılmadı: rapord
     listede olmayan geçişin token adresi yoktur. Token ebeveyn altındaki ve kullanıcıya ait kaynaklarla
     birleşmez (görünürlükleri, token'ı taşıyanın sahip olmadığı bir kimliğe bağlıdır). Bilinen sınır: token
     kullanılınca kendiliğinden geçersiz olmaz; ömrünü `Expiring` ve durum makinesi belirler. Oran sınırlama yoktur.
+- **Saklama süresi.** `ResourceModel.RetentionTicks` (`LifecycleReader`; süre derleme zamanında okunan bir sabit olmalı).
+  Üretilen modül `HaldusMaintenanceRegistry.RegisterRetention<T>(süre)` çağırır; bakım, oluşturulalı süreden uzun
+  olmuş kayıtları `ExecuteDelete` ile siler (sorgu filtreleri bilerek kaldırılır; silinmiş ve süresi dolmuş kayıtlar
+  da gider). Başka bir kayıt referans veriyorsa veritabanı reddeder, uyarı günlüğe yazılır ve bir sonraki turda
+  yeniden denenir. `MapCrud`, `MapReadOnly` ve `MapAppendOnly` ile birleşir; `MapFile` (içerik depoda sahipsiz kalırdı)
+  ve `Publishable` ile birleşmez. Toplu silme değişiklik izleyicisini atladığı için sürümlere, değişiklik akışına ve
+  toplanan alanlara yansımaz.
+- **Okundu takibi.** `Traits.ReadTracking` (`IReadTracked`, `ReadAt`; trait alanıdır). `read` / `unread` uçları
+  `EmitArchive` kalıbından geçer (`If-Match`, `Save`); `read-all` kaynağın filtrelerinden geçen tek bir
+  `ExecuteUpdate`'tir, `unread-count` arşivlenmiş kayıtları saymaz. İkisinin de adı geçiş ve aksiyon adı olamaz
+  (`ReservedRoute`). Okundu bilgisi içerik değildir: salt-okunur kaynakta da değişir, ama `Auditable` kaynakta
+  `UpdatedAt` alanını ilerletir. `read-all` değişiklik izleyicisini atlar (akışa ve sürümlere girmez).
+- **Toplanan alanlar.** Zincirdeki `Counts<T>()` / `Sums<T>(...)` `ResourceModel.Rollups` olur ve alanı
+  `ExtraMembers`'a ekler (yalnızca yanıtta; aranabilir ve sıralanabilir). Alt kaynağı ve onun bu kaynağa işaret eden
+  alanını `ResourceLinker.ResolveRollups` çözer (her tür referans olur: `References`, `Under`, `AttachedTo`,
+  `Hierarchical`). Üretilen modül, alt kaynak başına bir `HaldusRollups.Register<TParent, TChild>` çağrısı yazar.
+  - **Kural kaydetmeye bağlıdır, uçlara değil.** Interceptor kaydedilmek üzere olan alt kayıtların üst kayıtlarını
+    not eder (`Collect`; eklenen, silinen ve yabancı anahtarı, toplanan alanı, `DeletedAt` veya `ExpiresAt` alanı
+    değişen kayıtlar), açık bir transaction yoksa açar (`BeginAsync`) ve kaydetme bitince üst kaydı baştan sayar
+    (`ApplyAsync`). Alt kayıt ile üst kaydın alanı böylece birlikte kalıcı olur. Üretilen uçlarda toplama kodu yoktur.
+  - Sayım üst kayıt başına bir kilidin altındadır (`HaldusOrdering.BeginAsync`, `Rollup:{tip}` + anahtar); kilit
+    olmadan aynı üst kayda birlikte yazan iki istek birbirinin kaydını göremezdi. Entegrasyon testi on iki eşzamanlı
+    yazmayla doğrular. Kilitler tipe ve anahtara göre sıralı alınır.
+  - Sayılan kayıtlar `HaldusRollups.Children<T>`'tır: kimliğe bağlı filtreler (kiracı, sahip, ebeveyn) kalkar, çünkü
+    sayı alt kaydı yazanın neyi görebildiğine bağlı olamaz; silinmiş, süresi dolmuş ve yayın kopyası olan kayıtlar
+    sayılmaz. **Bu yüzden kiracıya ait kayıtlar genel bir kayıtta toplanamaz** (`HALDUS007`): herkesin gördüğü alan
+    her kiracının kaç kaydı olduğunu ötekilere gösterirdi. Kullanıcıya ait kayıtların ortak bir kayıtta sayılması
+    (beğeni sayısı) bilerek serbesttir.
+  - Alanlar `ExecuteUpdate` ile yazılır: üst kaydın `UpdatedAt` alanı, sürümleri, onayı ve değişiklik akışı
+    etkilenmez (satır sürümü, xmin, ilerler). Üst kayıt `IComputed` ise ardından satırlarıyla yüklenir, `Compute()`
+    çağrılır ve değiştiyse sıradan bir kaydetmeyle yazılır (o zaman bütün kurallar işler); eşzamanlılık çakışmasında
+    kayıt yeniden okunup üç kez daha denenir (`FinishAsync`). Üst kayıt bağlamda izleniyorsa yeniden okunur.
+  - Sınırlar: alt kayıt aynı projede eşlenmiş olmalıdır; toplanan alan null olamayan `decimal`, `int`, `long` veya
+    `double` olmalıdır; `Publishable` ile birleşmez; değişiklik izleyicisini atlayan yazmalar (`ExecuteUpdate`,
+    `ExecuteDelete`, bakımın temizliği, veritabanının zincirleme silmesi) toplamı yenilemez, bir sonraki izlenen
+    yazma düzeltir; süresi dolan kayıt, başka bir yazma yeniden saydırana kadar toplamda kalır; her alt yazma üst
+    kayıt başına iki-üç ek sorgudur ve aynı üst kaydın yazmaları sıraya girer.
 - **Özel alanlar.** `Traits.CustomFields` (`IHasCustomFields`; çanta `Dictionary<string, JsonElement>`, jsonb).
   Tanımlar `HaldusCustomFieldDefinitions` tablosundadır (kaynağın tam tip adı + kiracı + anahtar; kiracıya bağlı
   olmayan kaynakta kiracı `Guid.Empty`'dir ki benzersiz indeks işlesin). Doğrulama çalışma zamanındadır

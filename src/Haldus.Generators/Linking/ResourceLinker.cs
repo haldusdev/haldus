@@ -110,8 +110,62 @@ internal static class ResourceLinker
                 Details = linked
                     .Where(detail => detail.Archetype == Archetype.Detail && detail.Parent?.TargetType == resource.QualifiedName)
                     .ToEquatableArray(),
+                Rollups = ResolveRollups(resource, linked, resources, byType, report).ToEquatableArray(),
             }),
         ];
+    }
+
+    /// <summary>
+    /// Toplanan alanların alt kaynağını ve o kaynakta bu kaynağa işaret eden alanı çözer. Alt kaynağın referansları
+    /// ancak tüm kaynaklar bağlandıktan sonra bilinir.
+    /// </summary>
+    private static List<RollupModel> ResolveRollups(
+        ResourceModel resource,
+        List<ResourceModel> linked,
+        IReadOnlyList<ResourceModel> resources,
+        Dictionary<string, ResourceModel> byType,
+        Action<DiagnosticInfo> report)
+    {
+        var resolved = new List<RollupModel>();
+
+        foreach (var rollup in resource.Rollups)
+        {
+            void Fail(string id, params string[] arguments) =>
+                report(new DiagnosticInfo(id, rollup.Location, arguments.ToEquatableArray()));
+
+            var declaration = rollup.Field is null ? $"Counts<{rollup.ChildName}>()" : $"Sums<{rollup.ChildName}>()";
+            var child = rollup.ChildType is not null
+                ? linked.FirstOrDefault(candidate => candidate.QualifiedName == rollup.ChildType)
+                : linked.Where(candidate => candidate.EntityName == rollup.ChildName).Take(2).ToList() is { Count: 1 } named ? named[0] : null;
+
+            if (child is null)
+            {
+                Fail("HALDUS009", rollup.ChildName, resource.EntityName);
+            }
+            else if (!HasSingleColumnKey(resource))
+            {
+                Fail("HALDUS007", $"{declaration} needs '{resource.EntityName}' to have a key of its own");
+            }
+            else if (child.References.FirstOrDefault(reference => reference.TargetType == resource.QualifiedName) is not { } reference)
+            {
+                Fail(
+                    "HALDUS007",
+                    $"{declaration} needs '{child.EntityName}' to refer to '{resource.EntityName}'; declare References<{resource.EntityName}>() or Under<{resource.EntityName}>() on it");
+            }
+            else if (IsTenantScoped(child, resources, byType) && !IsTenantScoped(resource, resources, byType))
+            {
+                // Herkesin gördüğü bir kaydın alanı, her kiracının kaç kaydı olduğunu ötekilere gösterirdi.
+                Fail(
+                    "HALDUS007",
+                    $"{declaration} would add up the records of every tenant on '{resource.EntityName}', which is not tenant-scoped; make '{resource.EntityName}' MultiTenant() or count a resource that is not");
+            }
+            else
+            {
+                resolved.Add(rollup with { ChildType = child.QualifiedName, ForeignKey = reference.PropertyName });
+            }
+        }
+
+        return resolved;
     }
 
     /// <summary>
@@ -496,6 +550,7 @@ internal static class ResourceLinker
     {
         "restore" or "purge" when resource.Has(Traits.SoftDeletable) => nameof(Traits.SoftDeletable),
         "archive" or "unarchive" when resource.Has(Traits.Archivable) => nameof(Traits.Archivable),
+        "read" or "unread" when resource.Has(Traits.ReadTracking) => nameof(Traits.ReadTracking),
         "expire" when resource.Expiry is not null => "Expiring",
         "clone" when resource.Has(Traits.Cloneable) => nameof(Traits.Cloneable),
         "reverse" when resource.Has(Traits.Reversible) => nameof(Traits.Reversible),

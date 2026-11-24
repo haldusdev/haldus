@@ -399,6 +399,48 @@ app.MapJob<ProductImport>().Imports<Product>();
 CSV yeni bir bağımlılık olmadan okunur ve yazılır (RFC 4180). Dışa aktarılan metinlerden `=`, `+`, `-` veya `@` ile
 başlayanların önüne kesme işareti konur; böylece dosya bir tablolama programında açıldığında formül olarak çalışmaz.
 
+## Saklama, okundu takibi ve toplanan alanlar
+
+```csharp
+app.MapReadOnly<Notification>()
+    .OwnedByCurrentUser()
+    .ReadTracking()
+    .Retention(TimeSpan.FromDays(90));
+
+app.MapCrud<Discussion>()
+    .Counts<Reply>()
+    .Sums<Reply>(reply => reply.Score, into: "Score");
+
+app.MapCrud<Reply>().Under<Discussion>();
+```
+
+| Bildirim | Etkisi |
+|---|---|
+| `.Retention(süre)` | Oluşturulalı verilen süreden uzun olmuş kayıtlar bakım sırasında silinir. `Auditable` kendiliğinden eklenir |
+| `.ReadTracking()` | Kullanıcıya ait kayda `ReadAt` alanı ekler: `POST /{id}/read`, `POST /{id}/unread`, `POST /read-all` (okunmamışların hepsi), `GET /unread-count`; liste `?unread=true` ile süzülür. `OwnedByCurrentUser` ister |
+| `.Counts<TChild>(into:)` | Kayda, kendisine işaret eden `TChild` kayıtlarının sayısını tutan bir alan ekler (varsayılan adı `ReplyCount`) |
+| `.Sums<TChild>(child => child.Alan, into:)` | Aynısı, bir sayısal alanın toplamı için (varsayılan adı `ReplyScoreSum`) |
+
+Toplanan alanlar yalnızca yanıtta görünür, süzülebilir ve sıralanabilir. Alt kayıt hangi koddan yazılırsa yazılsın
+(uç, toplu işlem, iş, uygulamanın kendi kodu) üst kaydın alanı aynı transaction içinde **baştan sayılır**; artırıp
+azaltılmaz, bu yüzden kaçırılmış bir yazma kalıcı bir yanlış bırakmaz. Silinmiş ve süresi dolmuş kayıtlar sayılmaz.
+Üst kayıt `IComputed` uygularsa toplamdan sonra `Compute()` yeniden çağrılır; "ödenen tutardan ödeme durumu" gibi
+türetilmiş durumlar böyle yazılır:
+
+```csharp
+public partial class Bill : IComputed
+{
+    public decimal Amount { get; set; }
+    public BillState State { get; private set; }
+
+    // PaidAmount üretilen alandır: ödemelerin toplamı.
+    public void Compute() => State = PaidAmount >= Amount ? BillState.Paid : PaidAmount > 0 ? BillState.PartiallyPaid : BillState.Unpaid;
+}
+
+app.MapCrud<Bill>().Sums<BillPayment>(payment => payment.Amount, into: "PaidAmount");
+app.MapAppendOnly<BillPayment>().References<Bill>();
+```
+
 ## Sırlar
 
 ```csharp
@@ -447,11 +489,10 @@ kısıtı olur, ayrı bağlamlardaysa referans yalnızca kimlikle tutulur ve var
 
 ## Durum
 
-İki plan da tamamlandı: ilk sürümün on aşaması ve araştırmanın ikinci sürüm listesini kapatan on bir aşama. Model,
-araştırmadaki 59 gerçek varlığa karşı iki kez sınandı: bugün 47'si eksiksiz, 10'u kısmen ifade ediliyor, 2'si için
-gereken özellik yok (ilk sınamada bu sayılar 19, 29 ve 11 idi). Kalan eksiklerin tamamı araştırmanın üçüncü sürüme
-bıraktığı veya kapsam dışı saydığı kalemlerdir; ayrıntısı [taksonomi sınaması](reports/Haldus%20taksonomi%20sınaması.md)
-belgesindedir.
+İlk iki plan tamamlandı: ilk sürümün on aşaması ve araştırmanın ikinci sürüm listesini kapatan on bir aşama. Üçüncü
+plan (araştırmanın üçüncü sürüm listesi ve sınamada kalan satırlar) sürüyor. Model, araştırmadaki 59 gerçek varlığa
+karşı sınanıyor: bugün 51'i eksiksiz, 6'sı kısmen ifade ediliyor, 2'si için gereken özellik yok (ilk sınamada bu
+sayılar 19, 29 ve 11 idi). Ayrıntısı [taksonomi sınaması](reports/Haldus%20taksonomi%20sınaması.md) belgesindedir.
 
 Tasarım kararları için [CLAUDE.md](CLAUDE.md), kararların dayandığı araştırma için [reports](reports/)
 klasörüne bakın. İki örnek uygulama var: tek projeli [mağaza](samples/Haldus.Sample.Shop) ve

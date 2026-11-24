@@ -177,20 +177,35 @@ public sealed class TaxonomyTests
             """),
 
         // ── Muhasebe ─────────────────────────────────────────────────────────────────────────────────
-        new(12, "Invoice", Fit.Partial,
+        new(12, "Invoice", Fit.Clean,
             """
-            public enum InvoiceStatus { Draft, Issued, Paid, Void }
-            public partial class Invoice { public string Customer { get; set; } = ""; }
+            public enum InvoiceStatus { Draft, Issued, Void }
+            public enum PaymentState { Unpaid, PartiallyPaid, Paid }
+            public partial class Invoice : IComputed
+            {
+                public string Customer { get; set; } = "";
+                public decimal Total { get; private set; }
+                public PaymentState Payment { get; private set; }
+
+                // Ödeme durumu yazılmaz: ödemelerden toplanan tutardan türetilir.
+                public void Compute()
+                {
+                    Total = InvoiceLines.Sum(line => line.Amount);
+                    Payment = PaidAmount >= Total && Total > 0 ? PaymentState.Paid : PaidAmount > 0 ? PaymentState.PartiallyPaid : PaymentState.Unpaid;
+                }
+            }
             public partial class InvoiceLine { public string Description { get; set; } = ""; public decimal Amount { get; set; } }
+            public partial class InvoicePayment { public decimal Amount { get; set; } }
             """,
             """
             var invoices = app.MapCrud<Invoice>().ConcurrencyChecked().Idempotent()
                 .Workflow<InvoiceStatus>().EditableIn(InvoiceStatus.Draft).DeletableIn(InvoiceStatus.Draft)
-                .Numbered("INV-{yyyy}-{seq:6}", assignOn: InvoiceStatus.Issued).Previewable();
+                .Numbered("INV-{yyyy}-{seq:6}", assignOn: InvoiceStatus.Issued).Previewable()
+                .Sums<InvoicePayment>(payment => payment.Amount, into: "PaidAmount");
             invoices.MapDetail<InvoiceLine>();
             invoices.MapTransition("issue", InvoiceStatus.Draft, InvoiceStatus.Issued);
-            invoices.MapTransition("pay", InvoiceStatus.Issued, InvoiceStatus.Paid);
             invoices.MapTransition("void", [InvoiceStatus.Draft, InvoiceStatus.Issued], InvoiceStatus.Void);
+            app.MapAppendOnly<InvoicePayment>().References<Invoice>();
             """),
         new(13, "InvoiceLine", Fit.Clean,
             """
@@ -447,32 +462,18 @@ public sealed class TaxonomyTests
             app.MapSingleton<StoreSettings>().MultiTenant();
             app.MapStore<Preference>().MultiTenant();
             """),
-        new(44, "AuditLog / Event", Fit.Partial,
+        new(44, "AuditLog / Event", Fit.Clean,
             """
             public partial class AuditLog { public string Action { get; set; } = ""; }
             public partial class AuditLogExport;
             """,
             """
-            app.MapReadOnly<AuditLog>().MultiTenant().Searchable(log => log.Action);
+            app.MapReadOnly<AuditLog>().MultiTenant().Searchable(log => log.Action).Retention(TimeSpan.FromDays(365));
             app.MapJob<AuditLogExport>().Exports<AuditLog>().MultiTenant();
             """),
-        new(45, "Notification", Fit.Partial,
-            """
-            public partial class Notification
-            {
-                public string Title { get; private set; } = "";
-                public DateTimeOffset? ReadAt { get; private set; }
-                public void MarkRead(DateTimeOffset now) => ReadAt ??= now;
-            }
-            """,
-            """
-            var notifications = app.MapReadOnly<Notification>().OwnedByCurrentUser();
-            notifications.MapAction("mark-read", (notification, services, cancellationToken) =>
-            {
-                notification.MarkRead(services.GetRequiredService<TimeProvider>().GetUtcNow());
-                return System.Threading.Tasks.Task.CompletedTask;
-            });
-            """),
+        new(45, "Notification", Fit.Clean,
+            "public partial class Notification { public string Title { get; set; } = \"\"; }",
+            "app.MapReadOnly<Notification>().OwnedByCurrentUser().ReadTracking().Retention(TimeSpan.FromDays(90));"),
         new(46, "Webhook endpoint", Fit.Clean,
             Webhook + """
             public partial class WebhookSettings { public int TimeoutSeconds { get; set; } = 30; public bool VerifyTls { get; set; } = true; }
@@ -559,17 +560,15 @@ public sealed class TaxonomyTests
             app.MapCrud<Board>();
             app.MapCrud<Card>().Under<Board>().Orderable();
             """),
-        new(57, "Counter", Fit.Partial,
+        new(57, "Counter", Fit.Clean,
             """
-            public partial class Playlist : IComputed
-            {
-                public string Name { get; set; } = "";
-                public int TrackCount { get; private set; }
-                public void Compute() => TrackCount = Tracks.Count;
-            }
-            public partial class Track { public string Title { get; set; } = ""; }
+            public partial class Playlist { public string Name { get; set; } = ""; }
+            public partial class Track { public string Title { get; set; } = ""; public int Seconds { get; set; } }
             """,
-            "app.MapCrud<Playlist>().MapDetail<Track>();"),
+            """
+            app.MapCrud<Playlist>().Counts<Track>().Sums<Track>(track => track.Seconds, into: "TotalSeconds");
+            app.MapCrud<Track>().Under<Playlist>();
+            """),
         new(58, "Bulk operations", Fit.Clean,
             Product + """
             public partial class PriceUpdate { public int Percent { get; set; } public int Changed { get; private set; } }
@@ -636,8 +635,8 @@ public sealed class TaxonomyTests
     public void Tally_MatchesTheWrittenResults()
     {
         // reports/Haldus taksonomi sınaması.md dosyasındaki sayılar; biri değişirse diğeri de güncellenmelidir.
-        Assert.Equal(47, Rows.Count(row => row.Fit == Fit.Clean));
-        Assert.Equal(10, Rows.Count(row => row.Fit == Fit.Partial));
+        Assert.Equal(51, Rows.Count(row => row.Fit == Fit.Clean));
+        Assert.Equal(6, Rows.Count(row => row.Fit == Fit.Partial));
         Assert.Equal(2, Rows.Count(row => row.Fit == Fit.Missing));
     }
 }

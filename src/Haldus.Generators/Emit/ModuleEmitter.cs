@@ -105,6 +105,18 @@ internal static class ModuleEmitter
                 blocks.Add($"        global::Haldus.HaldusMaintenanceRegistry.RegisterExpiring<{entity}>();\n");
             }
 
+            if (resource.RetentionTicks is { } retention)
+            {
+                // Saklama süresi geçen kayıtlar bakım sırasında silinir.
+                blocks.Add(
+                    $"        global::Haldus.HaldusMaintenanceRegistry.RegisterRetention<{entity}>(global::System.TimeSpan.FromTicks({retention}L));\n");
+            }
+
+            foreach (var rollups in resource.Rollups.GroupBy(rollup => (rollup.ChildType, rollup.ForeignKey)))
+            {
+                blocks.Add(Rollup(resource, entity, rollups.Key.ChildType!, rollups.Key.ForeignKey, [.. rollups]));
+            }
+
             if (resource.Has(Traits.Approvable))
             {
                 // İçerik alanlarından biri değişince toplanan onaylar düşer; Haldus'un yönettiği alanlar içerik değildir.
@@ -268,6 +280,54 @@ internal static class ModuleEmitter
     }
 
     /// <summary>Tek kayıtlı kaynak koleksiyon değildir; adı çoğullanmaz.</summary>
+    /// <summary>
+    /// Bir alt kaynaktan toplanan alanların yeniden hesaplanması: alt kayıtlar sayılır, alanlar tek bir güncellemeyle
+    /// yazılır ve kaydın hesaplanan alanları varsa onlar da yenilenir.
+    /// </summary>
+    private static string Rollup(ResourceModel resource, string entity, string child, string foreignKey, List<RollupModel> rollups)
+    {
+        var builder = new StringBuilder();
+        var fields = rollups.Where(rollup => rollup.Field is not null).Select(rollup => ResourceEmitter.Literal(rollup.Field!)).Distinct();
+
+        builder.Append($"        global::Haldus.HaldusRollups.Register<{entity}, {child}>(\n");
+        builder.Append($"            {ResourceEmitter.Literal(foreignKey)},\n");
+        builder.Append($"            [{string.Join(", ", fields)}],\n");
+        builder.Append("            static async (context, key, cancellationToken) =>\n");
+        builder.Append("            {\n");
+        builder.Append($"                var id = ({resource.IdType})key;\n");
+        builder.Append($"                var children = global::Haldus.HaldusRollups.Children<{child}>(context).Where(child => child.{foreignKey} == id);\n");
+
+        for (var index = 0; index < rollups.Count; index++)
+        {
+            builder.Append(rollups[index].Field is { } field
+                ? $"                var value{index} = await children.SumAsync(child => child.{field}, cancellationToken);\n"
+                : $"                var value{index} = await children.CountAsync(cancellationToken);\n");
+        }
+
+        builder.Append($"                await global::Haldus.HaldusRollups.Parents<{entity}>(context)\n");
+        builder.Append($"                    .Where(parent => parent.{resource.KeyName} == id)\n");
+        builder.Append("                    .ExecuteUpdateAsync(\n");
+        builder.Append("                        setters => setters");
+
+        for (var index = 0; index < rollups.Count; index++)
+        {
+            builder.Append($".SetProperty(parent => parent.{rollups[index].Into}, value{index})");
+        }
+
+        builder.Append(",\n");
+        builder.Append("                        cancellationToken);\n");
+
+        // Hesaplanan alanlar toplamı okuyabilir (ödenen tutardan ödeme durumu); toplam yazıldıktan sonra yenilenir.
+        var includes = string.Concat(resource.Details.Select(detail => $".Include(parent => parent.{detail.CollectionName})"));
+        var computed = resource.IsComputed
+            ? $"global::Haldus.HaldusRollups.Parents<{entity}>(context){includes}.Where(parent => parent.{resource.KeyName} == id)"
+            : "null";
+
+        builder.Append($"                await global::Haldus.HaldusRollups.FinishAsync<{entity}>(context, key, {computed}, cancellationToken);\n");
+        builder.Append("            });\n");
+        return builder.ToString();
+    }
+
     private static string TableName(ResourceModel resource) =>
         resource.Archetype == Archetype.Singleton ? resource.EntityName : Naming.Pluralize(resource.EntityName);
 

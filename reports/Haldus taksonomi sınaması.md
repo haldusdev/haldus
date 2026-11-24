@@ -7,12 +7,12 @@ sonunda (10. aşama) ve ikinci planın sonunda (21. aşama); aşağıdaki tablo 
 
 ## Sonuç
 
-59 satırın 57'si bugünkü API ile yazılıp derleniyor; 47'si önerilen eşlemeyi eksiksiz ifade ediyor.
+59 satırın 57'si bugünkü API ile yazılıp derleniyor; 51'i önerilen eşlemeyi eksiksiz ifade ediyor.
 
 | Sonuç | İlk sınama | Bugün | Anlamı |
 |---|---|---|---|
-| Temiz | 19 | 47 | Raporun önerdiği eşleme, yazılmış özelliklerle eksiksiz ifade ediliyor |
-| Kısmi | 29 | 10 | Çekirdek ifade ediliyor; önerilen eşlemedeki bir özellik yok |
+| Temiz | 19 | 51 | Raporun önerdiği eşleme, yazılmış özelliklerle eksiksiz ifade ediliyor |
+| Kısmi | 29 | 6 | Çekirdek ifade ediliyor; önerilen eşlemedeki bir özellik yok |
 | Yok | 11 | 2 | Gereken archetype veya trait yazılmadı |
 
 Araştırmanın başlangıçtaki düz katalog için kendi sayımı 10 oturuyor, 31 zorlanarak, 18 oturmuyor idi. Üç sayım
@@ -34,6 +34,7 @@ iyileşme ölçüsü olarak değil, yön olarak okunmalıdır.
 | 18. Zaman ve sürüm | `Revisioned`, `Publishable`, `EffectiveDated`, `ChangeFeed` | 2 |
 | 19. Dosyalar ve takılabilirler | `MapFile`, `AttachedTo`, `Attachable`, `Commentable`, `Taggable` | 4 |
 | 20. Özel alanlar ve aktarma | `CustomFields`, `Exports`, `Imports` | 2 |
+| 22. Saklama, okundu takibi, toplama | `Retention`, `ReadTracking`, `Counts`, `Sums` | 4 |
 
 Dört katmanlı model (bir archetype, ilişkiler, en fazla bir durum modeli, trait'ler) iki sınamadan da sağlam çıktı:
 hiçbir satır iki archetype istemedi ve hiçbir satır modelin yeniden açılmasını gerektirmedi. Kapanan bütün boşluklar
@@ -67,7 +68,7 @@ yeni bir trait, ilişki bildirimi veya zincir metoduyla kapandı; kalanlar da ay
 | 9 | Refund | Temiz | `MapAppendOnly` + `Workflow` + `Idempotent` + `Metadata`; iptal bir geçiş | — |
 | 10 | FulfillmentOrder | Kısmi | `MapReadOnly` + `Workflow` + geçişler | İkinci durum ekseni, böl/birleştir/taşı |
 | 11 | Inventory level | Kısmi | `MapAppendOnly` hareket + `MapReadOnly().DerivedFrom<StockMovement>()` seviye | `MapBalance` (durum kovaları, kovalar arası taşıma) |
-| 12 | Invoice | Kısmi | `MapCrud` + `Workflow` + `EditableIn` + `Numbered(assignOn)` + `Idempotent` + `MapDetail` + `Previewable` | Türetilmiş `paid` durumu |
+| 12 | Invoice | Temiz | `MapCrud` + `Workflow` + `EditableIn` + `Numbered(assignOn)` + `Idempotent` + `MapDetail` + `Previewable`; ödeme durumu `Sums<InvoicePayment>()` + `IComputed` ile türetilir | |
 | 13 | InvoiceLine | Temiz | Gömülü `MapDetail` | — |
 | 14 | Credit note | Temiz | `MapAppendOnly` + `CreatedFrom<Invoice>` + `Workflow` (void) + `Numbered` | — |
 | 15 | JournalEntry | Temiz | `MapCrud` + `Document` + `Numbered(assignOn)` + `MapDetail` + `Reversible`; "satırlar dengeli" kuralı gönderme geçişinde | — |
@@ -99,8 +100,8 @@ yeni bir trait, ilişki bildirimi veya zincir metoduyla kapandı; kalanlar da ay
 | 41 | Invitation | Temiz | `MapCrud().Without(Update, Patch, Delete)` + `Workflow` + `Expiring` + `TokenAccess`; kabul edilince doğan üyelik `CreatedFrom<Invitation>(on: "accept")` | — |
 | 42 | ApiKey / secret | Temiz | `MapCrud().Without(Update, Patch)` + `Expiring()` + `SecretOnce` + `Rotatable` | — |
 | 43 | Settings / Preferences | Temiz | `MapSingleton().MultiTenant()`, `MapStore().MultiTenant()` | — |
-| 44 | AuditLog / Event | Kısmi | `MapReadOnly` + `Searchable`; dışa aktarma `MapJob().Exports<AuditLog>()` | `Retention` |
-| 45 | Notification | Kısmi | `MapReadOnly` + `OwnedByCurrentUser`; okundu işareti bir entity aksiyonu | `ReadTracking` (hepsini okundu işaretleme, okunmamış sayısı) |
+| 44 | AuditLog / Event | Temiz | `MapReadOnly` + `Searchable` + `Retention`; dışa aktarma `MapJob().Exports<AuditLog>()` | |
+| 45 | Notification | Temiz | `MapReadOnly` + `OwnedByCurrentUser` + `ReadTracking` + `Retention` | |
 | 46 | Webhook endpoint | Temiz | `MapCrud` + `Archivable` + `SecretOnce(recoverable)` + `Rotatable`; ping bir entity aksiyonu; yapılandırma `MapSingleton().Under<Webhook>()` | — |
 | 47 | Webhook delivery | Temiz | `MapReadOnly` + `Under<Webhook>` + `Workflow`; yeniden gönderme bir geçiş | — |
 | 48 | Subscription / Plan | Temiz | `MapCrud` + `Workflow` + `MapDetail` | — |
@@ -112,7 +113,7 @@ yeni bir trait, ilişki bildirimi veya zincir metoduyla kapandı; kalanlar da ay
 | 54 | Search | Temiz | `Searchable` | — |
 | 55 | Favorite / star / vote | Temiz | `MapAssociation<Favorite, Product>().ForCurrentUser()` | — |
 | 56 | Ordering / position | Temiz | `Orderable` (`Position` alanı, `POST /{id}/move`) | — |
-| 57 | Counter | Kısmi | Gömülü satırlardan `IComputed` | Başka kaynaklardan toplama (`Rollup`) |
+| 57 | Counter | Temiz | `Counts<Track>()` + `Sums<Track>(...)` | |
 | 58 | Bulk operations | Temiz | `Batch` + `MapJob` + `MapJob().Imports<T>()` | — |
 | 59 | Büyük veri export'u | Temiz | `MapJob().Exports<T>()` + `Idempotent` (mantığı üretilir; dosya işten indirilir) | — |
 
@@ -161,10 +162,6 @@ yeni bir trait, ilişki bildirimi veya zincir metoduyla kapandı; kalanlar da ay
 | Birden çok durum ekseni | 1, 10 | Üçüncü sürüm; "en fazla bir durum modeli" kuralını açar |
 | `MapChangeSet` | 1 | Üçüncü sürüm |
 | `Translatable` | 28 | Üçüncü sürüm |
-| `Retention` | 44 | Üçüncü sürüm |
-| `ReadTracking` | 45 | Üçüncü sürüm |
-| Türetilmiş durum (`paid`) | 12 | Araştırmada tanımı yok; bugün bir geçişle elle yazılır |
-| Başka kaynaklardan toplama (`Rollup`) | 57 | Araştırmada tanımı yok; `DerivedFrom` ile yazılabilir |
 | Sepet birleştirme, anonim oturumun sahipliği | 5 | Alana özgü; bir handler işi |
 | Kombinatoryal varyant üretimi | 3 | Alana özgü; bir aksiyon işi |
 | Tekrar serisi | 36 | Araştırmada bilinçli olarak kapsam dışı |

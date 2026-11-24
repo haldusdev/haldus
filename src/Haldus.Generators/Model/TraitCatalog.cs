@@ -71,6 +71,12 @@ internal static class TraitCatalog
             new("CustomFields", JsonBag, InResponse: true, Search: null),
         ]),
 
+        // Okundu zamanını yalnızca okundu uçları değiştirir.
+        new(Traits.ReadTracking, "global::Haldus.IReadTracked",
+        [
+            new("ReadAt", DateTimeOffset + "?", InResponse: true, new("ReadAt", SearchKind.Range, DateTimeOffset, IsNullable: true)),
+        ]),
+
         // Dönem alanları istemcinin yazdığı sıradan alanlardır; ayrıca eklenirler.
         new(Traits.EffectiveDated, "global::Haldus.IEffectiveDated", []),
 

@@ -115,6 +115,12 @@ internal sealed record ResourceModel(
     public TokenModel? Token { get; init; }
 
     /// <summary>Kaydın ters çevrilebildiği durumlar; durum makinesi yoksa <c>null</c> (her zaman).</summary>
+    /// <summary>Kayıtların saklandığı süre (<c>.Retention(...)</c>); yoksa <c>null</c>.</summary>
+    public long? RetentionTicks { get; init; }
+
+    /// <summary>Başka kaynaklardan toplanan alanlar.</summary>
+    public EquatableArray<RollupModel> Rollups { get; init; } = EquatableArray<RollupModel>.Empty;
+
     /// <summary>Kaynak bir aktarma işiyse (<c>Exports</c> / <c>Imports</c>) aktardığı kaynak; değilse <c>null</c>.</summary>
     public TransferModel? Transfer { get; init; }
 
@@ -339,6 +345,7 @@ internal enum Traits
     Publishable = 1048576,
     EffectiveDated = 2097152,
     CustomFields = 4194304,
+    ReadTracking = 8388608,
 }
 
 /// <summary>
@@ -682,6 +689,21 @@ internal sealed record TransferModel(
     LocationInfo Location,
     string TargetNamespace = "",
     bool NeedsTime = false);
+
+/// <summary>
+/// Başka bir kaynaktan toplanan alan: <c>.Counts&lt;T&gt;()</c> veya <c>.Sums&lt;T&gt;(...)</c>. Alt kaynağın bu
+/// kaynağa işaret eden alanı, tüm kaynaklar bilindikten sonra çözülür.
+/// </summary>
+/// <param name="Field">Toplanan alan; sayımda <c>null</c>.</param>
+/// <param name="Into">Üretilen alanın adı.</param>
+/// <param name="ForeignKey">Alt kayıtta bu kaynağa işaret eden alan; çözülmeden önce boştur.</param>
+internal sealed record RollupModel(
+    string ChildName,
+    string? ChildType,
+    string? Field,
+    string Into,
+    LocationInfo Location,
+    string ForeignKey = "");
 
 /// <summary><c>MapFile</c> ile bildirilen dosya kaynağının içerik kuralları.</summary>
 /// <param name="MaxBytes">Kabul edilen en büyük içerik.</param>

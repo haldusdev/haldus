@@ -138,6 +138,13 @@ internal static class MapCallParser
                 }
             }
 
+            if (chain.Any(call => call.Name == "Retention"))
+            {
+                // Bakım kayıtları topluca siler; içerik depoda sahipsiz kalırdı.
+                diagnostics.Add(new DiagnosticInfo(
+                    "HALDUS007", location, new EquatableArray<string>(["MapFile cannot be combined with Retention: records are purged in bulk, which would leave their content behind in the storage"])));
+            }
+
             // Yükleme bekleyen kayıtların ne zaman oluşturulduğu bilinmelidir.
             traits |= Traits.Auditable;
             lifecycle.Members.AddRange(LifecycleReader.FileMembers());
@@ -336,6 +343,7 @@ internal static class MapCallParser
         SearchFieldRequest? naturalKeyRequest = null;
         var effectiveKeyRequests = new List<SearchFieldRequest>();
         TransferModel? transfer = null;
+        var rollups = new List<RollupModel>();
         var reverseAttachments = new List<ReverseDeclaration>();
         var tagDeclarations = new List<ReverseDeclaration>();
         var derivedFrom = new List<SourceDeclaration>();
@@ -381,6 +389,62 @@ internal static class MapCallParser
                     references.Add(ReadReference(
                         ReferenceKind.Reference, targets[0], call, context.SemanticModel, OnDeleteBehavior.Restrict, cancellationToken));
                     break;
+                case GenericNameSyntax { Identifier.ValueText: "Counts" or "Sums", TypeArgumentList.Arguments: { Count: 1 } counted } rollupCall:
+                {
+                    var child = context.SemanticModel.GetTypeInfo(counted[0], cancellationToken).Type as INamedTypeSymbol;
+                    var known = child is { TypeKind: not TypeKind.Error };
+                    var childName = known ? child!.Name : counted[0].ToString();
+                    var sum = rollupCall.Identifier.ValueText == "Sums";
+
+                    string? field = null;
+                    string? into = null;
+                    ITypeSymbol? fieldType = null;
+
+                    foreach (var argument in call.ArgumentList.Arguments)
+                    {
+                        if (DirectMember(argument.Expression) is { } member)
+                        {
+                            field = member;
+                            fieldType = known ? PublicInstanceProperties(child!).FirstOrDefault(property => property.Name == member)?.Type : null;
+                        }
+                        else if (context.SemanticModel.GetConstantValue(argument.Expression, cancellationToken) is { HasValue: true, Value: string text })
+                        {
+                            into = text;
+                        }
+                    }
+
+                    var numeric = fieldType?.SpecialType is SpecialType.System_Decimal or SpecialType.System_Int32 or SpecialType.System_Int64 or SpecialType.System_Double;
+                    into ??= sum ? childName + field + "Sum" : childName + "Count";
+
+                    if ((sum && !numeric) || !SyntaxFacts.IsValidIdentifier(into) || rollups.Any(existing => existing.Into == into))
+                    {
+                        diagnostics.Add(new DiagnosticInfo(
+                            "HALDUS010",
+                            LocationInfo.From(callName.GetLocation()),
+                            new EquatableArray<string>(
+                            [
+                                sum && !numeric
+                                    ? $"Sums<{childName}>() needs a non-nullable decimal, int, long or double property of '{childName}', written as 'item => item.Amount'"
+                                    : $"'{into}' cannot name the field of {rollupCall.Identifier.ValueText}<{childName}>(): it must be a valid, unused identifier",
+                            ])));
+                        break;
+                    }
+
+                    rollups.Add(new RollupModel(
+                        childName,
+                        known ? child!.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) : null,
+                        sum ? field : null,
+                        into,
+                        LocationInfo.From(counted[0].GetLocation())));
+
+                    // Alan yalnızca yanıtta görünür; değeri bağlı kayıtlar kaydedildikçe hesaplanır.
+                    lifecycle.Members.Add(new TraitMember(
+                        into,
+                        sum ? fieldType!.ToDisplayString(TypeFormat) : "int",
+                        InResponse: true,
+                        new SearchField(into, SearchKind.Range, sum ? fieldType!.ToDisplayString(TypeFormat) : "int", IsNullable: false)));
+                    break;
+                }
                 case GenericNameSyntax { Identifier.ValueText: "Exports" or "Imports", TypeArgumentList.Arguments: { Count: 1 } moved } transferCall:
                 {
                     var target = context.SemanticModel.GetTypeInfo(moved[0], cancellationToken).Type as INamedTypeSymbol;
@@ -547,6 +611,8 @@ internal static class MapCallParser
             Approval = lifecycle.Approval,
             File = file,
             Transfer = archetype == Archetype.Job ? transfer : null,
+            RetentionTicks = lifecycle.RetentionTicks,
+            Rollups = rollups.ToEquatableArray(),
             ReversibleIn = lifecycle.ReversibleIn,
             SupersedableIn = lifecycle.SupersedableIn,
             Batch = lifecycle.Batch,
@@ -769,6 +835,12 @@ internal static class MapCallParser
             yield return "ChangeFeed cannot be combined with Under<T>(shallow: true): the feed could not tell whose deleted records it is listing";
         }
 
+        if ((traits & Traits.ReadTracking) != 0 && (traits & Traits.Owned) == 0)
+        {
+            // Okundu bilgisi kaydın kendisinde durur; kayıt tek bir kullanıcıya ait olmalıdır.
+            yield return "ReadTracking needs OwnedByCurrentUser: whether a record has been read is kept on the record, so it must belong to one user";
+        }
+
         if (chain.Any(call => call.Name == "CustomFields") && chain.Any(call => call.Name == "Under"))
         {
             // Tanımlar kaynağın kendi adresinde yönetilir ve bütün kayıtları için geçerlidir; ebeveyn başına değil.
@@ -782,6 +854,7 @@ internal static class MapCallParser
             foreach (var other in new[]
             {
                 "Workflow", "Document", "Numbered", "Expiring", "SecretOnce", "TokenAccess", "Reversible", "Supersedes", "Approvable", "EffectiveDated",
+                "Retention", "ReadTracking", "Counts", "Sums",
             })
             {
                 if (chain.Any(call => call.Name == other))
@@ -960,6 +1033,9 @@ internal static class MapCallParser
 
                 // Belge, taslağı düzenlenen ve düzeltmesi yeni bir kayıt olan bir koleksiyondur.
                 "Document" => crudLike,
+
+                // Saklama süresi, okundu takibi ve toplanan alanlar, anahtarıyla adreslenen koleksiyonlar içindir.
+                "Retention" or "ReadTracking" or "Counts" or "Sums" => crudLike || archetype is Archetype.AppendOnly or Archetype.ReadOnly,
 
                 // Özel alanlar, istemcinin yazıp değiştirdiği kayıtlar içindir.
                 "CustomFields" => crudLike,

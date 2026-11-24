@@ -80,6 +80,26 @@ public sealed class ResourceBuilder<TEntity>(RouteGroupBuilder group, IEndpointR
     public ResourceBuilder<TEntity> NaturalKey(Expression<Func<TEntity, object?>> field) => this;
 
     /// <summary>
+    /// Kayda, kendisine bağlı <typeparamref name="TChild"/> kayıtlarının sayısını tutan bir alan ekler
+    /// (<c>CommentCount</c>). Alan yalnızca yanıtta görünür; bağlı bir kayıt eklendiğinde, silindiğinde veya başka
+    /// bir kayda taşındığında baştan hesaplanır. <typeparamref name="TChild"/> bu kaynağa <c>Under</c>,
+    /// <c>References</c> veya <c>AttachedTo</c> ile bağlı olmalıdır.
+    /// </summary>
+    /// <param name="into">Alanın adı; verilmezse alt kaynağın adından türetilir.</param>
+    public ResourceBuilder<TEntity> Counts<TChild>(string? into = null)
+        where TChild : class => this;
+
+    /// <summary>
+    /// Kayda, kendisine bağlı <typeparamref name="TChild"/> kayıtlarının bir alanının toplamını tutan bir alan ekler
+    /// (<c>PaidAmount</c>). Entity <see cref="IComputed"/> uyguluyorsa toplam değiştikçe <c>Compute()</c> yeniden
+    /// çağrılır; böylece toplamdan türeyen bir durum (ödendi / kısmen ödendi) güncel kalır.
+    /// </summary>
+    /// <param name="field">Toplanan sayısal alan.</param>
+    /// <param name="into">Alanın adı; verilmezse alt kaynağın ve alanın adından türetilir.</param>
+    public ResourceBuilder<TEntity> Sums<TChild>(Expression<Func<TChild, object?>> field, string? into = null)
+        where TChild : class => this;
+
+    /// <summary>
     /// İşi (<c>MapJob</c>) bir dışa aktarma yapar: iş, <typeparamref name="TResource"/> kaynağının işi başlatana
     /// görünen bütün kayıtlarını bir dosyaya döker (<c>format</c>: <c>csv</c> veya <c>json</c>). Dosya, iş bitince
     /// <c>GET /{id}/content</c> ile indirilir. Mantığı Haldus üretir; handler yazılmaz.

@@ -27,6 +27,25 @@ public static class HaldusMaintenanceRegistry
 
     internal static IEnumerable<KeyValuePair<Type, Func<IServiceProvider, DateTimeOffset, CancellationToken, Task<int>>>> ExpiringResources =>
         Expiring;
+
+    private static readonly ConcurrentDictionary<Type, (TimeSpan Period, Func<IServiceProvider, DateTimeOffset, CancellationToken, Task<int>> Purge)> Retained = new();
+
+    /// <summary>
+    /// <c>.Retention(...)</c> taşıyan bir kaynağı kaydeder: oluşturulalı verilen süreden uzun olmuş kayıtları bakım
+    /// sırasında silinir. Süreyi geliştirici açıkça bildirdiği için, süresi dolan kayıtların aksine ayrıca açılmaz.
+    /// </summary>
+    public static void RegisterRetention<TEntity>(TimeSpan period)
+        where TEntity : class, IAuditable =>
+        Retained[typeof(TEntity)] = (period, static (services, cutoff, cancellationToken) =>
+            services.GetRequiredService<IHaldusDbContextProvider>().For<TEntity>().Set<TEntity>()
+
+                // Bakım bir isteğe ait değildir: kiracı filtresi bilerek kaldırılır, yoksa hiçbir kayıt görünmezdi.
+                .IgnoreQueryFilters()
+                .Where(entity => entity.CreatedAt <= cutoff)
+                .ExecuteDeleteAsync(cancellationToken));
+
+    internal static IEnumerable<KeyValuePair<Type, (TimeSpan Period, Func<IServiceProvider, DateTimeOffset, CancellationToken, Task<int>> Purge)>> RetainedResources =>
+        Retained;
 }
 
 /// <summary>
@@ -67,13 +86,33 @@ public static class HaldusMaintenance
             logger.LogWarning(exception, "Expired idempotency records could not be removed.");
         }
 
+        var contexts = provider.GetRequiredService<IOptions<HaldusContextOptions>>().Value;
+
+        foreach (var resource in HaldusMaintenanceRegistry.RetainedResources)
+        {
+            // Kayıt süreç genelindedir; bu uygulamanın parçası olmayan bir modülün kaynağı atlanır.
+            if (contexts.ContextOf(resource.Key.Assembly) is null)
+            {
+                continue;
+            }
+
+            try
+            {
+                var removed = await resource.Value.Purge(provider, now - resource.Value.Period, cancellationToken);
+                logger.LogDebug("Removed {Count} '{Resource}' records past their retention period.", removed, resource.Key.Name);
+            }
+            catch (DbException exception)
+            {
+                // Başka kayıtlar hâlâ referans veriyor olabilir; o kayıtlar bir sonraki turda yeniden denenir.
+                logger.LogWarning(exception, "'{Resource}' records past their retention period could not be removed.", resource.Key.Name);
+            }
+        }
+
         // Süresi dolan kayıtlar kullanıcının verisidir; ancak açıkça istenirse silinir.
         if (options.PurgeExpiredAfter is not { } retention)
         {
             return;
         }
-
-        var contexts = provider.GetRequiredService<IOptions<HaldusContextOptions>>().Value;
 
         foreach (var resource in HaldusMaintenanceRegistry.ExpiringResources)
         {
