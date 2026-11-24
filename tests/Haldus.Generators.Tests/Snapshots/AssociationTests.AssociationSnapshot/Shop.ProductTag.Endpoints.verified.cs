@@ -34,6 +34,18 @@ public static partial class ProductTagEndpoints
         group.MapGet("/tags/{tagId:int}/products", ListProductsAsync)
             .WithName("ListTagProducts");
 
+        group.MapPut("/products/{productId:guid}/tags", ReplaceTagsAsync)
+            .WithName("ReplaceProductTags")
+            .AddEndpointFilter<global::Haldus.HaldusValidationFilter<global::Haldus.BatchIdsRequest<int>>>()
+            .ProducesValidationProblem()
+            .ProducesProblem(404);
+
+        group.MapPut("/tags/{tagId:int}/products", ReplaceProductsAsync)
+            .WithName("ReplaceTagProducts")
+            .AddEndpointFilter<global::Haldus.HaldusValidationFilter<global::Haldus.BatchIdsRequest<global::System.Guid>>>()
+            .ProducesValidationProblem()
+            .ProducesProblem(404);
+
         return group;
     }
 
@@ -162,6 +174,96 @@ public static partial class ProductTagEndpoints
             return global::Haldus.HaldusProblems.NotFound(messages, "ProductTag", $"{productId}/{tagId}");
         }
 
+        return global::Microsoft.AspNetCore.Http.TypedResults.NoContent();
+    }
+
+    private static async global::System.Threading.Tasks.Task<global::Microsoft.AspNetCore.Http.HttpResults.Results<global::Microsoft.AspNetCore.Http.HttpResults.NoContent, global::Microsoft.AspNetCore.Http.HttpResults.ProblemHttpResult>> ReplaceTagsAsync(
+        global::System.Guid productId,
+        global::Haldus.BatchIdsRequest<int> request,
+        global::Haldus.IHaldusDbContextProvider contexts,
+        global::Haldus.IHaldusMessages messages,
+        global::System.Threading.CancellationToken cancellationToken)
+    {
+        var ids = request.Ids.Distinct().ToList();
+
+        if (ids.Count > 1000)
+        {
+            return global::Haldus.HaldusProblems.BatchTooLarge(messages, 1000);
+        }
+
+        if (!await contexts.For<global::Shop.Product>().Set<global::Shop.Product>()
+            .AnyAsync(item => item.Id == productId, cancellationToken))
+        {
+            return global::Haldus.HaldusProblems.NotFound(messages, "Product", productId);
+        }
+
+        // Listedeki her kayıt isteği yapana görünür olmalıdır; biri bile bulunamazsa hiçbir şey değişmez.
+        var visible = await contexts.For<global::Shop.Tag>().Set<global::Shop.Tag>()
+            .Where(item => ids.Contains(item.Id))
+            .Select(item => item.Id)
+            .ToListAsync(cancellationToken);
+
+        if (ids.Except(visible).Take(1).ToList() is [var missing])
+        {
+            return global::Haldus.HaldusProblems.ReferenceNotFound(messages, "ids", "Tag", missing!);
+        }
+
+        var context = contexts.For<ProductTag>();
+        var current = await context.Set<ProductTag>().Where(link => link.ProductId == productId).ToListAsync(cancellationToken);
+
+        context.Set<ProductTag>().RemoveRange(current.Where(link => !ids.Contains(link.TagId)));
+
+        foreach (var id in ids.Except(current.Select(link => link.TagId)))
+        {
+            context.Set<ProductTag>().Add(new ProductTag { ProductId = productId, TagId = id });
+        }
+
+        await context.SaveChangesAsync(cancellationToken);
+        return global::Microsoft.AspNetCore.Http.TypedResults.NoContent();
+    }
+
+    private static async global::System.Threading.Tasks.Task<global::Microsoft.AspNetCore.Http.HttpResults.Results<global::Microsoft.AspNetCore.Http.HttpResults.NoContent, global::Microsoft.AspNetCore.Http.HttpResults.ProblemHttpResult>> ReplaceProductsAsync(
+        int tagId,
+        global::Haldus.BatchIdsRequest<global::System.Guid> request,
+        global::Haldus.IHaldusDbContextProvider contexts,
+        global::Haldus.IHaldusMessages messages,
+        global::System.Threading.CancellationToken cancellationToken)
+    {
+        var ids = request.Ids.Distinct().ToList();
+
+        if (ids.Count > 1000)
+        {
+            return global::Haldus.HaldusProblems.BatchTooLarge(messages, 1000);
+        }
+
+        if (!await contexts.For<global::Shop.Tag>().Set<global::Shop.Tag>()
+            .AnyAsync(item => item.Id == tagId, cancellationToken))
+        {
+            return global::Haldus.HaldusProblems.NotFound(messages, "Tag", tagId);
+        }
+
+        // Listedeki her kayıt isteği yapana görünür olmalıdır; biri bile bulunamazsa hiçbir şey değişmez.
+        var visible = await contexts.For<global::Shop.Product>().Set<global::Shop.Product>()
+            .Where(item => ids.Contains(item.Id))
+            .Select(item => item.Id)
+            .ToListAsync(cancellationToken);
+
+        if (ids.Except(visible).Take(1).ToList() is [var missing])
+        {
+            return global::Haldus.HaldusProblems.ReferenceNotFound(messages, "ids", "Product", missing!);
+        }
+
+        var context = contexts.For<ProductTag>();
+        var current = await context.Set<ProductTag>().Where(link => link.TagId == tagId).ToListAsync(cancellationToken);
+
+        context.Set<ProductTag>().RemoveRange(current.Where(link => !ids.Contains(link.ProductId)));
+
+        foreach (var id in ids.Except(current.Select(link => link.ProductId)))
+        {
+            context.Set<ProductTag>().Add(new ProductTag { TagId = tagId, ProductId = id });
+        }
+
+        await context.SaveChangesAsync(cancellationToken);
         return global::Microsoft.AspNetCore.Http.TypedResults.NoContent();
     }
 }

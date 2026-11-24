@@ -25,6 +25,7 @@ internal static class ChainReader
         "Hierarchical",
         "Embeds",
         "AsSubresource",
+        "AsCommands",
         "Workflow",
         "EditableIn",
         "DeletableIn",

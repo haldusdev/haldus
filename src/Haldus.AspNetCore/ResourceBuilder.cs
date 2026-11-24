@@ -93,7 +93,13 @@ public sealed class ResourceBuilder<TEntity>(RouteGroupBuilder group) : IEndpoin
     /// Kaynağı bir ebeveynin adresi altına yerleştirir (<c>/projects/{projectId}/tasks</c>). Kaynak yine
     /// kendi kimliğine ve kurallarına sahiptir; ebeveyn istek gövdesinden değil adresten gelir.
     /// </summary>
-    public ResourceBuilder<TEntity> Under<TParent>(OnDelete onDelete = OnDelete.Cascade)
+    /// <param name="onDelete">Ebeveyn silindiğinde bu kayda ne olacağı.</param>
+    /// <param name="shallow">
+    /// Kaynak kendi adresinde kalsın mı (<c>/tasks/{id}</c>). Ebeveyn yine zorunludur ve kaydın görünürlüğünü
+    /// belirler, ama adresten değil oluşturma isteğinin gövdesinden gelir ve sonradan değişmez; liste, ebeveynler
+    /// arasında döner ve <c>?projectId=</c> ile süzülür.
+    /// </param>
+    public ResourceBuilder<TEntity> Under<TParent>(OnDelete onDelete = OnDelete.Cascade, bool shallow = false)
         where TParent : class => this;
 
     /// <summary>

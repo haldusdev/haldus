@@ -82,8 +82,65 @@ internal static class OperationParser
         var (leftName, leftType) = Describe(name.TypeArgumentList.Arguments[0], context.SemanticModel, cancellationToken);
         var (rightName, rightType) = Describe(name.TypeArgumentList.Arguments[1], context.SemanticModel, cancellationToken);
 
+        // Kullanıcı bağ sınıfını (sol ucun yanında, {Sol}{Sağ} adıyla) kendisi de yazdıysa alanları bağın yüküdür.
+        var payload = new List<PropertyModel>();
+        var problems = new List<string>();
+        var linkDeclared = false;
+        var statusDeclared = false;
+        WorkflowModel? workflow = null;
+
+        foreach (var node in ChainReader.Nodes(invocation))
+        {
+            if (node.Name.Identifier.ValueText == "Workflow")
+            {
+                workflow = LifecycleReader.ReadWorkflow(
+                    context.SemanticModel,
+                    node.Name,
+                    node.Invocation.ArgumentList.Arguments,
+                    leftName + rightName,
+                    (_, message) => problems.Add(message),
+                    cancellationToken);
+                break;
+            }
+        }
+
+        if (context.SemanticModel.GetTypeInfo(name.TypeArgumentList.Arguments[0], cancellationToken).Type
+                is INamedTypeSymbol { TypeKind: not TypeKind.Error } leftSymbol
+            && rightType is not null)
+        {
+            var linkNamespace = leftSymbol.ContainingNamespace is { IsGlobalNamespace: false } home ? home.ToDisplayString() + "." : string.Empty;
+
+            if (context.SemanticModel.Compilation.GetTypeByMetadataName(linkNamespace + leftName + rightName) is { TypeKind: TypeKind.Class } link)
+            {
+                linkDeclared = true;
+
+                foreach (var property in MapCallParser.PublicInstanceProperties(link))
+                {
+                    // Durum alanı yük değildir: istekle yazılamaz, yalnızca geçişlerle değişir.
+                    if (workflow is not null && property.Name == "Status")
+                    {
+                        statusDeclared = true;
+
+                        if (property.Type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) != workflow.StatusType)
+                        {
+                            problems.Add($"The Status property of '{leftName}{rightName}' must have the status type declared with Workflow<TStatus>()");
+                        }
+                    }
+                    else if (MapCallParser.TryClassify(property.Type, out var kind, out var valueType))
+                    {
+                        payload.Add(MapCallParser.ToModel(property, kind, valueType));
+                    }
+                }
+            }
+        }
+
         return new AssociationDeclaration(leftName, leftType, rightName, rightType, LocationInfo.From(name.GetLocation()))
         {
+            Payload = payload.ToEquatableArray(),
+            LinkDeclared = linkDeclared,
+            Workflow = workflow,
+            StatusDeclared = statusDeclared,
+            Problems = problems.ToEquatableArray(),
             ForCurrentUser = ChainReader.Nodes(invocation).Any(node => node.Name.Identifier.ValueText == "ForCurrentUser"),
             CallNamespace = context.SemanticModel.GetEnclosingSymbol(invocation.SpanStart, cancellationToken)
                 ?.ContainingNamespace is { IsGlobalNamespace: false } callSiteNamespace

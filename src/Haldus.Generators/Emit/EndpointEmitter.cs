@@ -311,6 +311,11 @@ internal sealed partial class EndpointEmitter
             EmitCycleHelper();
             EmitSyncHelpers();
         }
+
+        foreach (var detail in _resource.Details.Where(detail => detail.IsCommandWritten))
+        {
+            EmitDetailCommands(detail);
+        }
     }
 
     /// <summary>Numara deseni ve ömür gibi, uçların paylaştığı sabitler.</summary>
@@ -358,6 +363,14 @@ internal sealed partial class EndpointEmitter
         var treeParameters = self is null
             ? string.Empty
             : $"        {self.TargetKeyType}? {ResourceEmitter.CamelCase(self.PropertyName)},\n        bool? roots,\n";
+
+        // Adrese girmeyen ebeveyn: liste ebeveynler arasında döner ve ebeveyne göre süzülebilir.
+        var shallow = _resource.ShallowParent;
+        var shallowParameter = shallow is null ? string.Empty : ResourceEmitter.CamelCase(shallow.PropertyName);
+        if (shallow is not null)
+        {
+            treeParameters += $"        {shallow.TargetKeyType}? {shallowParameter},\n";
+        }
 
         // Durum makinesi olan kaynak duruma göre süzülebilir; kullanıcının filtresi aynı adı taşıyorsa o geçerlidir.
         var status = _resource.Filter?.Properties.Any(property => property.Name == "Status") != true
@@ -415,6 +428,18 @@ internal sealed partial class EndpointEmitter
                         else if (roots == true)
                         {
                             query = query.Where(item => item.{{self.PropertyName}} == null);
+                        }
+
+                """);
+        }
+
+        if (shallow is not null)
+        {
+            _handlers.Append($$"""
+
+                        if ({{shallowParameter}} is { } underValue)
+                        {
+                            query = query.Where(item => item.{{shallow.PropertyName}} == underValue);
                         }
 
                 """);
@@ -548,14 +573,19 @@ internal sealed partial class EndpointEmitter
 
             """);
 
+        // Değer ebeveyn içinde benzersizdir; ebeveyn adreste değilse hangisinin kastedildiği sorguda söylenir.
+        var under = _resource.ShallowParent;
+        var underParameter = under is null ? string.Empty : $"        {under.TargetKeyType} {ResourceEmitter.CamelCase(under.PropertyName)},\n";
+        var underCondition = under is null ? string.Empty : $" && item.{under.PropertyName} == {ResourceEmitter.CamelCase(under.PropertyName)}";
+
         _handlers.Append($$"""
 
                 private static async {{OkOrProblem}} GetBy{{key.PropertyName}}Async(
             {{ScopeParameter}}        {{key.Type}} {{parameter}},
-            {{(_concurrency ? HttpContextParameter : string.Empty)}}{{ContextsParameter}}{{MessagesParameter}}{{CancellationParameter}}    {
+            {{underParameter}}{{(_concurrency ? HttpContextParameter : string.Empty)}}{{ContextsParameter}}{{MessagesParameter}}{{CancellationParameter}}    {
                     var entity = await contexts.For<{{_entity}}>().Set<{{_entity}}>()
                         .AsNoTracking(){{Includes}}
-                        .FirstOrDefaultAsync(item => item.{{key.PropertyName}} == {{parameter}}{{ScopeCondition("item")}}, cancellationToken);
+                        .FirstOrDefaultAsync(item => item.{{key.PropertyName}} == {{parameter}}{{ScopeCondition("item")}}{{underCondition}}, cancellationToken);
 
                     if (entity is null)
                     {
@@ -1135,7 +1165,9 @@ internal sealed partial class EndpointEmitter
 
                 """);
 
-            _handlers.Append($$"""
+            // Ebeveyn altındaki tek kayıt ebeveyn başına birdir; ebeveyn görünmüyorsa kayıt da yoktur.
+            _handlers.Append(Parent is null
+                ? $$"""
 
                     private static async {{Task}}<{{Results}}.Ok<{{_entity}}Response>> GetAsync(
                 {{ContextsParameter}}{{CancellationParameter}}    {
@@ -1144,6 +1176,19 @@ internal sealed partial class EndpointEmitter
                             .FirstOrDefaultAsync(cancellationToken);
 
                         return {{Http}}.TypedResults.Ok(ToResponse(entity ?? new {{_entity}}()));
+                    }
+
+                """
+                : $$"""
+
+                    private static async {{OkOrProblem}} GetAsync(
+                {{ScopeParameter}}{{ContextsParameter}}{{MessagesParameter}}{{CancellationParameter}}    {
+                {{ParentCheck()}}        var entity = await contexts.For<{{_entity}}>().Set<{{_entity}}>()
+                            .AsNoTracking()
+                            .FirstOrDefaultAsync(item => item.{{Parent.PropertyName}} == {{ParentParameter}}, cancellationToken);
+
+                        // Hiç yazılmadıysa varsayılan değerler döner.
+                        return {{Http}}.TypedResults.Ok(ToResponse(entity ?? new {{_entity}} { {{Parent.PropertyName}} = {{ParentParameter}} }));
                     }
 
                 """);
@@ -1164,27 +1209,33 @@ internal sealed partial class EndpointEmitter
     {
         var key = _tenant
             ? "entity.TenantId = tenants.TenantId.GetValueOrDefault();"
-            : "context.Entry(entity).Property(global::Haldus.HaldusModel.SingletonKey).CurrentValue = 1;";
+            : Parent is not null
+                ? $"entity.{Parent.PropertyName} = {ParentParameter};"
+                : "context.Entry(entity).Property(global::Haldus.HaldusModel.SingletonKey).CurrentValue = 1;";
+
+        var scoped = Parent is not null;
+        var returnType = scoped ? OkOrProblem : $"{Task}<{Results}.Ok<{_entity}Response>>";
+        var match = scoped ? $"item => item.{Parent!.PropertyName} == {ParentParameter}, " : string.Empty;
 
         _map.Append($$"""
                     group.{{mapMethod}}("/", {{operation}}Async)
                         .WithName("{{operation}}{{_entity}}")
                         .AddEndpointFilter<global::Haldus.HaldusValidationFilter<{{operation}}{{_entity}}Request>>()
-                        .ProducesValidationProblem();
+                        .ProducesValidationProblem(){{(scoped ? "\n            .ProducesProblem(404)" : string.Empty)}};
 
 
             """);
 
         _handlers.Append($$"""
 
-                private static async {{Task}}<{{Results}}.Ok<{{_entity}}Response>> {{operation}}Async(
-                    {{operation}}{{_entity}}Request request,
-            {{(_tenant ? TenantsParameter : string.Empty)}}{{ContextsParameter}}{{CancellationParameter}}    {
-                    var context = contexts.For<{{_entity}}>();
+                private static async {{returnType}} {{operation}}Async(
+            {{ScopeParameter}}        {{operation}}{{_entity}}Request request,
+            {{(_tenant ? TenantsParameter : string.Empty)}}{{ContextsParameter}}{{(scoped ? MessagesParameter : string.Empty)}}{{CancellationParameter}}    {
+            {{ParentCheck()}}        var context = contexts.For<{{_entity}}>();
 
                     for (var attempt = 0; ; attempt++)
                     {
-                        var entity = await context.Set<{{_entity}}>().FirstOrDefaultAsync(cancellationToken);
+                        var entity = await context.Set<{{_entity}}>().FirstOrDefaultAsync({{match}}cancellationToken);
                         var isNew = entity is null;
                         entity ??= new {{_entity}}();
 
@@ -1714,7 +1765,7 @@ internal sealed partial class EndpointEmitter
     {
         var builder = new StringBuilder();
 
-        foreach (var detail in _resource.Details)
+        foreach (var detail in _resource.Details.Where(detail => !detail.IsCommandWritten))
         {
             var collection = detail.CollectionName;
             var problem = ResourceEmitter.CamelCase(collection) + "Problem";
@@ -1739,7 +1790,7 @@ internal sealed partial class EndpointEmitter
     /// <summary>Her gömülü detay için bir eşitleme metodu üretir.</summary>
     private void EmitSyncHelpers()
     {
-        foreach (var detail in _resource.Details)
+        foreach (var detail in _resource.Details.Where(detail => !detail.IsCommandWritten))
         {
             var collection = detail.CollectionName;
             var writable = detail.Properties.Where(property => property.IsWritable).ToArray();
@@ -1804,6 +1855,99 @@ internal sealed partial class EndpointEmitter
 
                 """);
         }
+    }
+
+    /// <summary>
+    /// Satırları tek tek yazan komutlar: ekle, değiştir, kaldır. Her biri üst kaydın bir yazmasıdır; güncelleme
+    /// ucunun korumalarından (sürüm, durum, kapanmış kayıt) geçer, hesaplanan alanları yeniler ve üst kaydı,
+    /// satırlarıyla birlikte döndürür.
+    /// </summary>
+    private void EmitDetailCommands(ResourceModel detail)
+    {
+        var collection = detail.CollectionName;
+        var route = Naming.ToKebabCase(collection);
+        var name = detail.EntityName;
+        var prefix = detail.Namespace.Prefix();
+        var writable = detail.Properties.Where(property => property.IsWritable).ToArray();
+        var rowRoute = $"{_keyRoute}/{route}/{{rowId:guid}}";
+        var metadata = $"\n            .ProducesProblem(404){StateMetadata(_resource.Workflow?.EditableIn)}{ConcurrencyMetadata()}";
+
+        _map.Append($$"""
+                    group.MapPost("{{_keyRoute}}/{{route}}", Add{{name}}Async)
+                        .WithName("Add{{_entity}}{{name}}")
+                        .AddEndpointFilter<global::Haldus.HaldusValidationFilter<{{prefix}}Create{{name}}Request>>()
+                        .ProducesValidationProblem(){{metadata}};
+
+                    group.MapPut("{{rowRoute}}", Change{{name}}Async)
+                        .WithName("Change{{_entity}}{{name}}")
+                        .AddEndpointFilter<global::Haldus.HaldusValidationFilter<{{prefix}}Create{{name}}Request>>()
+                        .ProducesValidationProblem(){{metadata}};
+
+                    group.MapDelete("{{rowRoute}}", Remove{{name}}Async)
+                        .WithName("Remove{{_entity}}{{name}}"){{metadata}};
+
+
+            """);
+
+        // Üç komut aynı iskeleti paylaşır: üst kaydı satırlarıyla yükle, korumalardan geç, satırı değiştir, kaydet.
+        string Command(string method, string parameters, string change) => $$"""
+
+                private static async {{OkOrProblem}} {{method}}{{name}}Async(
+            {{ScopeParameter}}{{KeyParameter}}{{parameters}}{{(_concurrency ? HttpContextParameter : string.Empty)}}{{(Sliding ? TimeProviderParameter : string.Empty)}}{{ContextsParameter}}{{MessagesParameter}}{{CancellationParameter}}    {
+            {{ReadIfMatch()}}{{OwnerGuard("update")}}        var context = contexts.For<{{_entity}}>();
+                    var entity = await context.Set<{{_entity}}>(){{Includes}}.FirstOrDefaultAsync(item => {{Match}}, cancellationToken);
+
+                    if (entity is null)
+                    {
+                        return {{NotFound}};
+                    }
+
+            {{ChainGuard()}}{{StateGuard(_resource.Workflow?.EditableIn, "update")}}{{ExpectVersion()}}{{change}}
+                    // Satır değişikliği üst kaydın değişikliğidir: sürümü ilerler ve hesaplanan alanları yenilenir.
+                    context.Entry(entity).State = global::Microsoft.EntityFrameworkCore.EntityState.Modified;
+            {{Slide()}}{{Compute()}}{{Save()}}
+            {{WriteETag()}}        return {{Http}}.TypedResults.Ok(ToResponse(entity));
+                }
+
+            """;
+
+        var find = $$"""
+                    var row = entity.{{collection}}.FirstOrDefault(candidate => candidate.{{detail.KeyName}} == rowId);
+
+                    if (row is null)
+                    {
+                        return {{Problems}}.NotFound(messages, "{{name}}", rowId);
+                    }
+
+
+            """;
+
+        var creation = string.Join(
+            ", ",
+            new[] { $"{detail.KeyName} = global::System.Guid.CreateVersion7()", $"{detail.Parent!.PropertyName} = entity.{_key}", "Position = position" }
+                .Concat(writable.Select(property => $"{property.Name} = request.{property.Name}")));
+
+        _handlers.Append(Command(
+            "Add",
+            $"        {prefix}Create{name}Request request,\n",
+            $$"""
+                    // Yeni satır sona eklenir.
+                    var position = entity.{{collection}}.Count == 0 ? 0 : entity.{{collection}}.Max(candidate => candidate.Position) + 1;
+                    var added = new {{detail.QualifiedName}} { {{creation}} };
+                    entity.{{collection}}.Add(added);
+                    context.Add(added);
+
+            """));
+
+        _handlers.Append(Command(
+            "Change",
+            $"        global::System.Guid rowId,\n        {prefix}Create{name}Request request,\n",
+            find + string.Concat(writable.Select(property => $"        row.{property.Name} = request.{property.Name};\n"))));
+
+        _handlers.Append(Command(
+            "Remove",
+            "        global::System.Guid rowId,\n",
+            find + $"        entity.{collection}.Remove(row);\n        context.Remove(row);\n"));
     }
 
     /// <summary>Kaynak bir ebeveynin altındaysa, oluşturmadan önce ebeveynin var (ve görünür) olduğu doğrulanır.</summary>
@@ -2071,9 +2215,13 @@ internal sealed partial class EndpointEmitter
 
         var ignore = hidden.Count == 0 ? string.Empty : $".IgnoreQueryFilters(new[] {{ {string.Join(", ", hidden)} }})";
 
+        // Adrese girmeyen ebeveyn yalnızca oluşturma isteğinde gelir; var olan kayıtta kaydın kendisinden okunur.
+        var owner = self.Length == 0 && value.StartsWith("request.", StringComparison.Ordinal) ? "request" : "entity";
+        var under = _resource.ShallowParent is { } shallow ? $" && item.{shallow.PropertyName} == {owner}.{shallow.PropertyName}" : string.Empty;
+
         return $$"""
                     if ({{condition}}await contexts.For<{{_entity}}>().Set<{{_entity}}>(){{ignore}}
-                        .AnyAsync(item => item.{{key.PropertyName}} == {{value}}{{self}}{{ScopeCondition("item")}}, cancellationToken))
+                        .AnyAsync(item => item.{{key.PropertyName}} == {{value}}{{self}}{{ScopeCondition("item")}}{{under}}, cancellationToken))
                     {
                         return {{Problems}}.Duplicate(messages, "{{_entity}}", "{{ResourceEmitter.CamelCase(key.PropertyName)}}", {{value}});
                     }
@@ -2095,6 +2243,7 @@ internal sealed partial class EndpointEmitter
     /// <param name="under">Ağaçta üst düğümü veren ifade.</param>
     private string Siblings(string under) =>
         $"context.Set<{_entity}>(){ScopeFilter}"
+        + (_resource.ShallowParent is { } shallow ? $".Where(item => item.{shallow.PropertyName} == entity.{shallow.PropertyName})" : string.Empty)
         + (_resource.SelfReference is { } self ? $".Where(item => item.{self.PropertyName} == {under})" : string.Empty);
 
     private string SiblingsOf(string record) =>

@@ -336,6 +336,7 @@ internal static class ResourceLinker
         "clone" when resource.Has(Traits.Cloneable) => nameof(Traits.Cloneable),
         "reverse" when resource.Has(Traits.Reversible) => nameof(Traits.Reversible),
         "rotate" when resource.Secret is { Rotatable: true } => "Rotatable",
+        _ when resource.Details.Any(detail => detail.IsCommandWritten && Naming.ToKebabCase(detail.CollectionName) == route) => "MapDetail",
         "supersede" when resource.Has(Traits.Supersedes) => nameof(Traits.Supersedes),
         "move" when resource.Has(Traits.Orderable) => nameof(Traits.Orderable),
         "preview" when resource.Has(Traits.Previewable) => nameof(Traits.Previewable),
@@ -347,6 +348,7 @@ internal static class ResourceLinker
     public static List<AssociationModel> LinkAssociations(
         IEnumerable<AssociationDeclaration> declarations,
         IReadOnlyList<ResourceModel> resources,
+        IReadOnlyList<TransitionDeclaration> transitions,
         Action<DiagnosticInfo> report)
     {
         var byType = resources.ToDictionary(resource => resource.QualifiedName);
@@ -356,6 +358,16 @@ internal static class ResourceLinker
         {
             void Fail(string id, params string[] arguments) =>
                 report(new DiagnosticInfo(id, declaration.Location, arguments.ToEquatableArray()));
+
+            if (declaration.Problems.Length > 0)
+            {
+                foreach (var problem in declaration.Problems)
+                {
+                    Fail("HALDUS010", problem);
+                }
+
+                continue;
+            }
 
             var left = Find(declaration.LeftName, declaration.LeftType, resources, byType);
             var right = Find(declaration.RightName, declaration.RightType, resources, byType);
@@ -389,11 +401,79 @@ internal static class ResourceLinker
                     left,
                     right,
                     LeftOnDelete: !leftScoped && rightScoped ? OnDeleteBehavior.Restrict : OnDeleteBehavior.Cascade,
-                    RightOnDelete: !rightScoped && leftScoped ? OnDeleteBehavior.Restrict : OnDeleteBehavior.Cascade));
+                    RightOnDelete: !rightScoped && leftScoped ? OnDeleteBehavior.Restrict : OnDeleteBehavior.Cascade)
+                {
+                    Payload = declaration.Payload,
+                    LinkDeclared = declaration.LinkDeclared,
+                    Workflow = declaration.Workflow,
+                    StatusDeclared = declaration.StatusDeclared,
+                });
             }
         }
 
-        return associations;
+        return AttachLinkTransitions(associations, transitions, report);
+    }
+
+    /// <summary>Bağların builder'ında bildirilen geçişleri bağlarına bağlar ve doğrular.</summary>
+    private static List<AssociationModel> AttachLinkTransitions(
+        List<AssociationModel> associations,
+        IReadOnlyList<TransitionDeclaration> declarations,
+        Action<DiagnosticInfo> report)
+    {
+        var attached = associations.ToDictionary(association => association.LinkName, _ => new List<TransitionModel>());
+
+        foreach (var declaration in declarations.Distinct())
+        {
+            void Fail(string id, string message) =>
+                report(new DiagnosticInfo(id, declaration.Location, new[] { message }.ToEquatableArray()));
+
+            if (associations.FirstOrDefault(candidate => candidate.LinkName == declaration.OwnerName) is not { } association)
+            {
+                Fail("HALDUS007", $"MapTransition is declared on the association '{declaration.OwnerName}', which is not mapped (links of the current user have no state)");
+            }
+            else if (association.Workflow is not { } workflow)
+            {
+                Fail("HALDUS007", $"MapTransition needs a state machine; declare Workflow<TStatus>() on the association '{association.LinkName}'");
+            }
+            else if (!declaration.StatesReadable)
+            {
+                Fail("HALDUS010", "The states of a transition must be written as enum members, for example from: MembershipStatus.Invited, to: MembershipStatus.Active");
+            }
+            else if (declaration.From.Append(declaration.To!).FirstOrDefault(state => state.Type != workflow.StatusType) is { } foreign)
+            {
+                Fail("HALDUS010", $"'{foreign.Name}' is not a state of '{association.LinkName}'; transitions use the status type declared with Workflow<TStatus>()");
+            }
+            else if (!declaration.NameIsConstant || declaration.Name is null)
+            {
+                Fail("HALDUS010", "The name of a transition must be a constant; it becomes part of the generated route");
+            }
+            else if (!IsValidTransitionName(declaration.Name))
+            {
+                Fail("HALDUS010", $"'{declaration.Name}' is not a valid transition name; use lowercase words separated by '-', for example \"mark-paid\"");
+            }
+            else if (attached[association.LinkName].Any(transition => transition.Route == declaration.Name))
+            {
+                Fail("HALDUS007", $"'{association.LinkName}' already has a transition named '{declaration.Name}'");
+            }
+            else
+            {
+                attached[association.LinkName].Add(new TransitionModel(
+                    declaration.Name,
+                    string.Concat(declaration.Name.Split('-').Select(word => char.ToUpperInvariant(word[0]) + word.Substring(1))),
+                    declaration.Name,
+                    RequestType: null,
+                    ImplementsTransition: false,
+                    declaration.From.Select(state => state.Name).Distinct().ToEquatableArray(),
+                    declaration.To!.Name));
+            }
+        }
+
+        return
+        [
+            .. associations.Select(association => attached[association.LinkName] is { Count: > 0 } own
+                ? association with { Transitions = own.ToEquatableArray() }
+                : association),
+        ];
     }
 
     /// <summary>
@@ -534,6 +614,22 @@ internal static class ResourceLinker
     /// Geçerli kullanıcıya bağlı bağları çözer. Sol tip argümanı üretilecek bağ entity'sinin adıdır; sağ uç
     /// eşlenmiş bir kaynak olmalıdır.
     /// </summary>
+    // Geçerli kullanıcıya bağlı bağın durumu yoktur; bildirim sessizce yok sayılmaz.
+    private static bool RejectUserLinkState(AssociationDeclaration declaration, Action<DiagnosticInfo> report)
+    {
+        if (declaration.Workflow is null && declaration.Problems.Length == 0)
+        {
+            return false;
+        }
+
+        report(new DiagnosticInfo("HALDUS007", declaration.Location, new[]
+        {
+            "Workflow cannot be combined with ForCurrentUser(): a link of the current user is only a mark and has no state",
+        }.ToEquatableArray()));
+
+        return true;
+    }
+
     public static List<UserLinkModel> LinkUserLinks(
         IEnumerable<AssociationDeclaration> declarations,
         IReadOnlyList<ResourceModel> resources,
@@ -546,6 +642,11 @@ internal static class ResourceLinker
         {
             void Fail(string id, params string[] arguments) =>
                 report(new DiagnosticInfo(id, declaration.Location, arguments.ToEquatableArray()));
+
+            if (RejectUserLinkState(declaration, report))
+            {
+                continue;
+            }
 
             if (Find(declaration.RightName, declaration.RightType, resources, byType) is not { } right)
             {
@@ -685,8 +786,9 @@ internal static class ResourceLinker
             _ => declared?.IsNonNullable ?? declaration.Required,
         };
 
-        // Kaynağa işaret eden alanı yalnızca üretme ucu doldurur.
-        var settable = declaration.Kind is not (ReferenceKind.Parent or ReferenceKind.Source);
+        // Ebeveyn adresten, kaynak üretme ucundan gelir. Adrese girmeyen ebeveyn ise oluşturma isteğinde verilir.
+        var shallow = declaration is { Kind: ReferenceKind.Parent, Shallow: true };
+        var settable = shallow || declaration.Kind is not (ReferenceKind.Parent or ReferenceKind.Source);
 
         // Ebeveyn silinince altındakiler de silinir; ama kiracıya ait kayıtlar genel bir ebeveynin
         // altındaysa bu, ebeveyni silen kişinin başka kiracıların verisini silmesi demektir. Geliştirici
@@ -713,7 +815,13 @@ internal static class ResourceLinker
 
         if (declared is null)
         {
-            properties.Add(ForeignKey(propertyName, targetKeyType, required, writable: settable));
+            // Adrese girmeyen ebeveyn kayıt oluşturulurken seçilir ve değişmez: kayıt başka bir ebeveynin altına
+            // taşınamaz, tıpkı adresi ebeveyniyle başlayan bir kayıt gibi.
+            properties.Add(ForeignKey(propertyName, targetKeyType, required, writable: settable) with { IsCreateOnly = shallow });
+        }
+        else if (shallow)
+        {
+            properties[properties.IndexOf(declared)] = declared with { IsCreateOnly = true };
         }
         else if (!settable)
         {
@@ -723,7 +831,7 @@ internal static class ResourceLinker
         }
 
         return new ResolvedReference(
-            declaration.Kind,
+            shallow ? ReferenceKind.Reference : declaration.Kind,
             propertyName,
             propertyType,
             required,
@@ -735,7 +843,10 @@ internal static class ResourceLinker
                 ? target.CollectionRoute
                 : external ? Naming.ToKebabCase(Naming.Pluralize(declaration.TargetName)) : string.Empty,
             onDelete,
-            IsExternal: external);
+            IsExternal: external)
+        {
+            IsShallowParent = shallow,
+        };
     }
 
     private static ResourceModel? FindTarget(

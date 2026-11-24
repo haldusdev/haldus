@@ -174,6 +174,12 @@ internal sealed record ResourceModel(
 
     public ResolvedReference? Parent => References.FirstOrDefault(reference => reference.Kind == ReferenceKind.Parent);
 
+    /// <summary>Adrese girmeyen ebeveyn; varsa kaydın görünürlüğünü ve kapsamını o belirler.</summary>
+    public ResolvedReference? ShallowParent => References.FirstOrDefault(reference => reference.IsShallowParent);
+
+    /// <summary>Detayın satırları üst kaydın güncelleme isteğiyle değil, tek tek komutlarla mı yazılıyor (<c>.AsCommands()</c>).</summary>
+    public bool IsCommandWritten { get; init; }
+
     public ResolvedReference? SelfReference => References.FirstOrDefault(reference => reference.Kind == ReferenceKind.Self);
 
     public string QualifiedName => Namespace.Length == 0 ? $"global::{EntityName}" : $"global::{Namespace}.{EntityName}";
@@ -422,6 +428,9 @@ internal sealed record ReferenceDeclaration(
 
     /// <summary><c>.CreatedFrom&lt;T&gt;(on: "...")</c> ile verilen, kaydı kendiliğinden üreten geçişin adı.</summary>
     public string? Trigger { get; init; }
+
+    /// <summary><c>.Under&lt;T&gt;(shallow: true)</c>: ebeveyn zorunludur ama kaynak kendi adresinde kalır.</summary>
+    public bool Shallow { get; init; }
 }
 
 /// <summary><c>.SecretOnce(...)</c> ve <c>.Rotatable(...)</c> ile bildirilen sır.</summary>
@@ -473,7 +482,14 @@ internal sealed record ResolvedReference(
     string TargetKeyType,
     string TargetRoute,
     OnDeleteBehavior OnDelete,
-    bool IsExternal = false);
+    bool IsExternal = false)
+{
+    /// <summary>
+    /// Referans, adrese girmeyen bir ebeveyne mi (<c>.Under&lt;T&gt;(shallow: true)</c>). Öyleyse alan oluşturma
+    /// isteğinde verilir, sonradan değişmez ve kaydın görünürlüğü ile silinmesi ebeveyni izler.
+    /// </summary>
+    public bool IsShallowParent { get; init; }
+}
 
 /// <summary>Zincirsiz bir <c>MapAssociation&lt;TLeft, TRight&gt;()</c> çağrısı; uçları henüz çözülmemiştir.</summary>
 internal sealed record AssociationDeclaration(
@@ -491,6 +507,24 @@ internal sealed record AssociationDeclaration(
 
     /// <summary>Çağrının bulunduğu namespace; yazılmamış bir bağ entity'si buraya üretilir.</summary>
     public string CallNamespace { get; init; } = string.Empty;
+
+    /// <summary>
+    /// Kullanıcının bağ sınıfına (<c>ProductTag</c>) yazdığı skaler alanlar: bağın taşıdığı yük. Sınıf
+    /// yazılmadıysa boştur.
+    /// </summary>
+    public EquatableArray<PropertyModel> Payload { get; init; } = EquatableArray<PropertyModel>.Empty;
+
+    /// <summary>Kullanıcı bağ sınıfını kendisi de yazdı mı; yazdıysa erişim belirleyicisi onunkidir.</summary>
+    public bool LinkDeclared { get; init; }
+
+    /// <summary>Bağın durum makinesi (<c>.Workflow&lt;TStatus&gt;()</c>); yoksa <c>null</c>.</summary>
+    public WorkflowModel? Workflow { get; init; }
+
+    /// <summary>Kullanıcı bağ sınıfına <c>Status</c> alanını kendisi yazdı mı; yazdıysa yeniden üretilmez.</summary>
+    public bool StatusDeclared { get; init; }
+
+    /// <summary>Zincir okunurken bulunan, bildirimi geçersiz kılan sorunlar.</summary>
+    public EquatableArray<string> Problems { get; init; } = EquatableArray<string>.Empty;
 }
 
 /// <summary>Geçerli kullanıcı ile bir kaynak arasındaki bağ (favori, yıldız): kullanıcı başına, kaynak başına bir kayıt.</summary>
@@ -526,6 +560,24 @@ internal sealed record AssociationModel(
     public string LeftKey => Left.EntityName + Left.KeyName;
 
     public string RightKey => Right.EntityName + Right.KeyName;
+
+    /// <summary>Bağın taşıdığı, kullanıcının bağ sınıfına yazdığı alanlar.</summary>
+    public EquatableArray<PropertyModel> Payload { get; init; } = EquatableArray<PropertyModel>.Empty;
+
+    public bool HasPayload => Payload.Length > 0;
+
+    public bool LinkDeclared { get; init; }
+
+    /// <summary>Bağın durum makinesi; yoksa <c>null</c>.</summary>
+    public WorkflowModel? Workflow { get; init; }
+
+    public bool StatusDeclared { get; init; }
+
+    /// <summary>Bağın durumunu değiştiren, gövdesiz geçişler.</summary>
+    public EquatableArray<TransitionModel> Transitions { get; init; } = EquatableArray<TransitionModel>.Empty;
+
+    /// <summary>Bağ okunduğunda kendi yanıtını mı döndürür (yükü veya durumu varsa), yoksa yalnızca var mıdır.</summary>
+    public bool HasResponse => HasPayload || Workflow is not null;
 }
 
 /// <summary>Kaydın durum makinesi.</summary>
@@ -576,6 +628,9 @@ internal sealed record TransitionDeclaration(
     LocationInfo Location)
 {
     public bool IsAction { get; init; }
+
+    /// <summary>Geçiş bir kaynağın değil bir bağın (<c>MapAssociation</c>) builder'ında mı bildirildi.</summary>
+    public bool IsLink { get; init; }
 
     /// <summary>Aksiyon kendi sonucunu döndürüyorsa o tipin tam adı; yoksa yanıt kaydın kendisidir.</summary>
     public string? ResponseType { get; init; }

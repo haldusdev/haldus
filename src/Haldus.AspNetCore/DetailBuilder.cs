@@ -14,4 +14,12 @@ public sealed class DetailBuilder<TEntity, TDetail>
     /// kaynaklar için.
     /// </summary>
     public DetailBuilder<TEntity, TDetail> AsSubresource() => this;
+
+    /// <summary>
+    /// Satırlar üst kaydın yanıtında gömülü kalır, ama güncelleme isteğinde topluca gönderilmek yerine tek tek
+    /// komutlarla yazılır: <c>POST /orders/{id}/order-items</c> (ekle), <c>PUT …/{rowId}</c> (değiştir),
+    /// <c>DELETE …/{rowId}</c> (kaldır). Her komut üst kaydın bir yazmasıdır: onun durum ve sürüm kurallarına
+    /// uyar, hesaplanan alanlarını yeniler ve üst kaydı döndürür.
+    /// </summary>
+    public DetailBuilder<TEntity, TDetail> AsCommands() => this;
 }

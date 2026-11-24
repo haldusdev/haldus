@@ -401,6 +401,7 @@ internal static class MapCallParser
             DetailOfName = detailOfName,
             DetailOfType = detailOfType,
             IsSubresource = chain.Any(call => call.Name == "AsSubresource"),
+            IsCommandWritten = chain.Any(call => call.Name == "AsCommands"),
             SortRequests = sortRequests.ToEquatableArray(),
             CreateOnlyRequests = createOnlyRequests.ToEquatableArray(),
             NaturalKeyRequest = naturalKeyRequest,
@@ -707,8 +708,9 @@ internal static class MapCallParser
             {
                 "References" => archetype != Archetype.Singleton,
 
-                // Ebeveyn altında yaşamak ve ağaç oluşturmak, sunucunun anahtar ürettiği koleksiyonlar içindir.
-                "Under" or "Hierarchical" => archetype is Archetype.Crud or Archetype.ReadOnly or Archetype.AppendOnly,
+                // Ebeveyn altında yaşamak, sunucunun anahtar ürettiği koleksiyonlar ve ebeveyn başına tek kayıt içindir.
+                "Under" => archetype is Archetype.Crud or Archetype.ReadOnly or Archetype.AppendOnly or Archetype.Singleton,
+                "Hierarchical" => archetype is Archetype.Crud or Archetype.ReadOnly or Archetype.AppendOnly,
                 _ => true,
             };
 
@@ -716,6 +718,22 @@ internal static class MapCallParser
             {
                 yield return $"{relation} cannot be combined with {name}";
             }
+        }
+
+        if (chain.Any(call => call.Name == "AsCommands") && chain.Any(call => call.Name == "AsSubresource"))
+        {
+            yield return "AsCommands and AsSubresource are two different ways to write the rows of a detail; choose one";
+        }
+
+        if (archetype == Archetype.Singleton && chain.Any(call => call.Name == "Under" && call.Arguments.Any(argument => argument == "true")))
+        {
+            yield return "A singleton under a parent is addressed through that parent; shallow: true does not apply to it";
+        }
+
+        if (archetype == Archetype.Singleton && chain.Any(call => call.Name == "Under") && (traits & Traits.MultiTenant) != 0)
+        {
+            // Kapsam tektir: ya kiracı başına ya ebeveyn başına bir kayıt. Ebeveyn kiracıya aitse kayıt da öyledir.
+            yield return "A singleton under a parent is scoped by that parent; remove MultiTenant (the record follows the tenancy of its parent)";
         }
 
         if (chain.Count(call => call.Name == "Under") > 1)
@@ -818,7 +836,7 @@ internal static class MapCallParser
         }
     }
 
-    private static PropertyModel ToModel(IPropertySymbol property, SearchKind searchKind, string valueType)
+    internal static PropertyModel ToModel(IPropertySymbol property, SearchKind searchKind, string valueType)
     {
         var attributes = new List<AttributeModel>();
         var hasRequired = false;
@@ -1026,10 +1044,17 @@ internal static class MapCallParser
         var onDelete = defaultOnDelete;
         var onDeleteExplicit = false;
         var required = true;
+        var shallow = false;
 
         foreach (var argument in call.ArgumentList.Arguments)
         {
             var text = argument.Expression.ToString();
+
+            if (kind == ReferenceKind.Parent && text == "true")
+            {
+                shallow = true;
+                continue;
+            }
 
             if (DirectMember(argument.Expression) is { } member)
             {
@@ -1070,6 +1095,7 @@ internal static class MapCallParser
             TargetKeyName = targetKey?.Name,
             IsExternal = external,
             TargetTenantScoped = resolved && target!.AllInterfaces.Any(candidate => candidate.ToDisplayString() == "Haldus.IMultiTenant"),
+            Shallow = shallow,
         };
     }
 

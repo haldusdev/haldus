@@ -121,6 +121,22 @@ Bunlar kullanıcıyla kararlaştırıldı; yeniden sorma.
   - `.TokenAccess(prefix: "inv", "accept")`: kayıt, oturumu olmayan biri tarafından gizli bir token ile okunur
     (`GET /by-token`) ve yalnızca sayılan geçişler/aksiyonlar çalıştırılır (`POST /by-token/accept`). Token adreste
     değil `X-Access-Token` başlığında taşınır.
+- Bağlar ve kapsam (16. aşama). Kullanıcı sormamamı istedi; yazılan, önerdiğim seçeneklerdir ve ayrıca onaylanmadı:
+  - Bağların topluca değiştirilmesi: `PUT /products/{id}/tags` gövdesinde `{ "ids": [...] }` alır ve o ucun
+    bağlarını listeyle aynı yapar (iki yönden de). Yalnızca yükü ve durumu olmayan bağlarda üretilir.
+  - Yük taşıyan bağ: kullanıcı bağ sınıfını (`{Sol}{Sağ}`, sol ucun namespace'inde) kendisi yazarsa skaler alanları
+    bağın yüküdür. `PUT` çifti gövdede yükü alır ve bağı döndürür; bağlar yükleriyle `…/links` altında listelenir.
+  - Durumu olan bağ: `app.MapAssociation<Organization, User>().Workflow<MembershipStatus>()` ve builder'ında
+    gövdesiz `MapTransition("activate", from, to)`. Geçişin iş mantığı (lambda, handler, istek tipi) yoktur.
+  - Ebeveyn altında tek kayıt: `app.MapSingleton<SupplierTerms>().Under<Supplier>()`
+    (`/suppliers/{supplierId}/supplier-terms`); anahtarı ebeveynin anahtarıdır.
+  - Kısa adres: `.Under<T>(shallow: true)` kaynağı kendi adresinde bırakır (`/supplier-contacts/{id}`); ebeveyn
+    oluşturma isteğinde gelir, sonradan değişmez, liste `?supplierId=` ile süzülür. Rails'teki gibi iç içe
+    koleksiyon adresi ayrıca üretilmez.
+  - Detayın komutla yazılan modu: `orders.MapDetail<OrderItem>().AsCommands()`; satırlar yanıtta ve oluşturma
+    isteğinde gömülü kalır, `PUT`/`PATCH` isteklerinde taşınmaz ve `POST /{id}/order-items`,
+    `PUT` / `DELETE /{id}/order-items/{rowId}` ile tek tek yazılır.
+  - Raporun v1 listesindeki "uzatma kancaları" yazılmadı: raporda tanımı yok ve kullanıcı istemedi.
 - Eşzamanlılık trait'inin adı `ConcurrencyChecked` (eski adı `Versioned`). Sürüm yanıt gövdesinde değil
   `ETag` başlığında taşınır; güncelleme ve silme `If-Match` ister (eksikse 428, uyuşmazlıkta 412).
 - Güncelleme için hem `PUT` (tam değiştirme) hem `PATCH` (kısmi) üretilir.
@@ -190,7 +206,7 @@ Bunlar kullanıcıyla kararlaştırıldı; yeniden sorma.
 ## Aşamalar
 
 On aşamanın tamamı bitti (3. aşamaya `.Searchable()`, 8. aşamaya fiziksel temizlik de eklendi). 10. aşamanın
-sonucu `reports/Haldus taksonomi sınaması.md` dosyasındadır: araştırmadaki 59 varlığın (bugünkü sayımla) 35'i temiz, 18'i
+sonucu `reports/Haldus taksonomi sınaması.md` dosyasındadır: araştırmadaki 59 varlığın (bugünkü sayımla) 38'i temiz, 15'i
 kısmen ifade ediliyor, 6'sı için gereken özellik yok. Aynı veri `tests/Haldus.Generators.Tests/TaxonomyTests.cs`
 içinde derlenir; yeni bir archetype veya trait bir satırı kapatıyorsa ikisini birlikte güncelle.
 
@@ -212,7 +228,7 @@ içinde derlenir; yeni bir archetype veya trait bir satırı kapatıyorsa ikisin
 Kullanıcı 2026-11-24'te onayladı. Kapsamı araştırma raporunun v2 listesi, ilk sürümden kalan küçük kalemler
 ve sınamada çıkan küçük eksiklerdir. Raporun v3 listesi (`MapBalance`, `MapChangeSet`, birden çok durum
 ekseni, çeviri, saklama süresi, okundu takibi) ve tekrar serisi bu planın dışındadır. Her aşama testleriyle
-birlikte ayrı commit olur; 11–15. aşamalar bitti, sıradaki 16.
+birlikte ayrı commit olur; 11–16. aşamalar bitti, sıradaki 17.
 
 11. Sahiplik: `OwnedByCurrentUser`, `MapAssociation().ForCurrentUser()`
 12. Alan eklentileri: `Metadata`, yalnızca oluştururken yazılan alan, `NaturalKey`, `KeyStrategy`, liste
@@ -236,17 +252,12 @@ aktarma, yeni paket eklemeden yazılır.
 
 Aşama başına açık kararlar (uygulandıkça "Tasarım kararları"na taşınır):
 
-
-
-
-
 - 17: Onay tek adım mı, zincir mi.
 - 18: Taslak/yayın için çift kopya mı, sürüm tablosu mu; geçmiş anlık görüntü mü, fark günlüğü mü.
 - 19: Depolama sağlayıcıları (paketlere ayrılması önerildi; S3 gibi sağlayıcılar yeni bağımlılıktır).
 - 20: Aktarma biçimleri; CSV için bir kütüphane yeni bağımlılık olabilir.
 
-Raporun v1 listesindeki "uzatma kancaları" plana girmedi: raporda tanımı yok. Kullanıcı isterse 16. aşamada
-netleştirilecek.
+Raporun v1 listesindeki "uzatma kancaları" plana girmedi ve yazılmadı: raporda tanımı yok.
 
 ## Açık kararlar
 
@@ -467,8 +478,8 @@ netleştirilecek.
   `(OwnerId, {Uç}{Anahtar})` çiftidir ve iki filtre taşır: `Owner` ile `Association` (karşı uç görünür olmalı).
   Sahip anahtarın parçası olduğu için kayıt izlenmeden önce üretilen kodda atanır. Karşı uç silinince bağ da
   silinir (`Cascade`): bağ yalnızca bir işarettir ve bir kullanıcının işareti silmeyi engellememelidir.
-  Yazılmamış bağ entity'si, her yazılmamış entity gibi, çağrının bulunduğu namespace'e üretilir. Bağ henüz yük
-  taşımaz (16. aşama); değer taşıyan oy bu yüzden yazılamaz.
+  Yazılmamış bağ entity'si, her yazılmamış entity gibi, çağrının bulunduğu namespace'e üretilir. Kullanıcıya bağlı
+  bağ yük ve durum taşımaz (sıradan bağlar taşır); değer taşıyan oy bu yüzden yazılamaz.
 - **Alan eklentileri.** Alanları lambda ile sayan bildirimler (`Sortable`, `CreateOnly`, `NaturalKey`) `Searchable`
   gibi `ResourceBuilder<T>` üyesidir, `MapCallParser.ReadFieldRequests` ile okunur ve `ResourceLinker`'da, üretilen
   yabancı anahtarlar da bilindikten sonra çözülür. Geçersiz alan `HALDUS010` olur.
@@ -588,6 +599,34 @@ netleştirilecek.
     listede olmayan geçişin token adresi yoktur. Token ebeveyn altındaki ve kullanıcıya ait kaynaklarla
     birleşmez (görünürlükleri, token'ı taşıyanın sahip olmadığı bir kimliğe bağlıdır). Bilinen sınır: token
     kullanılınca kendiliğinden geçersiz olmaz; ömrünü `Expiring` ve durum makinesi belirler. Oran sınırlama yoktur.
+- **Bağlar ve kapsam.**
+  - **Bağın yükü ve durumu** `OperationParser.ParseAssociation` içinde okunur: bağ sınıfı derlemede varsa
+    (`LinkDeclared`) skaler alanları yük olur, zincirdeki `Workflow` `LifecycleReader.ReadWorkflow` ile okunur.
+    Bağın geçişleri `TransitionParser.ParseLink` ile okunur (`TransitionDeclaration.IsLink`; sahibinin adı iki ucun
+    adından kurulur), kaynak geçişlerinden ayrılır ve `ResourceLinker.AttachLinkTransitions` ile bağlanır.
+    `AssociationBuilder.MapTransition` çalışma zamanında boştur; uç, bağın üretilen `Map` metodunda eşlenir.
+    Yükü veya durumu olan bağ (`AssociationModel.HasResponse`) kendi yanıt tipini döndürür ve topluca
+    değiştirilemez; `Status` eşzamanlılık belirtecidir (çakışma 409 `StateChanged`). Sınırlar: bağın `EditableIn` /
+    `DeletableIn` kuralı yoktur (yük her durumda yazılır, bağ her durumda kaldırılır), geçişi iş mantığı taşımaz,
+    bağın uçları idempotency ve token ile erişim almaz. Sağ ucun anahtarı metinse (`MapLookup`) `links` kodlu kayıt
+    `…/links` adresiyle çakışır.
+  - **Topluca değiştirme** (`AssociationEmitter.EmitReplace`): listedeki her kayıt isteği yapana görünür olmalıdır
+    (biri bile yoksa 400 ve hiçbir şey değişmez); isteği yapana görünmeyen bağlara dokunulmaz (bağın sorgu filtresi).
+    En çok 1000 kimlik. Tek kaydetmedir ama kilitsizdir: aynı ucu aynı anda değiştiren iki isteğin sonucu ikisinin
+    birleşimi olabilir.
+  - **Ebeveyn altında tek kayıt.** `MapSingleton().Under<T>()`: anahtar ebeveynin yabancı anahtarıdır
+    (`ModuleEmitter`), okuma ve yazma önce ebeveyni arar (yoksa 404), hiç yazılmadıysa varsayılanlar ebeveynin
+    kimliğiyle döner. `MultiTenant` ile birleşmez (kiracı ebeveynden gelir); `shallow: true` alamaz.
+  - **Kısa adres.** `ReferenceDeclaration.Shallow` → `ResolvedReference.IsShallowParent`, `ResourceModel.ShallowParent`.
+    Bağlayıcı onu `ReferenceKind.Reference` olarak çözer (alan istekte yazılır, `IsCreateOnly`); ebeveynin anlamı
+    modelden gelir: `HaldusFilters.Parent` filtresi, `Cascade` silme, doğal anahtarın ve kardeş sırasının
+    (`Siblings`) kapsamı. Bir kaynağın ebeveynine bakan yeni kod `resource.Parent ?? resource.ShallowParent` yazmalıdır.
+  - **Komutla yazılan detay.** `ResourceModel.IsCommandWritten`; `EndpointEmitter.EmitDetailCommands` üç ucu üretir.
+    Her komut sahibi satırlarıyla yükler ve sahibin yazma kurallarından geçer (`If-Match`, `OwnerGuard`,
+    `ChainGuard`, `EditableIn`, `Compute`, `Save`). Satırlar güncelleme isteklerine ve `Sync…` yardımcılarına
+    girmez; oluşturma isteğinde ve kopyada yer alır. Komutun adresi (`{satırlar}`) geçiş ve aksiyon adı olamaz
+    (`ReservedRoute`). Sınırlar: komutların toplu biçimi ve önizlemesi yoktur; satırın sırası eklenme sırasıdır,
+    araya ekleme yoktur.
 - **Yanıt izdüşümü tek yerdedir:** `ResourceEmitter.ResponseAssignments`. Bir kaynağın yanıtını döndüren her
   üretici (kendi uçları, bağ listeleri) onu kullanır; elle yazılan bir izdüşüm, yanıta sonradan eklenen zorunlu
   alanlarda (durum, numara, gömülü satırlar) derlenmez.

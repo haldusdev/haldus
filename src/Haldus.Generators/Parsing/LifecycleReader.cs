@@ -270,7 +270,7 @@ internal static class LifecycleReader
             ? new StateReference(field.ContainingType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat), field.Name)
             : null;
 
-    private static WorkflowModel? ReadWorkflow(
+    internal static WorkflowModel? ReadWorkflow(
         SemanticModel semanticModel,
         SimpleNameSyntax name,
         SeparatedSyntaxList<ArgumentSyntax> arguments,

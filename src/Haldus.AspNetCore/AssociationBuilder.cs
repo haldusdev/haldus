@@ -20,6 +20,23 @@ public sealed class AssociationBuilder<TLeft, TRight>(RouteGroupBuilder group) :
     /// </summary>
     public AssociationBuilder<TLeft, TRight> ForCurrentUser() => this;
 
+    /// <summary>
+    /// Bağa bir durum makinesi verir (davet edilmiş / etkin üyelik gibi). <c>Status</c> alanı üretilir, yeni bağda
+    /// başlangıç değerini alır, istekle yazılamaz ve yalnızca <see cref="MapTransition"/> ile bildirilen geçişlerle
+    /// değişir.
+    /// </summary>
+    /// <param name="initial">Yeni bağın durumu.</param>
+    public AssociationBuilder<TLeft, TRight> Workflow<TStatus>(TStatus initial = default)
+        where TStatus : struct, Enum => this;
+
+    /// <summary>
+    /// Bağın durumunu değiştiren, gövdesiz bir geçiş bildirir:
+    /// <c>POST /organizations/{organizationId}/users/{userId}/activate</c>. Bağ sayılan durumlardan birinde değilse
+    /// 409 döner. Uç üretilen kodda eşlenir; bu çağrı çalışma zamanında bir şey yapmaz.
+    /// </summary>
+    /// <param name="name">Adresin son parçası; sabit olmalıdır.</param>
+    public AssociationBuilder<TLeft, TRight> MapTransition(string name, StateSet from, Enum to) => this;
+
     void IEndpointConventionBuilder.Add(Action<EndpointBuilder> convention) =>
         ((IEndpointConventionBuilder)Group).Add(convention);
 

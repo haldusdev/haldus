@@ -359,7 +359,7 @@ public sealed class TaxonomyTests
             app.MapCrud<Post>();
             app.MapCrud<Comment>().Under<Post>().Hierarchical().SoftDeletable();
             """),
-        new(31, "Tag / Label", Fit.Partial,
+        new(31, "Tag / Label", Fit.Clean,
             "public partial class Article { public string Title { get; set; } = \"\"; }",
             """
             app.MapLookup<Tag>();
@@ -408,17 +408,18 @@ public sealed class TaxonomyTests
             app.MapCrud<Role>();
             app.MapAssociation<Role, Permission>();
             """),
-        new(40, "Membership", Fit.Partial,
+        new(40, "Membership", Fit.Clean,
             User + """
-            public enum MembershipStatus { Pending, Active }
+            public enum MembershipStatus { Pending, Active, Suspended }
             public partial class Organization { public string Name { get; set; } = ""; }
-            public partial class Membership { public string Role { get; set; } = ""; }
+            public partial class OrganizationUser { public string Role { get; set; } = ""; }
             """,
             """
             app.MapCrud<User>();
             app.MapCrud<Organization>();
-            var memberships = app.MapCrud<Membership>().References<User>().References<Organization>().Workflow<MembershipStatus>();
+            var memberships = app.MapAssociation<Organization, User>().Workflow<MembershipStatus>();
             memberships.MapTransition("activate", MembershipStatus.Pending, MembershipStatus.Active);
+            memberships.MapTransition("suspend", MembershipStatus.Active, MembershipStatus.Suspended);
             """),
         new(41, "Invitation", Fit.Clean,
             """
@@ -474,11 +475,14 @@ public sealed class TaxonomyTests
                 return System.Threading.Tasks.Task.CompletedTask;
             });
             """),
-        new(46, "Webhook endpoint", Fit.Partial,
-            Webhook,
+        new(46, "Webhook endpoint", Fit.Clean,
+            Webhook + """
+            public partial class WebhookSettings { public int TimeoutSeconds { get; set; } = 30; public bool VerifyTls { get; set; } = true; }
+            """,
             """
             var webhooks = app.MapCrud<Webhook>().MultiTenant().Archivable().SecretOnce(prefix: "whsec", recoverable: true).Rotatable();
             webhooks.MapAction("ping", (webhook, services, cancellationToken) => System.Threading.Tasks.Task.CompletedTask);
+            app.MapSingleton<WebhookSettings>().Under<Webhook>();
             """),
         new(47, "Webhook delivery", Fit.Clean,
             Webhook + """
@@ -615,8 +619,8 @@ public sealed class TaxonomyTests
     public void Tally_MatchesTheWrittenResults()
     {
         // reports/Haldus taksonomi sınaması.md dosyasındaki sayılar; biri değişirse diğeri de güncellenmelidir.
-        Assert.Equal(35, Rows.Count(row => row.Fit == Fit.Clean));
-        Assert.Equal(18, Rows.Count(row => row.Fit == Fit.Partial));
+        Assert.Equal(38, Rows.Count(row => row.Fit == Fit.Clean));
+        Assert.Equal(15, Rows.Count(row => row.Fit == Fit.Partial));
         Assert.Equal(6, Rows.Count(row => row.Fit == Fit.Missing));
     }
 }

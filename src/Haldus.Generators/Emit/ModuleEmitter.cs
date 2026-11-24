@@ -227,6 +227,12 @@ internal static class ModuleEmitter
             {
                 statements.Add("entity.HasKey(item => item.TenantId);");
             }
+            else if (resource.Parent is { } owner)
+            {
+                // Ebeveyn başına tek kayıt: anahtar ebeveynin kimliğidir.
+                statements.Add($"entity.HasKey(item => item.{owner.PropertyName});");
+                statements.Add($"entity.Property(item => item.{owner.PropertyName}).ValueGeneratedNever();");
+            }
             else
             {
                 statements.Add("entity.Property<int>(global::Haldus.HaldusModel.SingletonKey).ValueGeneratedNever();");
@@ -327,7 +333,7 @@ internal static class ModuleEmitter
                 columns.Add("OwnerId");
             }
 
-            if (resource.Parent is { } scope)
+            if ((resource.Parent ?? resource.ShallowParent) is { } scope)
             {
                 columns.Add(scope.PropertyName);
             }
@@ -386,7 +392,8 @@ internal static class ModuleEmitter
             statements.Add($"entity.ComplexProperty(item => item.{embedded.Name});");
         }
 
-        if (resource.Parent is { } parent)
+        // Ebeveyn adrese girmese de (shallow) kaydın görünürlüğünü o belirler.
+        if ((resource.Parent ?? resource.ShallowParent) is { } parent)
         {
             // Ebeveyn altındaki kayıt, ancak ebeveyni görünürse görünür. Alt sorgu ebeveynin kendi
             // filtrelerinden (kiracı, silinmişlik, onun da ebeveyni) geçer. Koşul tek tek sorgulara değil

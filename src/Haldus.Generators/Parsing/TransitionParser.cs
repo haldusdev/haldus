@@ -13,6 +13,7 @@ namespace Haldus.Generators.Parsing;
 internal static class TransitionParser
 {
     private const string BuilderType = "Haldus.ResourceBuilder<TEntity>";
+    private const string LinkBuilderType = "Haldus.AssociationBuilder<TLeft, TRight>";
 
     public static bool IsCandidate(SyntaxNode node) =>
         node is InvocationExpressionSyntax
@@ -26,9 +27,17 @@ internal static class TransitionParser
         var access = (MemberAccessExpressionSyntax)invocation.Expression;
         var semanticModel = context.SemanticModel;
 
-        if (semanticModel.GetTypeInfo(access.Expression, cancellationToken).Type
-                is not INamedTypeSymbol { TypeArguments: { Length: 1 } owners } receiver
-            || receiver.OriginalDefinition.ToDisplayString() != BuilderType)
+        if (semanticModel.GetTypeInfo(access.Expression, cancellationToken).Type is not INamedTypeSymbol receiver)
+        {
+            return null;
+        }
+
+        if (receiver is { TypeArguments.Length: 2 } && receiver.OriginalDefinition.ToDisplayString() == LinkBuilderType)
+        {
+            return access.Name.Identifier.ValueText == "MapTransition" ? ParseLink(invocation, access, receiver, semanticModel, cancellationToken) : null;
+        }
+
+        if (receiver is not { TypeArguments: { Length: 1 } owners } || receiver.OriginalDefinition.ToDisplayString() != BuilderType)
         {
             return null;
         }
@@ -130,6 +139,85 @@ internal static class TransitionParser
         {
             IsAction = isAction,
             ResponseType = response?.ToDisplayString(MapCallParser.TypeFormat),
+        };
+    }
+
+    /// <summary>
+    /// Bir bağın builder'ında bildirilen geçiş: her zaman gövdesizdir (ad, nereden, nereye). Sahibi bağ entity'sidir;
+    /// adı iki ucun adından kurulur.
+    /// </summary>
+    private static TransitionDeclaration ParseLink(
+        InvocationExpressionSyntax invocation,
+        MemberAccessExpressionSyntax access,
+        INamedTypeSymbol receiver,
+        SemanticModel semanticModel,
+        CancellationToken cancellationToken)
+    {
+        string? name = null;
+        var nameIsConstant = true;
+        var from = new List<StateReference>();
+        StateReference? to = null;
+        var statesReadable = true;
+        var arguments = invocation.ArgumentList.Arguments;
+
+        for (var index = 0; index < arguments.Count; index++)
+        {
+            var expression = arguments[index].Expression;
+
+            switch (arguments[index].NameColon?.Name.Identifier.ValueText ?? index switch { 0 => "name", 1 => "from", _ => "to" })
+            {
+                case "name":
+                    if (semanticModel.GetConstantValue(expression, cancellationToken) is { HasValue: true, Value: string text })
+                    {
+                        name = text;
+                    }
+                    else
+                    {
+                        nameIsConstant = false;
+                    }
+
+                    break;
+
+                case "from":
+                    var elements = expression is CollectionExpressionSyntax collection
+                        ? collection.Elements.Select(element => (element as ExpressionElementSyntax)?.Expression)
+                        : [expression];
+
+                    foreach (var element in elements)
+                    {
+                        if (element is not null && LifecycleReader.StateOf(semanticModel, element, cancellationToken) is { } state)
+                        {
+                            from.Add(state);
+                        }
+                        else
+                        {
+                            statesReadable = false;
+                        }
+                    }
+
+                    break;
+
+                case "to":
+                    to = LifecycleReader.StateOf(semanticModel, expression, cancellationToken);
+                    statesReadable &= to is not null;
+                    break;
+            }
+        }
+
+        return new TransitionDeclaration(
+            receiver.TypeArguments[0].Name + receiver.TypeArguments[1].Name,
+            OwnerType: null,
+            name,
+            nameIsConstant,
+            RequestName: null,
+            RequestType: null,
+            ImplementsTransition: false,
+            from.ToEquatableArray(),
+            to,
+            statesReadable && from.Count > 0 && to is not null,
+            LocationInfo.From(access.Name.GetLocation()))
+        {
+            IsLink = true,
         };
     }
 

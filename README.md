@@ -76,11 +76,32 @@ app.MapAssociation<Product, Tag>();
 | `.Under<T>()` | Kaynak ebeveynin adresi altında yaşar: `/customers/{customerId}/addresses` |
 | `.Hierarchical()` | `ParentId` ile ağaç; bir düğüm kendi altına taşınamaz |
 | `.Embeds<T>()` | O tipteki alanlar iç içe değer nesnesi olur, sahibinin kolonlarında saklanır |
-| `MapAssociation<TLeft, TRight>()` | Çoktan-çoğa bağ: `PUT` / `DELETE /products/{id}/tags/{tagId}`, iki yönlü liste |
+| `.Under<T>(shallow: true)` | Kaynak ebeveynine aittir ama kendi adresinde yaşar (`/addresses/{id}`); ebeveyn oluşturma isteğinde gelir ve sonradan değişmez, liste `?customerId=` ile süzülür |
+| `MapSingleton<T>().Under<TParent>()` | Ebeveyn başına tek kayıt: `GET` / `PUT` / `PATCH /customers/{customerId}/preferences` |
+| `MapAssociation<TLeft, TRight>()` | Çoktan-çoğa bağ: `PUT` / `DELETE /products/{id}/tags/{tagId}`, iki yönlü liste; `PUT /products/{id}/tags` bağları verilen listeyle değiştirir |
 | `MapAssociation<TLink, T>().ForCurrentUser()` | Geçerli kullanıcıyı bir kayda bağlar (favori, yıldız): `PUT` / `DELETE /me/favorites/{productId}` |
 
 Bir kaynağın görünürlüğü başka bir kayıttan geliyorsa (ebeveyni kiracıya bağlı bir kaynak gibi), o
 kaynağa dokunan her sorgu bunu kendiliğinden uygular.
+
+Bağ kendi alanlarını ve durumunu taşıyabilir. Bağ sınıfı (`{Sol}{Sağ}`) yazılırsa alanları bağın yüküdür;
+`.Workflow<TStatus>()` bağa yalnızca geçişlerle değişen bir durum verir:
+
+```csharp
+public partial class OrganizationUser          // anahtarları (OrganizationId, UserId) Haldus üretir
+{
+    public string Role { get; set; } = "";
+}
+
+var memberships = app.MapAssociation<Organization, User>()
+    .Workflow<MembershipStatus>(initial: MembershipStatus.Invited);
+
+memberships.MapTransition("activate", from: MembershipStatus.Invited, to: MembershipStatus.Active);
+```
+
+`PUT /organizations/{id}/users/{userId}` gövdesinde yükü alır (`{ "role": "admin" }`) ve bağı döndürür;
+`POST …/users/{userId}/activate` durumu değiştirir; bağlar yükleri ve durumlarıyla
+`GET /organizations/{id}/users/links` altında (öteki yönden `GET /users/{id}/organizations/links`) listelenir.
 
 ## Detaylar ve hesaplanan alanlar
 
@@ -95,6 +116,10 @@ orders.MapDetail<OrderNote>().AsSubresource();  // /orders/{orderId}/order-notes
 
 Gömülü satırlar sahibiyle tek istekte yazılır. `PUT` satırları eşitler: kimliği verilen satır
 güncellenir, verilmeyen eklenir, istekte bulunmayan silinir. Satırlar gönderildikleri sırayla döner.
+
+`.AsCommands()` satırları yanıtta gömülü bırakır ama topluca eşitlemek yerine tek tek komutlarla yazdırır:
+`POST /orders/{id}/order-items`, `PUT` ve `DELETE /orders/{id}/order-items/{rowId}`. Her komut sahibin bir
+yazmasıdır (sürüm ister, durum kuralına uyar, `Compute()` çalışır) ve sahibi döndürür.
 
 Entity `IComputed` uygularsa Haldus her yazmadan önce `Compute()` çağırır. Herkese açık setter'ı
 olmayan alanlar yalnızca yanıtta görünür:
@@ -334,7 +359,7 @@ kısıtı olur, ayrı bağlamlardaysa referans yalnızca kimlikle tutulur ve var
 ## Durum
 
 İlk sürümün planlanan on aşaması tamamlandı; eksikleri kapatan ikinci plan sürüyor. Model, araştırmadaki 59
-gerçek varlığa karşı sınanıyor: bugün 35'i temiz, 18'i kısmen ifade ediliyor, 6'sı için gereken özellik henüz
+gerçek varlığa karşı sınanıyor: bugün 38'i temiz, 15'i kısmen ifade ediliyor, 6'sı için gereken özellik henüz
 yok. Ayrıntısı ve eksiklerin listesi [taksonomi sınaması](reports/Haldus%20taksonomi%20sınaması.md)
 belgesindedir.
 

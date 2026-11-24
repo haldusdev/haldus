@@ -191,7 +191,9 @@ internal static class ResourceEmitter
                 builder,
                 $"Patch{resource.EntityName}Request",
                 resource,
-                resource.Properties.Where(property => property.IsUpdatable).Concat(resource.Details.Select(DetailCollection)));
+                resource.Properties
+                    .Where(property => property.IsUpdatable)
+                    .Concat(resource.Details.Where(detail => !detail.IsCommandWritten).Select(DetailCollection)));
         }
 
         if (resource.Has(Traits.Cloneable))
@@ -432,7 +434,10 @@ internal static class ResourceEmitter
             first = false;
         }
 
-        foreach (var detail in detailRequests is null ? [] : resource.Details.ToArray())
+        // Komutla yazılan satırlar güncelleme isteğinde taşınmaz; yalnızca kayıt oluşturulurken verilebilir.
+        foreach (var detail in detailRequests is null
+            ? []
+            : resource.Details.Where(detail => detailRequests == "Create" || !detail.IsCommandWritten).ToArray())
         {
             if (!first)
             {

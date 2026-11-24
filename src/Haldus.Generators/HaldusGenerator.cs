@@ -161,7 +161,10 @@ public sealed class HaldusGenerator : IIncrementalGenerator
         ];
 
         var associations = ResourceLinker.LinkAssociations(
-            associationDeclarations, [.. valid.Select(entry => entry.Resource)], diagnostic => Report(context, diagnostic));
+            associationDeclarations,
+            [.. valid.Select(entry => entry.Resource)],
+            [.. transitionDeclarations.Where(transition => transition.IsLink)],
+            diagnostic => Report(context, diagnostic));
 
         var userLinks = ResourceLinker.LinkUserLinks(
             associationDeclarations, [.. valid.Select(entry => entry.Resource)], diagnostic => Report(context, diagnostic));
@@ -170,7 +173,10 @@ public sealed class HaldusGenerator : IIncrementalGenerator
         valid =
         [
             .. ResourceLinker
-                .AttachTransitions([.. valid.Select(entry => entry.Resource)], transitionDeclarations, diagnostic => Report(context, diagnostic))
+                .AttachTransitions(
+                    [.. valid.Select(entry => entry.Resource)],
+                    transitionDeclarations.Where(transition => !transition.IsLink),
+                    diagnostic => Report(context, diagnostic))
                 .Select(resource => (resource, resource.Namespace)),
         ];
 
@@ -240,6 +246,11 @@ public sealed class HaldusGenerator : IIncrementalGenerator
 
             AddSource(context, $"{hintPrefix}.Entity.g.cs", AssociationEmitter.EmitEntity(association));
             AddSource(context, $"{hintPrefix}.Endpoints.g.cs", AssociationEmitter.EmitEndpoints(association));
+
+            if (AssociationEmitter.EmitDtos(association) is { } dtos)
+            {
+                AddSource(context, $"{hintPrefix}.Dtos.g.cs", dtos);
+            }
         }
 
         foreach (var link in userLinks)
