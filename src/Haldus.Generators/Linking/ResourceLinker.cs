@@ -218,9 +218,15 @@ internal static class ResourceLinker
             return null;
         }
 
+        // Hassas (yalnızca yazılan) alanlar devralınmaz: tipin gizli bir değeri, kaydın yanıtında okunur hale gelirdi.
+        // Hassasiyet tipin kendi bağlanmasında işaretlenir; burada bildirimlerinden okunur.
+        var sensitive = new HashSet<string>(
+            type.SensitiveRequests.Concat(resource.SensitiveRequests).Select(request => request.FieldName).OfType<string>());
+
         var fields = properties
-            .Where(property => property is { IsWritable: true, IsNonNullable: false, IsEmbedded: false, IsGenerated: false }
-                && type.Properties.Any(candidate => candidate.Name == property.Name && candidate.ValueType == property.ValueType && !candidate.IsEmbedded))
+            .Where(property => property is { IsWritable: true, IsNonNullable: false, IsEmbedded: false, IsGenerated: false, IsInputOnly: false }
+                && !sensitive.Contains(property.Name)
+                && type.Properties.Any(candidate => candidate.Name == property.Name && candidate.ValueType == property.ValueType && candidate is { IsEmbedded: false, IsInputOnly: false }))
             .Select(property => property.Name)
             .ToEquatableArray();
 
@@ -1403,8 +1409,10 @@ internal static class ResourceLinker
         // Ebeveyn silinince altındakiler de silinir; ama kiracıya ait kayıtlar genel bir ebeveynin
         // altındaysa bu, ebeveyni silen kişinin başka kiracıların verisini silmesi demektir. Geliştirici
         // açıkça seçmediyse o durumda silme reddedilir.
+        // Aynı kural, varsayılanı zincirleme silme olan her bildirim için geçerlidir (ebeveyn, rol): kiracıya ait bir
+        // rol genel bir oyuncuya bağlıysa, oyuncuyu silen kişi başka kiracıların rol kayıtlarını da silerdi.
         var onDelete = declaration.OnDelete;
-        if (declaration is { Kind: ReferenceKind.Parent, OnDeleteExplicit: false }
+        if (declaration is { OnDelete: OnDeleteBehavior.Cascade, OnDeleteExplicit: false }
             && (target is not null || external)
             && IsTenantScoped(resource, resources, byType)
             && !(target is null ? declaration.TargetTenantScoped : IsTenantScoped(target, resources, byType)))

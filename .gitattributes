@@ -1,2 +1,6 @@
 # Snapshot dosyaları üretilen kodla bayt bayt karşılaştırılır; satır sonları sabit tutulur.
 *.verified.cs text eol=lf
+
+# Generator'ın şablonları kendi kaynak dosyalarındaki satır sonlarını üretilen koda taşır. Satır sonu çalışma kopyasına
+# göre değişirse üretilen kodun boşlukları (ve snapshot'lar) da değişir; bu yüzden bu dosyalar her yerde LF'dir.
+src/Haldus.Generators/**/*.cs text eol=lf

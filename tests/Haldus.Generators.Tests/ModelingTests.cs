@@ -153,6 +153,54 @@ public sealed class ModelingTests
         Assert.Contains("HasForeignKey(item => item.PersonId).OnDelete(global::Microsoft.EntityFrameworkCore.DeleteBehavior.Cascade)", module);
     }
 
+    [Fact]
+    public void RoleOf_OfATenantRecord_DoesNotCascadeFromAGlobalPlayer()
+    {
+        // Genel bir kişi silinince kiracıların rol kayıtları kendiliğinden silinmez: zincirleme silme kiracı sınırını aşmaz.
+        var mixed = Run("""
+            app.MapCrud<Person>();
+            app.MapCrud<Employee>().MultiTenant().RoleOf<Person>();
+            """).AssertCompiles().Sources["HaldusModule.g.cs"];
+
+        Assert.Contains("HasForeignKey(item => item.PersonId).OnDelete(global::Microsoft.EntityFrameworkCore.DeleteBehavior.Restrict)", mixed);
+
+        // Rol kiracı başına benzersizdir: aynı kişi her kiracıda ayrı bir rol kaydı taşıyabilir.
+        Assert.Contains("entity.HasIndex(item => new { item.TenantId, item.PersonId }).IsUnique()", mixed);
+
+        // İkisi de aynı kiracıdaysa veya geliştirici açıkça seçtiyse zincirleme silinir.
+        var sameTenant = Run("""
+            app.MapCrud<Person>().MultiTenant();
+            app.MapCrud<Employee>().MultiTenant().RoleOf<Person>();
+            """).AssertCompiles().Sources["HaldusModule.g.cs"];
+        var chosen = Run("""
+            app.MapCrud<Person>();
+            app.MapCrud<Employee>().MultiTenant().RoleOf<Person>(OnDelete.Cascade);
+            """).AssertCompiles().Sources["HaldusModule.g.cs"];
+
+        Assert.Contains("HasForeignKey(item => item.PersonId).OnDelete(global::Microsoft.EntityFrameworkCore.DeleteBehavior.Cascade)", sameTenant);
+        Assert.Contains("HasForeignKey(item => item.PersonId).OnDelete(global::Microsoft.EntityFrameworkCore.DeleteBehavior.Cascade)", chosen);
+    }
+
+    [Fact]
+    public void TypedBy_DoesNotInheritSensitiveFields()
+    {
+        // Tipin hassas alanı, kaydın okunabilir aynı adlı alanına taşınmaz; kaydın hassas alanı da devralmaz.
+        var typeSecret = Run("""
+            app.MapCrud<DeviceModel>().Sensitive(model => model.Manual);
+            app.MapCrud<Device>().TypedBy<DeviceModel>();
+            """).AssertCompiles().Sources["Shop.Device.Endpoints.g.cs"];
+        var recordSecret = Run("""
+            app.MapCrud<DeviceModel>();
+            app.MapCrud<Device>().TypedBy<DeviceModel>().Sensitive(device => device.Manual);
+            """).AssertCompiles().Sources["Shop.Device.Endpoints.g.cs"];
+
+        foreach (var endpoints in new[] { typeSecret, recordSecret })
+        {
+            Assert.Contains("entity.WarrantyMonths ??= typeDefaults.WarrantyMonths;", endpoints);
+            Assert.DoesNotContain("typeDefaults.Manual", endpoints);
+        }
+    }
+
     // ── Genelleme ──────────────────────────────────────────────────────────────────────────────────────
 
     [Fact]

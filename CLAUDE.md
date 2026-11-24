@@ -741,7 +741,12 @@ içeriyor (ilişki bildirimleri, `Sensitive`, `PublishesEvents`, `Purgeable`, ye
     kaydı doğrudan yazarsa devralma çalışmaz (uçlara bağlıdır, kaydetmeye değil).
   - `ResolveRole` oyuncunun yabancı anahtarını kaydın doğal anahtarı yapar; benzersiz indeks, çakışmanın 409'u ve
     `by-{alan}` ucu doğal anahtarın yolundan gelir. Bu yüzden rol başka bir `NaturalKey` bildiremez ve tek bir
-    oyuncunun rolüdür. Silme davranışı varsayılan olarak `Cascade`'dir.
+    oyuncunun rolüdür. Silme davranışı varsayılan olarak `Cascade`'dir; ama "zincirleme silme kiracı sınırını aşmaz"
+    kuralı rol için de geçerlidir: kiracıya ait rol genel bir oyuncuya bağlıysa varsayılan `Restrict` olur (`Resolve`
+    artık bu kuralı ebeveyne özgü değil, varsayılanı `Cascade` olan her bildirim için uygular; güvenlik incelemesinde
+    çıktı). **Varsayılanı zincirleme silme olan yeni bir ilişki bildirimi bu koşuldan geçmelidir.**
+  - Hassas alanlar devralınmaz, iki yönde de: tipin yalnızca yazılan bir alanı, kaydın okunabilir aynı adlı alanına
+    taşınsaydı gizli değer kaydın yanıtında görünürdü (güvenlik incelemesinde çıktı).
 - **Genelleme.** `ResourceModel.BaseDeclaration` → `ResourceLinker.PrepareSubtypes` (bağlamanın ilk adımı): alt tipin
   modeli üst tipin trait'leriyle birleştirilir (`BaseType`), üst tip alt tiplerini öğrenir (`Subtypes`) ve ikisi de
   `Kind` alanını `ExtraMembers`'a alır. Alt tip için entity üretilmez (`EmitEntity` boş döner; anahtar ve trait
