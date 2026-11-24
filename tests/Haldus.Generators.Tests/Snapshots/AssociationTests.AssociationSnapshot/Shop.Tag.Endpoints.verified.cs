@@ -163,7 +163,14 @@ public static partial class TagEndpoints
         }
 
         context.Set<Tag>().Remove(entity);
-        await context.SaveChangesAsync(cancellationToken);
+        try
+        {
+            await context.SaveChangesAsync(cancellationToken);
+        }
+        catch (global::Microsoft.EntityFrameworkCore.DbUpdateException)
+        {
+            return global::Haldus.HaldusProblems.InUse(messages, "Tag", id);
+        }
 
         return global::Microsoft.AspNetCore.Http.TypedResults.NoContent();
     }

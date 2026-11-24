@@ -176,7 +176,8 @@ internal sealed record ReferenceDeclaration(
     string? PropertyName,
     OnDeleteBehavior OnDelete,
     bool Required,
-    LocationInfo Location);
+    LocationInfo Location,
+    bool OnDeleteExplicit = false);
 
 /// <param name="TargetRoute">Hedef koleksiyonun rota parçası (ör. <c>projects</c>); <c>.Under&lt;T&gt;()</c> adresi kurarken kullanır.</param>
 internal sealed record ResolvedReference(
@@ -200,7 +201,13 @@ internal sealed record AssociationDeclaration(
     LocationInfo Location);
 
 /// <summary>İki ucu da bilinen kaynaklara çözülmüş çoktan-çoğa bağ.</summary>
-internal sealed record AssociationModel(ResourceModel Left, ResourceModel Right)
+/// <param name="LeftOnDelete">Sol uç silindiğinde bağlara ne olacağı.</param>
+/// <param name="RightOnDelete">Sağ uç silindiğinde bağlara ne olacağı.</param>
+internal sealed record AssociationModel(
+    ResourceModel Left,
+    ResourceModel Right,
+    OnDeleteBehavior LeftOnDelete,
+    OnDeleteBehavior RightOnDelete)
 {
     /// <summary>Bağ kayıtlarını tutan, Haldus'un ürettiği entity: <c>ProductTag</c>.</summary>
     public string LinkName => Left.EntityName + Right.EntityName;

@@ -258,6 +258,31 @@ public sealed class RelationTests
     }
 
     [Fact]
+    public void Under_TenantOwnedRecordsBelowAGlobalParentAreNotCascadedUnlessAskedFor()
+    {
+        const string Cascade = "HasForeignKey(item => item.ProjectId).OnDelete(global::Microsoft.EntityFrameworkCore.DeleteBehavior.Cascade)";
+        const string Restrict = "HasForeignKey(item => item.ProjectId).OnDelete(global::Microsoft.EntityFrameworkCore.DeleteBehavior.Restrict)";
+
+        var sameScope = Run("app.MapCrud<Project>(); app.MapCrud<WorkItem>().Under<Project>();").AssertCompiles();
+        var tenantBelowGlobal = Run("app.MapCrud<Project>(); app.MapCrud<WorkItem>().MultiTenant().Under<Project>();").AssertCompiles();
+        var explicitCascade = Run(
+            "app.MapCrud<Project>(); app.MapCrud<WorkItem>().MultiTenant().Under<Project>(OnDelete.Cascade);").AssertCompiles();
+        var tenantBelowTenant = Run(
+            "app.MapCrud<Project>().MultiTenant(); app.MapCrud<WorkItem>().MultiTenant().Under<Project>();").AssertCompiles();
+
+        Assert.Contains(Cascade, sameScope.Sources["HaldusModule.g.cs"]);
+        Assert.Contains(Cascade, tenantBelowTenant.Sources["HaldusModule.g.cs"]);
+
+        // Genel bir projeyi silen kişi, başka kiracıların iş kalemlerini de silmiş olurdu; varsayılan bunu
+        // reddeder ve projenin silme ucu durumu çakışma olarak bildirir.
+        Assert.Contains(Restrict, tenantBelowGlobal.Sources["HaldusModule.g.cs"]);
+        Assert.Contains("InUse(messages, \"Project\", id)", tenantBelowGlobal.Sources["Shop.Project.Endpoints.g.cs"]);
+
+        // Geliştirici zincirleme silmeyi açıkça seçtiyse karar onundur.
+        Assert.Contains(Cascade, explicitCascade.Sources["HaldusModule.g.cs"]);
+    }
+
+    [Fact]
     public void Under_ParentFilterIsKeptWhenOnlyTheSoftDeleteFilterIsIgnored()
     {
         var run = Run("""

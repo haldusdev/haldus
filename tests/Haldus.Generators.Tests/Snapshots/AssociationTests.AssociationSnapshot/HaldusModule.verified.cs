@@ -23,7 +23,7 @@ internal static class HaldusModule
             {
                 entity.HasKey(item => new { item.ProductId, item.TagId });
                 entity.HasOne<global::Shop.Product>().WithMany().HasForeignKey(item => item.ProductId).OnDelete(global::Microsoft.EntityFrameworkCore.DeleteBehavior.Cascade);
-                entity.HasOne<global::Shop.Tag>().WithMany().HasForeignKey(item => item.TagId).OnDelete(global::Microsoft.EntityFrameworkCore.DeleteBehavior.Cascade);
+                entity.HasOne<global::Shop.Tag>().WithMany().HasForeignKey(item => item.TagId).OnDelete(global::Microsoft.EntityFrameworkCore.DeleteBehavior.Restrict);
                 entity.HasIndex(item => item.TagId);
                 entity.HasQueryFilter(global::Haldus.HaldusFilters.Association, item =>
                     context.Set<global::Shop.Product>().Any(left => left.Id == item.ProductId)

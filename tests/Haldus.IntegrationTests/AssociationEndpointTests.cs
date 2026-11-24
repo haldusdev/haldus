@@ -129,6 +129,48 @@ public sealed class AssociationEndpointTests(ShopFixture fixture)
     }
 
     [Fact]
+    public async Task Link_AGlobalEndCannotBeDeletedWhileATenantOwnedRecordIsLinkedToIt()
+    {
+        // Etiket geneldir, müşteri bir kiracıya aittir. Etiketi silmek bağı da silseydi, etiketi silen
+        // kişi başka bir kiracının verisini yok etmiş olurdu.
+        var tenant = Guid.NewGuid();
+        var tag = await CreateTagAsync("shared");
+        var customer = await ReadAsync<CustomerResponse>(
+            await SendAsync(HttpMethod.Post, "/customers", tenant, new CreateCustomerRequest { Name = "Ada" }));
+        var pair = $"/customers/{customer.Id}/tags/{tag.Id}";
+        await SendAsync(HttpMethod.Put, pair, tenant);
+
+        var blocked = await _client.DeleteAsync($"/tags/{tag.Id}", CancellationToken);
+        var stillLinked = await SendAsync(HttpMethod.Get, pair, tenant);
+
+        Assert.Equal(HttpStatusCode.Conflict, blocked.StatusCode);
+        Assert.Equal(HttpStatusCode.NoContent, stillLinked.StatusCode);
+
+        await SendAsync(HttpMethod.Delete, pair, tenant);
+        var allowed = await _client.DeleteAsync($"/tags/{tag.Id}", CancellationToken);
+
+        Assert.Equal(HttpStatusCode.NoContent, allowed.StatusCode);
+    }
+
+    [Fact]
+    public async Task Link_IsRemovedWhenTheTenantOwnedEndIsPurged()
+    {
+        var tenant = Guid.NewGuid();
+        var tag = await CreateTagAsync("ephemeral");
+        var customer = await ReadAsync<CustomerResponse>(
+            await SendAsync(HttpMethod.Post, "/customers", tenant, new CreateCustomerRequest { Name = "Ada" }));
+        await SendAsync(HttpMethod.Put, $"/customers/{customer.Id}/tags/{tag.Id}", tenant);
+
+        await SendAsync(HttpMethod.Delete, $"/customers/{customer.Id}", tenant, ifMatch: "*");
+        await SendAsync(HttpMethod.Post, $"/customers/{customer.Id}/purge", tenant, ifMatch: "*");
+
+        // Kiracı kendi kaydını kalıcı silince bağı da gider; etiket artık serbesttir.
+        var deleted = await _client.DeleteAsync($"/tags/{tag.Id}", CancellationToken);
+
+        Assert.Equal(HttpStatusCode.NoContent, deleted.StatusCode);
+    }
+
+    [Fact]
     public async Task Link_ToASoftDeletedRecordIsHiddenUntilItIsRestored()
     {
         var tenant = Guid.NewGuid();

@@ -219,7 +219,7 @@ internal static class AssociationEmitter
         var link = association.QualifiedLinkName;
         var left = association.Left;
         var right = association.Right;
-        const string Cascade = "global::Microsoft.EntityFrameworkCore.DeleteBehavior.Cascade";
+        const string DeleteBehavior = "global::Microsoft.EntityFrameworkCore.DeleteBehavior";
 
         // Bağ, ancak iki ucu da isteği yapana görünürse görünür. Koşul modele konur ki bağı okuyan her
         // sorgu (iki yönlü listeler, varlık kontrolü, silme) aynı korumadan geçsin.
@@ -227,8 +227,8 @@ internal static class AssociationEmitter
                         modelBuilder.Entity<{{link}}>(entity =>
                         {
                             entity.HasKey(item => new { item.{{association.LeftKey}}, item.{{association.RightKey}} });
-                            entity.HasOne<{{left.QualifiedName}}>().WithMany().HasForeignKey(item => item.{{association.LeftKey}}).OnDelete({{Cascade}});
-                            entity.HasOne<{{right.QualifiedName}}>().WithMany().HasForeignKey(item => item.{{association.RightKey}}).OnDelete({{Cascade}});
+                            entity.HasOne<{{left.QualifiedName}}>().WithMany().HasForeignKey(item => item.{{association.LeftKey}}).OnDelete({{DeleteBehavior}}.{{association.LeftOnDelete}});
+                            entity.HasOne<{{right.QualifiedName}}>().WithMany().HasForeignKey(item => item.{{association.RightKey}}).OnDelete({{DeleteBehavior}}.{{association.RightOnDelete}});
                             entity.HasIndex(item => item.{{association.RightKey}});
                             entity.HasQueryFilter(global::Haldus.HaldusFilters.Association, item =>
                                 context.Set<{{left.QualifiedName}}>().Any(left => left.{{left.KeyName}} == item.{{association.LeftKey}})

@@ -113,6 +113,63 @@ public sealed class AssociationTests
     }
 
     [Fact]
+    public void Association_DeletingEitherEndRemovesTheLinksWhenBothEndsAreScopedAlike()
+    {
+        var bothGlobal = Run("""
+            app.MapCrud<Product>();
+            app.MapCrud<Tag>();
+            app.MapAssociation<Product, Tag>();
+            """).AssertCompiles();
+        var bothTenant = Run("""
+            app.MapCrud<Product>().MultiTenant();
+            app.MapCrud<Tag>().MultiTenant();
+            app.MapAssociation<Product, Tag>();
+            """).AssertCompiles();
+
+        foreach (var run in new[] { bothGlobal, bothTenant })
+        {
+            var module = run.Sources["HaldusModule.g.cs"];
+            Assert.Contains("HasForeignKey(item => item.ProductId).OnDelete(global::Microsoft.EntityFrameworkCore.DeleteBehavior.Cascade)", module);
+            Assert.Contains("HasForeignKey(item => item.TagId).OnDelete(global::Microsoft.EntityFrameworkCore.DeleteBehavior.Cascade)", module);
+            Assert.DoesNotContain("InUse", run.Sources["Shop.Tag.Endpoints.g.cs"]);
+        }
+    }
+
+    [Fact]
+    public void Association_DeletingAGlobalEndNeverCascadesIntoTenantOwnedLinks()
+    {
+        // Ürün kiracıya ait, etiket genel: etiketi silen kişi başka kiracıların bağlarını silememelidir.
+        var run = Run("""
+            app.MapCrud<Product>().MultiTenant();
+            app.MapCrud<Tag>();
+            app.MapAssociation<Product, Tag>();
+            """).AssertCompiles();
+
+        var module = run.Sources["HaldusModule.g.cs"];
+        Assert.Contains("HasForeignKey(item => item.ProductId).OnDelete(global::Microsoft.EntityFrameworkCore.DeleteBehavior.Cascade)", module);
+        Assert.Contains("HasForeignKey(item => item.TagId).OnDelete(global::Microsoft.EntityFrameworkCore.DeleteBehavior.Restrict)", module);
+
+        // Genel ucun silinmesi veritabanında reddedilir; bu 500 değil çakışma olarak bildirilir.
+        Assert.Contains("InUse(messages, \"Tag\", id)", run.Sources["Shop.Tag.Endpoints.g.cs"]);
+        Assert.DoesNotContain("InUse", run.Sources["Shop.Product.Endpoints.g.cs"]);
+    }
+
+    [Fact]
+    public void Association_TreatsARecordBelowATenantOwnedParentAsTenantOwned()
+    {
+        var run = Run("""
+            app.MapCrud<Product>().MultiTenant();
+            app.MapCrud<Settings>().Under<Product>();
+            app.MapCrud<Tag>();
+            app.MapAssociation<Settings, Tag>();
+            """).AssertCompiles();
+
+        Assert.Contains(
+            "HasForeignKey(item => item.TagId).OnDelete(global::Microsoft.EntityFrameworkCore.DeleteBehavior.Restrict)",
+            run.Sources["HaldusModule.g.cs"]);
+    }
+
+    [Fact]
     public void Association_WithAStringKeyedEnd_UsesItsCode()
     {
         var run = Run("""

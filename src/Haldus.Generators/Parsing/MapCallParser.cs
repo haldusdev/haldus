@@ -581,6 +581,7 @@ internal static class MapCallParser
 
         string? propertyName = null;
         var onDelete = defaultOnDelete;
+        var onDeleteExplicit = false;
         var required = true;
 
         foreach (var argument in call.ArgumentList.Arguments)
@@ -594,6 +595,7 @@ internal static class MapCallParser
             else if (Enum.TryParse<OnDeleteBehavior>(text.Substring(text.LastIndexOf('.') + 1), out var behavior))
             {
                 onDelete = behavior;
+                onDeleteExplicit = true;
             }
             else if (text == "false")
             {
@@ -614,7 +616,8 @@ internal static class MapCallParser
             propertyName,
             onDelete,
             required,
-            LocationInfo.From(targetSyntax.GetLocation()));
+            LocationInfo.From(targetSyntax.GetLocation()),
+            onDeleteExplicit);
     }
 
     private static bool InheritsFrom(INamedTypeSymbol type, string baseTypeName)

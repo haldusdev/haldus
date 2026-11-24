@@ -151,6 +151,13 @@ public sealed class HaldusGenerator : IIncrementalGenerator
         var associations = ResourceLinker.LinkAssociations(
             associationDeclarations, [.. valid.Select(entry => entry.Resource)], diagnostic => Report(context, diagnostic));
 
+        valid =
+        [
+            .. ResourceLinker
+                .MarkRestrictedEnds([.. valid.Select(entry => entry.Resource)], associations)
+                .Select(resource => (resource, resource.Namespace)),
+        ];
+
         // Aynı istek tipi birden çok rotaya eşlenebilir; endpoint kodu bir kez üretilir.
         var validQueries = new List<QueryModel>();
         var seenQueries = new HashSet<string>();

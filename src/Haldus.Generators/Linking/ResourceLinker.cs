@@ -94,11 +94,57 @@ internal static class ResourceLinker
             }
             else if (associations.All(existing => existing.LinkName != left.EntityName + right.EntityName))
             {
-                associations.Add(new AssociationModel(left, right));
+                var leftScoped = IsTenantScoped(left, resources, byType);
+                var rightScoped = IsTenantScoped(right, resources, byType);
+
+                // Bir uç silindiğinde bağları da silinir; tek istisna, genel bir ucun kiracıya ait bir uca
+                // bağlı olmasıdır. O durumda genel ucu silen kişi başka kiracıların bağ kayıtlarını da
+                // silmiş olurdu, bu yüzden silme reddedilir.
+                associations.Add(new AssociationModel(
+                    left,
+                    right,
+                    LeftOnDelete: !leftScoped && rightScoped ? OnDeleteBehavior.Restrict : OnDeleteBehavior.Cascade,
+                    RightOnDelete: !rightScoped && leftScoped ? OnDeleteBehavior.Restrict : OnDeleteBehavior.Cascade));
             }
         }
 
         return associations;
+    }
+
+    /// <summary>Bir bağın, silinmesi reddedilen ucu olan kaynakları işaretler; silme uçları bunu çakışma olarak bildirir.</summary>
+    public static List<ResourceModel> MarkRestrictedEnds(IReadOnlyList<ResourceModel> resources, IReadOnlyList<AssociationModel> associations)
+    {
+        var restricted = new HashSet<string>(associations.SelectMany(association => new[]
+        {
+            association.LeftOnDelete == OnDeleteBehavior.Restrict ? association.Left.QualifiedName : null,
+            association.RightOnDelete == OnDeleteBehavior.Restrict ? association.Right.QualifiedName : null,
+        }).OfType<string>());
+
+        return [.. resources.Select(resource =>
+            restricted.Contains(resource.QualifiedName) ? resource with { IsReferenced = true } : resource)];
+    }
+
+    /// <summary>
+    /// Kaynağın kayıtları bir kiracıya mı ait: ya kendisi kiracıya bağlıdır ya da kiracıya ait bir ebeveynin
+    /// altındadır.
+    /// </summary>
+    private static bool IsTenantScoped(
+        ResourceModel resource,
+        IReadOnlyList<ResourceModel> resources,
+        Dictionary<string, ResourceModel> byType,
+        int depth = 0)
+    {
+        if (resource.Has(Traits.MultiTenant))
+        {
+            return true;
+        }
+
+        var parent = resource.ReferenceDeclarations.FirstOrDefault(declaration => declaration.Kind == ReferenceKind.Parent);
+
+        return parent is not null
+            && depth < 8
+            && FindTarget(parent, resources, byType) is { } target
+            && IsTenantScoped(target, resources, byType, depth + 1);
     }
 
     private static bool HasSingleColumnKey(ResourceModel resource) =>
@@ -161,6 +207,18 @@ internal static class ResourceLinker
             _ => declared?.IsNonNullable ?? declaration.Required,
         };
 
+        // Ebeveyn silinince altındakiler de silinir; ama kiracıya ait kayıtlar genel bir ebeveynin
+        // altındaysa bu, ebeveyni silen kişinin başka kiracıların verisini silmesi demektir. Geliştirici
+        // açıkça seçmediyse o durumda silme reddedilir.
+        var onDelete = declaration.OnDelete;
+        if (declaration is { Kind: ReferenceKind.Parent, OnDeleteExplicit: false }
+            && target is not null
+            && IsTenantScoped(resource, resources, byType)
+            && !IsTenantScoped(target, resources, byType))
+        {
+            onDelete = OnDeleteBehavior.Restrict;
+        }
+
         if (required && declaration.OnDelete == OnDeleteBehavior.SetNull)
         {
             fail(
@@ -192,7 +250,7 @@ internal static class ResourceLinker
             targetKeyName,
             targetKeyType,
             target is null ? string.Empty : Naming.ToKebabCase(Naming.Pluralize(target.EntityName)),
-            declaration.OnDelete);
+            onDelete);
     }
 
     private static ResourceModel? FindTarget(
