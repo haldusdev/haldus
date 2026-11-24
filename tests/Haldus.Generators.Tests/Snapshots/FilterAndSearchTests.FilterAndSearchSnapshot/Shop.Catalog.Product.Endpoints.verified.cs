@@ -178,7 +178,7 @@ public static partial class ProductEndpoints
             };
         }
 
-        // Sayfalama kararlı olsun diye sıralama her zaman kimlikle tamamlanır.
+        // Sayfalama kararlı olsun diye sıralama her zaman anahtarla tamamlanır.
         return global::Haldus.HaldusSearch.OrderBy(query, ordered, item => item.Id, descending: false);
     }
 

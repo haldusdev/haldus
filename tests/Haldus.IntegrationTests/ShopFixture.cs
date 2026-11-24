@@ -15,6 +15,15 @@ public sealed class ShopFixture : IAsyncLifetime
     public HttpClient CreateClient() =>
         (_factory ?? throw new InvalidOperationException("The fixture has not been initialized.")).CreateClient();
 
+    /// <summary>İstemcinin yazamadığı verileri (ör. salt-okunur kaynaklar) doğrudan veritabanına koymak için.</summary>
+    public async Task WithDbContextAsync(Func<AppDbContext, Task> action)
+    {
+        var factory = _factory ?? throw new InvalidOperationException("The fixture has not been initialized.");
+
+        await using var scope = factory.Services.CreateAsyncScope();
+        await action(scope.ServiceProvider.GetRequiredService<AppDbContext>());
+    }
+
     public async ValueTask InitializeAsync()
     {
         await _database.StartAsync();

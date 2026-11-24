@@ -24,8 +24,16 @@ internal static class HaldusDiagnostics
 
     public static readonly DiagnosticDescriptor UnsupportedIdType = new(
         "HALDUS003",
-        "Unsupported Id type",
-        "'{0}.Id' has type '{1}'; supported Id types are Guid, int and long",
+        "Unsupported key type",
+        "'{0}' has type '{1}'; supported key types for this archetype are {2}",
+        Category,
+        DiagnosticSeverity.Error,
+        isEnabledByDefault: true);
+
+    public static readonly DiagnosticDescriptor InvalidCombination = new(
+        "HALDUS007",
+        "Declarations cannot be combined",
+        "{0}",
         Category,
         DiagnosticSeverity.Error,
         isEnabledByDefault: true);
@@ -58,6 +66,7 @@ internal static class HaldusDiagnostics
     {
         "HALDUS005" => FieldCannotBeSearched,
         "HALDUS006" => SearchableNeedsFields,
+        "HALDUS007" => InvalidCombination,
         "HALDUS001" => EntityMustBePartialClass,
         "HALDUS002" => EntityMappedMoreThanOnce,
         "HALDUS003" => UnsupportedIdType,

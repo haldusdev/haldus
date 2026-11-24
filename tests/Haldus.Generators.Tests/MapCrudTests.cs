@@ -47,7 +47,7 @@ public sealed class MapCrudTests
     }
 
     [Fact]
-    public void UndeclaredEntity_IsGeneratedInTheRootNamespace()
+    public void UndeclaredEntity_IsGeneratedInTheNamespaceOfTheMapCall()
     {
         var run = GeneratorHarness.Run("""
             namespace Shop.Features
@@ -59,8 +59,24 @@ public sealed class MapCrudTests
             }
             """).AssertCompiles();
 
-        var entity = run.Sources["Shop.Tag.Entity.g.cs"];
-        Assert.Contains("namespace Shop;", entity);
+        var entity = run.Sources["Shop.Features.Tag.Entity.g.cs"];
+        Assert.Contains("namespace Shop.Features;", entity);
+        Assert.Contains("public partial class Tag", entity);
+    }
+
+    [Fact]
+    public void UndeclaredEntity_MappedFromTheGlobalNamespace_StillCompiles()
+    {
+        // Üst düzey Program.cs'ten yapılan çağrı global namespace'tedir; tip oradan da görülebilmelidir.
+        var run = GeneratorHarness.Run("""
+            public static class Endpoints
+            {
+                public static void Map(IEndpointRouteBuilder app) => app.MapCrud<Tag>();
+            }
+            """).AssertCompiles();
+
+        var entity = run.Sources["Tag.Entity.g.cs"];
+        Assert.DoesNotContain("namespace", entity);
         Assert.Contains("public partial class Tag", entity);
     }
 

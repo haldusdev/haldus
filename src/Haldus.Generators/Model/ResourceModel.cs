@@ -6,10 +6,11 @@ namespace Haldus.Generators.Model;
 
 /// <summary>Tek bir <c>Map*</c> çağrısından okunan her şey.</summary>
 internal sealed record ResourceModel(
-    string Archetype,
+    Archetype Archetype,
     string EntityName,
-    string? Namespace,
+    string Namespace,
     bool EntityDeclared,
+    string KeyName,
     string IdType,
     IdKind IdKind,
     bool IdDeclared,
@@ -35,6 +36,53 @@ internal enum IdKind
     Guid,
     Int32,
     Int64,
+    String,
+}
+
+/// <summary>Kaynağın şekli: hangi standart işlemlerin var olduğunu ve nasıl adreslendiğini belirler.</summary>
+internal enum Archetype
+{
+    /// <summary>Kendi kimliği ve yaşam döngüsü olan bağımsız entity.</summary>
+    Crud,
+
+    /// <summary>İstemci hiç yazmaz.</summary>
+    ReadOnly,
+
+    /// <summary>İstemci oluşturur; kayıt sonra değişmez.</summary>
+    AppendOnly,
+
+    /// <summary>Anahtarı istemci verir; anahtarla ekle-veya-güncelle.</summary>
+    Store,
+
+    /// <summary>Kod + ad taşıyan küçük referans listesi.</summary>
+    Lookup,
+
+    /// <summary>Kapsam başına tam bir kayıt; örtük olarak vardır.</summary>
+    Singleton,
+}
+
+internal static class ArchetypeExtensions
+{
+    public static Operations BaseOperations(this Archetype archetype) => archetype switch
+    {
+        Archetype.ReadOnly => Operations.List | Operations.Get,
+        Archetype.AppendOnly => Operations.List | Operations.Get | Operations.Create,
+        Archetype.Store or Archetype.Lookup => Operations.List | Operations.Get | Operations.Update | Operations.Delete,
+        Archetype.Singleton => Operations.Get | Operations.Update | Operations.Patch,
+        _ => Operations.All,
+    };
+
+    /// <summary>Anahtar özelliğinin adı. Singleton'da anahtar entity'de görünmez.</summary>
+    public static string KeyName(this Archetype archetype) => archetype switch
+    {
+        Archetype.Store => "Key",
+        Archetype.Lookup => "Code",
+        Archetype.Singleton => string.Empty,
+        _ => "Id",
+    };
+
+    /// <summary>Anahtarı sunucu mu üretir, yoksa istemci mi verir.</summary>
+    public static bool HasClientKey(this Archetype archetype) => archetype is Archetype.Store or Archetype.Lookup;
 }
 
 [Flags]
@@ -72,7 +120,8 @@ internal sealed record PropertyModel(
     bool IsNonNullableValue,
     SearchKind SearchKind,
     string ValueType,
-    EquatableArray<AttributeModel> ValidationAttributes)
+    EquatableArray<AttributeModel> ValidationAttributes,
+    bool IsGenerated = false)
 {
     public bool IsNonNullable => IsNonNullableReference || IsNonNullableValue;
 }

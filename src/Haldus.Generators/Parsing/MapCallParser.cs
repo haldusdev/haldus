@@ -38,9 +38,14 @@ internal static class MapCallParser
         }
         && ArchetypeOf(name.Identifier.ValueText) is not null;
 
-    public static string? ArchetypeOf(string methodName) => methodName switch
+    public static Archetype? ArchetypeOf(string methodName) => methodName switch
     {
-        "MapCrud" => "Crud",
+        "MapCrud" => Archetype.Crud,
+        "MapReadOnly" => Archetype.ReadOnly,
+        "MapAppendOnly" => Archetype.AppendOnly,
+        "MapStore" => Archetype.Store,
+        "MapLookup" => Archetype.Lookup,
+        "MapSingleton" => Archetype.Singleton,
         _ => null,
     };
 
@@ -56,26 +61,31 @@ internal static class MapCallParser
             return null;
         }
 
-        var archetype = ArchetypeOf(name.Identifier.ValueText)!;
+        var archetype = ArchetypeOf(name.Identifier.ValueText)!.Value;
+        var keyName = archetype.KeyName();
         var location = LocationInfo.From(name.GetLocation());
         var chain = ChainReader.Read(invocation);
-        var (traits, operations) = ChainReader.Interpret(chain);
+        var (traits, operations, unsupportedOperations) = ChainReader.Interpret(chain, archetype.BaseOperations());
         var diagnostics = new List<DiagnosticInfo>();
 
         string entityName;
-        string? entityNamespace;
+        string entityNamespace;
         INamedTypeSymbol? entity = null;
 
         if (type is null or IErrorTypeSymbol)
         {
-            // Entity hiç yazılmamış: Haldus tamamını üretir ve projenin kök namespace'ine koyar.
+            // Entity hiç yazılmamış: Haldus tamamını üretir. Çağrının bulunduğu namespace'e konur ki
+            // çağrı yerinden her zaman görülebilsin (üst düzey Program.cs'te bu, global namespace'tir).
             if (typeSyntax is not IdentifierNameSyntax identifier)
             {
                 return null;
             }
 
             entityName = identifier.Identifier.ValueText;
-            entityNamespace = null;
+            entityNamespace = context.SemanticModel.GetEnclosingSymbol(invocation.SpanStart, cancellationToken)
+                ?.ContainingNamespace is { IsGlobalNamespace: false } callSiteNamespace
+                    ? callSiteNamespace.ToDisplayString()
+                    : string.Empty;
         }
         else
         {
@@ -103,7 +113,7 @@ internal static class MapCallParser
 
         foreach (var property in entity is null ? [] : PublicInstanceProperties(entity))
         {
-            if (property.Name == "Id")
+            if (keyName.Length > 0 && property.Name == keyName)
             {
                 id = property;
             }
@@ -118,14 +128,27 @@ internal static class MapCallParser
             }
         }
 
-        var idKind = IdKind.Guid;
-        if (id is not null && !TryGetIdKind(id.Type, out idKind))
+        // Anahtarı istemcinin verdiği archetype'larda varsayılan tip metindir; diğerlerinde sunucu Guid üretir.
+        var idKind = archetype.HasClientKey() ? IdKind.String : IdKind.Guid;
+        if (id is not null && !TryGetIdKind(id.Type, archetype, out idKind))
         {
             diagnostics.Add(new DiagnosticInfo(
-                "HALDUS003", location, new EquatableArray<string>([entityName, id.Type.ToDisplayString()])));
+                "HALDUS003",
+                location,
+                new EquatableArray<string>([$"{entityName}.{keyName}", id.Type.ToDisplayString(), SupportedKeyTypes(archetype)])));
         }
 
-        var idType = id?.Type.ToDisplayString(TypeFormat) ?? GuidType;
+        var idType = id?.Type.ToDisplayString(TypeFormat) ?? (archetype.HasClientKey() ? "string" : GuidType);
+
+        if (archetype == Archetype.Lookup && properties.All(property => property.Name != "Name"))
+        {
+            properties.Insert(0, LookupName());
+        }
+
+        foreach (var message in Conflicts(archetype, traits, operations, unsupportedOperations, chain))
+        {
+            diagnostics.Add(new DiagnosticInfo("HALDUS007", location, new EquatableArray<string>([message])));
+        }
 
         FilterModel? filter = null;
         var searchFields = new List<SearchField>();
@@ -140,7 +163,7 @@ internal static class MapCallParser
                 case { Identifier.ValueText: "Searchable" }:
                     ReadSearchFields(
                         callName, call, entityName,
-                        SearchCandidates(idType, idKind, properties, traits),
+                        SearchCandidates(keyName, idType, idKind, properties, traits),
                         searchFields, diagnostics);
                     break;
             }
@@ -151,6 +174,7 @@ internal static class MapCallParser
             entityName,
             entityNamespace,
             EntityDeclared: entity is not null,
+            keyName,
             idType,
             idKind,
             IdDeclared: id is not null,
@@ -264,19 +288,99 @@ internal static class MapCallParser
         }
     }
 
-    private static bool TryGetIdKind(ITypeSymbol type, out IdKind kind)
+    private static bool TryGetIdKind(ITypeSymbol type, Archetype archetype, out IdKind kind)
     {
         switch (type.SpecialType)
         {
+            case SpecialType.System_String:
+                kind = IdKind.String;
+                return archetype.HasClientKey();
             case SpecialType.System_Int32:
                 kind = IdKind.Int32;
-                return true;
+                return archetype != Archetype.Lookup;
             case SpecialType.System_Int64:
                 kind = IdKind.Int64;
-                return true;
+                return archetype != Archetype.Lookup;
             default:
                 kind = IdKind.Guid;
-                return type.ToDisplayString() == "System.Guid";
+                return archetype != Archetype.Lookup && type.ToDisplayString() == "System.Guid";
+        }
+    }
+
+    private static string SupportedKeyTypes(Archetype archetype) => archetype switch
+    {
+        Archetype.Lookup => "string",
+        Archetype.Store => "string, Guid, int and long",
+        _ => "Guid, int and long",
+    };
+
+    /// <summary>Lookup'ın kullanıcı yazmadıysa üretilen ad alanı.</summary>
+    private static PropertyModel LookupName() => new(
+        "Name",
+        "string",
+        NullableType: "string?",
+        IsWritable: true,
+        IsNonNullableReference: true,
+        IsNonNullableValue: false,
+        SearchKind.String,
+        "string",
+        new EquatableArray<AttributeModel>(
+        [
+            new AttributeModel($"global::{RequiredAttributeType}", IsRequired: true),
+            new AttributeModel("global::System.ComponentModel.DataAnnotations.MaxLengthAttribute(200)", IsRequired: false),
+        ]),
+        IsGenerated: true);
+
+    /// <summary>
+    /// Archetype'ın anlamıyla çelişen zincir bildirimlerini bulur. Bunlar sessizce yok sayılsaydı,
+    /// örneğin liste işlemi kaldırılmış bir kaynakta arama ucu açık kalabilirdi.
+    /// </summary>
+    private static IEnumerable<string> Conflicts(
+        Archetype archetype,
+        Traits traits,
+        Operations operations,
+        Operations unsupportedOperations,
+        EquatableArray<ChainCall> chain)
+    {
+        var name = $"Map{archetype}";
+
+        if (unsupportedOperations != Operations.None)
+        {
+            yield return $"{name} does not have the operation(s) '{unsupportedOperations}'; they cannot be selected with Without or Only";
+        }
+
+        var forbidden = archetype switch
+        {
+            Archetype.ReadOnly => Traits.ConcurrencyChecked,
+            Archetype.AppendOnly => Traits.ConcurrencyChecked | Traits.SoftDeletable,
+            Archetype.Store or Archetype.Lookup => Traits.ConcurrencyChecked | Traits.SoftDeletable,
+            Archetype.Singleton => Traits.ConcurrencyChecked | Traits.SoftDeletable | Traits.Archivable,
+            _ => Traits.None,
+        };
+
+        foreach (var trait in new[] { Traits.ConcurrencyChecked, Traits.SoftDeletable, Traits.Archivable })
+        {
+            if ((traits & forbidden & trait) != 0)
+            {
+                yield return $"{trait} cannot be combined with {name}";
+            }
+        }
+
+        foreach (var declaration in new[] { "Filterable", "Searchable" })
+        {
+            if (chain.All(call => call.Name != declaration))
+            {
+                continue;
+            }
+
+            if (archetype is Archetype.Singleton or Archetype.Lookup)
+            {
+                yield return $"{declaration} cannot be combined with {name}";
+            }
+            else if ((operations & Operations.List) == 0)
+            {
+                yield return $"{declaration} requires the List operation, which has been removed from this resource";
+            }
         }
     }
 
@@ -345,14 +449,22 @@ internal static class MapCallParser
 
     /// <summary>Aranabilecek alanlar: kimlik, kullanıcının skaler alanları ve etkin trait'lerin açık alanları.</summary>
     private static Dictionary<string, SearchField> SearchCandidates(
+        string keyName,
         string idType,
         IdKind idKind,
         List<PropertyModel> properties,
         Traits traits)
     {
+        var keyKind = idKind switch
+        {
+            IdKind.Guid => SearchKind.Equality,
+            IdKind.String => SearchKind.String,
+            _ => SearchKind.Range,
+        };
+
         var candidates = new Dictionary<string, SearchField>
         {
-            ["Id"] = new("Id", idKind == IdKind.Guid ? SearchKind.Equality : SearchKind.Range, idType, IsNullable: false),
+            [keyName] = new(keyName, keyKind, idType, IsNullable: false),
         };
 
         foreach (var property in properties)

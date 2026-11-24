@@ -10,6 +10,16 @@ public static class HaldusFilters
     public const string SoftDelete = "Haldus.SoftDelete";
 }
 
+/// <summary>Üretilen model yapılandırmasının kullandığı sabitler.</summary>
+public static class HaldusModel
+{
+    /// <summary>
+    /// Kiracıya bağlı olmayan tek kayıtlı kaynakların anahtarı olan gölge alan. Değeri her zaman 1'dir;
+    /// böylece tabloda ikinci bir satır oluşamaz.
+    /// </summary>
+    public const string SingletonKey = "SingletonKey";
+}
+
 /// <summary>Üretilen sorgu filtrelerinin, geçerli bağlam üzerinden istek kapsamındaki değerlere ulaştığı yer.</summary>
 public static class HaldusScope
 {

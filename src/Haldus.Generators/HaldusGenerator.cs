@@ -30,19 +30,9 @@ public sealed class HaldusGenerator : IIncrementalGenerator
             .Where(static dbContext => dbContext is not null)
             .Select(static (dbContext, _) => dbContext!);
 
-        // Kullanıcının yazmadığı entity'ler projenin kök namespace'ine üretilir.
-        var rootNamespace = context.AnalyzerConfigOptionsProvider
-            .Combine(context.CompilationProvider.Select(static (compilation, _) => compilation.AssemblyName))
-            .Select(static (pair, _) =>
-                pair.Left.GlobalOptions.TryGetValue("build_property.RootNamespace", out var value) && value.Length > 0
-                    ? value
-                    : pair.Right ?? string.Empty);
-
-        var input = resources.Collect().Combine(dbContexts.Collect()).Combine(rootNamespace);
-
         context.RegisterSourceOutput(
-            input,
-            static (productionContext, data) => Emit(productionContext, data.Left.Left, data.Left.Right, data.Right));
+            resources.Collect().Combine(dbContexts.Collect()),
+            static (productionContext, data) => Emit(productionContext, data.Left, data.Right));
 
         // Zincir derleme zamanında okunduğu için bir Map çağrısına kesintisiz bağlı olmayan bildirimler
         // sessizce yok sayılırdı; bunun yerine hata verilir.
@@ -87,8 +77,7 @@ public sealed class HaldusGenerator : IIncrementalGenerator
     private static void Emit(
         SourceProductionContext context,
         ImmutableArray<ResourceModel> resources,
-        ImmutableArray<DbContextModel> dbContexts,
-        string rootNamespace)
+        ImmutableArray<DbContextModel> dbContexts)
     {
         var valid = new List<(ResourceModel Resource, string Namespace)>();
         var seen = new HashSet<string>();
@@ -105,7 +94,7 @@ public sealed class HaldusGenerator : IIncrementalGenerator
                 continue;
             }
 
-            var entityNamespace = resource.Namespace ?? rootNamespace;
+            var entityNamespace = resource.Namespace;
             if (!seen.Add($"{entityNamespace}.{resource.EntityName}"))
             {
                 context.ReportDiagnostic(Diagnostic.Create(

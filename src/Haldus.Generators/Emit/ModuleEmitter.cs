@@ -49,7 +49,10 @@ internal static class ModuleEmitter
 
         foreach (var (resource, entityNamespace) in resources)
         {
-            var setName = Naming.Pluralize(resource.EntityName);
+            // Tek kayıtlı kaynak koleksiyon değildir; adı çoğullanmaz.
+            var setName = resource.Archetype == Archetype.Singleton
+                ? resource.EntityName
+                : Naming.Pluralize(resource.EntityName);
             if (!existing.Add(setName))
             {
                 continue;
@@ -77,13 +80,41 @@ internal static class ModuleEmitter
     private static void AppendModel(StringBuilder builder, ResourceModel resource, string entity)
     {
         var statements = new List<string>();
+        var tenant = resource.Has(Traits.MultiTenant);
 
-        if (resource.Has(Traits.MultiTenant))
+        if (resource.Archetype == Archetype.Singleton)
+        {
+            // Kapsam başına tek kayıt: anahtar ya kiracının kendisidir ya da sabit bir gölge alandır.
+            if (tenant)
+            {
+                statements.Add("entity.HasKey(item => item.TenantId);");
+            }
+            else
+            {
+                statements.Add("entity.Property<int>(global::Haldus.HaldusModel.SingletonKey).ValueGeneratedNever();");
+                statements.Add("entity.HasKey(global::Haldus.HaldusModel.SingletonKey);");
+            }
+        }
+        else if (resource.Archetype.HasClientKey())
+        {
+            // Anahtarı istemci verir; kiracıya bağlı kaynakta aynı anahtar her kiracıda ayrı kullanılabilir.
+            statements.Add(tenant
+                ? $"entity.HasKey(item => new {{ item.TenantId, item.{resource.KeyName} }});"
+                : $"entity.HasKey(item => item.{resource.KeyName});");
+            statements.Add($"entity.Property(item => item.{resource.KeyName}).ValueGeneratedNever();");
+        }
+
+        if (tenant)
         {
             // Filtre, modelin kurulduğu bağlama başvurur; EF Core bu başvuruyu her sorguda geçerli bağlamla değiştirir.
             statements.Add(
                 "entity.HasQueryFilter(global::Haldus.HaldusFilters.Tenant, item => item.TenantId == global::Haldus.HaldusScope.TenantId(context));");
-            statements.Add("entity.HasIndex(item => item.TenantId);");
+
+            // Kiracı zaten anahtarın ilk parçasıysa ayrı indeks gereksizdir.
+            if (resource.Archetype != Archetype.Singleton && !resource.Archetype.HasClientKey())
+            {
+                statements.Add("entity.HasIndex(item => item.TenantId);");
+            }
         }
 
         if (resource.Has(Traits.SoftDeletable))

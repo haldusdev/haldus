@@ -1,7 +1,9 @@
 using Haldus;
 using Haldus.Sample.Shop;
 using Haldus.Sample.Shop.Features.Catalog;
+using Haldus.Sample.Shop.Features.Platform;
 using Haldus.Sample.Shop.Features.Sales;
+using Haldus.Sample.Shop.Features.Stock;
 using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -25,6 +27,8 @@ app.UseHaldus();
 app.MapOpenApi();
 app.MapCatalog();
 app.MapSales();
+app.MapStock();
+app.MapPlatform();
 
 app.Run();
 

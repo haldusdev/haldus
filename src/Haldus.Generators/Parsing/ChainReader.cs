@@ -46,10 +46,17 @@ internal static class ChainReader
                 node.Invocation.ArgumentList.Arguments.Select(argument => argument.Expression.ToString()).ToEquatableArray()))
             .ToEquatableArray();
 
-    public static (Traits Traits, Operations Operations) Interpret(EquatableArray<ChainCall> chain)
+    /// <returns>
+    /// Etkin trait'ler, üretilecek işlemler ve zincirde istenip archetype'ın sunmadığı işlemler
+    /// (bunlar sessizce yok sayılmaz, tanı olarak bildirilir).
+    /// </returns>
+    public static (Traits Traits, Operations Operations, Operations Unsupported) Interpret(
+        EquatableArray<ChainCall> chain,
+        Operations baseOperations)
     {
         var traits = Traits.None;
-        var operations = Operations.All;
+        var operations = baseOperations;
+        var unsupported = Operations.None;
 
         foreach (var call in chain)
         {
@@ -76,15 +83,24 @@ internal static class ChainReader
                     traits |= Traits.Archivable;
                     break;
                 case "Without":
-                    operations &= ~ParseOperations(call);
+                {
+                    var requested = ParseOperations(call);
+                    unsupported |= requested & ~baseOperations;
+                    operations &= ~requested;
                     break;
+                }
+
                 case "Only":
-                    operations = ParseOperations(call);
+                {
+                    var requested = ParseOperations(call);
+                    unsupported |= requested & ~baseOperations;
+                    operations = requested & baseOperations;
                     break;
+                }
             }
         }
 
-        return (traits, operations);
+        return (traits, operations, unsupported);
     }
 
     /// <summary>
