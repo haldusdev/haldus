@@ -31,6 +31,7 @@ internal static class ChainReader
         "Numbered",
         "Expiring",
         "Idempotent",
+        "Batch",
     ];
 
     /// <summary>Zincirdeki çağrıları, Map çağrısından dışa doğru sırayla verir.</summary>

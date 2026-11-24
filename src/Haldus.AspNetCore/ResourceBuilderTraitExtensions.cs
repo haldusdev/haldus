@@ -75,6 +75,22 @@ public static class ResourceBuilderTraitExtensions
     public static ResourceBuilder<TEntity> Idempotent<TEntity>(this ResourceBuilder<TEntity> builder, bool required = false)
         where TEntity : class => builder;
 
+    /// <summary>
+    /// Kaynağın sahip olduğu işlemlerin toplu biçimlerini ekler: <c>POST /batch-get</c>,
+    /// <c>/batch-create</c>, <c>/batch-update</c> ve <c>/batch-delete</c>. Her öğeye tekil ucun kuralları
+    /// aynen uygulanır.
+    /// </summary>
+    /// <param name="atomic">
+    /// <c>true</c> ise ya hepsi ya hiçbiri: bir öğe başarısızsa hiçbir şey kaydedilmez ve yanıt o öğenin
+    /// hatasıdır. <c>false</c> ise geçerli öğeler kaydedilir ve yanıt 207 ile öğe başına sonuç döner.
+    /// </param>
+    /// <param name="maxItems">Bir istekte kabul edilen en çok öğe.</param>
+    public static ResourceBuilder<TEntity> Batch<TEntity>(
+        this ResourceBuilder<TEntity> builder,
+        bool atomic = true,
+        int maxItems = HaldusBatch.DefaultMaxItems)
+        where TEntity : class => builder;
+
     /// <summary>Verilen standart işlemlerin endpoint'lerini üretmez.</summary>
     public static ResourceBuilder<TEntity> Without<TEntity>(this ResourceBuilder<TEntity> builder, params CrudOperation[] operations)
         where TEntity : class => builder;

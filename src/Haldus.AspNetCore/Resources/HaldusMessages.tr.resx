@@ -69,6 +69,15 @@
   <data name="IdempotencyKeyReused.Detail" xml:space="preserve">
     <value>Bu Idempotency-Key daha önce farklı bir istekle kullanıldı. Yeni bir istek için yeni bir anahtar kullanın.</value>
   </data>
+  <data name="BatchTooLarge.Title" xml:space="preserve">
+    <value>Çok fazla öğe</value>
+  </data>
+  <data name="BatchTooLarge.Detail" xml:space="preserve">
+    <value>Bir toplu istek en fazla {0} öğe içerebilir.</value>
+  </data>
+  <data name="BatchItemMissing.Detail" xml:space="preserve">
+    <value>Toplu istekteki bir öğe boş.</value>
+  </data>
   <data name="SearchTooComplex.Title" xml:space="preserve">
     <value>Arama çok karmaşık</value>
   </data>

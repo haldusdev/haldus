@@ -135,6 +135,28 @@ public static class HaldusProblems
             statusCode: StatusCodes.Status422UnprocessableEntity);
     }
 
+    /// <summary>Toplu istek, izin verilenden çok öğe taşıyor.</summary>
+    public static ProblemHttpResult BatchTooLarge(IHaldusMessages messages, int maxItems)
+    {
+        ArgumentNullException.ThrowIfNull(messages);
+
+        return TypedResults.Problem(
+            title: messages.Format(HaldusMessageKeys.BatchTooLargeTitle),
+            detail: messages.Format(HaldusMessageKeys.BatchTooLargeDetail, maxItems),
+            statusCode: StatusCodes.Status400BadRequest);
+    }
+
+    /// <summary>Toplu istekteki bir öğe boş (<c>null</c>) gönderildi.</summary>
+    public static ProblemHttpResult BatchItemMissing(IHaldusMessages messages)
+    {
+        ArgumentNullException.ThrowIfNull(messages);
+
+        return TypedResults.Problem(
+            title: messages.Format(HaldusMessageKeys.ValidationTitle),
+            detail: messages.Format(HaldusMessageKeys.BatchItemMissingDetail),
+            statusCode: StatusCodes.Status400BadRequest);
+    }
+
     /// <summary>Arama isteği izin verilen derinliği, koşul sayısını veya liste uzunluğunu aştı.</summary>
     public static ProblemHttpResult SearchTooComplex(IHaldusMessages messages)
     {

@@ -33,6 +33,9 @@ public static class HaldusMessageKeys
     public const string IdempotencyKeyInvalidDetail = "IdempotencyKeyInvalid.Detail";
     public const string IdempotencyKeyReusedTitle = "IdempotencyKeyReused.Title";
     public const string IdempotencyKeyReusedDetail = "IdempotencyKeyReused.Detail";
+    public const string BatchTooLargeTitle = "BatchTooLarge.Title";
+    public const string BatchTooLargeDetail = "BatchTooLarge.Detail";
+    public const string BatchItemMissingDetail = "BatchItemMissing.Detail";
     public const string SearchTooComplexTitle = "SearchTooComplex.Title";
     public const string SearchTooComplexDetail = "SearchTooComplex.Detail";
     public const string TenantRequiredTitle = "TenantRequired.Title";

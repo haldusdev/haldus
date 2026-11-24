@@ -71,6 +71,9 @@ internal sealed record ResourceModel(
     /// </summary>
     public EquatableArray<TraitMember> ExtraMembers { get; init; } = EquatableArray<TraitMember>.Empty;
 
+    /// <summary><c>.Batch(...)</c> ile bildirilen toplu işlemler.</summary>
+    public BatchModel? Batch { get; init; }
+
     /// <summary><c>MapTransition</c> ile bildirilen geçişler; bağlama adımı doldurur.</summary>
     public EquatableArray<TransitionModel> Transitions { get; init; } = EquatableArray<TransitionModel>.Empty;
 
@@ -318,6 +321,10 @@ internal sealed record NumberingModel(string Pattern, bool Gapless, string? Assi
 /// <param name="LifetimeTicks">Sunucunun verdiği ömür; <c>null</c> ise son kullanma zamanını istemci verir.</param>
 /// <param name="Sliding">Her yazmada süre yeniden başlar mı.</param>
 internal sealed record ExpiryModel(long? LifetimeTicks, bool Sliding);
+
+/// <param name="Atomic">Bir öğe başarısızsa hiçbir şey kaydedilmez mi; değilse geçerli öğeler kaydedilir.</param>
+/// <param name="MaxItems">Bir istekte kabul edilen en çok öğe.</param>
+internal sealed record BatchModel(bool Atomic, int MaxItems);
 
 /// <summary>Bir durum enum'unun üyesi.</summary>
 internal sealed record StateReference(string Type, string Name);

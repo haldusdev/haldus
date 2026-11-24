@@ -21,7 +21,8 @@ public static class SalesEndpoints
         // Adres müşterinin adresi altında yaşar: /customers/{customerId}/addresses
         // Müşteri kiracıya bağlı olduğu için adreslere de yalnızca o kiracı ulaşabilir.
         app.MapCrud<Address>()
-            .Under<Customer>();
+            .Under<Customer>()
+            .Batch();
 
         // Aşağıdaki ikisi adresin kendisi gibi korunur: adres görünmüyorsa ona not eklenemez ve
         // bir teslimat ona bağlanamaz.

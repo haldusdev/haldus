@@ -167,6 +167,11 @@ internal static class ResourceEmitter
             AppendSearchTypes(builder, resource);
         }
 
+        if (resource.Batch is not null)
+        {
+            AppendBatchRequests(builder, resource);
+        }
+
         return builder.ToString();
     }
 
@@ -259,6 +264,37 @@ internal static class ResourceEmitter
         builder.Append("}\n");
     }
 
+    /// <summary>
+    /// Toplu oluşturma ve güncellemenin istek tipleri. Öğeler tekil isteklerle aynı alanları ve kuralları
+    /// taşır; güncelleme öğesi ayrıca hangi kaydı değiştirdiğini söyler.
+    /// </summary>
+    private static void AppendBatchRequests(StringBuilder builder, ResourceModel resource)
+    {
+        var entity = resource.EntityName;
+
+        if (resource.Has(Operations.Create))
+        {
+            AppendBatchRequest(builder, $"BatchCreate{entity}Request", $"Create{entity}Request");
+        }
+
+        if (resource.Has(Operations.Update))
+        {
+            AppendRequest(builder, $"BatchUpdate{entity}Item", resource, detailRequests: "Update", withKey: true);
+            AppendBatchRequest(builder, $"BatchUpdate{entity}Request", $"BatchUpdate{entity}Item");
+        }
+    }
+
+    private static void AppendBatchRequest(StringBuilder builder, string name, string item)
+    {
+        builder.Append('\n');
+        builder.Append($"public sealed partial record {name}\n");
+        builder.Append("{\n");
+        builder.Append($"    [{RequiredAttributeName}]\n");
+        builder.Append($"    public {ReadOnlyList}<{item}> Items {{ get; init; }} = default!;\n");
+        builder.Append("}\n");
+    }
+
+    /// <param name="withKey">İstek, hangi kaydı hedeflediğini kendi taşır mı (toplu güncelleme öğesi).</param>
     /// <param name="detailRequests">
     /// Gömülü detayların bu istekte hangi satır tipiyle taşınacağı: oluşturmada <c>Create</c> (isteğe bağlı),
     /// tam değiştirmede <c>Update</c> (zorunlu; gönderilmeyen koleksiyon tüm satırların silinmesi anlamına
@@ -269,7 +305,8 @@ internal static class ResourceEmitter
         string name,
         ResourceModel resource,
         string? detailRequests,
-        bool withOptionalId = false)
+        bool withOptionalId = false,
+        bool withKey = false)
     {
         builder.Append('\n');
         builder.Append($"public sealed partial record {name}\n");
@@ -280,6 +317,12 @@ internal static class ResourceEmitter
         if (withOptionalId)
         {
             builder.Append($"    public {resource.IdType}? {resource.KeyName} {{ get; init; }}\n");
+            first = false;
+        }
+
+        if (withKey)
+        {
+            builder.Append($"    public {resource.IdType} {resource.KeyName} {{ get; init; }}\n");
             first = false;
         }
 

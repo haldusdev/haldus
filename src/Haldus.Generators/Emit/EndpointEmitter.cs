@@ -5,7 +5,7 @@ using Haldus.Generators.Model;
 namespace Haldus.Generators.Emit;
 
 /// <summary>Bir kaynağın Minimal API endpoint'lerini archetype'a, seçilen işlemlere ve trait'lere göre üretir.</summary>
-internal sealed class EndpointEmitter
+internal sealed partial class EndpointEmitter
 {
     private const string Task = "global::System.Threading.Tasks.Task";
     private const string Http = "global::Microsoft.AspNetCore.Http";
@@ -254,6 +254,11 @@ internal sealed class EndpointEmitter
             EmitJobCancel();
         }
 
+        if (_resource.Batch is not null)
+        {
+            EmitBatch();
+        }
+
         foreach (var transition in _resource.Transitions)
         {
             EmitTransition(transition);
@@ -472,7 +477,11 @@ internal sealed class EndpointEmitter
             """);
     }
 
-    private void EmitCreate()
+    /// <summary>
+    /// Yeni kaydın başlangıç değerleri: Haldus'un atadıkları (kimlik, ebeveyn, durum, ömür) ve istekten
+    /// gelen alanlar. Tekil ve toplu oluşturma aynı ifadeyi kullanır.
+    /// </summary>
+    private string CreateInitializer()
     {
         var keys = new List<string>();
         if (_resource.IdKind == IdKind.Guid)
@@ -505,8 +514,13 @@ internal sealed class EndpointEmitter
             keys.Add("Culture = global::System.Globalization.CultureInfo.CurrentUICulture.Name");
         }
 
-        var assignments = string.Join(
+        return string.Join(
             ", ", keys.Concat(_writable.Select(property => $"{property.Name} = request.{property.Name}")));
+    }
+
+    private void EmitCreate()
+    {
+        var assignments = CreateInitializer();
 
         // Numara oluşturulurken atanıyorsa, kayıtla aynı transaction'da ayrılır ve onunla birlikte kalıcı olur.
         var numbered = _resource.Numbering is { AssignOn: null };

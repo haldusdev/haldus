@@ -69,6 +69,15 @@
   <data name="IdempotencyKeyReused.Detail" xml:space="preserve">
     <value>This Idempotency-Key was already used with a different request. Use a new key for a new request.</value>
   </data>
+  <data name="BatchTooLarge.Title" xml:space="preserve">
+    <value>Too many items</value>
+  </data>
+  <data name="BatchTooLarge.Detail" xml:space="preserve">
+    <value>A batch request can contain at most {0} items.</value>
+  </data>
+  <data name="BatchItemMissing.Detail" xml:space="preserve">
+    <value>An item of the batch is empty.</value>
+  </data>
   <data name="SearchTooComplex.Title" xml:space="preserve">
     <value>Search is too complex</value>
   </data>

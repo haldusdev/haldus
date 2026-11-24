@@ -294,6 +294,7 @@ internal static class MapCallParser
             Workflow = lifecycle.Workflow,
             Numbering = lifecycle.Numbering,
             Expiry = lifecycle.Expiry,
+            Batch = lifecycle.Batch,
             ExtraMembers = lifecycle.Members.ToEquatableArray(),
             IsComputed = entity?.AllInterfaces.Any(candidate => candidate.ToDisplayString() == "Haldus.IComputed") == true,
         };
@@ -516,6 +517,9 @@ internal static class MapCallParser
 
                 // Anahtarla ekle-veya-güncelle zaten tekrara dayanıklıdır; tek kaydın oluşturma ucu yoktur.
                 "Idempotent" => archetype is Archetype.Crud or Archetype.ReadOnly or Archetype.AppendOnly or Archetype.Job,
+
+                // Toplu uçlar, sunucunun anahtar ürettiği koleksiyonların işlemlerini izler.
+                "Batch" => archetype is Archetype.Crud or Archetype.ReadOnly or Archetype.AppendOnly,
                 _ => true,
             };
 
@@ -523,6 +527,15 @@ internal static class MapCallParser
             {
                 yield return $"{declaration} cannot be combined with {name}";
             }
+        }
+
+        if (chain.Any(call => call.Name == "Batch")
+            && (traits & Traits.ConcurrencyChecked) != 0
+            && (operations & (Operations.Update | Operations.Delete)) != 0)
+        {
+            // Toplu güncelleme ve silme öğe başına sürüm taşımaz; sürüm kontrolünü sessizce atlamak olurdu.
+            yield return "Batch cannot be combined with ConcurrencyChecked while the resource can be updated or deleted: "
+                + "a batch item cannot carry the version it expects. Remove those operations with Without, or drop one of the two";
         }
 
         foreach (var declaration in new[] { "Filterable", "Searchable" })

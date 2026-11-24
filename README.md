@@ -210,6 +210,7 @@ app.MapCrud<Customer>()
 | `.Numbered("ORD-{yyyy}-{seq:6}")` | Benzersiz `Number` alanı; varsayılan olarak boşluksuz, `gapless: false` ile sequence |
 | `.Expiring(...)` | `ExpiresAt` alanı; süresi dolan kayıt okunamaz ve yazılamaz, `expire` ucu hemen sonlandırır |
 | `.Idempotent()` | Oluşturma ve geçişler `Idempotency-Key` ile tekrara karşı korunur |
+| `.Batch()` | Toplu uçlar: `POST /batch-get`, `batch-create`, `batch-update`, `batch-delete`; atomik veya `atomic: false` ile kısmi |
 | `.Without(...)` / `.Only(...)` | Üretilecek standart işlemleri seçer |
 | `.Filterable<TFilter>()` | Kendi yazdığın filtre sınıfını liste ucunun sorgu parametrelerine bağlar |
 | `.Searchable(...)` | `POST /search`: sayılan alanlarda VE/VEYA koşulları ve sıralama |

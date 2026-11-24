@@ -96,7 +96,7 @@ Bunlar kullanıcıyla kararlaştırıldı; yeniden sorma.
   Hangfire. İlk ikisi yazıldı; Hangfire paketi yeni bağımlılık getirdiği için onay bekliyor.
 - `Batch` işlem başına ayrı uçlarla sunulur (`POST /products/batch-get`, `batch-create`, `batch-update`,
   `batch-delete`) ve varsayılan olarak atomiktir; `.Batch(atomic: false)` ile kısmi başarıya (207, öğe
-  başına sonuç) geçilir. İkisi de desteklenecek (kullanıcı kararı). Henüz yazılmadı.
+  başına sonuç) geçilir. İkisi de desteklenir (kullanıcı kararı).
 - `Expiring` süresi dolan kaydın erişimini keser (kullanıcı kararı): kayıt silinmez, sorgu filtresiyle
   okuma anında gizlenir ve yazılamaz. Fiziksel temizlik arka plan işleriyle birlikte 8. aşamadadır.
 - `MultiTenant` kiracıyı token'daki claim'den okur.
@@ -128,8 +128,8 @@ Bunlar kullanıcıyla kararlaştırıldı; yeniden sorma.
 
 ## Aşamalar
 
-1–7 tamamlandı (3. aşamaya `.Searchable()` da eklendi). 8. aşama sürüyor: `MapJob` ile bellek içi ve
-PostgreSQL altyapıları bitti; kalanlar Hangfire paketi, `Batch` ve fiziksel temizlik (süresi dolmuş
+1–7 tamamlandı (3. aşamaya `.Searchable()` da eklendi). 8. aşama sürüyor: `MapJob` (bellek içi ve
+PostgreSQL altyapılarıyla) ve `Batch` bitti; kalanlar Hangfire paketi ve fiziksel temizlik (süresi dolmuş
 `Expiring` kayıtları, saklama süresi geçmiş idempotency kayıtları).
 
 1. İskelet
@@ -305,6 +305,20 @@ PostgreSQL altyapıları bitti; kalanlar Hangfire paketi, `Batch` ve fiziksel te
   - Build sırasındaki şema üretimi arka plan servislerini de başlatır; iş altyapıları
     `HaldusJobs.IsGeneratingOpenApiDocument` ile o sırada veritabanına bağlanmaz. Yeni bir arka plan
     servisi eklerken aynı kontrolü yap.
+- **Toplu uçlar.** `Emit/EndpointEmitter.Batch.cs`. Her öğe, tekil ucun kullandığı kod parçalarıyla
+  (`ReferenceChecks`, `StateGuard`, `SyncDetails`, `Compute`, `Save`...) ayrı bir `Batch*ItemAsync` metodunda
+  işlenir ve hemen kaydedilir; kurallar bu yüzden toplu yolda da aynen geçerlidir. **Tekil bir uca yeni bir
+  kural eklerken onu bu paylaşılan parçalara koy; doğrudan handler'a yazılan kural toplu yolda uygulanmaz.**
+  - Atomik modda tüm öğeler tek bir `HaldusBatch.BeginAsync` sınırı içindedir: ilk hatada dönülür ve hepsi
+    geri alınır; hata, öğenin sırasını (`index`) ve alan adlarını `items[2].` önekiyle taşır. Kısmi modda her
+    öğe kendi sınırı içindedir ve istek, öğe başına sonuçla 207 döner. Sınır, açık bir transaction yoksa
+    transaction, varsa (idempotency filtresi) kayıt noktasıdır.
+  - Atomik modda öğeleri isteğin doğrulama filtresi, kısmi modda `HaldusBatch.Validate` öğe başına doğrular.
+  - Ebeveynin ve sahibin durumunun kontrolü istek başına bir kez yapılır. Toplu okuma her zaman kısmidir:
+    bulunanlar ve bulunamayan kimlikler ayrı döner.
+  - Sınırlar: sürüm kontrollü kaynakta toplu güncelleme ve silme yoktur (öğe sürüm taşıyamaz; `HALDUS007`),
+    toplu yama (`PATCH`) yoktur, geçişlerin toplu biçimi yoktur. Kısmi modda bir öğe beklenmeyen bir hatayla
+    (500) düşerse ondan önceki öğeler kaydedilmiş kalır.
 - Haldus'un kendi tabloları (`HaldusCounters`, `HaldusIdempotencyRecords`) yalnızca onları kullanan bir
   kaynak varsa modele eklenir; ekleyen, üretilen modül kodudur.
 - Tanılar `HALDUS001`+ kodlarıyla `Diagnostics/HaldusDiagnostics.cs` ve `AnalyzerReleases.Unshipped.md`

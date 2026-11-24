@@ -27,6 +27,8 @@ internal static class LifecycleReader
 
         public ExpiryModel? Expiry { get; set; }
 
+        public BatchModel? Batch { get; set; }
+
         /// <summary>Bildirimlerin entity'ye eklediği, istek gövdesinden yazılamayan alanlar.</summary>
         public List<TraitMember> Members { get; } = [];
     }
@@ -75,6 +77,10 @@ internal static class LifecycleReader
 
                 case "Expiring":
                     result.Expiry = ReadExpiry(semanticModel, name, arguments, Invalid, cancellationToken);
+                    break;
+
+                case "Batch":
+                    result.Batch = ReadBatch(semanticModel, name, arguments, Invalid, cancellationToken);
                     break;
             }
         }
@@ -342,6 +348,41 @@ internal static class LifecycleReader
         }
 
         return sequences == 1 ? null : $"The number pattern '{pattern}' must contain {{seq}} exactly once";
+    }
+
+    private static BatchModel? ReadBatch(
+        SemanticModel semanticModel,
+        SimpleNameSyntax name,
+        SeparatedSyntaxList<ArgumentSyntax> arguments,
+        Action<SyntaxNode, string> invalid,
+        CancellationToken cancellationToken)
+    {
+        var atomic = true;
+        var maxItems = 100;
+
+        foreach (var argument in arguments)
+        {
+            switch (semanticModel.GetConstantValue(argument.Expression, cancellationToken))
+            {
+                case { HasValue: true, Value: bool flag }:
+                    atomic = flag;
+                    break;
+                case { HasValue: true, Value: int count }:
+                    maxItems = count;
+                    break;
+                default:
+                    invalid(argument, "The arguments of Batch must be constants: true or false for atomic and a number for maxItems");
+                    return null;
+            }
+        }
+
+        if (maxItems is < 1 or > 10_000)
+        {
+            invalid(name, "The maxItems of Batch must be between 1 and 10000");
+            return null;
+        }
+
+        return new BatchModel(atomic, maxItems);
     }
 
     private static ExpiryModel? ReadExpiry(
