@@ -187,6 +187,23 @@ public sealed class ReportExportHandler(AppDbContext db) : IJobHandler<ReportExp
 | `Haldus.Jobs.InMemory` | Sürecin belleğinde; geliştirme ve tek sunucu için, yeniden başlatmada işler kaybolur |
 | `Haldus.Jobs.Hangfire` | Hangfire'da; depolamayı, sunucuyu ve paneli uygulama kurar (`AddHaldusHangfireJobs()`) |
 
+## Entity aksiyonları
+
+Bir kayıt üzerinde çalışan ama durumunu değiştirmeyen işlemler (kuponu kullan, parolayı sıfırla, yeniden
+gönder) kaynağın builder'ından bildirilir. Durum makinesi gerekmez; Haldus kaydı bulur, sürümünü denetler,
+mantık çalıştıktan sonra kaydeder.
+
+```csharp
+var coupons = app.MapCrud<Coupon>();
+
+coupons.MapAction("redeem", coupon => coupon.Redeem());   // POST /coupons/{id}/redeem
+coupons.MapAction<ExtendCoupon>();                         // mantık istek tipinde veya bir handler sınıfında
+coupons.MapAction<EstimateDiscount, DiscountEstimate>();   // yanıt kaydın kendisi değil, aksiyonun sonucu
+```
+
+İş mantığı, geçişlerdeki gibi üç yoldan biriyle verilir: istek `IEntityAction<T>` uygular, bir
+`IEntityActionHandler` sınıfı yazılır veya çağrıya lambda verilir.
+
 ## Trait'ler ve süzme
 
 Davranışlar `Map*` çağrısının devamına zincirlenir:
@@ -236,8 +253,8 @@ kısıtı olur, ayrı bağlamlardaysa referans yalnızca kimlikle tutulur ve var
 
 ## Durum
 
-İlk sürümün planlanan on aşaması tamamlandı. Model, araştırmadaki 59 gerçek varlığa karşı sınandı: 19'u
-temiz, 29'u kısmen ifade ediliyor, 11'i için gereken özellik henüz yok. Ayrıntısı ve eksiklerin listesi
+İlk sürümün planlanan on aşaması tamamlandı. Model, araştırmadaki 59 gerçek varlığa karşı sınandı: 20'si
+temiz, 28'i kısmen ifade ediliyor, 11'i için gereken özellik henüz yok. Ayrıntısı ve eksiklerin listesi
 [taksonomi sınaması](reports/Haldus%20taksonomi%20sınaması.md) belgesindedir.
 
 Tasarım kararları için [CLAUDE.md](CLAUDE.md), kararların dayandığı araştırma için [reports](reports/)

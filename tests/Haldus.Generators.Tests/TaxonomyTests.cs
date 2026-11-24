@@ -280,6 +280,7 @@ public sealed class TaxonomyTests
             """
             var employees = app.MapCrud<Employee>().MultiTenant().Searchable(employee => employee.Name);
             employees.MapDetail<EmploymentRecord>().AsSubresource();
+            employees.MapAction("terminate", employee => employee.Name = employee.Name.Trim());
             """),
         new(24, "LeaveRequest", Fit.Partial,
             """
@@ -294,9 +295,20 @@ public sealed class TaxonomyTests
             leave.MapTransition("reject", LeaveStatus.Requested, LeaveStatus.Rejected);
             """),
         new(25, "Time-off balance", Fit.Missing),
-        new(26, "Timesheet / attendance", Fit.Partial,
-            "public partial class TimeEntry { public DateOnly Day { get; set; } public decimal Hours { get; set; } }",
-            "app.MapCrud<TimeEntry>().MultiTenant().Batch(atomic: false);"),
+        new(26, "Timesheet / attendance", Fit.Clean,
+            """
+            public partial class TimeEntry
+            {
+                public DateOnly Day { get; set; }
+                public decimal Hours { get; set; }
+                public DateTimeOffset? ClockedOutAt { get; private set; }
+                public void ClockOut(DateTimeOffset at) => ClockedOutAt = at;
+            }
+            """,
+            """
+            var entries = app.MapCrud<TimeEntry>().MultiTenant().Batch(atomic: false);
+            entries.MapAction("clock-out", entry => entry.ClockOut(DateTimeOffset.UtcNow));
+            """),
 
         // ── İçerik yönetimi ──────────────────────────────────────────────────────────────────────────
         new(27, "Post / Entry", Fit.Partial,
@@ -357,7 +369,10 @@ public sealed class TaxonomyTests
             "app.MapCrud<Organization>().Auditable();"),
         new(38, "User", Fit.Partial,
             User,
-            "app.MapCrud<User>().SoftDeletable().Searchable(user => user.Email);"),
+            """
+            var users = app.MapCrud<User>().SoftDeletable().Searchable(user => user.Email);
+            users.MapAction("verify-email", user => user.Email = user.Email.ToLowerInvariant());
+            """),
         new(39, "Role & permission", Fit.Clean,
             "public partial class Role { public string Name { get; set; } = \"\"; }",
             """
@@ -412,7 +427,10 @@ public sealed class TaxonomyTests
         new(45, "Notification", Fit.Missing),
         new(46, "Webhook endpoint", Fit.Partial,
             Webhook,
-            "app.MapCrud<Webhook>().MultiTenant().Archivable();"),
+            """
+            var webhooks = app.MapCrud<Webhook>().MultiTenant().Archivable();
+            webhooks.MapAction("ping", (webhook, services, cancellationToken) => System.Threading.Tasks.Task.CompletedTask);
+            """),
         new(47, "Webhook delivery", Fit.Clean,
             Webhook + """
             public enum DeliveryStatus { Pending, Delivered, Failed }
@@ -531,8 +549,8 @@ public sealed class TaxonomyTests
     public void Tally_MatchesTheWrittenResults()
     {
         // reports/Haldus taksonomi sınaması.md dosyasındaki sayılar; biri değişirse diğeri de güncellenmelidir.
-        Assert.Equal(19, Rows.Count(row => row.Fit == Fit.Clean));
-        Assert.Equal(29, Rows.Count(row => row.Fit == Fit.Partial));
+        Assert.Equal(20, Rows.Count(row => row.Fit == Fit.Clean));
+        Assert.Equal(28, Rows.Count(row => row.Fit == Fit.Partial));
         Assert.Equal(11, Rows.Count(row => row.Fit == Fit.Missing));
     }
 }

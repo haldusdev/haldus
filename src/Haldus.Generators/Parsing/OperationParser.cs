@@ -103,7 +103,7 @@ internal static class OperationParser
         var services = handler.AllInterfaces
             .Where(candidate => candidate is
             {
-                Name: "IActionHandler" or "IQueryHandler" or "ITransitionHandler" or "IJobHandler",
+                Name: "IActionHandler" or "IQueryHandler" or "ITransitionHandler" or "IEntityActionHandler" or "IJobHandler",
                 ContainingNamespace: { Name: "Haldus", ContainingNamespace.IsGlobalNamespace: true },
             })
             .Select(service => service.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat))

@@ -338,10 +338,13 @@ internal sealed record BatchModel(bool Atomic, int MaxItems);
 /// <summary>Bir durum enum'unun üyesi.</summary>
 internal sealed record StateReference(string Type, string Name);
 
-/// <summary>Bir <c>MapTransition</c> çağrısı; sahibi ve durumları henüz doğrulanmamıştır.</summary>
-/// <param name="Name">Çağrıda açıkça verilen ad; gövdesiz geçişte zorunludur.</param>
+/// <summary>
+/// Bir <c>MapTransition</c> veya entity'ye bağlı <c>MapAction</c> çağrısı; sahibi ve durumları henüz
+/// doğrulanmamıştır. Aksiyon, durum kontrolü ve durum ataması olmayan bir geçiştir.
+/// </summary>
+/// <param name="Name">Çağrıda açıkça verilen ad; gövdesiz biçimde zorunludur.</param>
 /// <param name="NameIsConstant">Ad verildiyse derleme zamanında okunabildi mi.</param>
-/// <param name="ImplementsTransition">İstek tipi <c>ITransition&lt;TEntity&gt;</c> uyguluyor mu.</param>
+/// <param name="ImplementsTransition">İstek tipi kendi etkisini uyguluyor mu (<c>ITransition</c> veya <c>IEntityAction</c>).</param>
 internal sealed record TransitionDeclaration(
     string OwnerName,
     string? OwnerType,
@@ -353,7 +356,13 @@ internal sealed record TransitionDeclaration(
     EquatableArray<StateReference> From,
     StateReference? To,
     bool StatesReadable,
-    LocationInfo Location);
+    LocationInfo Location)
+{
+    public bool IsAction { get; init; }
+
+    /// <summary>Aksiyon kendi sonucunu döndürüyorsa o tipin tam adı; yoksa yanıt kaydın kendisidir.</summary>
+    public string? ResponseType { get; init; }
+}
 
 /// <summary>Sahibine bağlanmış ve doğrulanmış bir geçiş.</summary>
 /// <param name="Route">Adresin son parçası: <c>cancel</c>.</param>
@@ -366,7 +375,16 @@ internal sealed record TransitionModel(
     string? RequestType,
     bool ImplementsTransition,
     EquatableArray<string> From,
-    string To);
+    string? To)
+{
+    /// <summary>Durumu değiştirmeyen entity aksiyonu mu.</summary>
+    public bool IsAction { get; init; }
+
+    public string? ResponseType { get; init; }
+
+    /// <summary>Üretilen eşleyicinin adı; modül kaydı ve uç üretimi aynı adı kullanır.</summary>
+    public string MapperName => $"Map{PascalName}{(IsAction ? "Action" : "Transition")}";
+}
 
 /// <summary>Ayrı uçlu bir detayın yazılabilmesi için sahibinin bulunması gereken durumlar.</summary>
 internal sealed record OwnerGuardModel(string StatusType, EquatableArray<string> EditableIn);

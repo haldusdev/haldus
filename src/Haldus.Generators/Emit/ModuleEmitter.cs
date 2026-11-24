@@ -83,9 +83,11 @@ internal static class ModuleEmitter
             {
                 var name = transition.RegistryName is null ? "null" : ResourceEmitter.Literal(transition.RegistryName);
 
-                blocks.Add(transition.RequestType is null
-                    ? $"        global::Haldus.HaldusTransitionRegistry.Register<{entity}>({name}, {entity}Endpoints.Map{transition.PascalName}Transition);\n"
-                    : $"        global::Haldus.HaldusTransitionRegistry.Register<{entity}, {transition.RequestType}>({name}, {entity}Endpoints.Map{transition.PascalName}Transition);\n");
+                var types = string.Join(
+                    ", ", new[] { entity, transition.RequestType, transition.ResponseType }.Where(type => type is not null));
+
+                blocks.Add(
+                    $"        global::Haldus.HaldusTransitionRegistry.Register<{types}>({name}, {entity}Endpoints.{transition.MapperName});\n");
             }
         }
 

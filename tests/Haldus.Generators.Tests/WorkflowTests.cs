@@ -359,7 +359,7 @@ public sealed class WorkflowTests
     [InlineData("app.MapCrud<Order>().Workflow<OrderStatus>().MapTransition(\"Ship It\", OrderStatus.Draft, OrderStatus.Shipped);", "HALDUS010", "not a valid transition name")]
     [InlineData("var name = \"ship\"; app.MapCrud<Order>().Workflow<OrderStatus>().MapTransition(name, OrderStatus.Draft, OrderStatus.Shipped);", "HALDUS010", "must be a constant")]
     [InlineData("var to = OrderStatus.Shipped; app.MapCrud<Order>().Workflow<OrderStatus>().MapTransition(\"ship\", OrderStatus.Draft, to);", "HALDUS010", "must be written as enum members")]
-    [InlineData("var orders = app.MapCrud<Order>().Workflow<OrderStatus>(); orders.MapTransition(\"ship\", OrderStatus.Draft, OrderStatus.Shipped); orders.MapTransition(\"ship\", OrderStatus.Placed, OrderStatus.Shipped);", "HALDUS007", "already has a transition named 'ship'")]
+    [InlineData("var orders = app.MapCrud<Order>().Workflow<OrderStatus>(); orders.MapTransition(\"ship\", OrderStatus.Draft, OrderStatus.Shipped); orders.MapTransition(\"ship\", OrderStatus.Placed, OrderStatus.Shipped);", "HALDUS007", "already has a transition or an action named 'ship'")]
     [InlineData("app.MapCrud<Order>().Archivable().Workflow<OrderStatus>().MapTransition(\"archive\", OrderStatus.Draft, OrderStatus.Shipped);", "HALDUS007", "collides with the 'archive' endpoint that Archivable generates")]
     public void InvalidWorkflows_AreReported(string body, string expectedId, string expectedMessage)
     {

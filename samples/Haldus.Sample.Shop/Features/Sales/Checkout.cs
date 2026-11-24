@@ -34,6 +34,23 @@ public partial class Coupon
 
     [Range(1, 90)]
     public int Percent { get; set; }
+
+    /// <summary>Kuponun en çok kaç kez kullanılabileceği; boşsa sınırsızdır.</summary>
+    [Range(1, 1_000_000)]
+    public int? MaxRedemptions { get; set; }
+
+    public int TimesRedeemed { get; private set; }
+
+    public bool TryRedeem()
+    {
+        if (MaxRedemptions is { } limit && TimesRedeemed >= limit)
+        {
+            return false;
+        }
+
+        TimesRedeemed++;
+        return true;
+    }
 }
 
 /// <summary>

@@ -165,33 +165,47 @@ internal static class ResourceLinker
             void Fail(string id, string message) =>
                 report(new DiagnosticInfo(id, declaration.Location, new[] { message }.ToEquatableArray()));
 
+            var kind = declaration.IsAction ? "action" : "transition";
+
             if (Find(declaration.OwnerName, declaration.OwnerType, resources, byType) is not { } owner)
             {
-                Fail("HALDUS007", $"MapTransition is declared on '{declaration.OwnerName}', which is not a mapped resource");
+                Fail("HALDUS007", $"{(declaration.IsAction ? "MapAction" : "MapTransition")} is declared on '{declaration.OwnerName}', which is not a mapped resource");
                 continue;
             }
 
-            if (owner.Workflow is not { } workflow)
+            if (declaration.IsAction)
             {
-                Fail("HALDUS007", $"MapTransition needs a state machine; declare Workflow<TStatus>() on '{owner.EntityName}'");
-                continue;
+                // Aksiyon tek bir kayıt üzerinde çalışır; kaydın adreste bir anahtarı olmalıdır.
+                if (owner.Archetype is Archetype.Singleton or Archetype.Detail)
+                {
+                    Fail("HALDUS007", $"MapAction needs a resource that is addressed by its key; '{owner.EntityName}' is mapped with Map{owner.Archetype}");
+                    continue;
+                }
             }
-
-            if (!declaration.StatesReadable)
+            else
             {
-                Fail("HALDUS010", "The states of a transition must be written as enum members, for example from: OrderStatus.Draft, to: OrderStatus.Placed");
-                continue;
-            }
+                if (owner.Workflow is not { } workflow)
+                {
+                    Fail("HALDUS007", $"MapTransition needs a state machine; declare Workflow<TStatus>() on '{owner.EntityName}'");
+                    continue;
+                }
 
-            if (declaration.From.Append(declaration.To!).FirstOrDefault(state => state.Type != workflow.StatusType) is { } foreign)
-            {
-                Fail("HALDUS010", $"'{foreign.Name}' is not a state of '{owner.EntityName}'; transitions use the status type declared with Workflow<TStatus>()");
-                continue;
+                if (!declaration.StatesReadable)
+                {
+                    Fail("HALDUS010", "The states of a transition must be written as enum members, for example from: OrderStatus.Draft, to: OrderStatus.Placed");
+                    continue;
+                }
+
+                if (declaration.From.Append(declaration.To!).FirstOrDefault(state => state.Type != workflow.StatusType) is { } foreign)
+                {
+                    Fail("HALDUS010", $"'{foreign.Name}' is not a state of '{owner.EntityName}'; transitions use the status type declared with Workflow<TStatus>()");
+                    continue;
+                }
             }
 
             if (!declaration.NameIsConstant)
             {
-                Fail("HALDUS010", "The name of a transition must be a constant; it becomes part of the generated route");
+                Fail("HALDUS010", $"The name of {(declaration.IsAction ? "an action" : "a transition")} must be a constant; it becomes part of the generated route");
                 continue;
             }
 
@@ -199,13 +213,13 @@ internal static class ResourceLinker
 
             if (!IsValidTransitionName(route))
             {
-                Fail("HALDUS010", $"'{route}' is not a valid transition name; use lowercase words separated by '-', for example \"mark-paid\"");
+                Fail("HALDUS010", $"'{route}' is not a valid {kind} name; use lowercase words separated by '-', for example \"mark-paid\"");
                 continue;
             }
 
             if (ReservedRoute(owner, route) is { } trait)
             {
-                Fail("HALDUS007", $"The transition '{route}' collides with the '{route}' endpoint that {trait} generates on '{owner.EntityName}'");
+                Fail("HALDUS007", $"The {kind} '{route}' collides with the '{route}' endpoint that {trait} generates on '{owner.EntityName}'");
                 continue;
             }
 
@@ -213,7 +227,7 @@ internal static class ResourceLinker
 
             if (existing.Any(transition => transition.Route == route))
             {
-                Fail("HALDUS007", $"'{owner.EntityName}' already has a transition named '{route}'");
+                Fail("HALDUS007", $"'{owner.EntityName}' already has a transition or an action named '{route}'");
                 continue;
             }
 
@@ -224,7 +238,11 @@ internal static class ResourceLinker
                 declaration.RequestType,
                 declaration.ImplementsTransition,
                 declaration.From.Select(state => state.Name).Distinct().ToEquatableArray(),
-                declaration.To!.Name));
+                declaration.To?.Name)
+            {
+                IsAction = declaration.IsAction,
+                ResponseType = declaration.ResponseType,
+            });
         }
 
         var attached = new List<ResourceModel>();
@@ -295,6 +313,7 @@ internal static class ResourceLinker
         "restore" or "purge" when resource.Has(Traits.SoftDeletable) => nameof(Traits.SoftDeletable),
         "archive" or "unarchive" when resource.Has(Traits.Archivable) => nameof(Traits.Archivable),
         "expire" when resource.Expiry is not null => "Expiring",
+        "cancel" when resource.Archetype == Archetype.Job => "MapJob",
         _ => null,
     };
 

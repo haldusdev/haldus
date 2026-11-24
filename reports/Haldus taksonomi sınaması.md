@@ -6,12 +6,12 @@ sınamanın sonucudur: her satır, yazılmış olan API ile ifade edilmeye çal�
 
 ## Sonuç
 
-59 satırın 48'i bugünkü API ile yazılıp derleniyor; 11'i için anlamlı bir eşleme yok.
+59 satırın 48'i bugünkü API ile yazılıp derleniyor; 11'i için anlamlı bir eşleme yok. (İlk sayım 19 temiz, 29 kısmi idi; entity aksiyonu yazıldıktan sonra bir satır temize geçti.)
 
 | Sonuç | Satır | Anlamı |
 |---|---|---|
-| Temiz | 19 | Raporun önerdiği eşleme, yazılmış özelliklerle eksiksiz ifade ediliyor |
-| Kısmi | 29 | Çekirdek ifade ediliyor; önerilen eşlemedeki bir veya daha çok özellik henüz yok |
+| Temiz | 20 | Raporun önerdiği eşleme, yazılmış özelliklerle eksiksiz ifade ediliyor |
+| Kısmi | 28 | Çekirdek ifade ediliyor; önerilen eşlemedeki bir veya daha çok özellik henüz yok |
 | Yok | 11 | Gereken archetype veya trait yazılmadı |
 
 Araştırmanın başlangıçtaki düz katalog için kendi sayımı 10 oturuyor, 31 zorlanarak, 18 oturmuyor idi. İki sayım
@@ -59,10 +59,10 @@ tamamı eksik trait veya archetype'tır.
 | 20 | StockMovement / defter kaydı | Temiz | `MapAppendOnly` + `Auditable` | — |
 | 21 | Reservation | Temiz | `MapCrud` + `Workflow` + `Expiring` | — |
 | 22 | Transfer | Kısmi | `MapCrud` + `Workflow` + `MapDetail` + `Idempotent` + `IComputed` | `Cloneable` |
-| 23 | Employee | Kısmi | `MapCrud` + `Searchable`; geçmiş `MapDetail().AsSubresource()` | Entity aksiyonu, `CustomFields`, `ChangeFeed`, `EffectiveDated` |
+| 23 | Employee | Kısmi | `MapCrud` + `Searchable` + entity aksiyonu; geçmiş `MapDetail().AsSubresource()` | `CustomFields`, `ChangeFeed`, `EffectiveDated` |
 | 24 | LeaveRequest | Kısmi | `MapCrud` + `Under<Employee>` + `Workflow` (onayla/reddet) | `Approvable` (çok adımlı onay) |
 | 25 | Time-off balance | Yok | — | `MapBalance` |
-| 26 | Timesheet / attendance | Kısmi | `MapCrud` + `Batch(atomic: false)` | Entity aksiyonu (giriş/çıkış) |
+| 26 | Timesheet / attendance | Temiz | `MapCrud` + `Batch(atomic: false)`; giriş/çıkış birer entity aksiyonu | — |
 | 27 | Post / Entry | Kısmi | `MapCrud` + `SoftDeletable` + `ConcurrencyChecked` + `Workflow` (yayınla) | `Publishable`, `Revisioned` |
 | 28 | Localized fields | Yok | — | `Translatable` |
 | 29 | Revision / Snapshot | Yok | — | `Revisioned` |
@@ -74,7 +74,7 @@ tamamı eksik trait veya archetype'tır.
 | 35 | Appointment / Booking | Kısmi | `MapCrud` + `Workflow` + `Idempotent` + `ConcurrencyChecked` | `Supersedes` (yeniden planlama) |
 | 36 | Recurring event / series | Yok | — | Araştırmada bilinçli olarak kapsam dışı |
 | 37 | Tenant / Organization | Temiz | `MapCrud` + `Auditable` | — |
-| 38 | User | Kısmi | `MapCrud` + `SoftDeletable` + `Searchable` | Entity aksiyonu, `Metadata` |
+| 38 | User | Kısmi | `MapCrud` + `SoftDeletable` + `Searchable` + entity aksiyonu | `Metadata` |
 | 39 | Role & permission | Temiz | `MapLookup` + `MapCrud` + `MapAssociation` | — |
 | 40 | Membership | Kısmi | `MapCrud` + iki `References` + `Workflow` | Yük taşıyan ve durumu olan `MapAssociation` |
 | 41 | Invitation | Kısmi | `MapCrud().Without(Update, Patch, Delete)` + `Workflow` + `Expiring` | `TokenAccess`, `Creates<Membership>` |
@@ -82,7 +82,7 @@ tamamı eksik trait veya archetype'tır.
 | 43 | Settings / Preferences | Temiz | `MapSingleton().MultiTenant()`, `MapStore().MultiTenant()` | — |
 | 44 | AuditLog / Event | Kısmi | `MapReadOnly` + `Searchable`; dışa aktarma ayrı bir `MapJob` | `Retention` |
 | 45 | Notification | Yok | — | `OwnedByCurrentUser`, `ReadTracking` |
-| 46 | Webhook endpoint | Kısmi | `MapCrud` + `Archivable` | Entity aksiyonu (ping), `SecretOnce`, ebeveyn altında tek kayıt |
+| 46 | Webhook endpoint | Kısmi | `MapCrud` + `Archivable`; ping bir entity aksiyonu | `SecretOnce`, ebeveyn altında tek kayıt |
 | 47 | Webhook delivery | Temiz | `MapReadOnly` + `Under<Webhook>` + `Workflow`; yeniden gönderme bir geçiş | — |
 | 48 | Subscription / Plan | Temiz | `MapCrud` + `Workflow` + `MapDetail` | — |
 | 49 | Polimorfik attachment | Yok | — | `Attachable`, `MapFile` |
@@ -104,9 +104,10 @@ tamamı eksik trait veya archetype'tır.
   hepsi, yazılmış olan `Workflow` ve `MapTransition` ile ifade edildi (satır 9, 12, 15, 24, 47).
 - **"Yalnızca eklenen detay" ayrı bir detay modu gerektirmedi.** Ödeme hareketleri `MapAppendOnly().Under<Payment>()`
   ile yazıldı (satır 8).
-- **En sık eksik, durum değiştirmeyen entity aksiyonu.** Dört satırda (23, 26, 38, 46) bir kayıt üzerinde çalışan
-  ama durumunu değiştirmeyen bir uç gerekti: giriş/çıkış, parola sıfırlama, ping. `MapAction` entity'ye bağlı
-  değil, `MapTransition` ise durum makinesi istiyor; arası boş.
+- **Sınamanın ilk hali, durum değiştirmeyen entity aksiyonunun eksik olduğunu gösterdi; sonradan yazıldı.** Dört
+  satırda (23, 26, 38, 46) bir kayıt üzerinde çalışan ama durumunu değiştirmeyen bir uç gerekiyordu: giriş/çıkış,
+  parola sıfırlama, ping. Bu, bir kaynağın builder'ında çağrılan `MapAction` ile kapatıldı; 26. satır böylece
+  temize geçti, diğer üçünde başka özellikler eksik kalıyor.
 - **Geçerli kullanıcıya ait kaynak dört satırı etkiliyor** (5, 45, 52, 55). Haldus kiracıyı biliyor ama "benim
   kayıtlarım" kavramını bilmiyor.
 - **Tersine çevirme üç muhasebe satırında eksik** (14, 15, 19): bir kaydı silmek yerine onu geri alan karşı kaydı
@@ -118,7 +119,7 @@ tamamı eksik trait veya archetype'tır.
 
 | Eksik | Satırlar |
 |---|---|
-| Durum değiştirmeyen entity aksiyonu | 23, 26, 38, 46 |
+
 | `OwnedByCurrentUser` / geçerli kullanıcıya bağlı bağ | 5, 45, 52, 55 |
 | `Metadata` / `CustomFields` | 9, 23, 38, 51 |
 | `Reversible` / `Reverses` | 14, 15, 19 |
@@ -134,8 +135,8 @@ tamamı eksik trait veya archetype'tır.
 | Birden çok durum ekseni | 1, 10 |
 | Tek satırı etkileyenler | `MapChangeSet` (1), `Previewable` (12), `Approvable` (24), `Translatable` (28), `Supersedes` (35), yüklü ve durumlu bağ (40), bağların topluca değiştirilmesi (31), `Retention` (44), `ReadTracking` (45), `Rollup` (57), `EffectiveDated` ve `ChangeFeed` (23) |
 
-Araştırma bunların çoğunu zaten ikinci ve üçüncü sürüme bırakmıştı; bu sınama o sıralamayı değiştirecek tek bir
-şey gösterdi: durum değiştirmeyen entity aksiyonu ilk sürümün kapsamındaki satırlarda da gerekiyor.
+Araştırma bunların çoğunu zaten ikinci ve üçüncü sürüme bırakmıştı. Bu sınamanın o sıralamaya eklediği tek şey,
+ilk sürümün kapsamındaki satırlarda da gereken entity aksiyonuydu; o artık yazıldı.
 
 ## Bu sınamanın söylemediği
 

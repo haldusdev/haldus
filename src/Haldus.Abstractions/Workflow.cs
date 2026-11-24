@@ -28,10 +28,38 @@ public interface ITransitionHandler<in TEntity, in TRequest>
     Task HandleAsync(TEntity entity, TRequest request, CancellationToken cancellationToken);
 }
 
+// Entity aksiyonları (orders.MapAction(...)): bir kayıt üzerinde çalışan ama durumunu değiştirmeyen işlemler
+// (parola sıfırlama, yeniden gönderme, giriş/çıkış). Kaydı bulmayı, sürüm kontrolünü ve kaydetmeyi Haldus
+// üretir; iş mantığı geçişlerdeki gibi istek tipinden, bir handler sınıfından veya lambda'dan gelir.
+
+/// <summary>Entity üzerindeki etkisini kendisi uygulayan aksiyon isteği.</summary>
+public interface IEntityAction<in TEntity>
+    where TEntity : class
+{
+    void Apply(TEntity entity);
+}
+
 /// <summary>
-/// Geçişin iş mantığı bu geçişi reddettiğinde fırlatılır (ör. satırı olmayan sipariş verilemez). Hiçbir şey
-/// kaydedilmez ve mesaj istemciye 422 yanıtının açıklaması olarak döner; bu yüzden metni son kullanıcıya
-/// gösterilecek biçimde ve isteğin dilinde üretmek fırlatanın işidir.
+/// Bir entity aksiyonunun iş mantığı; yanıt olarak kaydın güncel hali döner. Haldus bu arayüzü uygulayan
+/// sınıfları bulur ve bağımlılık enjeksiyonuna kendisi kaydeder. Handler entity'yi değiştirir, kaydetmez.
+/// </summary>
+public interface IEntityActionHandler<in TEntity, in TRequest>
+    where TEntity : class
+{
+    Task HandleAsync(TEntity entity, TRequest request, CancellationToken cancellationToken);
+}
+
+/// <summary>Kendi sonucunu döndüren entity aksiyonunun iş mantığı.</summary>
+public interface IEntityActionHandler<in TEntity, in TRequest, TResponse>
+    where TEntity : class
+{
+    Task<TResponse> HandleAsync(TEntity entity, TRequest request, CancellationToken cancellationToken);
+}
+
+/// <summary>
+/// Bir geçişin veya entity aksiyonunun iş mantığı işlemi reddettiğinde fırlatılır (ör. satırı olmayan sipariş
+/// verilemez). Hiçbir şey kaydedilmez ve mesaj istemciye 422 yanıtının açıklaması olarak döner; bu yüzden
+/// metni son kullanıcıya gösterilecek biçimde ve isteğin dilinde üretmek fırlatanın işidir.
 /// </summary>
 public sealed class TransitionRejectedException : Exception
 {

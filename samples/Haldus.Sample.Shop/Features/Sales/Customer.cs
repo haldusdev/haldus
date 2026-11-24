@@ -12,3 +12,15 @@ public partial class Customer
 
     public int LoyaltyPoints { get; set; }
 }
+
+/// <summary>
+/// <c>POST /customers/{id}/adjust-loyalty</c>. Bağımlılık gerekmediği için istek kendi etkisini uygular; kaydı
+/// bulmayı, sürüm kontrolünü ve kaydetmeyi Haldus üretir.
+/// </summary>
+public sealed record AdjustLoyalty : IEntityAction<Customer>
+{
+    [Range(-1000, 1000)]
+    public int Delta { get; init; }
+
+    public void Apply(Customer entity) => entity.LoyaltyPoints += Delta;
+}

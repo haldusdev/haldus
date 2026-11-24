@@ -10,7 +10,7 @@ public static class CatalogEndpoints
 
         // Basit süzme sorgu parametreleriyle, VE/VEYA gerektiren aramalar POST /products/search ile yapılır.
         // Ürün isteğe bağlı olarak bir kategoriye bağlanır; ürünü olan kategori silinemez.
-        app.MapCrud<Product>()
+        var products = app.MapCrud<Product>()
             .References<Category>(onDelete: OnDelete.Restrict, required: false)
             .Filterable<ProductFilter>()
             .Searchable(
@@ -22,6 +22,10 @@ public static class CatalogEndpoints
             // Toplu uçlar: POST /products/batch-get, batch-create, batch-update, batch-delete.
             // Varsayılan atomiktir: bir öğe reddedilirse hiçbiri kaydedilmez.
             .Batch();
+
+        // Kendi sonucunu döndüren entity aksiyonu; mantığı RepriceProductHandler sınıfındadır:
+        // POST /products/{id}/reprice
+        products.MapAction<RepriceProduct, RepriceResult>();
 
         // Ürünler ve etiketler çoktan-çoğa bağlanır: PUT /products/{productId}/tags/{tagId}
         // Bağ kayıtlarının entity'si (ProductTag) üretilir.

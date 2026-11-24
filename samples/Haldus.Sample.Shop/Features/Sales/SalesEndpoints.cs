@@ -1,10 +1,12 @@
+using Microsoft.Extensions.Localization;
+
 namespace Haldus.Sample.Shop.Features.Sales;
 
 public static class SalesEndpoints
 {
     public static void MapSales(this IEndpointRouteBuilder app)
     {
-        app.MapCrud<Customer>()
+        var customers = app.MapCrud<Customer>()
             .MultiTenant()
             .Auditable(trackUser: true)
             .SoftDeletable()
@@ -17,6 +19,10 @@ public static class SalesEndpoints
                 customer => customer.LoyaltyPoints,
                 customer => customer.CreatedAt,
                 customer => customer.UpdatedAt);
+
+        // Entity aksiyonu: bir kayıt üzerinde çalışır ama durumunu değiştirmez. İstek kendi etkisini uygular:
+        // POST /customers/{id}/adjust-loyalty
+        customers.MapAction<AdjustLoyalty>();
 
         // Adres müşterinin adresi altında yaşar: /customers/{customerId}/addresses
         // Müşteri kiracıya bağlı olduğu için adreslere de yalnızca o kiracı ulaşabilir.
@@ -89,8 +95,19 @@ public static class SalesEndpoints
         app.MapAppendOnly<PaymentTransaction>()
             .Under<Payment>();
 
-        app.MapCrud<Coupon>()
+        var coupons = app.MapCrud<Coupon>()
             .Expiring();
+
+        // Gövdesiz aksiyon; mantığı lambda'dadır ve reddedilirse hiçbir şey kaydedilmez: POST /coupons/{id}/redeem
+        coupons.MapAction("redeem", (coupon, services, _) =>
+        {
+            if (!coupon.TryRedeem())
+            {
+                throw new TransitionRejectedException(services.GetRequiredService<IStringLocalizer<ShopMessages>>()["CouponExhausted"]);
+            }
+
+            return Task.CompletedTask;
+        });
 
         // Uzun süren iş: POST 202 döner, iş arka planda çalışır. Mantığı ReportExportHandler sınıfındadır.
         app.MapJob<ReportExport>()

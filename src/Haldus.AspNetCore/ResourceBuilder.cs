@@ -166,6 +166,101 @@ public sealed class ResourceBuilder<TEntity>(RouteGroupBuilder group) : IEndpoin
         return HaldusTransitionRegistry.Map(Group, name, apply);
     }
 
+    // Entity aksiyonları. Bu metotlar, bir kaynağın builder'ında çağrıldığında, aynı adlı ve entity'ye bağlı
+    // olmayan uzantı metotlarının (app.MapAction<TRequest>()) yerine geçer: builder üzerindeki MapAction her
+    // zaman o kaynağın bir kaydı üzerinde çalışır.
+
+    /// <summary>
+    /// Bir kayıt üzerinde çalışan, durumunu değiştirmeyen bir işlem ekler: <c>POST /{id}/{name}</c>. Haldus
+    /// kaydı bulur, sürümünü denetler, <paramref name="apply"/> çalıştıktan sonra kaydeder ve kaydın güncel
+    /// halini döndürür.
+    /// </summary>
+    public RouteHandlerBuilder MapAction(string name, Action<TEntity> apply)
+    {
+        ArgumentNullException.ThrowIfNull(apply);
+
+        return HaldusTransitionRegistry.Map<TEntity>(Group, name, (entity, _, _) =>
+        {
+            apply(entity);
+            return Task.CompletedTask;
+        });
+    }
+
+    /// <inheritdoc cref="MapAction(string, Action{TEntity})"/>
+    public RouteHandlerBuilder MapAction(string name, Func<TEntity, IServiceProvider, CancellationToken, Task> apply)
+    {
+        ArgumentNullException.ThrowIfNull(apply);
+        return HaldusTransitionRegistry.Map(Group, name, apply);
+    }
+
+    /// <summary>
+    /// İstek gövdesi alan bir entity aksiyonu ekler; adresi istek tipinin adından türetilir
+    /// (<c>ChangeEmail</c> → <c>POST /{id}/change-email</c>). İş mantığı ya istek tipindedir
+    /// (<see cref="IEntityAction{TEntity}"/>) ya da Haldus'un bulduğu bir
+    /// <see cref="IEntityActionHandler{TEntity, TRequest}"/> sınıfındadır.
+    /// </summary>
+    /// <param name="name">Adresin son parçası; verilmezse istek tipinin adından türetilir.</param>
+    public RouteHandlerBuilder MapAction<TRequest>(string? name = null)
+        where TRequest : class =>
+        HaldusTransitionRegistry.Map<TEntity, TRequest>(Group, name, apply: null);
+
+    /// <inheritdoc cref="MapAction{TRequest}(string?)"/>
+    /// <param name="apply">Kayıt üzerinde çalışır.</param>
+    public RouteHandlerBuilder MapAction<TRequest>(Action<TEntity, TRequest> apply, string? name = null)
+        where TRequest : class
+    {
+        ArgumentNullException.ThrowIfNull(apply);
+
+        return HaldusTransitionRegistry.Map<TEntity, TRequest>(Group, name, (entity, request, _, _) =>
+        {
+            apply(entity, request);
+            return Task.CompletedTask;
+        });
+    }
+
+    /// <inheritdoc cref="MapAction{TRequest}(string?)"/>
+    /// <param name="apply">Kayıt üzerinde çalışır; bağımlılıklarını isteğin servis sağlayıcısından alır.</param>
+    public RouteHandlerBuilder MapAction<TRequest>(
+        Func<TEntity, TRequest, IServiceProvider, CancellationToken, Task> apply,
+        string? name = null)
+        where TRequest : class
+    {
+        ArgumentNullException.ThrowIfNull(apply);
+        return HaldusTransitionRegistry.Map(Group, name, apply);
+    }
+
+    /// <summary>
+    /// Kendi sonucunu döndüren bir entity aksiyonu ekler; yanıt kaydın kendisi değil <typeparamref name="TResponse"/>
+    /// olur. İş mantığı Haldus'un bulduğu bir <see cref="IEntityActionHandler{TEntity, TRequest, TResponse}"/>
+    /// sınıfındadır. Kayıtta yapılan değişiklikler yine kaydedilir.
+    /// </summary>
+    /// <param name="name">Adresin son parçası; verilmezse istek tipinin adından türetilir.</param>
+    public RouteHandlerBuilder MapAction<TRequest, TResponse>(string? name = null)
+        where TRequest : class =>
+        HaldusTransitionRegistry.Map<TEntity, TRequest, TResponse>(Group, name, apply: null);
+
+    /// <inheritdoc cref="MapAction{TRequest, TResponse}(string?)"/>
+    /// <param name="apply">Kayıt üzerinde çalışır ve sonucu üretir.</param>
+    public RouteHandlerBuilder MapAction<TRequest, TResponse>(Func<TEntity, TRequest, TResponse> apply, string? name = null)
+        where TRequest : class
+    {
+        ArgumentNullException.ThrowIfNull(apply);
+
+        return HaldusTransitionRegistry.Map<TEntity, TRequest, TResponse>(
+            Group, name, (entity, request, _, _) => Task.FromResult(apply(entity, request)));
+    }
+
+    /// <inheritdoc cref="MapAction{TRequest, TResponse}(string?)"/>
+    /// <param name="apply">Kayıt üzerinde çalışır ve sonucu üretir; bağımlılıklarını isteğin servis sağlayıcısından alır.</param>
+    public RouteHandlerBuilder MapAction<TRequest, TResponse>(
+        Func<TEntity, TRequest, IServiceProvider, CancellationToken, Task<TResponse>> apply,
+        string? name = null)
+        where TRequest : class
+    {
+        ArgumentNullException.ThrowIfNull(apply);
+        return HaldusTransitionRegistry.Map(Group, name, apply);
+    }
+
     IApplicationBuilder IEndpointRouteBuilder.CreateApplicationBuilder() =>
         ((IEndpointRouteBuilder)Group).CreateApplicationBuilder();
 

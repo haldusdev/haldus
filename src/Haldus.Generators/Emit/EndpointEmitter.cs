@@ -1183,21 +1183,33 @@ internal sealed partial class EndpointEmitter
     }
 
     /// <summary>
-    /// Bir geçişin ucunu üretir. Uç, <c>MapTransition</c> çağrısı çalıştığında bağlanır; çağrıya verilen
-    /// lambda (varsa) eşleyiciye parametre olarak gelir. Durum kontrolü, sürüm kontrolü ve kaydetme burada
-    /// üretilir; iş mantığı istek tipinden, lambda'dan veya bir handler sınıfından gelir.
+    /// Bir geçişin veya entity aksiyonunun ucunu üretir. Uç, <c>MapTransition</c> / <c>MapAction</c> çağrısı
+    /// çalıştığında bağlanır; çağrıya verilen lambda (varsa) eşleyiciye parametre olarak gelir. Kaydı bulma,
+    /// sürüm kontrolü ve kaydetme burada üretilir; iş mantığı istek tipinden, lambda'dan veya bir handler
+    /// sınıfından gelir. Aksiyon, durum kontrolü ve durum ataması olmayan bir geçiştir; isterse kaydın kendisi
+    /// yerine kendi sonucunu döndürür.
     /// </summary>
     private void EmitTransition(TransitionModel transition)
     {
         const string Services = "global::System.IServiceProvider";
         const string Cancellation = "global::System.Threading.CancellationToken";
+        const string Injection = "global::Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions";
 
-        var workflow = _resource.Workflow!;
         var request = transition.RequestType;
-        var method = $"Transition{transition.PascalName}Async";
+        var response = transition.ResponseType;
+        var method = $"{(transition.IsAction ? "Action" : "Transition")}{transition.PascalName}Async";
+        var outcome = response is null ? Task : $"{Task}<{response}>";
         var apply = request is null
-            ? $"global::System.Func<{_entity}, {Services}, {Cancellation}, {Task}>?"
-            : $"global::System.Func<{_entity}, {request}, {Services}, {Cancellation}, {Task}>?";
+            ? $"global::System.Func<{_entity}, {Services}, {Cancellation}, {outcome}>?"
+            : $"global::System.Func<{_entity}, {request}, {Services}, {Cancellation}, {outcome}>?";
+
+        // İş mantığının sözleşmeleri geçiş ve aksiyon için ayrıdır; üretilen iskelet aynıdır.
+        var (handler, require, selfApplying) = (transition.IsAction, response) switch
+        {
+            (false, _) => ($"global::Haldus.ITransitionHandler<{_entity}, {request}>", $"RequireHandler<{_entity}, {request}>", "ITransition"),
+            (true, null) => ($"global::Haldus.IEntityActionHandler<{_entity}, {request}>", $"RequireActionHandler<{_entity}, {request}>", "IEntityAction"),
+            _ => ($"global::Haldus.IEntityActionHandler<{_entity}, {request}, {response}>", $"RequireActionHandler<{_entity}, {request}, {response}>", "IEntityAction"),
+        };
 
         // Uç bir lambda ile eşlenir ki çağrıya verilen iş mantığını yakalayabilsin; asıl iş statik metottadır.
         var parameters = new List<(string Type, string Name)>();
@@ -1230,7 +1242,7 @@ internal sealed partial class EndpointEmitter
             ? $$"""
                     if (apply is null)
                     {
-                        global::Haldus.HaldusTransitionRegistry.RequireHandler<{{_entity}}, {{request}}>(group);
+                        global::Haldus.HaldusTransitionRegistry.{{require}}(group);
                     }
 
 
@@ -1243,7 +1255,7 @@ internal sealed partial class EndpointEmitter
 
         _transitionMaps.Append($$"""
 
-                public static global::Microsoft.AspNetCore.Builder.RouteHandlerBuilder Map{{transition.PascalName}}Transition(
+                public static global::Microsoft.AspNetCore.Builder.RouteHandlerBuilder {{transition.MapperName}}(
                     global::Microsoft.AspNetCore.Routing.IEndpointRouteBuilder group,
                     {{apply}} apply)
                 {
@@ -1260,33 +1272,47 @@ internal sealed partial class EndpointEmitter
 
         var logic = new StringBuilder();
 
-        if (transition.ImplementsTransition)
+        if (response is not null)
         {
-            logic.Append($"            ((global::Haldus.ITransition<{_entity}>)request).Apply(entity);\n\n");
-        }
-
-        logic.Append($$"""
-                        if (apply is not null)
-                        {
-                            await apply(entity, {{(request is null ? string.Empty : "request, ")}}httpContext.RequestServices, cancellationToken);
-                        }
-
-            """);
-
-        if (request is not null)
-        {
+            // Sonuç döndüren aksiyonda mantık zorunludur: lambda verilmediyse handler sınıfı çağrılır.
             logic.Append($$"""
-                            else if (global::Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions
-                                .GetService<global::Haldus.ITransitionHandler<{{_entity}}, {{request}}>>(httpContext.RequestServices) is { } handler)
-                            {
-                                await handler.HandleAsync(entity, request, cancellationToken);
-                            }
+                            result = apply is not null
+                                ? await apply(entity, request, httpContext.RequestServices, cancellationToken)
+                                : await {{Injection}}.GetRequiredService<{{handler}}>(httpContext.RequestServices)
+                                    .HandleAsync(entity, request, cancellationToken);
 
                 """);
         }
+        else
+        {
+            if (transition.ImplementsTransition)
+            {
+                logic.Append($"            ((global::Haldus.{selfApplying}<{_entity}>)request).Apply(entity);\n\n");
+            }
+
+            logic.Append($$"""
+                            if (apply is not null)
+                            {
+                                await apply(entity, {{(request is null ? string.Empty : "request, ")}}httpContext.RequestServices, cancellationToken);
+                            }
+
+                """);
+
+            if (request is not null)
+            {
+                logic.Append($$"""
+                                else if ({{Injection}}
+                                    .GetService<{{handler}}>(httpContext.RequestServices) is { } handler)
+                                {
+                                    await handler.HandleAsync(entity, request, cancellationToken);
+                                }
+
+                    """);
+            }
+        }
 
         // Numara bu duruma geçerken atanıyorsa, kayıtla aynı transaction'da ayrılır; daha önce atanmışsa korunur.
-        var numbered = _resource.Numbering is { AssignOn: { } assignOn } && assignOn == transition.To;
+        var numbered = transition.To is not null && _resource.Numbering is { AssignOn: { } assignOn } && assignOn == transition.To;
         var allocate = numbered
             ? """
                     await using var numbering = entity.Number is null
@@ -1312,9 +1338,17 @@ internal sealed partial class EndpointEmitter
             """
             : string.Empty;
 
+        var returnType = response is null
+            ? OkOrProblem
+            : $"{Task}<{Results}.Results<{Results}.Ok<{response}>, {Problem}>>";
+        var declareResult = response is null ? string.Empty : $"        {response} result;\n";
+        var setStatus = transition.To is null
+            ? string.Empty
+            : $"        entity.Status = {_resource.Workflow!.StatusType}.{transition.To};\n";
+
         _handlers.Append($$"""
 
-                private static async {{OkOrProblem}} {{method}}(
+                private static async {{returnType}} {{method}}(
             {{ScopeParameter}}{{KeyParameter}}{{(request is null ? string.Empty : $"        {request} request,\n")}}        {{apply}} apply,
             {{HttpContextParameter}}{{(Sliding ? TimeProviderParameter : string.Empty)}}{{ContextsParameter}}{{MessagesParameter}}{{CancellationParameter}}    {
             {{ReadIfMatch()}}        var context = contexts.For<{{_entity}}>();
@@ -1325,7 +1359,7 @@ internal sealed partial class EndpointEmitter
                         return {{NotFound}};
                     }
 
-            {{StateGuard(transition.From, transition.Route)}}{{ExpectVersion()}}        try
+            {{StateGuard(transition.IsAction ? null : transition.From, transition.Route)}}{{ExpectVersion()}}{{declareResult}}        try
                     {
             {{logic}}        }
                     catch (global::Haldus.TransitionRejectedException rejection)
@@ -1333,14 +1367,12 @@ internal sealed partial class EndpointEmitter
                         return {{Problems}}.TransitionRejected(messages, rejection.Message);
                     }
 
-                    entity.Status = {{workflow.StatusType}}.{{transition.To}};
-            {{Slide()}}{{Compute()}}{{allocate}}{{Save()}}{{commit}}
-            {{WriteETag()}}        return {{Http}}.TypedResults.Ok(ToResponse(entity));
+            {{setStatus}}{{Slide()}}{{Compute()}}{{allocate}}{{Save()}}{{commit}}
+            {{WriteETag()}}        return {{Http}}.TypedResults.Ok({{(response is null ? "ToResponse(entity)" : "result")}});
                 }
 
             """);
     }
-
     /// <summary>Kayıt sayılan durumlardan birinde değilse işlemi çakışma olarak reddeder.</summary>
     private string StateGuard(EquatableArray<string>? allowed, string operation)
     {

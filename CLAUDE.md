@@ -141,7 +141,7 @@ Bunlar kullanıcıyla kararlaştırıldı; yeniden sorma.
 ## Aşamalar
 
 On aşamanın tamamı bitti (3. aşamaya `.Searchable()`, 8. aşamaya fiziksel temizlik de eklendi). 10. aşamanın
-sonucu `reports/Haldus taksonomi sınaması.md` dosyasındadır: araştırmadaki 59 varlığın 19'u temiz, 29'u
+sonucu `reports/Haldus taksonomi sınaması.md` dosyasındadır: araştırmadaki 59 varlığın 20'si temiz, 28'i
 kısmen ifade ediliyor, 11'i için gereken özellik yok. Aynı veri `tests/Haldus.Generators.Tests/TaxonomyTests.cs`
 içinde derlenir; yeni bir archetype veya trait bir satırı kapatıyorsa ikisini birlikte güncelle.
 
@@ -161,9 +161,9 @@ içinde derlenir; yeni bir archetype veya trait bir satırı kapatıyorsa ikisin
 ## Açık kararlar
 
 - Frontend ve mobil desteğinin kapsamı (backend API şekli oturunca ele alınacak).
-- Sıradaki özellikler. Sınama en çok şunların eksikliğini gösterdi: durum değiştirmeyen entity aksiyonu,
-  geçerli kullanıcıya ait kaynak (`OwnedByCurrentUser`), `Metadata`, `Reversible`, gizli değerler
-  (`SecretOnce` / `Rotatable`). Hangisinin önce yazılacağına kullanıcı karar verecek.
+- Sıradaki özellikler. Sınama en çok şunların eksikliğini gösterdi: geçerli kullanıcıya ait kaynak
+  (`OwnedByCurrentUser`), `Metadata`, `Reversible`, gizli değerler (`SecretOnce` / `Rotatable`). Hangisinin
+  önce yazılacağına kullanıcı karar verecek. (Listedeki ilk madde, entity aksiyonu, yazıldı.)
 
 - Süresi dolmuş `Expiring` kayıtları varsayılan olarak silinmez (`HaldusOptions.PurgeExpiredAfter` boş).
   Bu varsayılanı kullanıcı ayrıca onaylamadı; kullanıcı verisini kendiliğinden silmemek için böyle seçildi.
@@ -266,6 +266,16 @@ içinde derlenir; yeni bir archetype veya trait bir satırı kapatıyorsa ikisin
     `Compute`, numara, kaydet. İş mantığı `TransitionRejectedException` fırlatırsa hiçbir şey kaydedilmez
     ve mesajı 422 ile döner; metni üretmek (ve çevirmek) fırlatanın işidir.
   - İstek `ITransition` uygulamıyorsa ve lambda verilmediyse handler eksikliği uygulama açılırken hata olur.
+  - **Entity aksiyonu** durum kontrolü ve durum ataması olmayan bir geçiştir ve aynı hattan geçer
+    (`TransitionParser`, `AttachTransitions`, `EndpointEmitter.EmitTransition`; `TransitionModel.IsAction`).
+    Durum makinesi gerektirmez. Bir kaynağın builder'ında çağrılan `MapAction` her zaman entity'ye bağlıdır
+    ve aynı adlı, entity'ye bağlı olmayan uzantı metodunun (`app.MapAction<TRequest>()`) yerine geçer. Üç
+    biçimi vardır: gövdesiz (`MapAction("ad", lambda)`), istek tipli (`MapAction<TRequest>()`; mantık
+    `IEntityAction<TEntity>`, lambda veya `IEntityActionHandler<TEntity, TRequest>`) ve kendi sonucunu
+    döndüren (`MapAction<TRequest, TResponse>()`; yanıt kaydın kendisi değil sonuçtur, kayıt yine kaydedilir).
+    Aksiyon kaydı değiştirdiği için kaynağın yazma kurallarına uyar (`If-Match`, idempotency, durumun yazmayla
+    doğrulanması), ama `EditableIn` kuralına bağlı değildir; reddetmesi gerekiyorsa mantığı
+    `TransitionRejectedException` fırlatır. Singleton ve gömülü detayda kullanılamaz (anahtarı yoktur).
   - **Durum kontrolü yazmayla birlikte yinelenir.** Kontrol ile kaydetme arasında başka bir istek durumu
     değiştirebilir. Sürüm kontrollü kaynakta bunu satır sürümü yakalar (412); diğerlerinde `Status`
     eşzamanlılık belirtecidir (`IsConcurrencyToken`) ve çakışma 409 `StateChanged` olur. Durum makinesi

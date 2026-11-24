@@ -17,7 +17,7 @@ internal static class TransitionParser
     public static bool IsCandidate(SyntaxNode node) =>
         node is InvocationExpressionSyntax
         {
-            Expression: MemberAccessExpressionSyntax { Name.Identifier.ValueText: "MapTransition" },
+            Expression: MemberAccessExpressionSyntax { Name.Identifier.ValueText: "MapTransition" or "MapAction" },
         };
 
     public static TransitionDeclaration? Parse(GeneratorSyntaxContext context, CancellationToken cancellationToken)
@@ -34,9 +34,11 @@ internal static class TransitionParser
         }
 
         var owner = owners[0];
+        var isAction = access.Name.Identifier.ValueText == "MapAction";
         INamedTypeSymbol? request = null;
+        ITypeSymbol? response = null;
 
-        if (access.Name is GenericNameSyntax { TypeArgumentList.Arguments: { Count: 1 } typeArguments })
+        if (access.Name is GenericNameSyntax { TypeArgumentList.Arguments: { Count: >= 1 } typeArguments })
         {
             request = semanticModel.GetTypeInfo(typeArguments[0], cancellationToken).Type as INamedTypeSymbol;
 
@@ -44,6 +46,17 @@ internal static class TransitionParser
             {
                 // İstek tipi çözülemiyorsa derleyici zaten hata verir.
                 return null;
+            }
+
+            // İkinci tip argümanı yalnızca aksiyonda vardır: aksiyonun kendi sonucu.
+            if (typeArguments.Count == 2)
+            {
+                response = semanticModel.GetTypeInfo(typeArguments[1], cancellationToken).Type;
+
+                if (response is null or { TypeKind: TypeKind.Error })
+                {
+                    return null;
+                }
             }
         }
 
@@ -60,7 +73,7 @@ internal static class TransitionParser
 
             var isText = semanticModel.GetTypeInfo(expression, cancellationToken).ConvertedType?.SpecialType == SpecialType.System_String;
 
-            switch (ParameterOf(arguments[index], index, typed: request is not null, isText))
+            switch (ParameterOf(arguments[index], index, typed: request is not null, isText, isAction))
             {
                 case "name" when !expression.IsKind(Microsoft.CodeAnalysis.CSharp.SyntaxKind.NullLiteralExpression):
                     if (semanticModel.GetConstantValue(expression, cancellationToken) is { HasValue: true, Value: string text })
@@ -108,12 +121,16 @@ internal static class TransitionParser
             request?.Name,
             request?.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat),
             ImplementsTransition: request?.AllInterfaces.Any(candidate =>
-                candidate.OriginalDefinition.ToDisplayString() == "Haldus.ITransition<TEntity>"
+                candidate.OriginalDefinition.ToDisplayString() == (isAction ? "Haldus.IEntityAction<TEntity>" : "Haldus.ITransition<TEntity>")
                 && candidate.TypeArguments[0].Name == owner.Name) == true,
             from.ToEquatableArray(),
             to,
-            statesReadable && from.Count > 0 && to is not null,
-            LocationInfo.From(access.Name.GetLocation()));
+            isAction || (statesReadable && from.Count > 0 && to is not null),
+            LocationInfo.From(access.Name.GetLocation()))
+        {
+            IsAction = isAction,
+            ResponseType = response?.ToDisplayString(MapCallParser.TypeFormat),
+        };
     }
 
     /// <summary>
@@ -121,11 +138,19 @@ internal static class TransitionParser
     /// sıra, iki çağrı biçiminin imzasından bilinir. İstek tipli biçimde üçüncü sıradaki argüman ya iş
     /// mantığıdır ya da addır; hangisi olduğunu tipi söyler.
     /// </summary>
-    private static string ParameterOf(ArgumentSyntax argument, int index, bool typed, bool isText)
+    private static string ParameterOf(ArgumentSyntax argument, int index, bool typed, bool isText, bool isAction)
     {
         if (argument.NameColon is { } named)
         {
             return named.Name.Identifier.ValueText;
+        }
+
+        if (isAction)
+        {
+            // Aksiyonun durumu yoktur: gövdesiz biçim (ad, mantık), istek tipli biçim ([mantık], [ad]).
+            return typed
+                ? index == 0 && !isText ? "apply" : "name"
+                : index == 0 ? "name" : "apply";
         }
 
         if (!typed)
