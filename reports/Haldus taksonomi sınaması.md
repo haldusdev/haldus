@@ -64,7 +64,7 @@ durum modeli" kuralı da açılmadı: ek durum eksenleri asıl durumun yanında,
   eşlemeye en yakın biçimde ve yalnızca yazılmış özelliklerle bildirir, generator'dan geçirir ve üretilen kodun
   hatasız derlendiğini doğrular. Aşağıdaki tablo o dosyadaki verinin aynısıdır; sayılar bir testle bağlıdır.
 - **Çalışma:** Derleme, uçların doğru davrandığını göstermez. Tablodaki özelliklerin her biri örnek uygulamalarda
-  gerçek PostgreSQL'e karşı sınanıyor (bugün 339 entegrasyon testi); ama her satırın kendi birleşimi değil.
+  gerçek PostgreSQL'e karşı sınanıyor (bugün 362 entegrasyon testi); ama her satırın kendi birleşimi değil.
   Örnek mağazada bulunmayan birleşimler (ör. iade, abonelik, rezervasyon satırlarının tam hali) yalnızca derleme
   düzeyinde doğrulandı.
 - **Hüküm:** "Temiz" ile "kısmi" arasındaki ayrım benim yorumumdur: önerilen eşlemede adı geçen bir özellik
@@ -159,8 +159,9 @@ durum modeli" kuralı da açılmadı: ek durum eksenleri asıl durumun yanında,
   bağ, bir kaydın altındaki tek yapılandırma kaydı. Durumu olan bağın geçişleri gövdesizdir; mantık gerektiren bir
   üyelik hâlâ `MapCrud` + iki `References` ile yazılır.
 - **Onay bir trait oldu; zincir olmadı.** `Approvable` karar kaydını, "içeriği yazan onaylayamaz" kuralını ve sıralı
-  düzeyleri getirir (24). Araştırmanın önerdiği onay zinciri (düzey başına farklı roller, koşullu adımlar)
-  yazılmadı: düzeyler yalnızca "birbirinden farklı N kişi" demektir.
+  düzeyleri getirir (24). Araştırmanın önerdiği onay zinciri planlardan sonra, trait'in iki eklentisi olarak yazıldı:
+  düzey başına rol (`ApprovalRoles`) ve kayda göre değişen düzey sayısı (`IApprovalLevels`; koşullu adım). Paralel
+  onay ve vekâlet yoktur.
 - **Zaman dört ayrı biçimde ortaya çıktı** ve dördü de ayrı yazıldı: kaydın geçmiş halleri (`Revisioned`; 27, 29),
   taslağın yanında yayındaki hal (`Publishable`; 3, 27), iş tarafının beyan ettiği geçerlilik dönemi
   (`EffectiveDated`; 23) ve "şundan beri ne değişti" akışı (`ChangeFeed`; 23).
@@ -172,7 +173,8 @@ durum modeli" kuralı da açılmadı: ek durum eksenleri asıl durumun yanında,
 - **Bakiye, defterden türetilen bir izdüşüm olmaktan çıkıp kendi archetype'ı oldu** (11, 25). İkinci sınamada
   `MapAppendOnly` + `DerivedFrom` ile yaklaşık ifade ediliyordu; eksik olan, "bakiye yetiyor mu" kontrolünün yazmayla
   aynı kilidin altında yapılmasıydı. `MapBalance` bunu ve araştırmanın eksik saydığı adlandırılmış kovaları getirir.
-  Bakiyeye karşı süreli tutma (rezervasyonun kendiliğinden geri dönmesi) üretilmez; kovalar arası `move` ile yazılır.
+  Bakiyeye karşı süreli tutma (rezervasyonun kendiliğinden geri dönmesi) planlardan sonra yazıldı (`Holds`): tutma
+  miktarı bir kovadan ötekine ayırır, tahsil edilir, bırakılır veya ömrü dolunca bakım tarafından bırakılır.
 - **Birden çok durum ekseni "en fazla bir durum modeli" kuralını açmadı** (1, 10). Asıl durum tek kaldı; ödeme ve
   sevkiyat gibi eksenler `Axis` ile, kendi geçişleriyle yazıldı. Düzenleme ve silme kuralları yalnızca asıl duruma
   bakar; eksene bağlı bir `EditableIn` yoktur.
@@ -184,7 +186,8 @@ durum modeli" kuralı da açılmadı: ek durum eksenleri asıl durumun yanında,
 - **Araştırmanın açık bıraktığı çeviri deposu sorusu alan-dil haritasıyla kapandı** (28): çeviriler kayıttaki bir
   çantadadır, yan tablo yoktur. Karşılığında çevirilere göre süzme, arama ve sıralama yapılamaz.
 - **Son üç satır dar biçimleriyle kapandı** (3, 5, 36). Tekrar serisi araştırmada bilerek kapsam dışıydı; yazılan
-  RRULE değildir (sıklık, aralık, bitiş; haftanın günleri ve saat dilimi yok). Varyant üretimi ve sepet birleştirme
+  RRULE değildir (sıklık, aralık, bitiş; haftanın günleri, ay içindeki sıra ve saat dilimi planlardan sonra eklendi,
+  `RRULE`'un geri kalanı yoktur). Varyant üretimi ve sepet birleştirme
   için yeni bir bildirim yazılmadı; ikisi de entity aksiyonudur. Bunları sınarken bir hata çıktı: mantığın eklediği
   gömülü satırlar kimliksiz kalıyor ve kaydetme 500 veriyordu.
 - **Üçüncü sürüm listesinin tabloda karşılığı olmayan kalemleri de yazıldı:** hassas alan, ölçüte göre silme, işin
@@ -203,6 +206,21 @@ durum modeli" kuralı da açılmadı: ek durum eksenleri asıl durumun yanında,
 - **Misafir sepeti bir açık gösterdi** (planlardan sonra, 5. satır örnek mağazada çalıştırılırken). `TokenAccess`
   kimlikle çalışan adresleri de bırakıyordu; sahibi bir kullanıcı olmayan bir kayıtta bu, kimliği bilen herkese yazma
   izni demekti. `TokenOnly` eklendi: kimlikli hiçbir uç üretilmez.
+- **"Bilinen sınırlar"ın yeni bağımlılık gerektirmeyenleri planlardan sonra yazıldı:** tekrar serisinde haftanın
+  günleri ve saat dilimi, şifreli alan (`Encrypted`), onay zinciri, paylaşılan kayıtta kullanıcı başına okundu bilgisi
+  (`ReadReceipts`), zamanlanmış yayın (`ScheduledPublishing`), ULID ve istemcinin verdiği kimlik, bakiyeye karşı tutma
+  (`Holds`), multipart yükleme ve süreli indirme bağlantısı (`SignedLinks`). Hiçbiri bir satırın hükmünü değiştirmedi;
+  tablonun geri kalanı aşağıdadır.
+- **Bu eklemelerin güvenlik incelemeleri altı bulgu verdi; hepsi düzeltildi.** `TokenAccess` sahibi olmayan kayıtta
+  kimlikli uçları açık bırakıyordu (`TokenOnly`); şifreli alan tipten devralınabiliyordu; yayınlanamayan taslaklar
+  zamanlanmış yayının sırasını başka kiracılar için tutabiliyordu; istemcinin verdiği kimliğin "alınmış" yanıtı,
+  isteği yapanın göremediği bir kaydın varlığını söylüyordu (iki bulgu: önce kiracı ve sahip, sonra gizlenen öteki
+  kayıtlar); bırakma nedeninin uzunluğu defter kolonunu aşıp tutmanın hiç bırakılamamasına yol açıyordu.
+- **Gerçek kimlik doğrulama Haldus'ta hiçbir şeyi değiştirmedi, ama örnekte bir açık gösterdi.** Örnek mağaza parola
+  ile girişe ve taşıyıcı token'a geçirildi; Haldus kullanıcıyı ve kiracıyı zaten claim'lerden okuyordu. Panel
+  tarayıcıda denenirken görüldü: reddedilen bir token sunan istek anonim sayılıyor ve kaynağa göre 401, 403 veya 200
+  alıyordu; istemci oturumunu yenilemesi gerektiğini anlayamıyordu. Örnek, reddedilen token'ı her kaynakta 401 ile
+  yanıtlayacak biçimde düzeltildi. Bu, uygulamanın kimlik doğrulama katmanının işidir; Haldus'a taşınmadı.
 - **Güvenlik incelemeleri üçüncü planda da aynı türden bulgular verdi.** Dört aşamadan sonra düzeltme gerekti:
   kullanıcılara ait kayıtların ortak bir kayıtta örtük toplanması (22), hassas alanın değişiklik kümesinde saklanıp
   geri gösterilmesi ve ölçütsüz sayılabilecek toplu silme (27), rolün zincirleme silmesinin kiracı sınırını aşması
@@ -237,16 +255,67 @@ sınırları ayrıca [README](../README.md) ve `CLAUDE.md` dosyalarında, özell
 | Kimlik sağlayıcılı (OpenID Connect) örnek; sunucuda çıkış, parola sıfırlama, hesap kilidi | — | Gerçek kimlik doğrulama sonradan yazıldı: örnek mağaza parola ile giriş yapar ve ASP.NET Core'un yerleşik taşıyıcı token'ını kullanır, iki arayüz de onu taşır ve yeniler. Ayrı bir kimlik sağlayıcı yeni bağımlılık ve sorulması gereken bir seçimdir |
 | Arayüzler için otomatik test | — | Frontend test framework'ü sorulması gereken bir seçimdi; arayüzler tip denetimi, derleme ve elle doğrulandı |
 
-## Bu sınamanın söylemediği
+## Yük altında ölçüm
 
+Kilide dayanan özellikler [Haldus.LoadTest](../tools/Haldus.LoadTest) aracıyla, çalışan örnek mağazaya karşı ölçüldü
+(2026-11-25). Her satır 2000 işlemdir (önünde sayılmayan 100 ısınma işlemi); hiçbir çalıştırmada başarısız yanıt
+olmadı.
+
+**Ortam:** tek makine (Intel i7-11700KF, 16 mantıksal çekirdek, 64 GB; Windows 11). İstemci, backend (.NET 10,
+Release, Kestrel) ve PostgreSQL 17 (Docker Desktop, WSL2) aynı makinededir ve işlemciyi paylaşır. Veritabanı
+varsayılan ayarlarıyla, boş başlatıldı. Sayılar bu makinenin göreli kıyasıdır; bir kapasite vaadi değildir.
+
+| Senaryo | Ne ölçülüyor | Eşz. 1: işlem/sn (p50) | Eşz. 8: işlem/sn (p50 / p99) | Eşz. 32: işlem/sn (p50 / p99) |
+|---|---|---:|---:|---:|
+| Okuma | 20 kayıtlık sayfa + toplam | 366 (2,7 ms) | 2373 (3,2 / 5,8 ms) | 4839 (6,2 / 12,1 ms) |
+| Yazma | Kilitsiz, sayaçsız kayıt | 222 (4,4 ms) | 1632 (4,8 / 7,6 ms) | 4542 (7,5 / 9,3 ms) |
+| Boşluksuz numara | Tek sayaç satırı | 98 (9,5 ms) | 175 (27,4 / 233 ms) | 164 (13,6 / 1486 ms) |
+| Sequence numarası | `gapless: false` (+ idempotency) | 70 (13,9 ms) | 538 (14,5 / 19,9 ms) | 1148 (27,1 / 48,8 ms) |
+| Sıraya ekleme | `Orderable`, ağacın kilidi | 104 (9,5 ms) | 143 (55 / 67 ms) | 143 (223 / 250 ms) |
+| Sırada taşıma | 100 kardeş yeniden numaralanır | 54 (18,3 ms) | 58 (136 / 163 ms) | 57 (558 / 592 ms) |
+| Bakiye, tek anahtar | `MapBalance` `adjust` | 115 (8,5 ms) | 143 (55 / 70 ms) | 144 (222 / 241 ms) |
+| Bakiye, işçi başına anahtar | aynı | 116 (8,5 ms) | 801 (9,8 / 14,3 ms) | 2019 (15,5 / 24,0 ms) |
+| Tutma + tahsilat | `Holds`; iki istek | 50 (19,9 ms) | 59 (136 / 159 ms) | 58 (546 / 601 ms) |
+| Toplanan alan, tek üst kayıt | `Counts` + `Sums` | 83 (11,8 ms) | 154 (52 / 64 ms) | 151 (210 / 287 ms) |
+| Toplanan alan, işçi başına üst kayıt | aynı | 82 (12,0 ms) | 619 (12,3 / 17,2 ms) | 1118 (23,1 / 335 ms) |
+| Türetme | `DerivedFrom`, kaynak başına kilit | 122 (8,1 ms) | 151 (53 / 60 ms) | 151 (210 / 234 ms) |
+| Dönemli kayıt | `EffectiveDated`, tek kapsam | 102 (9,7 ms) | 141 (56 / 71 ms) | 141 (222 / 267 ms) |
+
+Dışa aktarma: 20 000 ürünün CSV'si (1,74 MiB) 0,44 saniyede üretildi; dosya 30 ms'de indirildi.
+
+Okunması:
+
+- **Kilit doğruluğu sıraya sokarak sağlıyor ve bedeli ölçülebilir.** Aynı kilidi bekleyen yazmalar bu ortamda
+  saniyede 140–150'de düzleşiyor; eşzamanlılık arttıkça verim değil yanıt süresi büyüyor (32 istemcide ortanca ~220 ms).
+  Tavanı, kilidin tutulduğu süre belirliyor; o sürenin çoğu veritabanının commit'i (bu ortamda kilitsiz bir yazma
+  da tek başına 4,4 ms sürüyor). Daha hızlı bir diskte tavan yükselir, biçimi değişmez.
+- **Kilidin kapsamı beyan edildiği gibi.** Bakiye ve toplanan alan anahtar / üst kayıt başına kilitleniyor: aynı
+  işlemler farklı anahtarlara dağıldığında verim eşzamanlılıkla birlikte büyüyor (2019 ve 1118 işlem/sn).
+- **`DerivedFrom` ve `Orderable` en dar boğazlar.** Türetme kaynak tipinin tamamını, sıra bütün ağacı tek kilide
+  bağlar; örnekte bütün ürünlerin stok hareketleri ve bütün kategori eklemeleri saniyede ~150 ile sınırlıdır. İkisi
+  de `CLAUDE.md`'de bilinen sınır olarak yazılıydı; ölçüm büyüklüğünü verdi. Yazma hacmi yüksek bir kaynak için
+  türetme yerine kendi kilidi dar olan `MapBalance` veya toplanan alan uygundur.
+- **Boşluksuz numaranın kuyruğu uzun.** Verim ötekilerle aynı (~165–175 işlem/sn), ama 32 istemcide yanıt süresinin
+  dağılımı çok eşitsiz: ortanca 13,6 ms iken yüzde biri 1,5 saniyeyi geçiyor. Sayaç bir satır kilidiyle korunuyor ve
+  PostgreSQL satır kilidini bekleyenlere sırayla vermiyor; öteki özelliklerin kullandığı danışma kilidinde dağılım
+  düzgün (aynı eşzamanlılıkta p99, ortancanın en çok 1,4 katı). Numaranın boşluksuz olması gerekmiyorsa `gapless: false` bu kuyruğu ortadan
+  kaldırıyor ve eşzamanlılıkla ölçekleniyor. Sayacı danışma kilidine taşımak ayrı bir iştir; yapılmadı.
+- **Sırada taşımanın maliyeti kapsamın büyüklüğüyle orantılı.** 100 kardeşte taşıma, eklemenin yaklaşık iki katı
+  sürüyor (18 ms). Daha büyük kapsamlar ölçülmedi.
+
+Ölçülmeyenler: olay dağıtımı (örnek mağazada kayıtlı yayıncı yok; yalnızca olayın kutuya yazılması ölçümün içinde),
+veritabanı dosya deposuna büyük dosya yükleme, milyonlarca satırlık tablolar, uzun süreli çalışma ve birden çok
+backend örneği.
+
+## Bu sınamanın söylemediği
 - Her satırın kendi birleşiminin uçlarının doğru davrandığı; özellikler tek tek sınandı, satırların çoğu yalnızca
   derleniyor.
 - Tasarım kararlarının doğru olduğu. 15. aşamadan sonraki kararlar sorulmadan, önerilen seçenekle verildi ve
   kullanıcı tarafından ayrıca onaylanmadı; hepsi `CLAUDE.md` dosyasının "Tasarım kararları" bölümünde, bu notla
   birlikte yazılıdır.
-- Büyük veri altındaki davranış: kilide dayanan özellikler (`Orderable`, `EffectiveDated`, `DerivedFrom`, boşluksuz
-  `Numbered`, `MapBalance`, toplanan alanlar, olay dağıtımı) ve içeriği bellekte kuran yollar (veritabanı dosya
-  deposu, dışa aktarma) yük altında ölçülmedi.
+- Üretim yükündeki davranış. Kilide dayanan özellikler tek makinede, küçük tablolarla ölçüldü
+  ([Yük altında ölçüm](#yük-altında-ölçüm)); olay dağıtımı, büyük dosyalar, büyük tablolar ve birden çok sunucu
+  ölçülmedi.
 - Güvenliğin tam olduğu. Her aşamadan sonra yapılan incelemelerin bulguları düzeltildi; bu, bulunmamış bir
   birleşim hatası kalmadığını göstermez. Oran sınırlama ve onaylayanın yetkisi gibi konular uygulamaya bırakıldı.
 - Mobil uygulamanın cihazda çalıştığı. Örnek mobil uygulama yalnızca Expo'nun web hedefinde, çalışan backend'e karşı

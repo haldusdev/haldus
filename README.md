@@ -780,6 +780,13 @@ sürüm listesiyle sınamada kalan satırları kapatan on bir aşama. Model, ara
 59'unun tamamı eksiksiz ifade ediliyor (ilk sınamada 19 eksiksiz, 29 kısmi, 11 karşılıksızdı; ikincisinde 47, 10, 2).
 Ayrıntısı ve bilerek yazılmayanlar [taksonomi sınaması](reports/Haldus%20taksonomi%20sınaması.md) belgesindedir.
 
+Planlardan sonra, o belgenin "Bilinen sınırlar" tablosundan yeni bağımlılık gerektirmeyen kalemler de yazıldı (tekrar
+serisinde haftanın günleri ve saat dilimi, şifreli alan, onay zinciri, kullanıcı başına okundu bilgisi, zamanlanmış
+yayın, ULID ve istemcinin verdiği kimlik, bakiyeye karşı tutma, multipart yükleme ve süreli indirme bağlantısı), örnek
+mağaza gerçek kimlik doğrulamaya geçirildi ve kilide dayanan özellikler yük altında ölçüldü. Yapılmayanlar aynı
+belgededir; başlıcaları: mobil uygulama Android ve iOS'ta çalıştırılmadı, arayüzlerin otomatik testi yok, nesne deposu
+ve mesaj kuyruğu paketleri yok (yeni bağımlılık gerektirirler).
+
 Tasarım kararları için [CLAUDE.md](CLAUDE.md), kararların dayandığı araştırma için [reports](reports/)
 klasörüne bakın. İki örnek backend var: tek projeli [mağaza](samples/Haldus.Sample.Shop) ve
 [modüler](samples/Haldus.Sample.Modular) uygulama. Mağazanın üretilmiş istemcisi
@@ -798,3 +805,10 @@ dotnet test
 
 Entegrasyon testleri Docker gerektirir. Örnek arayüzlerin komutları (`pnpm dev`, `pnpm generate:api`, `pnpm typecheck`)
 kendi README dosyalarındadır.
+
+Kilide dayanan özelliklerin (boşluksuz numara, sıra, bakiye, toplanan alan, türetme, dönem) yük altındaki davranışı
+[Haldus.LoadTest](tools/Haldus.LoadTest) ile ölçülür; araç çalışan bir örnek mağazaya HTTP üzerinden yüklenir. Bir
+ölçümün sonuçları ve nasıl okunacağı [taksonomi sınamasının](reports/Haldus%20taksonomi%20sınaması.md#yük-altında-ölçüm)
+"Yük altında ölçüm" bölümündedir. Özeti: aynı kilidi bekleyen yazmalar sıraya girer (ölçülen ortamda saniyede ~150),
+kilidi anahtar başına olan özellikler (`MapBalance`, toplanan alanlar) farklı anahtarlarda eşzamanlılıkla ölçeklenir,
+`DerivedFrom` ve `Orderable` ise kaynağın tamamını tek kilide bağlar.

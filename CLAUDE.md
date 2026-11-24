@@ -26,6 +26,9 @@ EF Core yapılandırması üretilir.
   izni gerekir (`Shop:CorsOrigins`). pnpm burada düz `node_modules` kurar (`pnpm-workspace.yaml`: `nodeLinker: hoisted`);
   Metro, sembolik bağlı düzende dolaylı bağımlılıkları (`react-native-css-interop`) çözemiyor.
 - Örnek uygulamada üretilen kod `samples/Haldus.Sample.Shop/obj/Generated` altında incelenebilir.
+- Yük ölçümü: `dotnet run -c Release --project tools/Haldus.LoadTest` (çalışan bir örnek mağaza ister; backend
+  `Shop:DemoIdentity=true` ile ve Release kipinde başlatılır; ayrıntısı aracın README'sinde). Sonuçlar makineye bağlıdır;
+  rapordaki tablo değiştirilecekse ölçüm boş bir veritabanıyla yeniden yapılır.
 
 ## Yapı
 
@@ -46,6 +49,8 @@ EF Core yapılandırması üretilir.
   NativeWind). Ürünler, favoriler ve kullanıcının sepeti; kendi orval istemcisi `api` altındadır.
 - `samples/Haldus.Sample.Modular`: modüler yapının sınandığı küçük uygulama. `Catalog` ve `Sales` kendi
   bağlamına sahip modüllerdir; `Support` modülü ve `Host` ortak bağlamı kullanır.
+- `tools/Haldus.LoadTest`: çalışan örnek mağazayı HTTP üzerinden yük altında ölçen konsol aracı (bağımlılığı yok).
+  Kilide dayanan özellikleri kilitsiz bir yazmayla yan yana ölçer.
 - `reports/`, `research_notes/`: archetype/trait taksonomisi araştırması. Tasarım kararlarının dayanağı
   `reports/Haldus archetype ve trait taksonomisi.md` dosyasındadır.
 
@@ -447,6 +452,13 @@ aşaması değildir ve kararları yine sorulmadan verildi:
   dilimi, `Encrypted`, onay zinciri (`ApprovalRoles`, `IApprovalLevels`), `ReadReceipts`, `ScheduledPublishing`,
   `KeyStrategy.Ulid` / `Client`, bakiyede `Holds`, dosyada multipart yükleme ve `SignedLinks`.
 - Örnekte gerçek kimlik doğrulama (aşağıda, "Açık kararlar").
+- Yük ölçümü: `tools/Haldus.LoadTest` ve raporun "Yük altında ölçüm" bölümü. Örnek mağaza Release kipinde, yerel
+  bir PostgreSQL kapsayıcısına karşı ölçüldü; sayılar o makinenin göreli kıyasıdır, bir kapasite vaadi değildir.
+  Ölçümün gösterdikleri: aynı kilidi bekleyen yazmalar sıraya girer (o ortamda ~150 işlem/sn; tavanı commit süresi
+  belirler); `MapBalance` ve toplanan alanlar anahtar / üst kayıt başına kilitlendiği için farklı anahtarlarda
+  ölçeklenir; `DerivedFrom` (kaynak tipi başına tek kilit) ve `Orderable` (ağaç başına tek kilit) en dar boğazlardır;
+  boşluksuz `Numbered` sayacının satır kilidi yüksek eşzamanlılıkta uzun bir kuyruk bırakır (32 istemcide p99 1,5 sn;
+  danışma kilidi kullanan özelliklerde dağılım düzgün). Sayacı danışma kilidine taşımak yapılmadı; ayrı bir iştir.
 
 Yapılmayanlar ve nedenleri: arayüzler için otomatik test (genel kural: test altyapısı kendiliğinden kurulmaz), mobil
 uygulamanın cihazda denenmesi (bu makinede emülatör yok), yeni bağımlılık gerektiren paketler (nesne deposu, mesaj
