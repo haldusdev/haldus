@@ -39,6 +39,15 @@ builder.Services.ConfigureHttpJsonOptions(options =>
 
 var app = builder.Build();
 
+// Örnek arayüzlerin (Haldus.Sample.Shop.Web, Haldus.Sample.Shop.Mobile) karşısında çalıştırmak için: istenirse
+// (Shop:CreateDatabase) tablolar açılışta, yoksa oluşturulur. Varsayılan olarak kapalıdır ve build sırasındaki şema
+// üretiminde hiç çalışmaz; gerçek bir uygulama şemasını migration'larla yönetir.
+if (app.Configuration.GetValue<bool>("Shop:CreateDatabase") && !HaldusJobs.IsGeneratingOpenApiDocument)
+{
+    await using var scope = app.Services.CreateAsyncScope();
+    await scope.ServiceProvider.GetRequiredService<AppDbContext>().Database.EnsureCreatedAsync();
+}
+
 app.UseHaldus();
 app.MapOpenApi();
 app.MapCatalog();

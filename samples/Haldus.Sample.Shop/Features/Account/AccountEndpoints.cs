@@ -38,5 +38,30 @@ public static class AccountEndpoints
         // Kullanıcıyı bir kayda bağlar: PUT ve DELETE /me/favorites/{productId}, GET /me/favorites (ürünleri döner).
         // İlk tip argümanı bağın kendisidir; Favorite entity'si üretilir.
         app.MapAssociation<Favorite, Product>().ForCurrentUser();
+
+        // Kullanıcının sepeti: /me/baskets. Satırları sepetin isteğine gömülüdür; sepet kullanıldıkça yaşar.
+        var baskets = app.MapCrud<Basket>()
+            .OwnedByCurrentUser()
+            .Expiring(TimeSpan.FromDays(30), sliding: true);
+
+        baskets.MapDetail<BasketItem>();
+
+        // Oturum açınca misafir sepeti kullanıcının sepetine katılır: POST /me/baskets/{id}/merge  { "guestToken": "…" }
+        // Birleştirme kuralı alana özgüdür; MergeBasketHandler sınıfındadır.
+        baskets.MapAction<MergeBasket>();
+
+        // Misafir sepetinin sahibi bir kullanıcı değil, yalnızca onu oluşturanın bildiği token'dır. Token oluşturma
+        // yanıtında bir kez gösterilir ve X-Access-Token başlığında taşınır:
+        // GET /guest-baskets/by-token, POST /guest-baskets/by-token/add-basket-item
+        // Okuma, liste ve düzenleme uçları kapalıdır (yalnızca oluşturma açık); sepet token olmadan okunamaz.
+        // Aksiyonun kimlikle çalışan adresi (/guest-baskets/{id}/add-basket-item) yine de üretilir; gerçek bir
+        // uygulamada kaynağa yetkilendirme eklenir (token uçları oturumsuz kalır).
+        var guests = app.MapCrud<GuestBasket>()
+            .Only(CrudOperation.Create)
+            .Expiring(TimeSpan.FromDays(7), sliding: true)
+            .TokenAccess(prefix: "basket", "add-basket-item");
+
+        guests.MapDetail<GuestBasketItem>();
+        guests.MapAction<AddBasketItem>();
     }
 }

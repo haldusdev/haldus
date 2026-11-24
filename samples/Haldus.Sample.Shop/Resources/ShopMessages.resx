@@ -21,4 +21,7 @@
   <data name="CouponExhausted" xml:space="preserve">
     <value>This coupon has no redemptions left.</value>
   </data>
+  <data name="GuestBasketNotFound" xml:space="preserve">
+    <value>The guest basket was not found or has expired.</value>
+  </data>
 </root>

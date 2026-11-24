@@ -21,4 +21,7 @@
   <data name="CouponExhausted" xml:space="preserve">
     <value>Bu kuponun kullanım hakkı doldu.</value>
   </data>
+  <data name="GuestBasketNotFound" xml:space="preserve">
+    <value>Misafir sepeti bulunamadı veya süresi doldu.</value>
+  </data>
 </root>
