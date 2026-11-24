@@ -255,10 +255,12 @@ Bunlar kullanıcıyla kararlaştırıldı; yeniden sorma.
 
 ## Aşamalar
 
-On aşamanın tamamı bitti (3. aşamaya `.Searchable()`, 8. aşamaya fiziksel temizlik de eklendi). 10. aşamanın
-sonucu `reports/Haldus taksonomi sınaması.md` dosyasındadır: araştırmadaki 59 varlığın (bugünkü sayımla) 47'si temiz, 10'u
-kısmen ifade ediliyor, 2'si için gereken özellik yok. Aynı veri `tests/Haldus.Generators.Tests/TaxonomyTests.cs`
-içinde derlenir; yeni bir archetype veya trait bir satırı kapatıyorsa ikisini birlikte güncelle.
+İki plan da bitti: ilk sürümün on aşaması (3. aşamaya `.Searchable()`, 8. aşamaya fiziksel temizlik de eklendi) ve
+ikinci planın on bir aşaması. Sınamanın sonucu `reports/Haldus taksonomi sınaması.md` dosyasındadır: araştırmadaki
+59 varlığın 47'si temiz, 10'u kısmen ifade ediliyor, 2'si için gereken özellik yok (ilk sınamada 19 / 29 / 11).
+Aynı veri `tests/Haldus.Generators.Tests/TaxonomyTests.cs` içinde derlenir; yeni bir archetype veya trait bir satırı
+kapatıyorsa ikisini birlikte güncelle. Kalan eksikler raporun "Kalan eksikler" tablosundadır; hepsi araştırmanın
+üçüncü sürüme bıraktığı veya kapsam dışı saydığı kalemlerdir ve yeni bir plan gerektirir.
 
 1. İskelet
 2. Generator çekirdeği ve `MapCrud`
@@ -278,7 +280,7 @@ içinde derlenir; yeni bir archetype veya trait bir satırı kapatıyorsa ikisin
 Kullanıcı 2026-11-24'te onayladı. Kapsamı araştırma raporunun v2 listesi, ilk sürümden kalan küçük kalemler
 ve sınamada çıkan küçük eksiklerdir. Raporun v3 listesi (`MapBalance`, `MapChangeSet`, birden çok durum
 ekseni, çeviri, saklama süresi, okundu takibi) ve tekrar serisi bu planın dışındadır. Her aşama testleriyle
-birlikte ayrı commit olur; 11–20. aşamalar bitti, sıradaki 21.
+birlikte ayrı commit oldu; 11–21. aşamaların tamamı bitti.
 
 11. Sahiplik: `OwnedByCurrentUser`, `MapAssociation().ForCurrentUser()`
 12. Alan eklentileri: `Metadata`, yalnızca oluştururken yazılan alan, `NaturalKey`, `KeyStrategy`, liste
@@ -296,16 +298,10 @@ birlikte ayrı commit olur; 11–20. aşamalar bitti, sıradaki 21.
 21. Sınamanın yinelenmesi: 59 satırlık tablo, rapor ve README
 
 **Kullanıcı 2026-11-24'te kalan aşamalar için soru sorulmamasını istedi** ("projenin tamamen bitmesini istiyorum,
-bana soru sorma"). Aşağıdaki kararlar artık sorulmaz: önerilen seçenek uygulanır ve "Tasarım kararları"na, kullanıcı
-ayrıca onaylamadı notuyla yazılır. Yeni bağımlılık gerektiren yollar seçilmez (o onay hâlâ gerekir); depolama ve
-aktarma, yeni paket eklemeden yazılır.
-
-Aşama başına açık kararlar (uygulandıkça "Tasarım kararları"na taşınır):
-
-
-
-
-
+bana soru sorma"). 15–20. aşamaların tasarım kararları bu yüzden sorulmadı: önerilen seçenek uygulandı ve "Tasarım
+kararları"na, kullanıcı ayrıca onaylamadı notuyla yazıldı. Kullanıcı bu kararlardan birini değiştirmek isterse ilgili
+madde oradadır. Yeni bağımlılık gerektiren hiçbir yol seçilmedi; depolama ve aktarma yeni paket eklemeden yazıldı.
+Bu talimat ikinci plan içindi: yeni bir işte tasarım soruları yeniden sorulur.
 
 Raporun v1 listesindeki "uzatma kancaları" plana girmedi ve yazılmadı: raporda tanımı yok.
 
@@ -670,6 +666,10 @@ Raporun v1 listesindeki "uzatma kancaları" plana girmedi ve yazılmadı: rapord
   hata raporu çalışma zamanındadır (`HaldusTransfers`).
   - İş, onu başlatan kiracı ve kullanıcının kimliğiyle çalışır (`HaldusAmbient`); dışa aktarma yalnızca onların
     görebildiği kayıtları içerir.
+  - **İş, aktardığı kaynağın kapsamını taşımalıdır:** hedef kiracıya aitse (kendisi veya ebeveyni) iş de
+    `MultiTenant`, hedef kullanıcıya aitse iş de `OwnedByCurrentUser` olmalıdır; değilse `HALDUS007`. İşin kaydı,
+    hata raporu ve ürettiği dosya işi görebilen herkese açıktır; kapsamı olmayan bir iş bir kiracının verisini
+    ötekilere gösterirdi (güvenlik incelemesinde çıktı).
   - İçe aktarma atomiktir: satırlar tek transaction içinde, her biri kendi kayıt noktasında işlenir; biri bile
     reddedilirse hepsi geri alınır. Bu, yarıda kalıp yeniden çalışan işin aynı kayıtları iki kez eklemesini de
     önler. İçerik (`Content`) yalnızca istekte yer alır (`PropertyModel.IsInputOnly`) ve iş bitince boşaltılır.

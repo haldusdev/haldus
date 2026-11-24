@@ -447,9 +447,10 @@ kısıtı olur, ayrı bağlamlardaysa referans yalnızca kimlikle tutulur ve var
 
 ## Durum
 
-İlk sürümün planlanan on aşaması tamamlandı; eksikleri kapatan ikinci plan sürüyor. Model, araştırmadaki 59
-gerçek varlığa karşı sınanıyor: bugün 47'si temiz, 10'u kısmen ifade ediliyor, 2'si için gereken özellik henüz
-yok. Ayrıntısı ve eksiklerin listesi [taksonomi sınaması](reports/Haldus%20taksonomi%20sınaması.md)
+İki plan da tamamlandı: ilk sürümün on aşaması ve araştırmanın ikinci sürüm listesini kapatan on bir aşama. Model,
+araştırmadaki 59 gerçek varlığa karşı iki kez sınandı: bugün 47'si eksiksiz, 10'u kısmen ifade ediliyor, 2'si için
+gereken özellik yok (ilk sınamada bu sayılar 19, 29 ve 11 idi). Kalan eksiklerin tamamı araştırmanın üçüncü sürüme
+bıraktığı veya kapsam dışı saydığı kalemlerdir; ayrıntısı [taksonomi sınaması](reports/Haldus%20taksonomi%20sınaması.md)
 belgesindedir.
 
 Tasarım kararları için [CLAUDE.md](CLAUDE.md), kararların dayandığı araştırma için [reports](reports/)

@@ -214,16 +214,15 @@ public sealed class TaxonomyTests
             """),
         new(15, "JournalEntry", Fit.Clean,
             """
-            public enum JournalStatus { Draft, Posted }
             public partial class JournalEntry { public string Memo { get; set; } = ""; }
             public partial class JournalLine { public decimal Debit { get; set; } public decimal Credit { get; set; } }
             """,
             """
             var entries = app.MapCrud<JournalEntry>()
-                .Workflow<JournalStatus>().EditableIn(JournalStatus.Draft).DeletableIn(JournalStatus.Draft)
-                .Numbered("JE-{yyyy}-{seq:6}", assignOn: JournalStatus.Posted).Reversible(JournalStatus.Posted);
+                .Document()
+                .Numbered("JE-{yyyy}-{seq:6}", assignOn: DocumentStatus.Submitted).Reversible(DocumentStatus.Submitted);
             entries.MapDetail<JournalLine>();
-            entries.MapTransition("post", JournalStatus.Draft, JournalStatus.Posted, entry =>
+            entries.MapTransition("submit", DocumentStatus.Draft, DocumentStatus.Submitted, entry =>
             {
                 if (entry.JournalLines.Sum(line => line.Debit) != entry.JournalLines.Sum(line => line.Credit))
                 {
@@ -451,11 +450,11 @@ public sealed class TaxonomyTests
         new(44, "AuditLog / Event", Fit.Partial,
             """
             public partial class AuditLog { public string Action { get; set; } = ""; }
-            public partial class AuditLogExport { public int Year { get; set; } public string? Url { get; private set; } }
+            public partial class AuditLogExport;
             """,
-            $$"""
+            """
             app.MapReadOnly<AuditLog>().MultiTenant().Searchable(log => log.Action);
-            app.MapJob<AuditLogExport>({{Job}}).MultiTenant();
+            app.MapJob<AuditLogExport>().Exports<AuditLog>().MultiTenant();
             """),
         new(45, "Notification", Fit.Partial,
             """
@@ -572,10 +571,14 @@ public sealed class TaxonomyTests
             """,
             "app.MapCrud<Playlist>().MapDetail<Track>();"),
         new(58, "Bulk operations", Fit.Clean,
-            Product + "public partial class PriceUpdate { public int Percent { get; set; } public int Changed { get; private set; } }",
+            Product + """
+            public partial class PriceUpdate { public int Percent { get; set; } public int Changed { get; private set; } }
+            public partial class ProductImport;
+            """,
             $$"""
             app.MapCrud<Product>().Batch();
             app.MapJob<PriceUpdate>({{Job}});
+            app.MapJob<ProductImport>().Imports<Product>();
             """),
         new(59, "Büyük veri export'u", Fit.Clean,
             Product + "public partial class ProductExport;",

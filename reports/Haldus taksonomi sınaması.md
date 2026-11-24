@@ -2,49 +2,55 @@
 
 Araştırma raporu ([Haldus archetype ve trait taksonomisi](Haldus%20archetype%20ve%20trait%20taksonomisi.md)) 59 gerçek
 varlığı önerdiği modele eşlemiş, ama bu eşlemelerin "henüz bir üreteçle sınanmadığını" not etmişti. Bu belge o
-sınamanın sonucudur: her satır, yazılmış olan API ile ifade edilmeye çalışıldı.
+sınamanın sonucudur: her satır, yazılmış olan API ile ifade edilmeye çalışıldı. Sınama iki kez yapıldı: ilk sürümün
+sonunda (10. aşama) ve ikinci planın sonunda (21. aşama); aşağıdaki tablo ikincisinin sonucudur.
 
 ## Sonuç
 
-59 satırın 57'si bugünkü API ile yazılıp derleniyor (47'si eksiksiz); 2'si için anlamlı bir eşleme yok. (İlk sayım 19 temiz, 29
-kısmi, 11 yok idi. Entity aksiyonu yazıldıktan sonra bir satır temize geçti; sahiplik yazıldıktan sonra iki satır
-temize, bir satır yoktan kısmiye geçti; alan eklentileri yazıldıktan sonra üç satır temize, bir satır yoktan
-kısmiye geçti; kayıt işlemleri yazıldıktan sonra üç satır daha temize geçti; kayıtlar arası zincir yazıldıktan
-sonra beş satır temize, bir satır yoktan kısmiye geçti; sırlar yazıldıktan sonra iki satır daha temize geçti;
-bağlar ve kapsam yazıldıktan sonra üç satır daha, onay yazıldıktan sonra bir satır daha temize geçti; zaman ve
-sürüm yazıldıktan sonra bir satır kısmiden, bir satır yoktan temize geçti; dosyalar ve takılabilirler yazıldıktan
-sonra bir satır kısmiden, üç satır yoktan temize geçti; özel alanlar yazıldıktan sonra iki satır daha temize geçti.)
+59 satırın 57'si bugünkü API ile yazılıp derleniyor; 47'si önerilen eşlemeyi eksiksiz ifade ediyor.
 
-| Sonuç | Satır | Anlamı |
+| Sonuç | İlk sınama | Bugün | Anlamı |
+|---|---|---|---|
+| Temiz | 19 | 47 | Raporun önerdiği eşleme, yazılmış özelliklerle eksiksiz ifade ediliyor |
+| Kısmi | 29 | 10 | Çekirdek ifade ediliyor; önerilen eşlemedeki bir özellik yok |
+| Yok | 11 | 2 | Gereken archetype veya trait yazılmadı |
+
+Araştırmanın başlangıçtaki düz katalog için kendi sayımı 10 oturuyor, 31 zorlanarak, 18 oturmuyor idi. Üç sayım
+aynı ölçüyle yapılmadı (ilki araştırmacının hükmüydü; sonraki ikisi derlenen kod), bu yüzden fark kesin bir
+iyileşme ölçüsü olarak değil, yön olarak okunmalıdır.
+
+İkinci plan boyunca satırlar şöyle kapandı:
+
+| Aşama | Yazılan | Temize geçen |
 |---|---|---|
-| Temiz | 47 | Raporun önerdiği eşleme, yazılmış özelliklerle eksiksiz ifade ediliyor |
-| Kısmi | 10 | Çekirdek ifade ediliyor; önerilen eşlemedeki bir veya daha çok özellik henüz yok |
-| Yok | 2 | Gereken archetype veya trait yazılmadı |
+| Entity aksiyonu (ilk sınamadan hemen sonra) | Builder'da `MapAction` | 1 |
+| 11. Sahiplik | `OwnedByCurrentUser`, `ForCurrentUser` | 2 |
+| 12. Alan eklentileri | `Metadata`, `CreateOnly`, `NaturalKey`, `KeyStrategy`, sıralama | 3 |
+| 13. Kayıt işlemleri | `Cloneable`, `Orderable`, `Previewable` | 3 |
+| 14. Kayıtlar arası zincir | `Reversible`, `Supersedes`, `CreatedFrom`, `DerivedFrom` | 5 |
+| 15. Sırlar | `SecretOnce`, `Rotatable`, `TokenAccess` | 2 |
+| 16. Bağlar ve kapsam | Yüklü ve durumlu bağ, topluca değiştirme, ebeveyn altında tek kayıt, kısa adres, satır komutları | 3 |
+| 17. Onay ve belge | `Approvable`, `Document` | 1 |
+| 18. Zaman ve sürüm | `Revisioned`, `Publishable`, `EffectiveDated`, `ChangeFeed` | 2 |
+| 19. Dosyalar ve takılabilirler | `MapFile`, `AttachedTo`, `Attachable`, `Commentable`, `Taggable` | 4 |
+| 20. Özel alanlar ve aktarma | `CustomFields`, `Exports`, `Imports` | 2 |
 
-Araştırmanın başlangıçtaki düz katalog için kendi sayımı 10 oturuyor, 31 zorlanarak, 18 oturmuyor idi. İki sayım
-aynı ölçüyle yapılmadı (o, araştırmacının hükmüydü; bu, derlenen kod), bu yüzden fark kesin bir iyileşme ölçüsü
-olarak değil, yön olarak okunmalıdır.
-
-Dört katmanlı model (bir archetype, ilişkiler, en fazla bir durum modeli, trait'ler) sınamadan sağlam çıktı:
-hiçbir satır iki archetype istemedi ve hiçbir satır modelin yeniden açılmasını gerektirmedi. Kalan boşlukların
-tamamı eksik trait veya archetype'tır.
+Dört katmanlı model (bir archetype, ilişkiler, en fazla bir durum modeli, trait'ler) iki sınamadan da sağlam çıktı:
+hiçbir satır iki archetype istemedi ve hiçbir satır modelin yeniden açılmasını gerektirmedi. Kapanan bütün boşluklar
+yeni bir trait, ilişki bildirimi veya zincir metoduyla kapandı; kalanlar da aynı türdendir.
 
 ## Nasıl sınandı
 
 - **Derleme:** [TaxonomyTests.cs](../tests/Haldus.Generators.Tests/TaxonomyTests.cs) her satırı, raporun önerdiği
   eşlemeye en yakın biçimde ve yalnızca yazılmış özelliklerle bildirir, generator'dan geçirir ve üretilen kodun
   hatasız derlendiğini doğrular. Aşağıdaki tablo o dosyadaki verinin aynısıdır; sayılar bir testle bağlıdır.
-- **Çalışma:** Derleme, uçların doğru davrandığını göstermez. Tablodaki birleşimlerin bir kısmı örnek uygulamalarda
-  gerçek PostgreSQL'e karşı sınanıyor: sipariş, satırlar, rezervasyon, kupon, iade, sepet, ödeme, yorumlar,
-  ayarlar, stok, iş, toplu işlemler, kullanıcıya ait kaynaklar, favoriler, doğal anahtar, sıralama, metadata,
-  kardeşler arası sıra, kopyalama, önizleme, ters kayıt, yerine geçme, başka bir kayıttan üretme, türetme, bir kez
-  gösterilen sır, döndürme, token ile erişim, bağların topluca değiştirilmesi, yük ve durum taşıyan bağ, ebeveyn
-  altında tek kayıt, kısa adres, komutla yazılan satırlar, onay (tek ve çok düzeyli), belge, saklanan sürümler ve
-  geri yükleme, değişiklik akışı, dönemli kayıtlar, taslak ve yayın, dosya yükleme ve indirme, birkaç kaynağa
-  takılabilen ekler ve yorumlar, etiketler, kiracının tanımladığı özel alanlar, CSV / JSON dışa ve içe aktarma.
-  Geri kalan satırlar yalnızca derleme düzeyinde doğrulandı.
+- **Çalışma:** Derleme, uçların doğru davrandığını göstermez. Tablodaki özelliklerin her biri örnek uygulamalarda
+  gerçek PostgreSQL'e karşı sınanıyor (bugün 300'e yakın entegrasyon testi); ama her satırın kendi birleşimi değil.
+  Örnek mağazada bulunmayan birleşimler (ör. iade, abonelik, rezervasyon satırlarının tam hali) yalnızca derleme
+  düzeyinde doğrulandı.
 - **Hüküm:** "Temiz" ile "kısmi" arasındaki ayrım benim yorumumdur: önerilen eşlemede adı geçen bir özellik
-  yazılmadıysa, aynı sonuç elle (ör. bir handler içinde) elde edilebilse bile satır kısmi sayıldı.
+  yazılmadıysa, aynı sonuç elle (ör. bir handler içinde) elde edilebilse bile satır kısmi sayıldı. Araştırmanın bir
+  satır için ayrıca not ettiği ama eşlemeye koymadığı eksikler (ör. zamanlanmış yayın) satırı kısmi yapmadı.
 
 ## Satırlar
 
@@ -64,7 +70,7 @@ tamamı eksik trait veya archetype'tır.
 | 12 | Invoice | Kısmi | `MapCrud` + `Workflow` + `EditableIn` + `Numbered(assignOn)` + `Idempotent` + `MapDetail` + `Previewable` | Türetilmiş `paid` durumu |
 | 13 | InvoiceLine | Temiz | Gömülü `MapDetail` | — |
 | 14 | Credit note | Temiz | `MapAppendOnly` + `CreatedFrom<Invoice>` + `Workflow` (void) + `Numbered` | — |
-| 15 | JournalEntry | Temiz | `MapCrud` + `Workflow` + `MapDetail` + `Reversible`; "satırlar dengeli" kuralı geçişte | — |
+| 15 | JournalEntry | Temiz | `MapCrud` + `Document` + `Numbered(assignOn)` + `MapDetail` + `Reversible`; "satırlar dengeli" kuralı gönderme geçişinde | — |
 | 16 | Journals (genel defter) | Temiz | `MapReadOnly` + `Searchable` | — |
 | 17 | Chart of accounts | Temiz | `MapCrud` + `Hierarchical` + `Archivable`; referanslar `Restrict` | — |
 | 18 | Document numbering | Temiz | `Numbered` (boşluksuz, kiracı ve dönem başına) | — |
@@ -93,7 +99,7 @@ tamamı eksik trait veya archetype'tır.
 | 41 | Invitation | Temiz | `MapCrud().Without(Update, Patch, Delete)` + `Workflow` + `Expiring` + `TokenAccess`; kabul edilince doğan üyelik `CreatedFrom<Invitation>(on: "accept")` | — |
 | 42 | ApiKey / secret | Temiz | `MapCrud().Without(Update, Patch)` + `Expiring()` + `SecretOnce` + `Rotatable` | — |
 | 43 | Settings / Preferences | Temiz | `MapSingleton().MultiTenant()`, `MapStore().MultiTenant()` | — |
-| 44 | AuditLog / Event | Kısmi | `MapReadOnly` + `Searchable`; dışa aktarma ayrı bir `MapJob` | `Retention` |
+| 44 | AuditLog / Event | Kısmi | `MapReadOnly` + `Searchable`; dışa aktarma `MapJob().Exports<AuditLog>()` | `Retention` |
 | 45 | Notification | Kısmi | `MapReadOnly` + `OwnedByCurrentUser`; okundu işareti bir entity aksiyonu | `ReadTracking` (hepsini okundu işaretleme, okunmamış sayısı) |
 | 46 | Webhook endpoint | Temiz | `MapCrud` + `Archivable` + `SecretOnce(recoverable)` + `Rotatable`; ping bir entity aksiyonu; yapılandırma `MapSingleton().Under<Webhook>()` | — |
 | 47 | Webhook delivery | Temiz | `MapReadOnly` + `Under<Webhook>` + `Workflow`; yeniden gönderme bir geçiş | — |
@@ -107,70 +113,70 @@ tamamı eksik trait veya archetype'tır.
 | 55 | Favorite / star / vote | Temiz | `MapAssociation<Favorite, Product>().ForCurrentUser()` | — |
 | 56 | Ordering / position | Temiz | `Orderable` (`Position` alanı, `POST /{id}/move`) | — |
 | 57 | Counter | Kısmi | Gömülü satırlardan `IComputed` | Başka kaynaklardan toplama (`Rollup`) |
-| 58 | Bulk operations | Temiz | `Batch` + `MapJob` | — |
+| 58 | Bulk operations | Temiz | `Batch` + `MapJob` + `MapJob().Imports<T>()` | — |
 | 59 | Büyük veri export'u | Temiz | `MapJob().Exports<T>()` + `Idempotent` (mantığı üretilir; dosya işten indirilir) | — |
 
 ## Bulgular
 
-- **Durum makinesi, ayrı trait olarak önerilen birkaç kalıbı karşıladı.** Araştırma `Document`, tek adımlı onay ve
-  "iptal et" / "yeniden gönder" gibi aksiyonlar için ayrı bildirimler öneriyordu. Bunların durumu değiştiren
-  hepsi, yazılmış olan `Workflow` ve `MapTransition` ile ifade edildi (satır 9, 12, 15, 24, 47).
+- **Durum makinesi, ayrı trait olarak önerilen birkaç kalıbı karşıladı.** "İptal et" / "yeniden gönder" gibi durumu
+  değiştiren aksiyonların hepsi `Workflow` ve `MapTransition` ile ifade edildi (9, 12, 47). `Document` sonradan
+  yazıldı, ama yeni bir satır kapatmadı: aynı şeyin (taslak → gönder → iptal → düzelt) hazır bir biçimidir (15).
 - **"Yalnızca eklenen detay" ayrı bir detay modu gerektirmedi.** Ödeme hareketleri `MapAppendOnly().Under<Payment>()`
-  ile yazıldı (satır 8).
-- **Sınamanın ilk hali, durum değiştirmeyen entity aksiyonunun eksik olduğunu gösterdi; sonradan yazıldı.** Dört
-  satırda (23, 26, 38, 46) bir kayıt üzerinde çalışan ama durumunu değiştirmeyen bir uç gerekiyordu: giriş/çıkış,
-  parola sıfırlama, ping. Bu, bir kaynağın builder'ında çağrılan `MapAction` ile kapatıldı; 26. satır böylece
-  temize geçti, diğer üçünde başka özellikler eksik kalıyor.
-- **Geçerli kullanıcıya ait kaynak dört satırı etkiliyordu** (5, 45, 52, 55); sonradan yazıldı. `OwnedByCurrentUser`
-  ve `MapAssociation().ForCurrentUser()` ile 52 ve 55 temize geçti; 5 ve 45 artık sahipliği ifade ediyor, başka
-  özellikleri eksik. Değer taşıyan oy (artı/eksi) yük taşıyan bağ gerektirir; o ayrı bir kalemdir.
-- **Tersine çevirme üç muhasebe satırında eksikti** (14, 15, 19): bir kaydı silmek yerine onu geri alan karşı kaydı
-  üretmek. `Reversible` ile yazıldı. Araştırmanın ayrı önerdiği `Reverses<T>` (başka tipten telafi kaydı) ayrı bir
-  bildirim olarak eklenmedi: `CreatedFrom<T>` aynı şeyi (kaynağa işaret eden, ondan üretilen kayıt) ifade ediyor;
-  14. satır bu yüzden temiz sayıldı ve bu benim yorumumdur.
-- **Gizli değerler üç satırda eksikti** (41, 42, 46): yalnızca bir kez gösterilen anahtar, döndürme, token ile erişim.
-  `SecretOnce`, `Rotatable` ve `TokenAccess` ile yazıldı. Araştırma sırrın yalnızca özetinin saklanmasını
-  öneriyordu; webhook imza sırrı gibi sunucunun kendisinin kullandığı sırlar özetten geri okunamadığı için
-  şifreli saklama (`recoverable: true`) ayrıca eklendi.
-- **Onay ayrı bir trait olarak yazıldı; belge ise durum makinesinin hazır bir biçimi oldu.** `Approvable` karar
-  kaydını, "kendi yazdığını onaylayamaz" kuralını ve sıralı düzeyleri getirir; 24. satır bununla temize geçti.
-  Raporun önerdiği onay zinciri (düzey başına farklı roller, koşullu adımlar) yazılmadı: düzeyler yalnızca
-  "birbirinden farklı N kişi" demektir. `.Document()` (taslak → gönder → iptal → düzelt) yeni bir satır kapatmadı,
-  çünkü o satırlar (12, 15) zaten `Workflow` ile yazılabiliyordu; aynı şeyin kısa yazımıdır.
-- **Zaman dört ayrı biçimde ortaya çıktı** ve dördü de ayrı yazıldı: kaydın geçmiş halleri (`Revisioned`, 27 ve 29),
-  taslağın yanında yayındaki hal (`Publishable`, 3 ve 27), iş tarafının beyan ettiği geçerlilik dönemi
-  (`EffectiveDated`, 23) ve "şundan beri ne değişti" akışı (`ChangeFeed`, 23). Araştırmanın 27. satır için ayrıca
-  not ettiği zamanlanmış yayın yazılmadı; önerilen eşlemede adı geçmediği için satır temiz sayıldı, bu benim
-  yorumumdur.
-- **Polimorfik referans, tip + kimlik çifti olarak değil hedef başına yabancı anahtar olarak yazıldı.** Araştırma
-  `.AttachedTo()` için Rails / Laravel tarzı "tip + id" alanlarını örnek gösteriyordu. Hedefler derleme zamanında
-  bilindiği için her hedefe isteğe bağlı gerçek bir yabancı anahtar üretildi ve "tam olarak biri dolu" kuralı
-  veritabanı kısıtı oldu; böylece takılı kaydın görünürlüğü ve zincirleme silinmesi, tek ebeveynli kaynaklarla aynı
-  yoldan gelir. `Attachable`, `Commentable` ve `Taggable` ayrı altyapı değil, aynı bildirimin hedef tarafında
-  yazılan kısa biçimleridir (30, 32, 49 ve 50. satırlar bunlarla kapandı).
-- **Bağın kendisi üç satırda eksikti** (31, 40, 46): bağların topluca değiştirilmesi, üyelik gibi kendi alanı ve
-  durumu olan bağ, bir kaydın altındaki tek yapılandırma kaydı. Üçü de yazıldı. Durumu olan bağın geçişleri
-  gövdesizdir (iş mantığı taşımaz); mantık gerektiren bir üyelik hâlâ `MapCrud` + iki `References` ile yazılır.
+  ile yazıldı (8).
+- **İlk sınamanın tek beklenmedik bulgusu entity aksiyonuydu:** bir kayıt üzerinde çalışan ama durumunu
+  değiştirmeyen uç (giriş/çıkış, parola sıfırlama, ping). Araştırmanın ilk sürüm listesinde yoktu; dört satırı
+  etkiliyordu (23, 26, 38, 46) ve builder'da çağrılan `MapAction` ile kapandı.
+- **Tersine çevirme üç muhasebe satırında eksikti** (14, 15, 19). `Reversible` ile yazıldı. Araştırmanın ayrı
+  önerdiği `Reverses<T>` (başka tipten telafi kaydı) ayrı bir bildirim olarak eklenmedi: `CreatedFrom<T>` aynı şeyi
+  ifade ediyor; 14. satır bu yüzden temiz sayıldı ve bu benim yorumumdur.
+- **Gizli değerler üç satırda eksikti** (41, 42, 46). Araştırma sırrın yalnızca özetinin saklanmasını öneriyordu;
+  webhook imza sırrı gibi sunucunun kendisinin kullandığı sırlar özetten geri okunamadığı için şifreli saklama
+  (`recoverable: true`) ayrıca eklendi.
+- **Bağın kendisi üç satırda eksikti** (31, 40, 46): bağların topluca değiştirilmesi, kendi alanı ve durumu olan
+  bağ, bir kaydın altındaki tek yapılandırma kaydı. Durumu olan bağın geçişleri gövdesizdir; mantık gerektiren bir
+  üyelik hâlâ `MapCrud` + iki `References` ile yazılır.
+- **Onay bir trait oldu; zincir olmadı.** `Approvable` karar kaydını, "içeriği yazan onaylayamaz" kuralını ve sıralı
+  düzeyleri getirir (24). Araştırmanın önerdiği onay zinciri (düzey başına farklı roller, koşullu adımlar)
+  yazılmadı: düzeyler yalnızca "birbirinden farklı N kişi" demektir.
+- **Zaman dört ayrı biçimde ortaya çıktı** ve dördü de ayrı yazıldı: kaydın geçmiş halleri (`Revisioned`; 27, 29),
+  taslağın yanında yayındaki hal (`Publishable`; 3, 27), iş tarafının beyan ettiği geçerlilik dönemi
+  (`EffectiveDated`; 23) ve "şundan beri ne değişti" akışı (`ChangeFeed`; 23).
+- **Polimorfik referans, tip + kimlik çifti olarak değil hedef başına yabancı anahtar olarak yazıldı.** Hedefler
+  derleme zamanında bilindiği için her hedefe gerçek bir yabancı anahtar üretildi ve "tam olarak biri dolu" kuralı
+  veritabanı kısıtı oldu; takılı kaydın görünürlüğü ve silinmesi tek ebeveynli kaynaklarla aynı yoldan gelir.
+  `Attachable`, `Commentable` ve `Taggable` ayrı altyapı değil, aynı bildirimin hedef tarafındaki yazımıdır
+  (30, 32, 49, 50).
+- **Güvenlik incelemeleri modeli değil birleşimleri düzeltti.** İkinci plan boyunca her aşamadan sonra yapılan
+  incelemeler on üç bulgu verdi (biri geçerli değildi); hiçbiri bir archetype veya trait'in tanımını değiştirmedi, hepsi iki
+  özelliğin kesiştiği yerdeydi (kopyanın devraldığı referans, zincir işleminin durum kuralını atlaması, aksiyonun
+  onaylı içeriği değiştirmesi, etiket uçlarının yetkilendirmeyi almaması, kiracıya ait veriyi aktaran işin kiracıya
+  ait olmaması). Bu, araştırmanın "kalan riskin ağırlık merkezi API yüzeyinde değil üretimin iç tarafındadır"
+  tespitini doğrular.
 
-## Eksikler, etkiledikleri satır sayısına göre
+## Kalan eksikler
 
-| Eksik | Satırlar |
-|---|---|
+| Eksik | Satırlar | Neden yazılmadı |
+|---|---|---|
+| `MapBalance` (durum kovaları, bakiyeye karşı atomik kontrol) | 11, 25 | Araştırmanın üçüncü sürüm listesinde; bugün `MapAppendOnly` + `DerivedFrom` ile yaklaşık ifade ediliyor |
+| Birden çok durum ekseni | 1, 10 | Üçüncü sürüm; "en fazla bir durum modeli" kuralını açar |
+| `MapChangeSet` | 1 | Üçüncü sürüm |
+| `Translatable` | 28 | Üçüncü sürüm |
+| `Retention` | 44 | Üçüncü sürüm |
+| `ReadTracking` | 45 | Üçüncü sürüm |
+| Türetilmiş durum (`paid`) | 12 | Araştırmada tanımı yok; bugün bir geçişle elle yazılır |
+| Başka kaynaklardan toplama (`Rollup`) | 57 | Araştırmada tanımı yok; `DerivedFrom` ile yazılabilir |
+| Sepet birleştirme, anonim oturumun sahipliği | 5 | Alana özgü; bir handler işi |
+| Kombinatoryal varyant üretimi | 3 | Alana özgü; bir aksiyon işi |
+| Tekrar serisi | 36 | Araştırmada bilinçli olarak kapsam dışı |
 
-
-| `MapBalance` | 11, 25 |
-
-| Birden çok durum ekseni | 1, 10 |
-| Tek satırı etkileyenler | `MapChangeSet` (1), türetilmiş durum (12), sepet birleştirme (5), `Translatable` (28), `Retention` (44), `ReadTracking` (45), `Rollup` (57), varyant üretimi (3) |
-
-Araştırma bunların çoğunu zaten ikinci ve üçüncü sürüme bırakmıştı. Bu sınamanın o sıralamaya eklediği tek şey,
-ilk sürümün kapsamındaki satırlarda da gereken entity aksiyonuydu; o artık yazıldı. Dört satırı etkileyen sahiplik
-(`OwnedByCurrentUser`, geçerli kullanıcıya bağlı bağ) da yazıldı ve bu tablodan çıktı. Ardından alan eklentileri
-(`Metadata`, `CreateOnly`, `NaturalKey`) yazıldı; `Metadata`'nın kapattığı satırlar tablodan çıktı, kiracının
-tanımladığı alanlar (`CustomFields`) ayrı bir kalem olarak kaldı.
+Kalan on iki satırın hiçbiri ikinci planın kapsamında değildi: plan araştırmanın ikinci sürüm listesini, ilk
+sürümden kalan küçük kalemleri ve ilk sınamada çıkan eksikleri kapsıyordu ve hepsi yazıldı.
 
 ## Bu sınamanın söylemediği
 
-- Sınanmayan satırların uçlarının doğru davrandığı; onlar yalnızca derleniyor.
+- Her satırın kendi birleşiminin uçlarının doğru davrandığı; özellikler tek tek sınandı, satırların çoğu yalnızca
+  derleniyor.
 - Eksik özelliklerin elle yazılmasının ne kadar zahmetli olduğu.
+- Büyük veri altındaki davranış: kilide dayanan özellikler (`Orderable`, `EffectiveDated`, `DerivedFrom`, boşluksuz
+  `Numbered`) ve içeriği bellekte kuran yollar (veritabanı dosya deposu, dışa aktarma) yük altında ölçülmedi.
 - Frontend ve mobil tarafında üretilen şemanın (orval) kullanışlılığı; o kapsam henüz kararlaştırılmadı.
