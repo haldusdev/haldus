@@ -106,10 +106,15 @@ internal static class MapCallParser
             }
         }
 
+        // Durum makinesi, numaralama ve son kullanma bildirimleri de trait'ler gibi entity'ye alan ekler.
+        var lifecycle = LifecycleReader.Read(context.SemanticModel, invocation, entityName, diagnostics, cancellationToken);
+
         var properties = new List<PropertyModel>();
         var declaredTraitMembers = new List<string>();
         var traitMemberNames = new HashSet<string>(
-            TraitCatalog.For(traits).SelectMany(definition => definition.Members).Select(member => member.Name));
+            TraitCatalog.For(traits).SelectMany(definition => definition.Members)
+                .Concat(lifecycle.Members)
+                .Select(member => member.Name));
         IPropertySymbol? id = null;
 
         // .Embeds<T>() ile bildirilen tipler: bu tipteki alanlar skaler olmadıkları halde DTO'lara girer.
@@ -181,6 +186,12 @@ internal static class MapCallParser
         if (archetype == Archetype.Lookup && properties.All(property => property.Name != "Name"))
         {
             properties.Insert(0, LookupName());
+        }
+
+        if (lifecycle.Expiry is { LifetimeTicks: null } && properties.All(property => property.Name != "ExpiresAt"))
+        {
+            // Son kullanma zamanını istemci veriyor: sıradan, yazılabilir bir alandır.
+            properties.Add(LifecycleReader.ClientExpiry());
         }
 
         foreach (var message in Conflicts(archetype, traits, operations, unsupportedOperations, chain))
@@ -265,6 +276,10 @@ internal static class MapCallParser
             DetailOfName = detailOfName,
             DetailOfType = detailOfType,
             IsSubresource = chain.Any(call => call.Name == "AsSubresource"),
+            Workflow = lifecycle.Workflow,
+            Numbering = lifecycle.Numbering,
+            Expiry = lifecycle.Expiry,
+            ExtraMembers = lifecycle.Members.ToEquatableArray(),
             IsComputed = entity?.AllInterfaces.Any(candidate => candidate.ToDisplayString() == "Haldus.IComputed") == true,
         };
     }
@@ -468,6 +483,28 @@ internal static class MapCallParser
         if (chain.Count(call => call.Name == "Under") > 1)
         {
             yield return "A resource can live under only one parent; Under is declared more than once";
+        }
+
+        foreach (var declaration in chain.Select(call => call.Name).Distinct())
+        {
+            var allowed = declaration switch
+            {
+                // Durum makinesi, sunucunun anahtar ürettiği koleksiyonlar içindir; salt-okunur kaynakta
+                // durum yalnızca geçişlerle değişir.
+                "Workflow" => archetype is Archetype.Crud or Archetype.ReadOnly or Archetype.AppendOnly,
+
+                // Numara ve ömür kayıt oluşturulurken verilir.
+                "Numbered" or "Expiring" => archetype is Archetype.Crud or Archetype.AppendOnly,
+
+                // Anahtarla ekle-veya-güncelle zaten tekrara dayanıklıdır; tek kaydın oluşturma ucu yoktur.
+                "Idempotent" => archetype is Archetype.Crud or Archetype.ReadOnly or Archetype.AppendOnly,
+                _ => true,
+            };
+
+            if (!allowed)
+            {
+                yield return $"{declaration} cannot be combined with {name}";
+            }
         }
 
         foreach (var declaration in new[] { "Filterable", "Searchable" })

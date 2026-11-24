@@ -28,6 +28,53 @@ public static class ResourceBuilderTraitExtensions
     public static ResourceBuilder<TEntity> Archivable<TEntity>(this ResourceBuilder<TEntity> builder)
         where TEntity : class => builder;
 
+    /// <summary>
+    /// Kayda okunabilir, benzersiz bir numara verir (<c>Number</c> alanı). Desen sabit metin ve
+    /// <c>{seq}</c>, <c>{seq:6}</c>, <c>{yyyy}</c>, <c>{yy}</c>, <c>{MM}</c>, <c>{dd}</c> parçalarından oluşur;
+    /// tarih parçaları sayacın ne zaman yeniden başlayacağını da belirler.
+    /// </summary>
+    /// <param name="pattern">Numara deseni, ör. <c>ORD-{yyyy}-{seq:6}</c>.</param>
+    /// <param name="assignOn">
+    /// Numaranın atanacağı durum (<c>Workflow</c> gerekir); verilmezse numara kayıt oluşturulurken atanır.
+    /// </param>
+    /// <param name="gapless">
+    /// <c>true</c> ise numara kayıtla aynı transaction'da bir sayaç satırından alınır: geri alınan işlem numara
+    /// yakmaz, sayaç kiracı ve dönem başına tutulur, aynı kapsamdaki eşzamanlı yazmalar sıraya girer.
+    /// <c>false</c> ise bir veritabanı sequence'i kullanılır: yazmalar birbirini beklemez, ama numaralarda
+    /// boşluk oluşabilir ve sayaç kiracı ya da dönem başına sıfırlanmaz.
+    /// </param>
+    public static ResourceBuilder<TEntity> Numbered<TEntity>(
+        this ResourceBuilder<TEntity> builder,
+        string pattern = "{seq:6}",
+        Enum? assignOn = null,
+        bool gapless = true)
+        where TEntity : class => builder;
+
+    /// <summary>
+    /// Kayda bir son kullanma zamanı ekler (<c>ExpiresAt</c>); zamanı istemci verir, boş bırakılırsa kayıt
+    /// süresizdir. Süresi dolan kayıt silinmez ama okunamaz ve yazılamaz; <c>POST /{id}/expire</c> kaydı hemen
+    /// sonlandırır.
+    /// </summary>
+    public static ResourceBuilder<TEntity> Expiring<TEntity>(this ResourceBuilder<TEntity> builder)
+        where TEntity : class => builder;
+
+    /// <summary>
+    /// Kayda sabit bir ömür verir: <c>ExpiresAt</c> oluşturulurken sunucu tarafından hesaplanır ve istek
+    /// gövdesinden yazılamaz.
+    /// </summary>
+    /// <param name="lifetime">Ömür; derleme zamanında okunabilmesi için <c>TimeSpan.FromMinutes(15)</c> gibi sabit bir ifade olmalıdır.</param>
+    /// <param name="sliding">Her başarılı yazmada süre yeniden başlasın mı (sepet gibi kullanıldıkça yaşayan kayıtlar için).</param>
+    public static ResourceBuilder<TEntity> Expiring<TEntity>(this ResourceBuilder<TEntity> builder, TimeSpan lifetime, bool sliding = false)
+        where TEntity : class => builder;
+
+    /// <summary>
+    /// Oluşturma ve geçiş uçlarını <c>Idempotency-Key</c> başlığıyla tekrara karşı korur: aynı anahtarla
+    /// yeniden gönderilen istek işlemi tekrarlamaz, ilk isteğin yanıtını döndürür.
+    /// </summary>
+    /// <param name="required">Başlık zorunlu mu; zorunluysa eksik olduğunda 400 döner.</param>
+    public static ResourceBuilder<TEntity> Idempotent<TEntity>(this ResourceBuilder<TEntity> builder, bool required = false)
+        where TEntity : class => builder;
+
     /// <summary>Verilen standart işlemlerin endpoint'lerini üretmez.</summary>
     public static ResourceBuilder<TEntity> Without<TEntity>(this ResourceBuilder<TEntity> builder, params CrudOperation[] operations)
         where TEntity : class => builder;

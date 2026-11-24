@@ -25,6 +25,12 @@ internal static class ChainReader
         "Hierarchical",
         "Embeds",
         "AsSubresource",
+        "Workflow",
+        "EditableIn",
+        "DeletableIn",
+        "Numbered",
+        "Expiring",
+        "Idempotent",
     ];
 
     /// <summary>Zincirdeki çağrıları, Map çağrısından dışa doğru sırayla verir.</summary>
@@ -86,6 +92,14 @@ internal static class ChainReader
                     break;
                 case "Archivable":
                     traits |= Traits.Archivable;
+                    break;
+                case "Idempotent":
+                    traits |= Traits.Idempotent;
+                    if (call.Arguments.Any(argument => argument == "true"))
+                    {
+                        traits |= Traits.IdempotencyRequired;
+                    }
+
                     break;
                 case "Without":
                 {

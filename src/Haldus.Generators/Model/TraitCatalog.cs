@@ -47,4 +47,5 @@ internal static class TraitCatalog
 internal sealed record TraitDefinition(Traits Trait, string Interface, TraitMember[] Members);
 
 /// <param name="Search">Alan aranabiliyorsa arama modeli; kiracı ve sürüm gibi iç alanlarda <c>null</c>.</param>
-internal sealed record TraitMember(string Name, string Type, bool InResponse, SearchField? Search);
+/// <param name="ResponseAttribute">Yanıt DTO'sundaki özelliğe eklenecek attribute (ör. enum'u metin olarak yazdıran dönüştürücü).</param>
+internal sealed record TraitMember(string Name, string Type, bool InResponse, SearchField? Search, string? ResponseAttribute = null);

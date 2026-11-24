@@ -34,7 +34,23 @@ internal static class ModuleEmitter
 
             foreach (var (resource, entityNamespace) in resources)
             {
+                if (resource.Numbering is { Gapless: false })
+                {
+                    model.Append($"            modelBuilder.HasSequence<long>({ResourceEmitter.Literal(ResourceEmitter.NumberSequence(resource))});\n");
+                }
+
                 AppendModel(model, resource, ResourceEmitter.QualifiedName(resource, entityNamespace));
+            }
+
+            // Haldus'un kendi tabloları yalnızca onları kullanan bir kaynak varsa modele girer.
+            if (resources.Any(entry => entry.Resource.Numbering is { Gapless: true }))
+            {
+                model.Append("            global::Haldus.HaldusNumbering.Configure(modelBuilder);\n");
+            }
+
+            if (resources.Any(entry => entry.Resource.Has(Traits.Idempotent)))
+            {
+                model.Append("            global::Haldus.HaldusIdempotency.Configure(modelBuilder);\n");
             }
 
             foreach (var association in associations)
@@ -50,6 +66,15 @@ internal static class ModuleEmitter
         {
             var entity = ResourceEmitter.QualifiedName(resource, entityNamespace);
             blocks.Add($"        global::Haldus.HaldusEndpointRegistry.Register<{entity}>({entity}Endpoints.Map);\n");
+
+            foreach (var transition in resource.Transitions)
+            {
+                var name = transition.RegistryName is null ? "null" : ResourceEmitter.Literal(transition.RegistryName);
+
+                blocks.Add(transition.RequestType is null
+                    ? $"        global::Haldus.HaldusTransitionRegistry.Register<{entity}>({name}, {entity}Endpoints.Map{transition.PascalName}Transition);\n"
+                    : $"        global::Haldus.HaldusTransitionRegistry.Register<{entity}, {transition.RequestType}>({name}, {entity}Endpoints.Map{transition.PascalName}Transition);\n");
+            }
         }
 
         foreach (var association in associations)
@@ -191,6 +216,28 @@ internal static class ModuleEmitter
         if (resource.Has(Traits.SoftDeletable))
         {
             statements.Add("entity.HasQueryFilter(global::Haldus.HaldusFilters.SoftDelete, item => item.DeletedAt == null);");
+        }
+
+        if (resource.Workflow is not null)
+        {
+            // Durum adıyla saklanır: enum'a yeni üye eklemek veya üyeleri yeniden sıralamak eski kayıtları bozmaz.
+            statements.Add("entity.Property(item => item.Status).HasConversion<string>().HasMaxLength(64);");
+        }
+
+        if (resource.Numbering is not null)
+        {
+            statements.Add("entity.Property(item => item.Number).HasMaxLength(64);");
+            statements.Add(tenant
+                ? "entity.HasIndex(item => new { item.TenantId, item.Number }).IsUnique();"
+                : "entity.HasIndex(item => item.Number).IsUnique();");
+        }
+
+        if (resource.Expiry is not null)
+        {
+            // Süresi dolan kayıt silinmez ama hiçbir sorguda görünmez; şimdiki zaman her sorguda yeniden okunur.
+            statements.Add(
+                "entity.HasQueryFilter(global::Haldus.HaldusFilters.Expiry, item => item.ExpiresAt == null "
+                + "|| item.ExpiresAt > global::Haldus.HaldusScope.UtcNow(context));");
         }
 
         foreach (var embedded in resource.Properties.Where(property => property.IsEmbedded))

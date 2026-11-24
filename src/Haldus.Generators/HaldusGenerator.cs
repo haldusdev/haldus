@@ -52,15 +52,24 @@ public sealed class HaldusGenerator : IIncrementalGenerator
             .Where(static association => association is not null)
             .Select(static (association, _) => association!);
 
+        var transitions = context.SyntaxProvider
+            .CreateSyntaxProvider(
+                static (node, _) => TransitionParser.IsCandidate(node),
+                static (syntaxContext, cancellationToken) => TransitionParser.Parse(syntaxContext, cancellationToken))
+            .Where(static transition => transition is not null)
+            .Select(static (transition, _) => transition!);
+
         context.RegisterSourceOutput(
             resources.Collect()
                 .Combine(dbContexts.Collect())
                 .Combine(queries.Collect())
                 .Combine(handlers.Collect())
-                .Combine(associations.Collect()),
+                .Combine(associations.Collect())
+                .Combine(transitions.Collect()),
             static (productionContext, data) => Emit(
                 productionContext,
-                data.Left.Left.Left.Left,
+                data.Left.Left.Left.Left.Left,
+                data.Left.Left.Left.Left.Right,
                 data.Left.Left.Left.Right,
                 data.Left.Left.Right,
                 data.Left.Right,
@@ -113,7 +122,8 @@ public sealed class HaldusGenerator : IIncrementalGenerator
         ImmutableArray<DbContextModel> dbContexts,
         ImmutableArray<QueryModel> queries,
         ImmutableArray<HandlerModel> handlers,
-        ImmutableArray<AssociationDeclaration> associationDeclarations)
+        ImmutableArray<AssociationDeclaration> associationDeclarations,
+        ImmutableArray<TransitionDeclaration> transitionDeclarations)
     {
         var valid = new List<(ResourceModel Resource, string Namespace)>();
         var seen = new HashSet<string>();
@@ -156,6 +166,13 @@ public sealed class HaldusGenerator : IIncrementalGenerator
         [
             .. ResourceLinker
                 .MarkRestrictedEnds([.. valid.Select(entry => entry.Resource)], associations)
+                .Select(resource => (resource, resource.Namespace)),
+        ];
+
+        valid =
+        [
+            .. ResourceLinker
+                .AttachTransitions([.. valid.Select(entry => entry.Resource)], transitionDeclarations, diagnostic => Report(context, diagnostic))
                 .Select(resource => (resource, resource.Namespace)),
         ];
 

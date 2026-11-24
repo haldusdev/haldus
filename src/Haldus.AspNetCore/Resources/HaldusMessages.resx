@@ -45,6 +45,27 @@
   <data name="InUse.Detail" xml:space="preserve">
     <value>{0} '{1}' cannot be deleted because other records refer to it.</value>
   </data>
+  <data name="StateConflict.Title" xml:space="preserve">
+    <value>Not allowed in the current state</value>
+  </data>
+  <data name="StateConflict.Detail" xml:space="preserve">
+    <value>'{0}' is not allowed while the record is in the '{1}' state.</value>
+  </data>
+  <data name="TransitionRejected.Title" xml:space="preserve">
+    <value>The operation was rejected</value>
+  </data>
+  <data name="IdempotencyKeyInvalid.Title" xml:space="preserve">
+    <value>Idempotency key required</value>
+  </data>
+  <data name="IdempotencyKeyInvalid.Detail" xml:space="preserve">
+    <value>Send an Idempotency-Key header of 1 to {0} characters with this request.</value>
+  </data>
+  <data name="IdempotencyKeyReused.Title" xml:space="preserve">
+    <value>Idempotency key already used</value>
+  </data>
+  <data name="IdempotencyKeyReused.Detail" xml:space="preserve">
+    <value>This Idempotency-Key was already used with a different request. Use a new key for a new request.</value>
+  </data>
   <data name="SearchTooComplex.Title" xml:space="preserve">
     <value>Search is too complex</value>
   </data>

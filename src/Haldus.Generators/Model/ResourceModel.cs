@@ -56,6 +56,37 @@ internal sealed record ResourceModel(
     /// <summary>Entity <c>IComputed</c> uyguluyor mu; uyguluyorsa yazma uçları kaydetmeden önce hesaplatır.</summary>
     public bool IsComputed { get; init; }
 
+    /// <summary><c>.Workflow&lt;TStatus&gt;()</c> ile bildirilen durum makinesi.</summary>
+    public WorkflowModel? Workflow { get; init; }
+
+    /// <summary><c>.Numbered(...)</c> ile bildirilen numaralama.</summary>
+    public NumberingModel? Numbering { get; init; }
+
+    /// <summary><c>.Expiring(...)</c> ile bildirilen son kullanma kuralı.</summary>
+    public ExpiryModel? Expiry { get; init; }
+
+    /// <summary>
+    /// Durum modeli ve numaralama gibi bildirimlerin entity'ye eklediği, istek gövdesinden yazılamayan
+    /// alanlar (<c>Status</c>, <c>Number</c>, <c>ExpiresAt</c>). Trait alanları gibi davranırlar.
+    /// </summary>
+    public EquatableArray<TraitMember> ExtraMembers { get; init; } = EquatableArray<TraitMember>.Empty;
+
+    /// <summary><c>MapTransition</c> ile bildirilen geçişler; bağlama adımı doldurur.</summary>
+    public EquatableArray<TransitionModel> Transitions { get; init; } = EquatableArray<TransitionModel>.Empty;
+
+    /// <summary>
+    /// Ayrı uçlu bir detayda, sahibinin düzenlenebildiği durumlar. Detay sahibinin parçasıdır; sahibi
+    /// düzenlenemezken detayı da yazılamaz.
+    /// </summary>
+    public OwnerGuardModel? OwnerGuard { get; init; }
+
+    /// <summary>Yanıtta yer alan, Haldus'a ait alanlar: trait alanları ve durum modeli alanları.</summary>
+    public IEnumerable<TraitMember> ResponseMembers =>
+        TraitCatalog.ResponseMembers(Traits).Concat(ExtraMembers.Where(member => member.InResponse));
+
+    /// <summary>Tekrara karşı korunabilecek bir uç var mı: oluşturma veya en az bir geçiş.</summary>
+    public bool HasWrites => Has(Operations.Create) || Transitions.Length > 0;
+
     /// <summary>Bu kaynağın DTO'larına gömülü taşınan detayları; bağlama adımı doldurur.</summary>
     public EquatableArray<ResourceModel> Details { get; init; } = EquatableArray<ResourceModel>.Empty;
 
@@ -142,6 +173,8 @@ internal enum Traits
     SoftDeletable = 8,
     ConcurrencyChecked = 16,
     Archivable = 32,
+    Idempotent = 64,
+    IdempotencyRequired = 128,
 }
 
 /// <summary>Üretilecek standart işlemler. Üye adları <c>Haldus.CrudOperation</c> ile aynıdır.</summary>
@@ -250,10 +283,66 @@ internal sealed record AssociationModel(
     public string RightKey => Right.EntityName + Right.KeyName;
 }
 
+/// <summary>Kaydın durum makinesi.</summary>
+/// <param name="StatusType">Durum enum'unun tam adı.</param>
+/// <param name="Initial">Yeni kaydın durumu (enum üyesinin adı).</param>
+/// <param name="EditableIn">Güncellemeye izin verilen durumlar; <c>null</c> ise her durumda düzenlenebilir.</param>
+/// <param name="DeletableIn">Silmeye izin verilen durumlar; <c>null</c> ise her durumda silinebilir.</param>
+internal sealed record WorkflowModel(
+    string StatusType,
+    string Initial,
+    EquatableArray<string>? EditableIn,
+    EquatableArray<string>? DeletableIn);
+
+/// <param name="Pattern">Numara deseni.</param>
+/// <param name="Gapless">Numara kayıtla aynı transaction'da bir sayaç satırından mı alınır.</param>
+/// <param name="AssignOn">Numaranın atandığı durum; <c>null</c> ise kayıt oluşturulurken atanır.</param>
+internal sealed record NumberingModel(string Pattern, bool Gapless, string? AssignOn);
+
+/// <param name="LifetimeTicks">Sunucunun verdiği ömür; <c>null</c> ise son kullanma zamanını istemci verir.</param>
+/// <param name="Sliding">Her yazmada süre yeniden başlar mı.</param>
+internal sealed record ExpiryModel(long? LifetimeTicks, bool Sliding);
+
+/// <summary>Bir durum enum'unun üyesi.</summary>
+internal sealed record StateReference(string Type, string Name);
+
+/// <summary>Bir <c>MapTransition</c> çağrısı; sahibi ve durumları henüz doğrulanmamıştır.</summary>
+/// <param name="Name">Çağrıda açıkça verilen ad; gövdesiz geçişte zorunludur.</param>
+/// <param name="NameIsConstant">Ad verildiyse derleme zamanında okunabildi mi.</param>
+/// <param name="ImplementsTransition">İstek tipi <c>ITransition&lt;TEntity&gt;</c> uyguluyor mu.</param>
+internal sealed record TransitionDeclaration(
+    string OwnerName,
+    string? OwnerType,
+    string? Name,
+    bool NameIsConstant,
+    string? RequestName,
+    string? RequestType,
+    bool ImplementsTransition,
+    EquatableArray<StateReference> From,
+    StateReference? To,
+    bool StatesReadable,
+    LocationInfo Location);
+
+/// <summary>Sahibine bağlanmış ve doğrulanmış bir geçiş.</summary>
+/// <param name="Route">Adresin son parçası: <c>cancel</c>.</param>
+/// <param name="PascalName">Metot ve işlem adlarında kullanılan biçim: <c>Cancel</c>.</param>
+/// <param name="RegistryName">Çağrıda açıkça verilen ad; çalışma zamanındaki kayıt anahtarıdır.</param>
+internal sealed record TransitionModel(
+    string Route,
+    string PascalName,
+    string? RegistryName,
+    string? RequestType,
+    bool ImplementsTransition,
+    EquatableArray<string> From,
+    string To);
+
+/// <summary>Ayrı uçlu bir detayın yazılabilmesi için sahibinin bulunması gereken durumlar.</summary>
+internal sealed record OwnerGuardModel(string StatusType, EquatableArray<string> EditableIn);
+
 /// <summary><c>.Searchable(...)</c> içinde sayılan, henüz doğrulanmamış bir alan.</summary>
 internal sealed record SearchFieldRequest(string? FieldName, string Expression, LocationInfo Location);
 
-/// <summary><c>IActionHandler</c> veya <c>IQueryHandler</c> uygulayan, bağımlılık enjeksiyonuna kaydedilecek sınıf.</summary>
+/// <summary><c>IActionHandler</c>, <c>IQueryHandler</c> veya <c>ITransitionHandler</c> uygulayan, bağımlılık enjeksiyonuna kaydedilecek sınıf.</summary>
 internal sealed record HandlerModel(string Implementation, EquatableArray<string> Services);
 
 /// <summary>Bir <c>MapQuery</c> çağrısı: istek tipi sorgu parametrelerinden doldurulur.</summary>

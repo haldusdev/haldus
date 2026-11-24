@@ -107,6 +107,49 @@ public partial class Order : IComputed
 }
 ```
 
+## Durum makinesi
+
+Durumu olan bir kayıt `.Workflow<TStatus>()` ile bildirilir. `Status` alanı istek gövdesinden yazılamaz;
+yalnızca geçişlerle değişir.
+
+```csharp
+var orders = app.MapCrud<Order>()
+    .Workflow<OrderStatus>(initial: OrderStatus.Draft)
+    .EditableIn(OrderStatus.Draft)                                   // PUT / PATCH yalnızca taslakta
+    .DeletableIn(OrderStatus.Draft, OrderStatus.Cancelled)
+    .Numbered("ORD-{yyyy}-{seq:6}", assignOn: OrderStatus.Placed);   // numara verilirken atanır
+
+orders.MapTransition("ship", from: OrderStatus.Placed, to: OrderStatus.Shipped);
+orders.MapTransition<PlaceOrder>(from: OrderStatus.Draft, to: OrderStatus.Placed);
+orders.MapTransition<CancelOrder>(from: [OrderStatus.Draft, OrderStatus.Placed], to: OrderStatus.Cancelled);
+```
+
+Her geçiş `POST /orders/{id}/ship` biçiminde bir uçtur; kayıt beklenen durumda değilse 409 döner. Durum
+kontrolünü ve kaydetmeyi Haldus üretir, iş mantığı üç yoldan biriyle verilir:
+
+```csharp
+// 1. İstek kendi etkisini uygular.
+public sealed record CancelOrder(string Reason) : ITransition<Order>
+{
+    public void Apply(Order order) => order.Cancel(Reason);
+}
+
+// 2. Bağımlılık gerekiyorsa bir handler sınıfı; Haldus bulur ve kaydeder.
+public sealed class PlaceOrderHandler(IStock stock) : ITransitionHandler<Order, PlaceOrder>
+{
+    public async Task HandleAsync(Order order, PlaceOrder request, CancellationToken cancellationToken)
+    {
+        if (order.OrderItems.Count == 0)
+        {
+            throw new TransitionRejectedException("...");   // 422; hiçbir şey kaydedilmez
+        }
+    }
+}
+
+// 3. Kısa işler için lambda.
+orders.MapTransition<ReopenOrder>(OrderStatus.Cancelled, OrderStatus.Draft, (order, request) => order.Reopen());
+```
+
 ## Trait'ler ve süzme
 
 Davranışlar `Map*` çağrısının devamına zincirlenir:
@@ -128,6 +171,9 @@ app.MapCrud<Customer>()
 | `.SoftDeletable()` | Silme geri alınabilir; `restore` ve `purge` uçları |
 | `.ConcurrencyChecked()` | `ETag` / `If-Match` ile iyimser eşzamanlılık |
 | `.Archivable()` | `archive` ve `unarchive` uçları; arşivlenenler listede gizlenir |
+| `.Numbered("ORD-{yyyy}-{seq:6}")` | Benzersiz `Number` alanı; varsayılan olarak boşluksuz, `gapless: false` ile sequence |
+| `.Expiring(...)` | `ExpiresAt` alanı; süresi dolan kayıt okunamaz ve yazılamaz, `expire` ucu hemen sonlandırır |
+| `.Idempotent()` | Oluşturma ve geçişler `Idempotency-Key` ile tekrara karşı korunur |
 | `.Without(...)` / `.Only(...)` | Üretilecek standart işlemleri seçer |
 | `.Filterable<TFilter>()` | Kendi yazdığın filtre sınıfını liste ucunun sorgu parametrelerine bağlar |
 | `.Searchable(...)` | `POST /search`: sayılan alanlarda VE/VEYA koşulları ve sıralama |

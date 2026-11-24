@@ -25,6 +25,13 @@ public static class HaldusMessageKeys
     public const string DetailNotFound = "Detail.NotFound";
     public const string InUseTitle = "InUse.Title";
     public const string InUseDetail = "InUse.Detail";
+    public const string StateConflictTitle = "StateConflict.Title";
+    public const string StateConflictDetail = "StateConflict.Detail";
+    public const string TransitionRejectedTitle = "TransitionRejected.Title";
+    public const string IdempotencyKeyInvalidTitle = "IdempotencyKeyInvalid.Title";
+    public const string IdempotencyKeyInvalidDetail = "IdempotencyKeyInvalid.Detail";
+    public const string IdempotencyKeyReusedTitle = "IdempotencyKeyReused.Title";
+    public const string IdempotencyKeyReusedDetail = "IdempotencyKeyReused.Detail";
     public const string SearchTooComplexTitle = "SearchTooComplex.Title";
     public const string SearchTooComplexDetail = "SearchTooComplex.Detail";
     public const string TenantRequiredTitle = "TenantRequired.Title";

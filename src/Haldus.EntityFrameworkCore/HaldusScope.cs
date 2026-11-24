@@ -14,6 +14,9 @@ public static class HaldusFilters
 
     /// <summary>Çoktan-çoğa bir bağı, iki ucundan biri isteği yapana görünür değilse gizleyen filtre.</summary>
     public const string Association = "Haldus.Association";
+
+    /// <summary>Süresi dolmuş kaydı gizleyen filtre.</summary>
+    public const string Expiry = "Haldus.Expiry";
 }
 
 /// <summary>Üretilen model yapılandırmasının kullandığı sabitler.</summary>
@@ -40,5 +43,12 @@ public static class HaldusScope
     {
         ArgumentNullException.ThrowIfNull(context);
         return context.GetService<ITenantProvider>().TenantId;
+    }
+
+    /// <summary>Sorgunun çalıştığı an; süresi dolmuş kayıtları gizleyen filtre her sorguda bunu yeniden okur.</summary>
+    public static DateTimeOffset UtcNow(DbContext context)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        return HaldusTime.UtcNow(context.GetService<TimeProvider>());
     }
 }

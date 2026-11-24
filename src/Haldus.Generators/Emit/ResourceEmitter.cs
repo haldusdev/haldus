@@ -54,6 +54,11 @@ internal static class ResourceEmitter
                 .Select(member => $"    public {member.Type} {member.Name} {{ get; set; }}"));
         }
 
+        // Durum makinesi, numaralama ve son kullanma bildirimlerinin alanları.
+        members.AddRange(resource.ExtraMembers
+            .Where(member => !declared.Contains(member.Name))
+            .Select(member => $"    public {member.Type} {member.Name} {{ get; set; }}{(member.Type == "string" ? " = \"\";" : string.Empty)}"));
+
         if (resource.Archetype == Archetype.Detail && !resource.PositionDeclared)
         {
             // Satırın sahibindeki sırası. Kimlikler aynı anda üretildiğinde sıralı olmadığı için sıra ayrıca tutulur.
@@ -106,8 +111,13 @@ internal static class ResourceEmitter
             builder.Append($"    public required {property.Type} {property.Name} {{ get; init; }}\n");
         }
 
-        foreach (var member in TraitCatalog.ResponseMembers(resource.Traits))
+        foreach (var member in resource.ResponseMembers)
         {
+            if (member.ResponseAttribute is not null)
+            {
+                builder.Append($"    [{member.ResponseAttribute}]\n");
+            }
+
             builder.Append($"    public required {member.Type} {member.Name} {{ get; init; }}\n");
         }
 
@@ -159,6 +169,12 @@ internal static class ResourceEmitter
     };
 
     public static string CamelCase(string name) => char.ToLowerInvariant(name[0]) + name.Substring(1);
+
+    /// <summary>Bir metni, üretilen koda yazılabilecek bir C# metin sabitine çevirir.</summary>
+    public static string Literal(string text) => "\"" + text.Replace("\\", "\\\\").Replace("\"", "\\\"") + "\"";
+
+    /// <summary>Boşluksuz olmayan numaralamada kaynağın kullandığı sequence'in adı.</summary>
+    public static string NumberSequence(ResourceModel resource) => resource.EntityName + "NumberSequence";
 
     /// <summary>Anahtarı istemcinin verdiği archetype'larda PUT ekle-veya-güncelle anlamına gelir ve adı da öyledir.</summary>
     public static string WriteOperationName(ResourceModel resource) => resource.Archetype.HasClientKey() ? "Put" : "Update";

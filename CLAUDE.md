@@ -79,6 +79,18 @@ Bunlar kullanıcıyla kararlaştırıldı; yeniden sorma.
     `and` / `or` / `not` ve sıralama. Yalnızca sayılan alanlar aranabilir; varsayılan olarak hiçbiri
     aranamaz. Bilinmeyen alan veya operatör isteği reddeder; boyut `SearchBudget` ile sınırlıdır.
 - Geçiş endpoint'leri `/orders/{id}/cancel` biçimindedir.
+- Durum makinesi zincirde bildirilir: `.Workflow<OrderStatus>(initial: ...)`, `.EditableIn(...)`,
+  `.DeletableIn(...)`. `Status` alanı üretilir, istek gövdesinden yazılamaz ve yalnızca geçişlerle değişir.
+- Geçişler sahibin builder'ından bildirilir: `orders.MapTransition<CancelOrder>(from: ..., to: ...)` ya da
+  gövdesiz `orders.MapTransition("ship", from: ..., to: ...)`. Geçişin iş mantığı üç yoldan biriyle verilir
+  ve üçü de desteklenir (kullanıcı kararı): istek tipi `ITransition<TEntity>` uygular, bir
+  `ITransitionHandler<TEntity, TRequest>` sınıfı yazılır (Haldus bulur ve kaydeder) veya çağrıya lambda
+  verilir. Sıra: önce isteğin `Apply`'ı, sonra lambda, lambda yoksa kayıtlı handler.
+- `Numbered` sayacı varsayılan olarak boşluksuzdur: numara kayıtla aynı transaction'da, kapsam başına
+  (kaynak, kiracı, desendeki tarih parçaları) kilitlenen bir sayaç satırından alınır. `gapless: false` ile
+  veritabanı sequence'ine geçilir; ikisi de desteklenir (kullanıcı kararı).
+- `Expiring` süresi dolan kaydın erişimini keser (kullanıcı kararı): kayıt silinmez, sorgu filtresiyle
+  okuma anında gizlenir ve yazılamaz. Fiziksel temizlik arka plan işleriyle birlikte 8. aşamadadır.
 - `MultiTenant` kiracıyı token'daki claim'den okur.
 
 ### Proje tipleri
@@ -108,7 +120,7 @@ Bunlar kullanıcıyla kararlaştırıldı; yeniden sorma.
 
 ## Aşamalar
 
-1–6 tamamlandı (3. aşamaya `.Searchable()` da eklendi); sıradaki 7.
+1–7 tamamlandı (3. aşamaya `.Searchable()` da eklendi); sıradaki 8.
 
 1. İskelet
 2. Generator çekirdeği ve `MapCrud`
@@ -126,7 +138,8 @@ Bunlar kullanıcıyla kararlaştırıldı; yeniden sorma.
 ## Açık kararlar
 
 - Frontend ve mobil desteğinin kapsamı (backend API şekli oturunca ele alınacak).
-- `MapJob` altyapısı (8. aşamada sorulacak).
+- `MapJob` altyapısı (8. aşamada sorulacak). Aynı altyapı, süresi dolmuş `Expiring` kayıtlarının ve saklama
+  süresi geçmiş idempotency kayıtlarının fiziksel temizliğini de üstlenecek; şu an ikisi de birikir.
 
 ## Generator'ın işleyişi
 
@@ -202,6 +215,53 @@ Bunlar kullanıcıyla kararlaştırıldı; yeniden sorma.
 - Kullanıcı `Id` yazmadıysa `Guid` (v7) üretilir; yazdıysa `Guid`, `int` veya `long` olmalıdır.
 - DTO'lara yalnızca skaler alanlar girer; herkese açık setter'ı olmayan alanlar yalnızca yanıtta yer alır.
 - `AddHaldus<TContext>()` aynı projedeki partial bir bağlamı gösteriyorsa DbSet özellikleri eklenir.
+- **Yaşam döngüsü bildirimleri.** `Parsing/LifecycleReader` zincirdeki `Workflow`, `EditableIn`,
+  `DeletableIn`, `Numbered` ve `Expiring` çağrılarını okur. Argümanları derleme zamanında okunabilen
+  sabitler olmalıdır (enum üyesi, metin sabiti, `TimeSpan.FromMinutes(15)` gibi sabit argümanlı bir ifade);
+  okunamayan argüman `HALDUS010` olur. Bu bildirimlerin eklediği alanlar (`Status`, `Number`, `ExpiresAt`)
+  `ResourceModel.ExtraMembers` içinde durur ve trait alanları gibi davranır: yanıtta görünür, istek
+  DTO'larına girmez, kullanıcı alanı kendisi yazdıysa yeniden üretilmez. Yeni bir yaşam döngüsü alanı
+  eklerken `TraitCatalog` yerine burayı kullan.
+- **Durum.** `Status` veritabanında adıyla saklanır (`HasConversion<string>()`) ve yanıtta adıyla yazılır
+  (yanıt özelliğine `JsonStringEnumConverter` eklenir; uygulamanın genel JSON ayarına bağlı değildir).
+  Arama gövdesindeki durum koşulu ise genel JSON ayarını izler. Liste, kullanıcının filtresi aynı adı
+  taşımıyorsa `?status=` ile süzülür.
+- **Geçişler.** `MapTransition`, `MapDetail` gibi `ResourceBuilder<T>` üyesidir ve sahibi çağrıldığı
+  builder'ın tipinden okunur (`Parsing/TransitionParser`); sahibine `ResourceLinker.AttachTransitions`
+  bağlar ve doğrular. Her geçiş için `Map{Ad}Transition(group, apply)` eşleyicisi üretilir ve
+  `HaldusTransitionRegistry`'ye kaydedilir; uç, `MapTransition` çağrısı çalıştığında bağlanır ve lambda
+  eşleyiciye parametre olarak gelir (bu yüzden standart uçlarla birlikte kendiliğinden eşlenmez). Kayıt
+  anahtarı entity, istek tipi ve çağrıda açıkça verilen addır; ad bu yüzden sabit olmalıdır.
+  - Adres, verilmediyse istek tipinin adından türetilir: `Request` / `Command` soneki ve entity adı atılır
+    (`CancelOrder` → `cancel`). Aynı kaynağın bir trait'inin ucuyla (`archive`, `restore`, `expire`...)
+    çakışan ad `HALDUS007` olur.
+  - Sıra: `If-Match`, kaydı yükle, durum kontrolü (409), sürüm beklentisi, iş mantığı, durumu yaz,
+    `Compute`, numara, kaydet. İş mantığı `TransitionRejectedException` fırlatırsa hiçbir şey kaydedilmez
+    ve mesajı 422 ile döner; metni üretmek (ve çevirmek) fırlatanın işidir.
+  - İstek `ITransition` uygulamıyorsa ve lambda verilmediyse handler eksikliği uygulama açılırken hata olur.
+  - Ayrı uçlu bir detay sahibinin parçasıdır: sahibinde `EditableIn` varsa detayın yazma uçları da sahibin
+    durumuna bakar (`OwnerGuardModel`). Serbestçe yazılabilen alt kayıtlar için `MapDetail` yerine
+    `.Under<T>()` kullanılır.
+- **Numaralama.** Numara `HaldusNumbering.AllocateAsync` ile, kaydetmeden hemen önce ayrılır. Boşluksuz
+  modda bu bir transaction açar (zaten açık biri varsa ona katılır) ve `HaldusCounters` tablosundaki sayaç
+  satırını tek bir `INSERT ... ON CONFLICT ... DO UPDATE ... RETURNING` ile artırır; kaydetme başarısız
+  olursa ya da uç bir hata yanıtıyla dönerse `await using` transaction'ı geri alır ve numara geri verilir.
+  Bu SQL PostgreSQL'e özgüdür. Sayaç kapsamı desendeki tarih parçalarını içerir; `{yyyy}` varsa sayaç her
+  yıl yeniden başlar. Sequence modunda sayaç kiracı ya da dönem başına sıfırlanmaz. Desenin kuralları
+  derleme zamanında (`LifecycleReader`) ve çalışma zamanında (`NumberFormat`) ayrı ayrı uygulanır; birini
+  değiştirirken diğerini de değiştir.
+- **Süre dolumu.** Gizleme modeldeki `HaldusFilters.Expiry` filtresidir; şimdiki zamanı kiracı filtresiyle
+  aynı yoldan, her sorguda geçerli bağlamdan okur (`HaldusScope.UtcNow(context)`). Üç biçim vardır:
+  `.Expiring()` (zamanı istemci verir, sıradan yazılabilir bir alandır), `.Expiring(ömür)` (sunucu
+  oluştururken hesaplar) ve `sliding: true` (her `PUT`, `PATCH` ve geçişte yeniden başlar).
+- **Idempotency.** `HaldusIdempotencyFilter` oluşturma ve geçiş uçlarına, doğrulama filtresinden sonra
+  eklenir. Anahtarı işlemin kendisiyle aynı transaction'da `HaldusIdempotencyRecords` tablosuna yazar; aynı
+  anahtarla eşzamanlı ikinci istek birincinin transaction'ı bitene kadar bekler. Yalnızca 2xx yanıtlar
+  saklanır; başarısız istek anahtarla birlikte geri alınır. Anahtarın kapsamı kiracı, kullanıcı, metot ve
+  adrestir. Yanıt, saklanabilmesi için belleğe yazdırılır. `MapAction` kapsam dışıdır (entity'ye bağlı
+  olmadığı için hangi bağlamın kullanılacağı belli değil).
+- Haldus'un kendi tabloları (`HaldusCounters`, `HaldusIdempotencyRecords`) yalnızca onları kullanan bir
+  kaynak varsa modele eklenir; ekleyen, üretilen modül kodudur.
 - Tanılar `HALDUS001`+ kodlarıyla `Diagnostics/HaldusDiagnostics.cs` ve `AnalyzerReleases.Unshipped.md`
   dosyalarında birlikte tutulur.
 

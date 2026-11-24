@@ -75,6 +75,52 @@ public static class HaldusProblems
             statusCode: StatusCodes.Status409Conflict);
     }
 
+    /// <summary>İşleme (güncelleme, silme veya bir geçiş) kaydın bulunduğu durumda izin verilmiyor.</summary>
+    /// <param name="operation">İşlemin adı: <c>update</c>, <c>delete</c> veya geçişin adı.</param>
+    /// <param name="state">Kaydın bulunduğu durum.</param>
+    public static ProblemHttpResult StateConflict(IHaldusMessages messages, string operation, object state)
+    {
+        ArgumentNullException.ThrowIfNull(messages);
+
+        return TypedResults.Problem(
+            title: messages.Format(HaldusMessageKeys.StateConflictTitle),
+            detail: messages.Format(HaldusMessageKeys.StateConflictDetail, operation, state),
+            statusCode: StatusCodes.Status409Conflict);
+    }
+
+    /// <summary>Geçişin iş mantığı geçişi reddetti; açıklama onu reddeden koddan gelir.</summary>
+    public static ProblemHttpResult TransitionRejected(IHaldusMessages messages, string reason)
+    {
+        ArgumentNullException.ThrowIfNull(messages);
+
+        return TypedResults.Problem(
+            title: messages.Format(HaldusMessageKeys.TransitionRejectedTitle),
+            detail: reason,
+            statusCode: StatusCodes.Status422UnprocessableEntity);
+    }
+
+    /// <summary><c>Idempotency-Key</c> başlığı zorunlu olduğu halde gönderilmedi veya çok uzun.</summary>
+    public static ProblemHttpResult IdempotencyKeyInvalid(IHaldusMessages messages)
+    {
+        ArgumentNullException.ThrowIfNull(messages);
+
+        return TypedResults.Problem(
+            title: messages.Format(HaldusMessageKeys.IdempotencyKeyInvalidTitle),
+            detail: messages.Format(HaldusMessageKeys.IdempotencyKeyInvalidDetail, HaldusIdempotency.MaxKeyLength),
+            statusCode: StatusCodes.Status400BadRequest);
+    }
+
+    /// <summary>Aynı <c>Idempotency-Key</c> daha önce farklı bir istek gövdesiyle kullanıldı.</summary>
+    public static ProblemHttpResult IdempotencyKeyReused(IHaldusMessages messages)
+    {
+        ArgumentNullException.ThrowIfNull(messages);
+
+        return TypedResults.Problem(
+            title: messages.Format(HaldusMessageKeys.IdempotencyKeyReusedTitle),
+            detail: messages.Format(HaldusMessageKeys.IdempotencyKeyReusedDetail),
+            statusCode: StatusCodes.Status422UnprocessableEntity);
+    }
+
     /// <summary>Arama isteği izin verilen derinliği, koşul sayısını veya liste uzunluğunu aştı.</summary>
     public static ProblemHttpResult SearchTooComplex(IHaldusMessages messages)
     {

@@ -6,7 +6,7 @@ using Microsoft.CodeAnalysis.CSharp.Syntax;
 
 namespace Haldus.Generators.Parsing;
 
-/// <summary>Entity'ye bağlı olmayan işlemleri okur: <c>MapQuery</c> çağrıları ve handler sınıfları.</summary>
+/// <summary>Entity'ye bağlı olmayan işlemleri ve handler sınıflarını (komut, sorgu, geçiş) okur.</summary>
 internal static class OperationParser
 {
     private const string OperationExtensionsType = "Haldus.HaldusOperationExtensions";
@@ -103,7 +103,7 @@ internal static class OperationParser
         var services = handler.AllInterfaces
             .Where(candidate => candidate is
             {
-                Name: "IActionHandler" or "IQueryHandler",
+                Name: "IActionHandler" or "IQueryHandler" or "ITransitionHandler",
                 ContainingNamespace: { Name: "Haldus", ContainingNamespace.IsGlobalNamespace: true },
             })
             .Select(service => service.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat))

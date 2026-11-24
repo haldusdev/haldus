@@ -45,6 +45,27 @@
   <data name="InUse.Detail" xml:space="preserve">
     <value>'{1}' kimlikli {0} kaydı, başka kayıtlar ona bağlı olduğu için silinemiyor.</value>
   </data>
+  <data name="StateConflict.Title" xml:space="preserve">
+    <value>Bu durumda izin verilmiyor</value>
+  </data>
+  <data name="StateConflict.Detail" xml:space="preserve">
+    <value>Kayıt '{1}' durumundayken '{0}' işlemine izin verilmiyor.</value>
+  </data>
+  <data name="TransitionRejected.Title" xml:space="preserve">
+    <value>İşlem reddedildi</value>
+  </data>
+  <data name="IdempotencyKeyInvalid.Title" xml:space="preserve">
+    <value>Idempotency anahtarı gerekli</value>
+  </data>
+  <data name="IdempotencyKeyInvalid.Detail" xml:space="preserve">
+    <value>Bu istekle birlikte 1 ile {0} karakter arasında bir Idempotency-Key başlığı gönderin.</value>
+  </data>
+  <data name="IdempotencyKeyReused.Title" xml:space="preserve">
+    <value>Idempotency anahtarı zaten kullanılmış</value>
+  </data>
+  <data name="IdempotencyKeyReused.Detail" xml:space="preserve">
+    <value>Bu Idempotency-Key daha önce farklı bir istekle kullanıldı. Yeni bir istek için yeni bir anahtar kullanın.</value>
+  </data>
   <data name="SearchTooComplex.Title" xml:space="preserve">
     <value>Arama çok karmaşık</value>
   </data>

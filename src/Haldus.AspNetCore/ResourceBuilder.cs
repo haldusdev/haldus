@@ -82,6 +82,90 @@ public sealed class ResourceBuilder<TEntity>(RouteGroupBuilder group) : IEndpoin
         return new DetailBuilder<TEntity, TDetail>();
     }
 
+    /// <summary>
+    /// Kayda bir durum makinesi ekler: <c>Status</c> alanı üretilir, istek gövdesinden yazılamaz ve yalnızca
+    /// <c>MapTransition</c> ile bildirilen geçişlerle değişir.
+    /// </summary>
+    /// <param name="initial">Yeni kaydın durumu.</param>
+    public ResourceBuilder<TEntity> Workflow<TStatus>(TStatus initial = default)
+        where TStatus : struct, Enum => this;
+
+    /// <summary>Güncellemeye (<c>PUT</c>, <c>PATCH</c>) yalnızca sayılan durumlarda izin verir; diğerlerinde 409 döner.</summary>
+    public ResourceBuilder<TEntity> EditableIn(params Enum[] states) => this;
+
+    /// <summary>Silmeye yalnızca sayılan durumlarda izin verir; diğerlerinde 409 döner.</summary>
+    public ResourceBuilder<TEntity> DeletableIn(params Enum[] states) => this;
+
+    /// <summary>
+    /// Gövdesiz bir geçiş ekler: <c>POST /{id}/{name}</c>. Kayıt <paramref name="from"/> durumlarından
+    /// birindeyse <paramref name="to"/> durumuna geçer; değilse 409 döner.
+    /// </summary>
+    public RouteHandlerBuilder MapTransition(string name, StateSet from, Enum to) =>
+        HaldusTransitionRegistry.Map<TEntity>(Group, name, apply: null);
+
+    /// <inheritdoc cref="MapTransition(string, StateSet, Enum)"/>
+    /// <param name="apply">Durum değişmeden önce kayıt üzerinde çalışır.</param>
+    public RouteHandlerBuilder MapTransition(string name, StateSet from, Enum to, Action<TEntity> apply)
+    {
+        ArgumentNullException.ThrowIfNull(apply);
+
+        return HaldusTransitionRegistry.Map<TEntity>(Group, name, (entity, _, _) =>
+        {
+            apply(entity);
+            return Task.CompletedTask;
+        });
+    }
+
+    /// <inheritdoc cref="MapTransition(string, StateSet, Enum)"/>
+    /// <param name="apply">Durum değişmeden önce kayıt üzerinde çalışır; bağımlılıklarını isteğin servis sağlayıcısından alır.</param>
+    public RouteHandlerBuilder MapTransition(
+        string name,
+        StateSet from,
+        Enum to,
+        Func<TEntity, IServiceProvider, CancellationToken, Task> apply)
+    {
+        ArgumentNullException.ThrowIfNull(apply);
+        return HaldusTransitionRegistry.Map(Group, name, apply);
+    }
+
+    /// <summary>
+    /// İstek gövdesi alan bir geçiş ekler; adresi istek tipinin adından türetilir
+    /// (<c>CancelOrder</c> → <c>POST /{id}/cancel</c>). İş mantığı ya istek tipindedir
+    /// (<see cref="ITransition{TEntity}"/>) ya da Haldus'un bulduğu bir
+    /// <see cref="ITransitionHandler{TEntity, TRequest}"/> sınıfındadır.
+    /// </summary>
+    /// <param name="name">Adresin son parçası; verilmezse istek tipinin adından türetilir.</param>
+    public RouteHandlerBuilder MapTransition<TRequest>(StateSet from, Enum to, string? name = null)
+        where TRequest : class =>
+        HaldusTransitionRegistry.Map<TEntity, TRequest>(Group, name, apply: null);
+
+    /// <inheritdoc cref="MapTransition{TRequest}(StateSet, Enum, string?)"/>
+    /// <param name="apply">Durum değişmeden önce kayıt üzerinde çalışır.</param>
+    public RouteHandlerBuilder MapTransition<TRequest>(StateSet from, Enum to, Action<TEntity, TRequest> apply, string? name = null)
+        where TRequest : class
+    {
+        ArgumentNullException.ThrowIfNull(apply);
+
+        return HaldusTransitionRegistry.Map<TEntity, TRequest>(Group, name, (entity, request, _, _) =>
+        {
+            apply(entity, request);
+            return Task.CompletedTask;
+        });
+    }
+
+    /// <inheritdoc cref="MapTransition{TRequest}(StateSet, Enum, string?)"/>
+    /// <param name="apply">Durum değişmeden önce kayıt üzerinde çalışır; bağımlılıklarını isteğin servis sağlayıcısından alır.</param>
+    public RouteHandlerBuilder MapTransition<TRequest>(
+        StateSet from,
+        Enum to,
+        Func<TEntity, TRequest, IServiceProvider, CancellationToken, Task> apply,
+        string? name = null)
+        where TRequest : class
+    {
+        ArgumentNullException.ThrowIfNull(apply);
+        return HaldusTransitionRegistry.Map(Group, name, apply);
+    }
+
     IApplicationBuilder IEndpointRouteBuilder.CreateApplicationBuilder() =>
         ((IEndpointRouteBuilder)Group).CreateApplicationBuilder();
 

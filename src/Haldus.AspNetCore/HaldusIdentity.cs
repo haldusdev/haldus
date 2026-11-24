@@ -11,6 +11,12 @@ public sealed class HaldusOptions
 
     /// <summary>Kullanıcı kimliğini taşıyan claim.</summary>
     public string UserClaimType { get; set; } = ClaimTypes.NameIdentifier;
+
+    /// <summary>
+    /// <c>Idempotency-Key</c> ile saklanan yanıtların ne kadar süre yeniden döndürüleceği. Süre dolduktan
+    /// sonra aynı anahtar yeni bir istek sayılır.
+    /// </summary>
+    public TimeSpan IdempotencyRetention { get; set; } = TimeSpan.FromHours(24);
 }
 
 internal sealed class ClaimsTenantProvider(IHttpContextAccessor accessor, IOptions<HaldusOptions> options) : ITenantProvider

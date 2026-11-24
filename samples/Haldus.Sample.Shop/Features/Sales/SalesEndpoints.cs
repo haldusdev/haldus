@@ -31,16 +31,49 @@ public static class SalesEndpoints
         app.MapCrud<Delivery>()
             .References<Address>();
 
+        // Sipariş bir durum makinesidir: yalnızca taslakken düzenlenir, numarasını verilirken alır.
         var orders = app.MapCrud<Order>()
             .MultiTenant()
             .Auditable()
-            .ConcurrencyChecked();
+            .ConcurrencyChecked()
+            .Workflow<OrderStatus>(initial: OrderStatus.Draft)
+            .EditableIn(OrderStatus.Draft)
+            .DeletableIn(OrderStatus.Draft, OrderStatus.Cancelled)
+            .Numbered("ORD-{yyyy}-{seq:6}", assignOn: OrderStatus.Placed)
+            .Idempotent();
 
         // Satırlar siparişin istek ve yanıtlarına gömülüdür; ayrı uçları yoktur.
         orders.MapDetail<OrderItem>();
 
         // Notlar siparişe aittir ama kendi uçlarından yönetilir: /orders/{orderId}/order-notes
+        // Siparişin parçası oldukları için onlar da yalnızca sipariş taslakken yazılabilir.
         orders.MapDetail<OrderNote>().AsSubresource();
+
+        // Geçişler: POST /orders/{id}/place, /ship, /cancel, /reopen
+        orders.MapTransition<PlaceOrder>(from: OrderStatus.Draft, to: OrderStatus.Placed);
+        orders.MapTransition("ship", from: OrderStatus.Placed, to: OrderStatus.Shipped);
+        orders.MapTransition<CancelOrder>(from: [OrderStatus.Draft, OrderStatus.Placed], to: OrderStatus.Cancelled);
+        orders.MapTransition<ReopenOrder>(
+            from: OrderStatus.Cancelled,
+            to: OrderStatus.Draft,
+            (order, _) => order.Reopen());
+
+        app.MapCrud<Reservation>()
+            .MultiTenant()
+            .Expiring(TimeSpan.FromMinutes(15));
+
+        app.MapCrud<Cart>()
+            .Expiring(TimeSpan.FromDays(7), sliding: true);
+
+        app.MapCrud<Coupon>()
+            .Expiring();
+
+        // Numara bir sequence'ten gelir: iadeler birbirini beklemez, ama numaralarda boşluk olabilir.
+        app.MapAppendOnly<Refund>()
+            .MultiTenant()
+            .References<Order>()
+            .Numbered("RF-{seq:8}", gapless: false)
+            .Idempotent(required: true);
 
         // Müşteri kiracıya bağlı olduğu için bağlar da öyledir: başka bir kiracı ne bağı görebilir
         // ne de etiketin altında bu müşteriyi listeleyebilir.

@@ -127,6 +127,11 @@ internal static class ResourceLinker
                 Archetype = resource.IsSubresource ? Archetype.Crud : Archetype.Detail,
                 RouteRelativeToParent = resource.IsSubresource,
                 PositionDeclared = position is not null,
+
+                // Detay sahibinin parçasıdır: sahibi düzenlenemezken ayrı uçlarından da yazılamaz.
+                OwnerGuard = resource.IsSubresource && owner.Workflow is { EditableIn: { } editable } ownerWorkflow
+                    ? new OwnerGuardModel(ownerWorkflow.StatusType, editable)
+                    : null,
                 Properties = resource.Properties.Where(property => property != position).ToEquatableArray(),
                 ReferenceDeclarations = resource.ReferenceDeclarations
                     .Append(new ReferenceDeclaration(
@@ -147,6 +152,156 @@ internal static class ResourceLinker
 
         return prepared;
     }
+
+    /// <summary>
+    /// <c>MapTransition</c> çağrılarını sahiplerine bağlar ve doğrular: sahip bir durum makinesi taşımalı,
+    /// durumlar onun durum tipinden olmalı, adlar derleme zamanında okunabilmeli ve çakışmamalıdır.
+    /// </summary>
+    public static List<ResourceModel> AttachTransitions(
+        IReadOnlyList<ResourceModel> resources,
+        IEnumerable<TransitionDeclaration> declarations,
+        Action<DiagnosticInfo> report)
+    {
+        var byType = resources.ToDictionary(resource => resource.QualifiedName);
+        var transitions = resources.ToDictionary(resource => resource.QualifiedName, _ => new List<TransitionModel>());
+
+        foreach (var declaration in declarations.Distinct())
+        {
+            void Fail(string id, string message) =>
+                report(new DiagnosticInfo(id, declaration.Location, new[] { message }.ToEquatableArray()));
+
+            if (Find(declaration.OwnerName, declaration.OwnerType, resources, byType) is not { } owner)
+            {
+                Fail("HALDUS007", $"MapTransition is declared on '{declaration.OwnerName}', which is not a mapped resource");
+                continue;
+            }
+
+            if (owner.Workflow is not { } workflow)
+            {
+                Fail("HALDUS007", $"MapTransition needs a state machine; declare Workflow<TStatus>() on '{owner.EntityName}'");
+                continue;
+            }
+
+            if (!declaration.StatesReadable)
+            {
+                Fail("HALDUS010", "The states of a transition must be written as enum members, for example from: OrderStatus.Draft, to: OrderStatus.Placed");
+                continue;
+            }
+
+            if (declaration.From.Append(declaration.To!).FirstOrDefault(state => state.Type != workflow.StatusType) is { } foreign)
+            {
+                Fail("HALDUS010", $"'{foreign.Name}' is not a state of '{owner.EntityName}'; transitions use the status type declared with Workflow<TStatus>()");
+                continue;
+            }
+
+            if (!declaration.NameIsConstant)
+            {
+                Fail("HALDUS010", "The name of a transition must be a constant; it becomes part of the generated route");
+                continue;
+            }
+
+            var route = declaration.Name ?? TransitionRoute(declaration.RequestName!, owner.EntityName);
+
+            if (!IsValidTransitionName(route))
+            {
+                Fail("HALDUS010", $"'{route}' is not a valid transition name; use lowercase words separated by '-', for example \"mark-paid\"");
+                continue;
+            }
+
+            if (ReservedRoute(owner, route) is { } trait)
+            {
+                Fail("HALDUS007", $"The transition '{route}' collides with the '{route}' endpoint that {trait} generates on '{owner.EntityName}'");
+                continue;
+            }
+
+            var existing = transitions[owner.QualifiedName];
+
+            if (existing.Any(transition => transition.Route == route))
+            {
+                Fail("HALDUS007", $"'{owner.EntityName}' already has a transition named '{route}'");
+                continue;
+            }
+
+            existing.Add(new TransitionModel(
+                route,
+                string.Concat(route.Split('-').Select(word => char.ToUpperInvariant(word[0]) + word.Substring(1))),
+                declaration.Name,
+                declaration.RequestType,
+                declaration.ImplementsTransition,
+                declaration.From.Select(state => state.Name).Distinct().ToEquatableArray(),
+                declaration.To!.Name));
+        }
+
+        var attached = new List<ResourceModel>();
+
+        foreach (var resource in resources)
+        {
+            var own = transitions[resource.QualifiedName];
+            var result = own.Count == 0 ? resource : resource with { Transitions = own.ToEquatableArray() };
+
+            if (result.Numbering is { AssignOn: { } assignOn } && own.All(transition => transition.To != assignOn))
+            {
+                report(new DiagnosticInfo("HALDUS007", resource.Location, new[]
+                {
+                    $"Numbered(assignOn: {assignOn}) never takes effect on '{resource.EntityName}': no transition leads to '{assignOn}'",
+                }.ToEquatableArray()));
+            }
+
+            if (result.Has(Traits.Idempotent) && !result.HasWrites)
+            {
+                report(new DiagnosticInfo("HALDUS007", resource.Location, new[]
+                {
+                    $"Idempotent has no effect on '{resource.EntityName}': it has neither a create operation nor transitions",
+                }.ToEquatableArray()));
+            }
+
+            attached.Add(result);
+        }
+
+        return attached;
+    }
+
+    /// <summary><c>CancelOrder</c> → <c>cancel</c>; <c>OrderApprovalRequest</c> → <c>approval</c>.</summary>
+    private static string TransitionRoute(string requestName, string entityName)
+    {
+        var name = requestName;
+
+        foreach (var suffix in new[] { "Request", "Command" })
+        {
+            if (name.Length > suffix.Length && name.EndsWith(suffix, StringComparison.Ordinal))
+            {
+                name = name.Substring(0, name.Length - suffix.Length);
+                break;
+            }
+        }
+
+        if (name.Length > entityName.Length && name.EndsWith(entityName, StringComparison.Ordinal))
+        {
+            name = name.Substring(0, name.Length - entityName.Length);
+        }
+        else if (name.Length > entityName.Length && name.StartsWith(entityName, StringComparison.Ordinal))
+        {
+            name = name.Substring(entityName.Length);
+        }
+
+        return Naming.ToKebabCase(name);
+    }
+
+    private static bool IsValidTransitionName(string name) =>
+        name.Length > 0
+        && name[0] is >= 'a' and <= 'z'
+        && name[name.Length - 1] != '-'
+        && name.IndexOf("--", StringComparison.Ordinal) < 0
+        && name.All(character => character is (>= 'a' and <= 'z') or (>= '0' and <= '9') or '-');
+
+    /// <summary>Ad, kaynağın bir trait'inin ürettiği uçla çakışıyorsa o trait'in adını verir.</summary>
+    private static string? ReservedRoute(ResourceModel resource, string route) => route switch
+    {
+        "restore" or "purge" when resource.Has(Traits.SoftDeletable) => nameof(Traits.SoftDeletable),
+        "archive" or "unarchive" when resource.Has(Traits.Archivable) => nameof(Traits.Archivable),
+        "expire" when resource.Expiry is not null => "Expiring",
+        _ => null,
+    };
 
     /// <summary>Çoktan-çoğa bağların iki ucunu da eşlenmiş kaynaklara çözer.</summary>
     public static List<AssociationModel> LinkAssociations(
@@ -411,7 +566,7 @@ internal static class ResourceLinker
                 property.Name, property.SearchKind, property.ValueType, IsNullable: !property.IsNonNullable);
         }
 
-        foreach (var member in TraitCatalog.For(resource.Traits).SelectMany(definition => definition.Members))
+        foreach (var member in TraitCatalog.For(resource.Traits).SelectMany(definition => definition.Members).Concat(resource.ExtraMembers))
         {
             if (member.Search is not null)
             {

@@ -19,6 +19,9 @@ builder.Services.AddSingleton<ITenantProvider>(services => services.GetRequiredS
 builder.Services.AddSingleton<ICurrentUser>(services => services.GetRequiredService<DemoIdentity>());
 
 builder.Services.AddHaldus<AppDbContext>();
+
+// Uygulamanın kendi son kullanıcı metinleri (ör. bir geçişin reddedilme nedeni) Resources altından okunur.
+builder.Services.AddLocalization(options => options.ResourcesPath = "Resources");
 builder.Services.AddOpenApi();
 
 var app = builder.Build();

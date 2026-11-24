@@ -78,8 +78,17 @@ internal static class HaldusDiagnostics
         DiagnosticSeverity.Error,
         isEnabledByDefault: true);
 
+    public static readonly DiagnosticDescriptor InvalidDeclaration = new(
+        "HALDUS010",
+        "Declaration cannot be read at compile time or is invalid",
+        "{0}",
+        Category,
+        DiagnosticSeverity.Error,
+        isEnabledByDefault: true);
+
     public static DiagnosticDescriptor Get(string id) => id switch
     {
+        "HALDUS010" => InvalidDeclaration,
         "HALDUS009" => ReferenceTargetUnknown,
         "HALDUS005" => FieldCannotBeSearched,
         "HALDUS006" => SearchableNeedsFields,

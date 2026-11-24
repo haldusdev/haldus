@@ -17,6 +17,8 @@ internal sealed class EndpointEmitter
     private const string MessagesParameter = "        global::Haldus.IHaldusMessages messages,\n";
     private const string HttpContextParameter = "        global::Microsoft.AspNetCore.Http.HttpContext httpContext,\n";
     private const string TenantsParameter = "        global::Haldus.ITenantProvider tenants,\n";
+    private const string TimeProviderParameter = "        global::System.TimeProvider timeProvider,\n";
+    private const string Now = "global::Haldus.HaldusTime.UtcNow(timeProvider)";
     private const string CancellationParameter = "        global::System.Threading.CancellationToken cancellationToken)\n";
 
     private readonly ResourceModel _resource;
@@ -30,6 +32,7 @@ internal sealed class EndpointEmitter
     private readonly PropertyModel[] _writable;
     private readonly StringBuilder _map = new();
     private readonly StringBuilder _handlers = new();
+    private readonly StringBuilder _transitionMaps = new();
 
     private EndpointEmitter(ResourceModel resource)
     {
@@ -60,7 +63,7 @@ internal sealed class EndpointEmitter
         ", ",
         (_key.Length == 0 ? Array.Empty<string>() : [$"{_key} = item.{_key}"])
             .Concat(_resource.Properties.Select(property => $"{property.Name} = item.{property.Name}"))
-            .Concat(TraitCatalog.ResponseMembers(_resource.Traits).Select(member => $"{member.Name} = item.{member.Name}"))
+            .Concat(_resource.ResponseMembers.Select(member => $"{member.Name} = item.{member.Name}"))
             .Concat(_resource.Details.Select(DetailProjection)));
 
     /// <summary>Tek bir kayıt yüklenirken gömülü detayları da getirir; yanıt ve eşitleme onlara ihtiyaç duyar.</summary>
@@ -81,6 +84,14 @@ internal sealed class EndpointEmitter
     }
 
     private string NotFound => $"{Problems}.NotFound(messages, \"{_entity}\", {_keyParameter})";
+
+    /// <summary>Ömrü sunucu veriyor mu; veriyorsa son kullanma zamanı oluşturulurken hesaplanır.</summary>
+    private bool HasLifetime => _resource.Expiry is { LifetimeTicks: not null };
+
+    /// <summary>Her başarılı yazmada ömür yeniden başlar mı.</summary>
+    private bool Sliding => _resource.Expiry is { LifetimeTicks: not null, Sliding: true };
+
+    private bool Idempotent => _resource.Has(Traits.Idempotent);
 
     private ResolvedReference? Parent => _resource.Parent;
 
@@ -154,14 +165,14 @@ internal sealed class EndpointEmitter
             {{ResourceEmitter.NamespaceLine(entityNamespace)}}
             public static partial class {{_entity}}Endpoints
             {
-                public static global::Microsoft.AspNetCore.Routing.RouteGroupBuilder Map(
+            {{Constants(entityNamespace)}}    public static global::Microsoft.AspNetCore.Routing.RouteGroupBuilder Map(
                     global::Microsoft.AspNetCore.Routing.IEndpointRouteBuilder endpoints)
                 {
                     var group = endpoints.MapGroup("/{{route}}").WithTags("{{(_resource.Archetype == Archetype.Singleton ? _entity : _plural)}}");
 
             {{tenantFilter}}{{_map}}        return group;
                 }
-            {{_handlers}}
+            {{_transitionMaps}}{{_handlers}}
                 private static {{_entity}}Response ToResponse({{_entity}} item) => new() { {{ResponseAssignments}} };
             }
 
@@ -233,11 +244,47 @@ internal sealed class EndpointEmitter
             EmitArchive("Unarchive", "unarchive", "entity.ArchivedAt = null;");
         }
 
+        if (_resource.Expiry is not null)
+        {
+            EmitExpire();
+        }
+
+        foreach (var transition in _resource.Transitions)
+        {
+            EmitTransition(transition);
+        }
+
         if (_resource.Has(Operations.Update) || _resource.Has(Operations.Patch))
         {
             EmitCycleHelper();
             EmitSyncHelpers();
         }
+    }
+
+    /// <summary>Numara deseni ve ömür gibi, uçların paylaştığı sabitler.</summary>
+    private string Constants(string entityNamespace)
+    {
+        var builder = new StringBuilder();
+
+        if (_resource.Numbering is { } numbering)
+        {
+            // Sayaç adı tam tip adıdır; farklı namespace'lerdeki aynı adlı entity'ler sayaç paylaşmaz.
+            var counter = entityNamespace.Length == 0 ? _entity : $"{entityNamespace}.{_entity}";
+            var sequence = numbering.Gapless ? string.Empty : $", sequence: {ResourceEmitter.Literal(ResourceEmitter.NumberSequence(_resource))}";
+
+            builder.Append(
+                $"    private static readonly global::Haldus.NumberFormat Numbering = new({ResourceEmitter.Literal(counter)}, "
+                + $"{ResourceEmitter.Literal(numbering.Pattern)}, gapless: {(numbering.Gapless ? "true" : "false")}, "
+                + $"perTenant: {(_tenant ? "true" : "false")}{sequence});\n\n");
+        }
+
+        if (_resource.Expiry is { LifetimeTicks: { } ticks })
+        {
+            builder.Append(
+                $"    private static readonly global::System.TimeSpan Lifetime = global::System.TimeSpan.FromTicks({ticks}L);\n\n");
+        }
+
+        return builder.ToString();
     }
 
     private void EmitList()
@@ -257,11 +304,17 @@ internal sealed class EndpointEmitter
             ? string.Empty
             : $"        {self.TargetKeyType}? {ResourceEmitter.CamelCase(self.PropertyName)},\n        bool? roots,\n";
 
+        // Durum makinesi olan kaynak duruma göre süzülebilir; kullanıcının filtresi aynı adı taşıyorsa o geçerlidir.
+        var status = _resource.Workflow is { } workflow && _resource.Filter?.Properties.Any(property => property.Name == "Status") != true
+            ? workflow.StatusType
+            : null;
+        var statusParameter = status is null ? string.Empty : $"        {status}? status,\n";
+
         _handlers.Append($$"""
 
                 private static async {{Task}}<{{Results}}.Ok<global::Haldus.PagedResult<{{_entity}}Response>>> ListAsync(
             {{ScopeParameter}}        [{{Http}}.AsParameters] global::Haldus.PageRequest page,
-            {{(softDelete ? "        bool? includeDeleted,\n" : string.Empty)}}{{(archive ? "        bool? includeArchived,\n" : string.Empty)}}{{treeParameters}}{{FilterParameters()}}{{ContextsParameter}}{{CancellationParameter}}    {
+            {{(softDelete ? "        bool? includeDeleted,\n" : string.Empty)}}{{(archive ? "        bool? includeArchived,\n" : string.Empty)}}{{treeParameters}}{{statusParameter}}{{FilterParameters()}}{{ContextsParameter}}{{CancellationParameter}}    {
                     var query = contexts.For<{{_entity}}>().Set<{{_entity}}>().AsNoTracking(){{ScopeFilter}};
 
             """);
@@ -304,6 +357,18 @@ internal sealed class EndpointEmitter
                         else if (roots == true)
                         {
                             query = query.Where(item => item.{{self.PropertyName}} == null);
+                        }
+
+                """);
+        }
+
+        if (status is not null)
+        {
+            _handlers.Append("""
+
+                        if (status is { } statusValue)
+                        {
+                            query = query.Where(item => item.Status == statusValue);
                         }
 
                 """);
@@ -416,8 +481,34 @@ internal sealed class EndpointEmitter
             keys.Add($"{Parent.PropertyName} = {ParentParameter}");
         }
 
+        if (_resource.Workflow is { } workflow)
+        {
+            // Durum istek gövdesinden gelmez; kayıt her zaman başlangıç durumunda doğar.
+            keys.Add($"Status = {workflow.StatusType}.{workflow.Initial}");
+        }
+
+        if (HasLifetime)
+        {
+            keys.Add($"ExpiresAt = {Now} + Lifetime");
+        }
+
         var assignments = string.Join(
             ", ", keys.Concat(_writable.Select(property => $"{property.Name} = request.{property.Name}")));
+
+        // Numara oluşturulurken atanıyorsa, kayıtla aynı transaction'da ayrılır ve onunla birlikte kalıcı olur.
+        var numbered = _resource.Numbering is { AssignOn: null };
+        var save = numbered
+            ? $$"""
+                    await using var numbering = await global::Haldus.HaldusNumbering.AllocateAsync(context, Numbering, cancellationToken);
+                    entity.Number = numbering.Number;
+                    context.Set<{{_entity}}>().Add(entity);
+                    await context.SaveChangesAsync(cancellationToken);
+                    await numbering.CommitAsync(cancellationToken);
+            """
+            : $$"""
+                    context.Set<{{_entity}}>().Add(entity);
+                    await context.SaveChangesAsync(cancellationToken);
+            """;
 
         // Referans veya ebeveyn bulunamazsa oluşturma reddedilir; dönüş tipi buna göre genişler.
         var returnType = ChecksReferences
@@ -428,7 +519,7 @@ internal sealed class EndpointEmitter
                     group.MapPost("/", CreateAsync)
                         .WithName("Create{{_entity}}")
                         .AddEndpointFilter<global::Haldus.HaldusValidationFilter<Create{{_entity}}Request>>()
-                        .ProducesValidationProblem(){{(Parent is null ? string.Empty : "\n            .ProducesProblem(404)")}};
+                        .ProducesValidationProblem(){{IdempotencyFilter($"Create{_entity}Request")}}{{(Idempotent ? "\n            .ProducesProblem(422)" : string.Empty)}}{{(Parent is null ? string.Empty : "\n            .ProducesProblem(404)")}}{{(_resource.OwnerGuard is null ? string.Empty : "\n            .ProducesProblem(409)")}};
 
 
             """);
@@ -437,12 +528,11 @@ internal sealed class EndpointEmitter
 
                 private static async {{returnType}} CreateAsync(
             {{ScopeParameter}}        Create{{_entity}}Request request,
-            {{HttpContextParameter}}{{ContextsParameter}}{{(ChecksReferences ? MessagesParameter : string.Empty)}}{{CancellationParameter}}    {
-            {{ParentCheck()}}{{ReferenceChecks(patch: false)}}        var entity = new {{_entity}} { {{assignments}} };
+            {{HttpContextParameter}}{{(HasLifetime ? TimeProviderParameter : string.Empty)}}{{ContextsParameter}}{{(ChecksReferences ? MessagesParameter : string.Empty)}}{{CancellationParameter}}    {
+            {{(_resource.OwnerGuard is null ? ParentCheck() : OwnerGuard("create"))}}{{ReferenceChecks(patch: false)}}        var entity = new {{_entity}} { {{assignments}} };
             {{CreateDetails()}}{{Compute()}}
                     var context = contexts.For<{{_entity}}>();
-                    context.Set<{{_entity}}>().Add(entity);
-                    await context.SaveChangesAsync(cancellationToken);
+            {{save}}
 
             {{WriteETag()}}        var location = $"{httpContext.Request.PathBase}{httpContext.Request.Path.Value?.TrimEnd('/')}/{entity.{{_key}}}";
                     return {{Http}}.TypedResults.Created(location, ToResponse(entity));
@@ -459,7 +549,7 @@ internal sealed class EndpointEmitter
                         .WithName("{{operation}}{{_entity}}")
                         .AddEndpointFilter<global::Haldus.HaldusValidationFilter<{{operation}}{{_entity}}Request>>()
                         .ProducesValidationProblem()
-                        .ProducesProblem(404){{ConcurrencyMetadata()}};
+                        .ProducesProblem(404){{StateMetadata(_resource.Workflow?.EditableIn)}}{{ConcurrencyMetadata()}};
 
 
             """);
@@ -468,8 +558,8 @@ internal sealed class EndpointEmitter
 
                 private static async {{OkOrProblem}} {{operation}}Async(
             {{ScopeParameter}}{{KeyParameter}}        {{operation}}{{_entity}}Request request,
-            {{(_concurrency ? HttpContextParameter : string.Empty)}}{{ContextsParameter}}{{MessagesParameter}}{{CancellationParameter}}    {
-            {{ReadIfMatch()}}        var context = contexts.For<{{_entity}}>();
+            {{(_concurrency ? HttpContextParameter : string.Empty)}}{{(Sliding ? TimeProviderParameter : string.Empty)}}{{ContextsParameter}}{{MessagesParameter}}{{CancellationParameter}}    {
+            {{ReadIfMatch()}}{{OwnerGuard("update")}}        var context = contexts.For<{{_entity}}>();
                     var entity = await context.Set<{{_entity}}>(){{Includes}}.FirstOrDefaultAsync(item => {{Match}}, cancellationToken);
 
                     if (entity is null)
@@ -477,8 +567,8 @@ internal sealed class EndpointEmitter
                         return {{NotFound}};
                     }
 
-            {{ReferenceChecks(patch: operation == "Patch")}}{{CycleCheck(patch: operation == "Patch")}}{{ExpectVersion()}}{{assignments}}
-            {{SyncDetails(patch: operation == "Patch")}}{{Compute()}}{{Save()}}
+            {{StateGuard(_resource.Workflow?.EditableIn, "update")}}{{ReferenceChecks(patch: operation == "Patch")}}{{CycleCheck(patch: operation == "Patch")}}{{ExpectVersion()}}{{assignments}}
+            {{SyncDetails(patch: operation == "Patch")}}{{Slide()}}{{Compute()}}{{Save()}}
             {{WriteETag()}}        return {{Http}}.TypedResults.Ok(ToResponse(entity));
                 }
 
@@ -558,7 +648,7 @@ internal sealed class EndpointEmitter
         _map.Append($$"""
                     group.MapDelete("{{_keyRoute}}", DeleteAsync)
                         .WithName("Delete{{_entity}}")
-                        .ProducesProblem(404){{ConcurrencyMetadata()}};
+                        .ProducesProblem(404){{StateMetadata(_resource.Workflow?.DeletableIn)}}{{ConcurrencyMetadata()}};
 
 
             """);
@@ -567,7 +657,7 @@ internal sealed class EndpointEmitter
 
                 private static async {{NoContentOrProblem}} DeleteAsync(
             {{ScopeParameter}}{{KeyParameter}}{{(_concurrency ? HttpContextParameter : string.Empty)}}{{ContextsParameter}}{{MessagesParameter}}{{CancellationParameter}}    {
-            {{ReadIfMatch()}}        var context = contexts.For<{{_entity}}>();
+            {{ReadIfMatch()}}{{OwnerGuard("delete")}}        var context = contexts.For<{{_entity}}>();
                     var entity = await context.Set<{{_entity}}>(){{Includes}}.FirstOrDefaultAsync(item => {{Match}}, cancellationToken);
 
                     if (entity is null)
@@ -575,7 +665,7 @@ internal sealed class EndpointEmitter
                         return {{NotFound}};
                     }
 
-            {{ExpectVersion()}}        context.Set<{{_entity}}>().Remove(entity);
+            {{StateGuard(_resource.Workflow?.DeletableIn, "delete")}}{{ExpectVersion()}}        context.Set<{{_entity}}>().Remove(entity);
             {{SaveDelete()}}
             {{(_resource.Has(Traits.SoftDeletable) ? WriteETag() : string.Empty)}}        return {{Http}}.TypedResults.NoContent();
                 }
@@ -982,6 +1072,260 @@ internal sealed class EndpointEmitter
 
             """);
     }
+
+    /// <summary>Süresi dolmamış bir kaydı hemen sonlandırır. Kayıt silinmez, ama artık okunamaz ve yazılamaz.</summary>
+    private void EmitExpire()
+    {
+        _map.Append($$"""
+                    group.MapPost("{{_keyRoute}}/expire", ExpireAsync)
+                        .WithName("Expire{{_entity}}")
+                        .ProducesProblem(404){{ConcurrencyMetadata()}};
+
+
+            """);
+
+        _handlers.Append($$"""
+
+                private static async {{NoContentOrProblem}} ExpireAsync(
+            {{ScopeParameter}}{{KeyParameter}}{{TimeProviderParameter}}{{(_concurrency ? HttpContextParameter : string.Empty)}}{{ContextsParameter}}{{MessagesParameter}}{{CancellationParameter}}    {
+            {{ReadIfMatch()}}        var context = contexts.For<{{_entity}}>();
+                    var entity = await context.Set<{{_entity}}>().FirstOrDefaultAsync(item => {{Match}}, cancellationToken);
+
+                    if (entity is null)
+                    {
+                        return {{NotFound}};
+                    }
+
+            {{ExpectVersion()}}        entity.ExpiresAt = {{Now}};
+            {{Save()}}
+                    return {{Http}}.TypedResults.NoContent();
+                }
+
+            """);
+    }
+
+    /// <summary>
+    /// Bir geçişin ucunu üretir. Uç, <c>MapTransition</c> çağrısı çalıştığında bağlanır; çağrıya verilen
+    /// lambda (varsa) eşleyiciye parametre olarak gelir. Durum kontrolü, sürüm kontrolü ve kaydetme burada
+    /// üretilir; iş mantığı istek tipinden, lambda'dan veya bir handler sınıfından gelir.
+    /// </summary>
+    private void EmitTransition(TransitionModel transition)
+    {
+        const string Services = "global::System.IServiceProvider";
+        const string Cancellation = "global::System.Threading.CancellationToken";
+
+        var workflow = _resource.Workflow!;
+        var request = transition.RequestType;
+        var method = $"Transition{transition.PascalName}Async";
+        var apply = request is null
+            ? $"global::System.Func<{_entity}, {Services}, {Cancellation}, {Task}>?"
+            : $"global::System.Func<{_entity}, {request}, {Services}, {Cancellation}, {Task}>?";
+
+        // Uç bir lambda ile eşlenir ki çağrıya verilen iş mantığını yakalayabilsin; asıl iş statik metottadır.
+        var parameters = new List<(string Type, string Name)>();
+        if (Parent is not null)
+        {
+            parameters.Add((Parent.TargetKeyType, ParentParameter));
+        }
+
+        parameters.Add((_resource.IdType, _keyParameter));
+        if (request is not null)
+        {
+            parameters.Add((request, "request"));
+        }
+
+        parameters.Add(("global::Microsoft.AspNetCore.Http.HttpContext", "httpContext"));
+        if (Sliding)
+        {
+            parameters.Add(("global::System.TimeProvider", "timeProvider"));
+        }
+
+        parameters.Add(("global::Haldus.IHaldusDbContextProvider", "contexts"));
+        parameters.Add(("global::Haldus.IHaldusMessages", "messages"));
+        parameters.Add((Cancellation, "cancellationToken"));
+
+        var lambdaParameters = string.Join(",\n", parameters.Select(parameter => $"                {parameter.Type} {parameter.Name}"));
+        var arguments = string.Join(", ", parameters.Select(parameter => parameter.Name == "httpContext" ? "apply, httpContext" : parameter.Name));
+
+        // İş mantığı ne istek tipinde ne de lambda'da ise bir handler sınıfı kayıtlı olmalıdır.
+        var requireHandler = request is not null && !transition.ImplementsTransition
+            ? $$"""
+                    if (apply is null)
+                    {
+                        global::Haldus.HaldusTransitionRegistry.RequireHandler<{{_entity}}, {{request}}>(group);
+                    }
+
+
+            """
+            : string.Empty;
+
+        var validation = request is null
+            ? string.Empty
+            : $"\n            .AddEndpointFilter<global::Haldus.HaldusValidationFilter<{request}>>()\n            .ProducesValidationProblem()";
+
+        _transitionMaps.Append($$"""
+
+                public static global::Microsoft.AspNetCore.Builder.RouteHandlerBuilder Map{{transition.PascalName}}Transition(
+                    global::Microsoft.AspNetCore.Routing.IEndpointRouteBuilder group,
+                    {{apply}} apply)
+                {
+            {{requireHandler}}        return group.MapPost("{{_keyRoute}}/{{transition.Route}}", (
+            {{lambdaParameters}}) =>
+                            {{method}}({{arguments}}))
+                        .WithName("{{transition.PascalName}}{{_entity}}"){{validation}}{{IdempotencyFilter(request)}}
+                        .ProducesProblem(404)
+                        .ProducesProblem(409)
+                        .ProducesProblem(422){{ConcurrencyMetadata()}};
+                }
+
+            """);
+
+        var logic = new StringBuilder();
+
+        if (transition.ImplementsTransition)
+        {
+            logic.Append($"            ((global::Haldus.ITransition<{_entity}>)request).Apply(entity);\n\n");
+        }
+
+        logic.Append($$"""
+                        if (apply is not null)
+                        {
+                            await apply(entity, {{(request is null ? string.Empty : "request, ")}}httpContext.RequestServices, cancellationToken);
+                        }
+
+            """);
+
+        if (request is not null)
+        {
+            logic.Append($$"""
+                            else if (global::Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions
+                                .GetService<global::Haldus.ITransitionHandler<{{_entity}}, {{request}}>>(httpContext.RequestServices) is { } handler)
+                            {
+                                await handler.HandleAsync(entity, request, cancellationToken);
+                            }
+
+                """);
+        }
+
+        // Numara bu duruma geçerken atanıyorsa, kayıtla aynı transaction'da ayrılır; daha önce atanmışsa korunur.
+        var numbered = _resource.Numbering is { AssignOn: { } assignOn } && assignOn == transition.To;
+        var allocate = numbered
+            ? """
+                    await using var numbering = entity.Number is null
+                        ? await global::Haldus.HaldusNumbering.AllocateAsync(context, Numbering, cancellationToken)
+                        : null;
+
+                    if (numbering is not null)
+                    {
+                        entity.Number = numbering.Number;
+                    }
+
+
+            """
+            : string.Empty;
+        var commit = numbered
+            ? """
+
+                    if (numbering is not null)
+                    {
+                        await numbering.CommitAsync(cancellationToken);
+                    }
+
+            """
+            : string.Empty;
+
+        _handlers.Append($$"""
+
+                private static async {{OkOrProblem}} {{method}}(
+            {{ScopeParameter}}{{KeyParameter}}{{(request is null ? string.Empty : $"        {request} request,\n")}}        {{apply}} apply,
+            {{HttpContextParameter}}{{(Sliding ? TimeProviderParameter : string.Empty)}}{{ContextsParameter}}{{MessagesParameter}}{{CancellationParameter}}    {
+            {{ReadIfMatch()}}        var context = contexts.For<{{_entity}}>();
+                    var entity = await context.Set<{{_entity}}>(){{Includes}}.FirstOrDefaultAsync(item => {{Match}}, cancellationToken);
+
+                    if (entity is null)
+                    {
+                        return {{NotFound}};
+                    }
+
+            {{StateGuard(transition.From, transition.Route)}}{{ExpectVersion()}}        try
+                    {
+            {{logic}}        }
+                    catch (global::Haldus.TransitionRejectedException rejection)
+                    {
+                        return {{Problems}}.TransitionRejected(messages, rejection.Message);
+                    }
+
+                    entity.Status = {{workflow.StatusType}}.{{transition.To}};
+            {{Slide()}}{{Compute()}}{{allocate}}{{Save()}}{{commit}}
+            {{WriteETag()}}        return {{Http}}.TypedResults.Ok(ToResponse(entity));
+                }
+
+            """);
+    }
+
+    /// <summary>Kayıt sayılan durumlardan birinde değilse işlemi çakışma olarak reddeder.</summary>
+    private string StateGuard(EquatableArray<string>? allowed, string operation)
+    {
+        if (_resource.Workflow is not { } workflow || allowed is not { } states)
+        {
+            return string.Empty;
+        }
+
+        return $$"""
+                    if (entity.Status is not ({{States(workflow.StatusType, states)}}))
+                    {
+                        return {{Problems}}.StateConflict(messages, "{{operation}}", entity.Status);
+                    }
+
+
+            """;
+    }
+
+    private static string States(string statusType, IEnumerable<string> states) =>
+        string.Join(" or ", states.Select(state => $"{statusType}.{state}"));
+
+    private string StateMetadata(EquatableArray<string>? allowed) =>
+        allowed is null && _resource.OwnerGuard is null ? string.Empty : "\n            .ProducesProblem(409)";
+
+    /// <summary>
+    /// Ayrı uçlu bir detay sahibinin parçasıdır: sahibi düzenlenemeyen bir durumdaysa detayı da yazılamaz.
+    /// Sahibin görünür olduğu da burada doğrulanır.
+    /// </summary>
+    private string OwnerGuard(string operation)
+    {
+        if (_resource.OwnerGuard is not { } guard || Parent is null)
+        {
+            return string.Empty;
+        }
+
+        return $$"""
+                    var ownerStatus = await contexts.For<{{Parent.TargetType}}>().Set<{{Parent.TargetType}}>()
+                        .Where(parent => parent.{{Parent.TargetKeyName}} == {{ParentParameter}})
+                        .Select(parent => ({{guard.StatusType}}?)parent.Status)
+                        .FirstOrDefaultAsync(cancellationToken);
+
+                    if (ownerStatus is null)
+                    {
+                        return {{Problems}}.NotFound(messages, "{{Parent.TargetName}}", {{ParentParameter}});
+                    }
+
+                    if (ownerStatus is not ({{States(guard.StatusType, guard.EditableIn)}}))
+                    {
+                        return {{Problems}}.StateConflict(messages, "{{operation}}", ownerStatus);
+                    }
+
+
+            """;
+    }
+
+    /// <summary>Kayan ömürde her başarılı yazma süreyi yeniden başlatır.</summary>
+    private string Slide() => Sliding ? $"        entity.ExpiresAt = {Now} + Lifetime;\n" : string.Empty;
+
+    /// <summary>Ucu <c>Idempotency-Key</c> ile tekrara karşı korur; doğrulamadan sonra çalışır ki geçersiz istek veritabanına dokunmasın.</summary>
+    private string IdempotencyFilter(string? requestType) => Idempotent
+        ? $"\n            .AddEndpointFilter(new global::Haldus.HaldusIdempotencyFilter<{_entity}>("
+            + $"{(requestType is null ? "null" : $"typeof({requestType})")}, required: {(_resource.Has(Traits.IdempotencyRequired) ? "true" : "false")}))"
+        : string.Empty;
 
     /// <summary>Entity hesaplanan alanlar taşıyorsa, istek uygulandıktan sonra ve kaydetmeden önce hesaplatır.</summary>
     private string Compute() => _resource.IsComputed
