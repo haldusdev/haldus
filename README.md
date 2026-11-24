@@ -371,6 +371,10 @@ app.MapCrud<Invoice>().Attachable<Attachment>().Commentable<Comment>();
 | `.Attachable<TFile>()`, `.Commentable<TComment>()` | Aynı bildirimin hedef tarafında yazılan biçimi: `TFile` / `TComment` bu kaynağa da takılabilir |
 | `.Taggable<TTag>()` | `MapAssociation<TEntity, TTag>()` ile aynıdır; etiketler `PUT /{id}/tags` ile topluca değişir |
 
+Yetkilendirme gibi kurallar her kaynağın kendi `Map` çağrısına eklenir: `/orders/{orderId}/attachments` uçlarını
+`app.MapFile<Attachment>()` eşler ve kurallarını da o çağrı taşır. Etiket bağının uçları ise (`Taggable`) etiketlenen
+kaynağın kurallarını alır.
+
 Dosya içerikleri varsayılan olarak veritabanında saklanır (ek altyapı gerekmez, içerik ve kayıt birlikte kalıcı
 olur). `builder.Services.AddHaldusFileSystemStorage(path)` içerikleri bir klasöre taşır; başka bir depo
 `IHaldusFileStorage` uygulanarak eklenir. İndirilen içerik her zaman ek olarak (`attachment`) ve `nosniff` ile

@@ -9,9 +9,14 @@ namespace Haldus;
 /// bir şey yapmaz; generator onları derleme zamanında okur. Builder aynı zamanda bir route group gibi
 /// davranır, yani standart Minimal API çağrıları zincire eklenebilir.
 /// </summary>
-public sealed class ResourceBuilder<TEntity>(RouteGroupBuilder group) : IEndpointRouteBuilder, IEndpointConventionBuilder
+public sealed class ResourceBuilder<TEntity>(RouteGroupBuilder group, IEndpointRouteBuilder? root = null) : IEndpointRouteBuilder, IEndpointConventionBuilder
     where TEntity : class
 {
+    // Kaynağın adresinin dışında kalan ama onunla birlikte eşlenen uçlar (etiket bağları). Builder'a eklenen her
+    // kural (yetkilendirme, hız sınırı) onlara da uygulanır; zincirdeki sırasından bağımsız olarak.
+    private readonly List<IEndpointConventionBuilder> _companions = [];
+    private readonly List<Action<IEndpointConventionBuilder>> _conventions = [];
+
     public RouteGroupBuilder Group { get; } = group;
 
     IServiceProvider IEndpointRouteBuilder.ServiceProvider => ((IEndpointRouteBuilder)Group).ServiceProvider;
@@ -102,7 +107,26 @@ public sealed class ResourceBuilder<TEntity>(RouteGroupBuilder group) : IEndpoin
     /// yazmakla aynıdır (<c>PUT</c> / <c>DELETE /{id}/tags/{tagId}</c>, etiketleri topluca değiştiren <c>PUT /{id}/tags</c>).
     /// </summary>
     public ResourceBuilder<TEntity> Taggable<TTag>()
-        where TTag : class => this;
+        where TTag : class
+    {
+        if (root is null)
+        {
+            throw new InvalidOperationException(
+                $"Taggable<{typeof(TTag).Name}>() maps endpoints outside the address of '{typeof(TEntity).Name}', " +
+                "so it must be called on the builder a Map call returned.");
+        }
+
+        // Bağın uçları iki kaynağın adresi altındadır; kaynağın grubuna değil köke eşlenir ve kuralları buradan alır.
+        var links = HaldusEndpointRegistry.MapAssociation<TEntity, TTag>(root);
+
+        foreach (var convention in _conventions)
+        {
+            convention(links);
+        }
+
+        _companions.Add(links);
+        return this;
+    }
 
     /// <summary>
     /// Kaydı belirli bir dönemde geçerli kılar: <c>EffectiveFrom</c> (zorunlu) ve <c>EffectiveTo</c> (boşsa hâlâ
@@ -350,8 +374,19 @@ public sealed class ResourceBuilder<TEntity>(RouteGroupBuilder group) : IEndpoin
         ((IEndpointRouteBuilder)Group).CreateApplicationBuilder();
 
     void IEndpointConventionBuilder.Add(Action<EndpointBuilder> convention) =>
-        ((IEndpointConventionBuilder)Group).Add(convention);
+        Apply(builder => builder.Add(convention));
 
     void IEndpointConventionBuilder.Finally(Action<EndpointBuilder> finallyConvention) =>
-        ((IEndpointConventionBuilder)Group).Finally(finallyConvention);
+        Apply(builder => builder.Finally(finallyConvention));
+
+    private void Apply(Action<IEndpointConventionBuilder> convention)
+    {
+        _conventions.Add(convention);
+        convention(Group);
+
+        foreach (var companion in _companions)
+        {
+            convention(companion);
+        }
+    }
 }

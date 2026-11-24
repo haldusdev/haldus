@@ -14,7 +14,7 @@ public static class HaldusEndpointRouteBuilderExtensions
     /// </summary>
     public static ResourceBuilder<TEntity> MapCrud<TEntity>(this IEndpointRouteBuilder endpoints)
         where TEntity : class =>
-        new(HaldusEndpointRegistry.Map<TEntity>(endpoints, nameof(MapCrud)));
+        new(HaldusEndpointRegistry.Map<TEntity>(endpoints, nameof(MapCrud)), endpoints);
 
     /// <summary>
     /// Asıl içeriği bayt akışı olan kaynak. Kayıt <c>POST</c> ile (adı ve kendi alanlarıyla) oluşturulur, içeriği
@@ -28,24 +28,24 @@ public static class HaldusEndpointRouteBuilderExtensions
         long maxBytes = 10 * 1024 * 1024,
         params string[] contentTypes)
         where TEntity : class =>
-        new(HaldusEndpointRegistry.Map<TEntity>(endpoints, nameof(MapFile)));
+        new(HaldusEndpointRegistry.Map<TEntity>(endpoints, nameof(MapFile)), endpoints);
 
     /// <summary>İstemcinin hiç yazmadığı kaynak: yalnızca liste ve tekil okuma.</summary>
     public static ResourceBuilder<TEntity> MapReadOnly<TEntity>(this IEndpointRouteBuilder endpoints)
         where TEntity : class =>
-        new(HaldusEndpointRegistry.Map<TEntity>(endpoints, nameof(MapReadOnly)));
+        new(HaldusEndpointRegistry.Map<TEntity>(endpoints, nameof(MapReadOnly)), endpoints);
 
     /// <summary>İstemcinin oluşturduğu ama sonradan değiştirilemeyen ve silinemeyen kayıtlar.</summary>
     public static ResourceBuilder<TEntity> MapAppendOnly<TEntity>(this IEndpointRouteBuilder endpoints)
         where TEntity : class =>
-        new(HaldusEndpointRegistry.Map<TEntity>(endpoints, nameof(MapAppendOnly)));
+        new(HaldusEndpointRegistry.Map<TEntity>(endpoints, nameof(MapAppendOnly)), endpoints);
 
     /// <summary>
     /// Anahtarını istemcinin verdiği kayıtlar: <c>PUT /{key}</c> kayıt yoksa oluşturur, varsa tam değiştirir.
     /// </summary>
     public static ResourceBuilder<TEntity> MapStore<TEntity>(this IEndpointRouteBuilder endpoints)
         where TEntity : class =>
-        new(HaldusEndpointRegistry.Map<TEntity>(endpoints, nameof(MapStore)));
+        new(HaldusEndpointRegistry.Map<TEntity>(endpoints, nameof(MapStore)), endpoints);
 
     /// <summary>
     /// Kod ve ad taşıyan küçük referans listesi (ülke, para birimi): sayfalamasız tam liste, koda göre
@@ -53,7 +53,7 @@ public static class HaldusEndpointRouteBuilderExtensions
     /// </summary>
     public static ResourceBuilder<TEntity> MapLookup<TEntity>(this IEndpointRouteBuilder endpoints)
         where TEntity : class =>
-        new(HaldusEndpointRegistry.Map<TEntity>(endpoints, nameof(MapLookup)));
+        new(HaldusEndpointRegistry.Map<TEntity>(endpoints, nameof(MapLookup)), endpoints);
 
     /// <summary>
     /// Kapsam başına tam bir kayıt (ayarlar gibi). Kayıt örtük olarak vardır: hiç yazılmadıysa okuma
@@ -61,7 +61,7 @@ public static class HaldusEndpointRouteBuilderExtensions
     /// </summary>
     public static ResourceBuilder<TEntity> MapSingleton<TEntity>(this IEndpointRouteBuilder endpoints)
         where TEntity : class =>
-        new(HaldusEndpointRegistry.Map<TEntity>(endpoints, nameof(MapSingleton)));
+        new(HaldusEndpointRegistry.Map<TEntity>(endpoints, nameof(MapSingleton)), endpoints);
 
     /// <summary>
     /// İsteği aşan bir iş (rapor üretme, içe aktarma): <c>POST</c> işi oluşturur ve hemen 202 döner, iş arka

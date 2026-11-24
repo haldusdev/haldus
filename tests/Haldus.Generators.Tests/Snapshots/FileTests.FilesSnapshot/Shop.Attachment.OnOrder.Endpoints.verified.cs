@@ -227,13 +227,18 @@ public static partial class AttachmentOnOrderEndpoints
             return global::Haldus.HaldusProblems.NotFound(messages, "Attachment", id);
         }
 
-        if (await global::Haldus.HaldusFiles.ReceiveAsync(
-            httpContext, context, entity, MaxFileBytes, FileContentTypes, messages, cancellationToken) is { } rejected)
+        var upload = await global::Haldus.HaldusFiles.ReceiveAsync(
+            httpContext, context, entity, MaxFileBytes, FileContentTypes, messages, cancellationToken);
+
+        if (upload.Rejected is { } rejected)
         {
             return rejected;
         }
 
         await context.SaveChangesAsync(cancellationToken);
+
+        // Kayıt yeni içeriğe geçti; yerine geçtiği eski içerik ancak şimdi kaldırılır.
+        await upload.CompleteAsync(cancellationToken);
 
         return global::Microsoft.AspNetCore.Http.TypedResults.Ok(ToResponse(entity));
     }

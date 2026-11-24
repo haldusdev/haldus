@@ -5,8 +5,10 @@ using System.Security.Cryptography;
 using System.Text;
 using Haldus.Sample.Shop.Features.Content;
 using Haldus.Sample.Shop.Features.Supply;
+using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Haldus.IntegrationTests;
 
@@ -94,6 +96,25 @@ public sealed class FileEndpointTests(ShopFixture fixture)
 
         // Jokerli tür kabul edilir; tam sınırdaki içerik de.
         Assert.Equal(HttpStatusCode.OK, (await UploadAsync(url, new byte[1024 * 1024], "image/png")).StatusCode);
+
+        // Reddedilen bir yükleme var olan içeriğe dokunmaz.
+        var kept = await ReadAsync<AttachmentResponse>(await UploadAsync(url, Encoding.UTF8.GetBytes("keep me"), "text/plain"));
+        Assert.Equal(HttpStatusCode.BadRequest, (await UploadAsync(url, [], "text/plain")).StatusCode);
+        Assert.Equal(HttpStatusCode.RequestEntityTooLarge, (await UploadAsync(url, new byte[1024 * 1024 + 1], "text/plain")).StatusCode);
+
+        var after = await ReadAsync<AttachmentResponse>(await SendAsync(HttpMethod.Get, $"/articles/{article.Id}/attachments/{file.Id}"));
+        Assert.Equal((kept.Size, kept.Checksum), (after.Size, after.Checksum));
+        Assert.Equal("keep me", await (await SendAsync(HttpMethod.Get, url)).Content.ReadAsStringAsync(CancellationToken));
+
+        // Depoda yalnızca geçerli içerik durur: yerine geçilen ve reddedilen içerikler kalmaz.
+        await fixture.WithDbContextAsync(async context =>
+        {
+            var key = (await context.Set<Attachment>().SingleAsync(item => item.Id == file.Id, CancellationToken)).StorageKey!;
+            var stored = await context.Set<HaldusFileContent>().Where(content => content.Key.StartsWith("Attachment/")).Select(content => content.Key).ToListAsync(CancellationToken);
+
+            Assert.Contains(key, stored);
+            Assert.Equal(await context.Set<Attachment>().CountAsync(item => item.StorageKey != null, CancellationToken), stored.Count);
+        });
 
         // Dosya adı zorunludur.
         Assert.Equal(HttpStatusCode.BadRequest, (await SendAsync(HttpMethod.Post, $"/articles/{article.Id}/attachments", new { caption = "nameless" })).StatusCode);
@@ -251,6 +272,49 @@ public sealed class FileEndpointTests(ShopFixture fixture)
 
         Assert.Equal(HttpStatusCode.NoContent, (await SendAsync(HttpMethod.Delete, $"/articles/{article.Id}/labels/{first}")).StatusCode);
         Assert.Equal(HttpStatusCode.NotFound, (await SendAsync(HttpMethod.Get, $"/articles/{article.Id}/labels/{first}")).StatusCode);
+    }
+
+    [Fact]
+    public void Taggable_AppliesTheConventionsOfTheResourceToItsTagEndpoints()
+    {
+        // Yetkilendirme gibi kurallar kaynağın builder'ına eklenir; etiket bağının uçları kaynağın adresinin
+        // dışında eşlense de aynı kuralları almalıdır, zincirde Taggable'dan önce de sonra da yazılsa.
+        foreach (var before in new[] { true, false })
+        {
+            var builder = Microsoft.AspNetCore.Builder.WebApplication.CreateBuilder();
+            builder.Services.AddAuthorization();
+            builder.Services.AddDbContext<Haldus.Sample.Shop.AppDbContext>(options => options.UseNpgsql("Host=unused"));
+            builder.Services.AddHaldus<Haldus.Sample.Shop.AppDbContext>();
+
+            using var app = builder.Build();
+            app.MapLookup<Label>();
+
+            if (before)
+            {
+                app.MapCrud<Article>().RequireAuthorization().Taggable<Label>();
+            }
+            else
+            {
+                app.MapCrud<Article>().Taggable<Label>().RequireAuthorization();
+            }
+
+            var endpoints = ((Microsoft.AspNetCore.Routing.IEndpointRouteBuilder)app).DataSources
+                .SelectMany(source => source.Endpoints)
+                .OfType<Microsoft.AspNetCore.Routing.RouteEndpoint>()
+                .ToList();
+
+            var tagging = endpoints.Where(endpoint => endpoint.RoutePattern.RawText!.Contains("/labels", StringComparison.Ordinal)
+                && endpoint.RoutePattern.RawText.Contains("articles", StringComparison.Ordinal)).ToList();
+            var lookup = endpoints.Where(endpoint => endpoint.RoutePattern.RawText!.StartsWith("/labels", StringComparison.Ordinal)
+                && !endpoint.RoutePattern.RawText.Contains("articles", StringComparison.Ordinal)).ToList();
+
+            Assert.NotEmpty(tagging);
+            Assert.All(tagging, endpoint => Assert.NotNull(endpoint.Metadata.GetMetadata<Microsoft.AspNetCore.Authorization.IAuthorizeData>()));
+
+            // Kural yalnızca o kaynağın uçlarına uygulanır; etiket kaynağının kendi uçları ona kalmıştır.
+            Assert.NotEmpty(lookup);
+            Assert.All(lookup, endpoint => Assert.Null(endpoint.Metadata.GetMetadata<Microsoft.AspNetCore.Authorization.IAuthorizeData>()));
+        }
     }
 
     private async Task<ArticleResponse> CreateArticleAsync() =>

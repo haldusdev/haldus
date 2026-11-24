@@ -650,6 +650,9 @@ Raporun v1 listesindeki "uzatma kancaları" plana girmedi ve yazılmadı: rapord
   - Depo `IHaldusFileStorage`'dır ve bağlamı parametre alır: veritabanı deposu içeriği dosya kaydıyla aynı
     kaydetmede yazar. İçerik, kayıt silindikten sonra kaldırılır (`SaveDelete` içinde `HaldusFiles.ReleaseAsync`).
     Dosya sistemi deposunda anahtarı Haldus üretir; yine de klasörün dışını gösteren anahtar reddedilir.
+  - **İçerik her yüklemede yeni bir anahtara yazılır**; kayıt ancak içerik kabul edilince ona geçer ve eski içerik
+    kayıt kaydedildikten sonra kaldırılır (`FileUpload.CompleteAsync`). Aynı anahtarın üzerine yazmak, reddedilen
+    (boş veya çok büyük) bir yüklemenin var olan içeriği bozmasına yol açıyordu (güvenlik incelemesinde çıktı).
   - İndirilen içerik `attachment` olarak ve `X-Content-Type-Options: nosniff` ile gönderilir: tür yükleyenin
     beyanıdır. **İçeriği tarayıcıda açılacak biçimde (`inline`) sunan bir seçenek eklenirse tür beyaz listesi
     zorunlu olmalıdır.**
@@ -662,8 +665,16 @@ Raporun v1 listesindeki "uzatma kancaları" plana girmedi ve yazılmadı: rapord
   `ReferenceKind.Attachment` olarak çözülür (isteğe bağlı, istekle yazılamayan yabancı anahtar). Hedef tarafında
   yazılan `Attachable` / `Commentable` bildirimleri (`ResourceModel.ReverseAttachments`) bağlayıcının ilk adımında
   çocuğun bildirimine çevrilir (`ResourceLinker.MergeReverseAttachments`); `Taggable` ise
-  `HaldusGenerator.Emit` içinde bir `AssociationDeclaration`'a dönüşür ve bağın uçları kaynağın kendi `Map`
-  metodunda eşlenir (ayrı bir `MapAssociation` çağrısı olmadığı için).
+  `HaldusGenerator.Emit` içinde bir `AssociationDeclaration`'a dönüşür.
+  - **`Taggable` çalışma zamanında boş değildir:** bağın uçlarını o eşler (`ResourceBuilder.Taggable`), çünkü ayrı
+    bir `MapAssociation` çağrısı yoktur. Bağın uçları kaynağın grubunun dışında, kökte durur; builder kendisine
+    eklenen her kuralı (yetkilendirme, hız sınırı) saklar ve bu "yoldaş" gruplara da uygular, zincirde
+    `Taggable`'dan önce de sonra da yazılsa. İlk yazımda uçlar üretilen `Map` metodunda köke eşleniyordu ve
+    kaynağa eklenen yetkilendirme onlara ulaşmıyordu (güvenlik incelemesinde çıktı). **Bir kaynağın builder'ından
+    eşlenen ama grubunun dışında kalan her yeni uç aynı yoldan (`_companions`) geçmelidir.**
+  - `Attachable` / `Commentable` ise çalışma zamanında boştur: takılı kaynağın uçlarını kendi `Map` çağrısı
+    (`app.MapFile<Attachment>()`) eşler ve kuralları da o çağrının builder'ı taşır; hedefin builder'ına eklenen
+    kural takılı kaynağa uygulanmaz.
   - Uçlar hedef başına bir kez üretilir: `HaldusGenerator` kaynağın, o hedef tek ebeveyniymiş gibi bir kopyasını
     kurar ve `EndpointEmitter`'dan geçirir; sınıf adı (`{Kaynak}On{Hedef}Endpoints`) ve işlem adları (`WithName`)
     üretilen metinde hedefin adıyla değiştirilir. `EmitAttached` hepsini ortak bir grubun altında eşleyen giriş

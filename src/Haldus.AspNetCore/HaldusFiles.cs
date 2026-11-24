@@ -16,11 +16,13 @@ public static class HaldusFiles
 {
     /// <summary>
     /// İsteğin gövdesini dosyanın içeriği olarak depoya yazar ve kaydın alanlarını doldurur; kaydetmek çağıranın
-    /// işidir. İçerik kabul edilmezse nedenini söyleyen yanıtı döndürür ve kayıt değişmez.
+    /// işidir. İçerik her zaman yeni bir anahtara yazılır ve kayıt ancak içerik kabul edildikten sonra ona geçer:
+    /// reddedilen bir yükleme (boş, çok büyük) var olan içeriğe dokunmaz. Çağıran, kaydı kaydettikten sonra
+    /// <see cref="FileUpload.CompleteAsync"/> ile eski içeriği kaldırır.
     /// </summary>
     /// <param name="maxBytes">Kabul edilen en büyük içerik.</param>
     /// <param name="contentTypes">Kabul edilen türler (<c>image/png</c>, <c>image/*</c>); boşsa her tür kabul edilir.</param>
-    public static async Task<ProblemHttpResult?> ReceiveAsync<TEntity>(
+    public static async Task<FileUpload> ReceiveAsync<TEntity>(
         HttpContext httpContext,
         DbContext context,
         TEntity file,
@@ -40,12 +42,12 @@ public static class HaldusFiles
 
         if (contentTypes.Count > 0 && !contentTypes.Any(allowed => Matches(allowed, contentType)))
         {
-            return HaldusProblems.FileTypeNotAllowed(messages, contentType ?? string.Empty);
+            return FileUpload.Reject(HaldusProblems.FileTypeNotAllowed(messages, contentType ?? string.Empty));
         }
 
         if (request.ContentLength > maxBytes)
         {
-            return HaldusProblems.FileTooLarge(messages, maxBytes);
+            return FileUpload.Reject(HaldusProblems.FileTooLarge(messages, maxBytes));
         }
 
         // Sunucunun kendi gövde sınırı daha küçükse bu uç için yükseltilir; daha büyükse bizimki geçerlidir.
@@ -55,7 +57,8 @@ public static class HaldusFiles
         }
 
         var storage = context.GetService<IHaldusFileStorage>();
-        var key = file.StorageKey ?? $"{typeof(TEntity).Name}/{Guid.NewGuid():N}";
+        var key = $"{typeof(TEntity).Name}/{Guid.NewGuid():N}";
+        var replaced = file.StorageKey;
 
         using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
         await using var content = new MeasuredStream(request.Body, maxBytes, hash);
@@ -66,12 +69,14 @@ public static class HaldusFiles
         }
         catch (FileTooLargeException)
         {
-            return HaldusProblems.FileTooLarge(messages, maxBytes);
+            await storage.DeleteAsync(context, key, cancellationToken);
+            return FileUpload.Reject(HaldusProblems.FileTooLarge(messages, maxBytes));
         }
 
         if (content.Length == 0)
         {
-            return HaldusProblems.FileEmpty(messages);
+            await storage.DeleteAsync(context, key, cancellationToken);
+            return FileUpload.Reject(HaldusProblems.FileEmpty(messages));
         }
 
         file.StorageKey = key;
@@ -80,7 +85,7 @@ public static class HaldusFiles
         file.Checksum = Convert.ToHexStringLower(hash.GetHashAndReset());
         file.Status = FileStatus.Uploaded;
         file.UploadedAt = HaldusTime.UtcNow(context.GetService<TimeProvider>());
-        return null;
+        return new FileUpload(null, storage, context, replaced);
     }
 
     /// <summary>Dosyanın içeriğini gönderir; içerik henüz yüklenmediyse 404 döner.</summary>
@@ -129,6 +134,33 @@ public static class HaldusFiles
         return file.StorageKey is { } key
             ? context.GetService<IHaldusFileStorage>().DeleteAsync(context, key, cancellationToken)
             : Task.CompletedTask;
+    }
+
+    /// <summary>Bir yüklemenin sonucu: reddedildiyse nedeni; kabul edildiyse yerine geçtiği eski içerik.</summary>
+    public readonly struct FileUpload
+    {
+        private readonly IHaldusFileStorage? _storage;
+        private readonly DbContext? _context;
+        private readonly string? _replaced;
+
+        internal FileUpload(ProblemHttpResult? rejected, IHaldusFileStorage? storage, DbContext? context, string? replaced)
+        {
+            Rejected = rejected;
+            _storage = storage;
+            _context = context;
+            _replaced = replaced;
+        }
+
+        /// <summary>İçerik kabul edilmediyse nedenini söyleyen yanıt; kabul edildiyse <c>null</c>.</summary>
+        public ProblemHttpResult? Rejected { get; }
+
+        internal static FileUpload Reject(ProblemHttpResult problem) => new(problem, null, null, null);
+
+        /// <summary>Kayıt kaydedildikten sonra çağrılır: yeni içeriğin yerine geçtiği eski içeriği depodan kaldırır.</summary>
+        public Task CompleteAsync(CancellationToken cancellationToken) =>
+            _replaced is not null && _storage is not null && _context is not null
+                ? _storage.DeleteAsync(_context, _replaced, cancellationToken)
+                : Task.CompletedTask;
     }
 
     private static bool Matches(string allowed, string? contentType)

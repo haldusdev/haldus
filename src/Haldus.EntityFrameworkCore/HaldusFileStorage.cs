@@ -72,6 +72,15 @@ public sealed class HaldusDatabaseFileStorage : IHaldusFileStorage
         }
     }
 
+    // Henüz kaydedilmemiş (yazılıp vazgeçilmiş) içerik de bağlamdan çıkarılır; yoksa bir sonraki kaydetmeyle yazılırdı.
+    private static void Forget(DbContext context, string key)
+    {
+        foreach (var pending in context.ChangeTracker.Entries<HaldusFileContent>().Where(entry => entry.Entity.Key == key).ToList())
+        {
+            pending.State = EntityState.Detached;
+        }
+    }
+
     public async Task<Stream?> OpenReadAsync(DbContext context, string key, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(context);
@@ -88,6 +97,8 @@ public sealed class HaldusDatabaseFileStorage : IHaldusFileStorage
     public Task DeleteAsync(DbContext context, string key, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(context);
+
+        Forget(context, key);
         return context.Set<HaldusFileContent>().Where(stored => stored.Key == key).ExecuteDeleteAsync(cancellationToken);
     }
 }

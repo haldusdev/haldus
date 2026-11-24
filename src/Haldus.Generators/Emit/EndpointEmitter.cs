@@ -189,10 +189,6 @@ internal sealed partial class EndpointEmitter
             tenantFilter += "        group.AddEndpointFilter<global::Haldus.HaldusUserRequiredFilter>();\n\n";
         }
 
-        // Taggable<T>() bir çoktan-çoğa bağdır, ama ayrı bir MapAssociation çağrısı yoktur; bağın uçları kaynağın
-        // kendi uçlarıyla birlikte eşlenir.
-        var tagMaps = string.Concat(_resource.TagDeclarations.Select(tag =>
-            $"        {_entity}{tag.ChildName}Endpoints.Map(endpoints);\n\n"));
 
         return $$"""
             {{ResourceEmitter.Header}}
@@ -210,7 +206,7 @@ internal sealed partial class EndpointEmitter
                 {
                     var group = endpoints.MapGroup("/{{route}}").WithTags("{{(_resource.Archetype == Archetype.Singleton ? _entity : _plural)}}");
 
-            {{tenantFilter}}{{_map}}{{tagMaps}}        return group;
+            {{tenantFilter}}{{_map}}        return group;
                 }
             {{_transitionMaps}}{{_handlers}}
                 private static {{_entity}}Response ToResponse({{_entity}} item) => new() { {{ResponseAssignments}} };
@@ -2821,13 +2817,18 @@ internal sealed partial class EndpointEmitter
                         return {{NotFound}};
                     }
 
-            {{ChainGuard()}}{{ExpectVersion()}}        if (await global::Haldus.HaldusFiles.ReceiveAsync(
-                        httpContext, context, entity, MaxFileBytes, FileContentTypes, messages, cancellationToken) is { } rejected)
+            {{ChainGuard()}}{{ExpectVersion()}}        var upload = await global::Haldus.HaldusFiles.ReceiveAsync(
+                        httpContext, context, entity, MaxFileBytes, FileContentTypes, messages, cancellationToken);
+
+                    if (upload.Rejected is { } rejected)
                     {
                         return rejected;
                     }
 
             {{Save()}}
+                    // Kayıt yeni içeriğe geçti; yerine geçtiği eski içerik ancak şimdi kaldırılır.
+                    await upload.CompleteAsync(cancellationToken);
+
             {{WriteETag()}}        return {{Http}}.TypedResults.Ok(ToResponse(entity));
                 }
 

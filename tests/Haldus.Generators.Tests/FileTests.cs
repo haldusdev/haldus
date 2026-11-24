@@ -89,7 +89,10 @@ public sealed class FileTests
         // Yükleme kaydın bir yazmasıdır: sürüm ister; sınırlar ve depo çalışma zamanındadır.
         var upload = Handler(endpoints, "UploadAsync");
         Assert.Contains("PreconditionRequired(messages)", upload);
-        Assert.Contains("httpContext, context, entity, MaxFileBytes, FileContentTypes, messages, cancellationToken) is { } rejected", upload);
+        Assert.Contains("httpContext, context, entity, MaxFileBytes, FileContentTypes, messages, cancellationToken);", upload);
+
+        // Eski içerik ancak kayıt yeni içeriğe geçip kaydedildikten sonra kaldırılır.
+        Assert.True(upload.IndexOf("SaveChangesAsync", StringComparison.Ordinal) < upload.IndexOf("upload.CompleteAsync(cancellationToken)", StringComparison.Ordinal));
 
         // İndirme kaydı kaynağın kendi filtrelerinden geçirerek bulur.
         var download = Handler(endpoints, "DownloadAsync");
@@ -230,8 +233,12 @@ public sealed class FileTests
         Assert.Contains("""MapPut("/orders/{orderId:guid}/lines/{lineCode}", LinkAsync)""", endpoints);
         Assert.Contains("""MapPut("/orders/{orderId:guid}/lines", ReplaceLinesAsync)""", endpoints);
 
-        // Ayrı bir MapAssociation çağrısı yoktur; bağın uçları kaynağın uçlarıyla birlikte eşlenir.
-        Assert.Contains("OrderLineEndpoints.Map(endpoints);", run.Sources["Shop.Order.Endpoints.g.cs"]);
+        // Bağın uçlarını üretilen kod değil Taggable çağrısının kendisi eşler: ancak böyle, kaynağın builder'ına
+        // eklenen kurallar (yetkilendirme gibi) bağın uçlarına da uygulanabilir.
+        Assert.DoesNotContain("OrderLineEndpoints", run.Sources["Shop.Order.Endpoints.g.cs"]);
+        Assert.Contains(
+            "RegisterAssociation<global::Shop.Order, global::Shop.Line>(global::Shop.OrderLineEndpoints.Map);",
+            run.Sources["HaldusModule.g.cs"]);
     }
 
     [Theory]
