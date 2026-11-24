@@ -370,6 +370,7 @@ internal enum Traits
     Translatable = 16777216,
     Purgeable = 33554432,
     Rerunnable = 67108864,
+    PublishesEvents = 134217728,
 }
 
 /// <summary>

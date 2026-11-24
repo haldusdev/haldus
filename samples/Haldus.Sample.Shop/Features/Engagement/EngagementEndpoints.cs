@@ -26,7 +26,8 @@ public static class EngagementEndpoints
         // Silinen yanıt sayılmaz; geri yüklenince yeniden sayılır.
         app.MapCrud<Reply>()
             .Under<Discussion>()
-            .SoftDeletable();
+            .SoftDeletable()
+            .PublishesEvents();
 
         // Kimlik numarası hassastır: isteklerde yazılır, hiçbir yanıtta ve saklanan sürümde yer almaz.
         // Ölçüte uyan kayıtlar topluca silinir: POST /contacts/purge?source=import-2024 önce sayar,
@@ -43,7 +44,12 @@ public static class EngagementEndpoints
         var tickets = app.MapCrud<Ticket>()
             .Workflow<TicketStatus>(initial: TicketStatus.Open)
             .EditableIn(TicketStatus.Open)
-            .Axis<TicketBilling>(initial: TicketBilling.Unbilled);
+            .Axis<TicketBilling>(initial: TicketBilling.Unbilled)
+
+            // Kayıt değiştikçe olay yayınlanır: ticket.created, ticket.updated, ticket.deleted ve her geçiş için
+            // ticket.close, ticket.bill... Olaylar kayıtla aynı kaydetmede yazılır ve uygulamanın kaydettiği
+            // IHaldusEventPublisher servislerine, kayıt kalıcı olduktan sonra sırayla teslim edilir.
+            .PublishesEvents();
 
         tickets.MapTransition("close", from: TicketStatus.Open, to: TicketStatus.Closed);
         tickets.MapTransition("reopen", from: TicketStatus.Closed, to: TicketStatus.Open);

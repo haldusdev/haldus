@@ -27,6 +27,13 @@ public sealed class HaldusOptions
 
     /// <summary>Bakımın (saklama süresi geçmiş idempotency yanıtları, süresi dolmuş kayıtlar) ne sıklıkla çalışacağı.</summary>
     public TimeSpan MaintenanceInterval { get; set; } = TimeSpan.FromHours(1);
+
+    /// <summary>
+    /// Bekleyen olayların (<c>.PublishesEvents()</c>) en geç ne kadar sonra yayınlanacağı. Aynı süreçte yazılan olay
+    /// beklemeden yayınlanır; bu süre, başka bir sunucunun yazdığı veya açık bir transaction'ın içinde yazılan olaylar
+    /// içindir.
+    /// </summary>
+    public TimeSpan EventPollInterval { get; set; } = TimeSpan.FromSeconds(1);
 }
 
 internal sealed class ClaimsTenantProvider(IHttpContextAccessor accessor, IOptions<HaldusOptions> options) : ITenantProvider

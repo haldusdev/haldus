@@ -77,6 +77,9 @@ internal static class TraitCatalog
             new("ReadAt", DateTimeOffset + "?", InResponse: true, new("ReadAt", SearchKind.Range, DateTimeOffset, IsNullable: true)),
         ]),
 
+        // Olay yayınının alanı yoktur; arayüz, interceptor'ın kaydı tanıması içindir.
+        new(Traits.PublishesEvents, "global::Haldus.IPublishesEvents", []),
+
         // Çeviriler yanıtta görünür; yalnızca çeviri uçlarından yazılır.
         new(Traits.Translatable, "global::Haldus.ITranslatable",
         [

@@ -100,6 +100,12 @@ public static class HaldusServiceCollectionExtensions
             services.AddHostedService<HaldusMaintenanceService>();
         }
 
+        // Olayları, uygulama bir yayıncı (IHaldusEventPublisher) kaydettiyse ona teslim eder.
+        if (!services.Any(service => service.ImplementationType == typeof(HaldusEventService)))
+        {
+            services.AddHostedService<HaldusEventService>();
+        }
+
         // Modüllerin üretilen kayıt kodu, assembly'leri ilk kullanıldığında çalışır. Bir modül henüz
         // kullanılmadıysa handler sınıfları burada görünmezdi; bu yüzden bağlamın assembly'sinden ulaşılan
         // modüller şimdi yüklenir.

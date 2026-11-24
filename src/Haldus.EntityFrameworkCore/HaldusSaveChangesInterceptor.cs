@@ -43,6 +43,8 @@ public sealed class HaldusSaveChangesInterceptor : SaveChangesInterceptor
             HaldusRollups.ApplyAsync(context, CancellationToken.None).GetAwaiter().GetResult();
         }
 
+        HaldusEvents.Notify();
+
         return base.SavedChanges(eventData, result);
     }
 
@@ -52,6 +54,9 @@ public sealed class HaldusSaveChangesInterceptor : SaveChangesInterceptor
         {
             await HaldusRollups.ApplyAsync(context, cancellationToken);
         }
+
+        // Yazılan olayların dağıtıcısı beklemeden uyanır.
+        HaldusEvents.Notify();
 
         return await base.SavedChangesAsync(eventData, result, cancellationToken);
     }
@@ -155,6 +160,9 @@ public sealed class HaldusSaveChangesInterceptor : SaveChangesInterceptor
         // Anlık görüntü ve değişiklik günlüğü, trait alanları yazıldıktan sonra ve kaydı hangi kod yazarsa yazsın alınır.
         HaldusRevisions.Capture(context, now, users);
         HaldusChanges.Capture(context, now);
+
+        // Olaylar kayıtla aynı kaydetmede yazılır; kayıt kalıcı olmadıysa olay da yoktur.
+        HaldusEvents.Capture(context, now, users);
 
         // Başka kayıtlardan toplanan alanlar, bağlı kayıt kaydedildikten sonra baştan hesaplanır.
         HaldusRollups.Collect(context);

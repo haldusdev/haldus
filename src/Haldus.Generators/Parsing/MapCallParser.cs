@@ -1162,6 +1162,9 @@ internal static class MapCallParser
                 "Purgeable" => crudLike,
                 "Rerunnable" => archetype == Archetype.Job,
 
+                // Olay, anahtarıyla adreslenen bir kaydın başına gelen şeydir.
+                "PublishesEvents" => crudLike || archetype is Archetype.AppendOnly or Archetype.ReadOnly,
+
                 // Çeviriler ve değişiklik kümeleri, istemcinin yazıp değiştirdiği kayıtlar içindir.
                 "Translatable" or "ChangeSets" => crudLike,
 

@@ -423,6 +423,37 @@ app.MapJob<ProductImport>().Imports<Product>();
 CSV yeni bir bağımlılık olmadan okunur ve yazılır (RFC 4180). Dışa aktarılan metinlerden `=`, `+`, `-` veya `@` ile
 başlayanların önüne kesme işareti konur; böylece dosya bir tablolama programında açıldığında formül olarak çalışmaz.
 
+## Olay yayını
+
+```csharp
+var tickets = app.MapCrud<Ticket>()
+    .Workflow<TicketStatus>()
+    .PublishesEvents();
+
+tickets.MapTransition("close", from: TicketStatus.Open, to: TicketStatus.Closed);
+
+// Olayları uygulamanın dışına taşıyan sınıfı uygulama yazar ve kaydeder.
+builder.Services.AddSingleton<IHaldusEventPublisher, QueuePublisher>();
+
+public sealed class QueuePublisher(IQueue queue) : IHaldusEventPublisher
+{
+    public Task PublishAsync(HaldusEvent published, CancellationToken cancellationToken) =>
+        queue.SendAsync(published.Type, published.Data, cancellationToken);
+}
+```
+
+Kayıt değiştikçe olay yazılır: `ticket.created`, `ticket.updated`, `ticket.deleted` ve her geçiş için ayrıca
+`ticket.close` gibi, geçişin adıyla. Olay, kaydın o andaki halini kaynağın yanıt biçiminde taşır; yanıtta olmayan
+(ör. hassas) bir alan olayda da yoktur.
+
+- **Olay kayıtla aynı kaydetmede yazılır** (bekleme tablosu, `HaldusOutbox`). Kayıt kalıcı olmadıysa olay da yoktur;
+  olduysa olay kaybolmaz. Kaydı hangi kod yazarsa yazsın (uç, iş, uygulamanın kendi kodu) olay yazılır.
+- **Teslimat ayrıdır ve en az bir kezdir.** Arka plandaki dağıtıcı olayları yazıldıkları sırayla yayıncılara verir ve
+  teslim edileni siler. Yayıncı hata fırlatırsa olay artan aralıklarla yeniden denenir ve arkasındakiler onu bekler
+  (sıra bozulmaz); on denemeden sonra olaydan vazgeçilir, nedeniyle birlikte tabloda kalır ve sıradakilere geçilir.
+  Aynı olay birden çok kez gelebilir; yayıncı `HaldusEvent.Id` ile yineleneni ayırt etmelidir.
+- Yayıncı kaydedilmediyse olaylar yazılır ama teslim edilmez; tabloda birikir (uygulama açılırken uyarı yazılır).
+
 ## Hassas alanlar, ölçüte göre silme, işin yeniden çalıştırılması
 
 ```csharp

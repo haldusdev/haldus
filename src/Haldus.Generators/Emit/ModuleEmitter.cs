@@ -75,6 +75,11 @@ internal static class ModuleEmitter
                 model.Append("            global::Haldus.HaldusFileStore.Configure(modelBuilder);\n");
             }
 
+            if (resources.Any(entry => entry.Resource.Has(Traits.PublishesEvents)))
+            {
+                model.Append("            global::Haldus.HaldusEvents.Configure(modelBuilder);\n");
+            }
+
             if (resources.Any(entry => entry.Resource.ChangeSets is not null))
             {
                 model.Append("            global::Haldus.HaldusChangeSets.Configure(modelBuilder);\n");
@@ -114,6 +119,14 @@ internal static class ModuleEmitter
             {
                 // Süresi dolan kayıtlar, uygulama isterse bakım sırasında fiziksel olarak silinir.
                 blocks.Add($"        global::Haldus.HaldusMaintenanceRegistry.RegisterExpiring<{entity}>();\n");
+            }
+
+            if (resource.Has(Traits.PublishesEvents))
+            {
+                // Olayın verisi kaydın yanıt biçimidir; böylece yanıtta olmayan hiçbir alan dışarı çıkmaz.
+                blocks.Add(
+                    $"        global::Haldus.HaldusEvents.Register<{entity}>({ResourceEmitter.Literal(Naming.ToKebabCase(resource.EntityName))}, "
+                    + $"static item => {entity}Endpoints.Describe(item));\n");
             }
 
             if (resource.RetentionTicks is { } retention)

@@ -53,6 +53,7 @@ internal static class ChainReader
         "Publishable",
         "EffectiveDated",
         "CustomFields",
+        "PublishesEvents",
         "Sensitive",
         "Purgeable",
         "Rerunnable",
@@ -184,6 +185,9 @@ internal static class ChainReader
                     break;
                 case "Purgeable":
                     traits |= Traits.Purgeable;
+                    break;
+                case "PublishesEvents":
+                    traits |= Traits.PublishesEvents;
                     break;
                 case "Rerunnable":
                     traits |= Traits.Rerunnable;

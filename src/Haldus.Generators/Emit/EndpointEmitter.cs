@@ -243,7 +243,7 @@ internal sealed partial class EndpointEmitter
 
             {{tenantFilter}}{{_map}}        return group;
                 }
-            {{_transitionMaps}}{{_handlers}}
+            {{_transitionMaps}}{{_handlers}}{{(_resource.Has(Traits.PublishesEvents) ? $"\n    /// <summary>Kaydın, olaylarda taşınan hali: yanıt biçimi.</summary>\n    internal static object Describe({_entity} item) => ToResponse(item);\n" : string.Empty)}}
                 private static {{_entity}}Response ToResponse({{_entity}} item) => new() { {{ResponseAssignments}} };
             }
 
@@ -2170,7 +2170,7 @@ internal sealed partial class EndpointEmitter
                         return {{Problems}}.TransitionRejected(messages, rejection.Message);
                     }
 
-            {{setStatus}}{{Slide()}}{{Compute()}}{{Spawn(transition)}}{{allocate}}{{Save()}}{{commit}}
+            {{setStatus}}{{Slide()}}{{Compute()}}{{Spawn(transition)}}{{(!transition.IsAction && _resource.Has(Traits.PublishesEvents) ? $"        global::Haldus.HaldusEvents.Raise(context, entity, {ResourceEmitter.Literal(transition.Route)});\n" : string.Empty)}}{{allocate}}{{Save()}}{{commit}}
             {{WriteETag()}}        return {{Http}}.TypedResults.Ok({{(response is null ? "ToResponse(entity)" : "result")}});
                 }
 

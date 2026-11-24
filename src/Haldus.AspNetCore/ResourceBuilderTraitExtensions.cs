@@ -79,6 +79,16 @@ public static class ResourceBuilderTraitExtensions
         where TEntity : class => builder;
 
     /// <summary>
+    /// Kayıt değiştikçe olay yayınlar: <c>order.created</c>, <c>order.updated</c>, <c>order.deleted</c> ve her geçiş
+    /// için <c>order.{geçiş}</c>. Olay, kaydın o andaki halini (yanıt biçiminde) taşır, kayıtla aynı kaydetmede
+    /// bekleme tablosuna yazılır ve kayıt kalıcı olduktan sonra uygulamanın kaydettiği yayıncılara
+    /// (<see cref="IHaldusEventPublisher"/>) sırayla teslim edilir. Teslimat en az bir kezdir: yayıncı hata
+    /// fırlatırsa olay yeniden denenir.
+    /// </summary>
+    public static ResourceBuilder<TEntity> PublishesEvents<TEntity>(this ResourceBuilder<TEntity> builder)
+        where TEntity : class => builder;
+
+    /// <summary>
     /// Ölçüte uyan kayıtları topluca siler: <c>POST /purge?…&amp;force=true</c>. Ölçüt, kaynağın filtresidir
     /// (<c>Filterable</c>) ve liste ucundaki sorgu parametreleriyle verilir; en az biri zorunludur. <c>force</c>
     /// verilmezse hiçbir şey silinmez, yanıt yalnızca kaç kaydın silineceğini ve bir örneğini gösterir. Her kayıt

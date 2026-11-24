@@ -236,6 +236,13 @@ Bunlar kullanıcıyla kararlaştırıldı; yeniden sorma.
     sayar. Eşzamanlı (arka plan işi olmayan) ve istek başına 1000 kayıtla sınırlıdır.
   - `MapJob().Rerunnable()`: AIP-152'nin "iş tanımı + çalıştırmalar" modeli yazılmadı; bizde iş kaydı zaten bir
     çalıştırmadır, yeniden çalıştırma girdileri kopyalanmış yeni bir iş kaydıdır.
+- Olay yayını (28. aşama). Kullanıcı sormamamı istedi; yazılan, önerdiğim seçeneklerdir ve ayrıca onaylanmadı:
+  - `.PublishesEvents()` bir "outbox"tur: olay kayıtla aynı kaydetmede `HaldusOutbox` tablosuna yazılır ve commit'ten
+    sonra uygulamanın kaydettiği `IHaldusEventPublisher` servislerine teslim edilir. Haldus bir mesaj kuyruğu paketi
+    taşımaz (yeni bağımlılık yok); kuyruğa, webhook'a ya da başka bir modüle taşımak yayıncının işidir.
+  - Olay türleri: `{kaynak}.created` / `.updated` / `.deleted` ve geçiş başına `{kaynak}.{geçiş}` (geçişin adı
+    olduğu gibi; geçmiş zamana çevrilmez). Veri, kaydın yanıt biçimidir ("kalın" olay).
+  - Teslimat en az bir kez ve tek sıralıdır: başarısız olay arkasındakileri bekletir, on denemeden sonra bırakılır.
 - Eşzamanlılık trait'inin adı `ConcurrencyChecked` (eski adı `Versioned`). Sürüm yanıt gövdesinde değil
   `ETag` başlığında taşınır; güncelleme ve silme `If-Match` ister (eksikse 428, uyuşmazlıkta 412).
 - Güncelleme için hem `PUT` (tam değiştirme) hem `PATCH` (kısmi) üretilir.
@@ -716,6 +723,29 @@ içeriyor (ilişki bildirimleri, `Sensitive`, `PublishesEvents`, `Purgeable`, ye
     listede olmayan geçişin token adresi yoktur. Token ebeveyn altındaki ve kullanıcıya ait kaynaklarla
     birleşmez (görünürlükleri, token'ı taşıyanın sahip olmadığı bir kimliğe bağlıdır). Bilinen sınır: token
     kullanılınca kendiliğinden geçersiz olmaz; ömrünü `Expiring` ve durum makinesi belirler. Oran sınırlama yoktur.
+- **Olay yayını.** `Traits.PublishesEvents` (`IPublishesEvents`; alanı yoktur). Üretilen modül
+  `HaldusEvents.Register<T>("ad", item => {Entity}Endpoints.Describe(item))` çağırır; `Describe`, `ToResponse`'un
+  içeriden çağrılan halidir, yani olayın verisi yanıt izdüşümünden gelir.
+  - **Yazma interceptor'ın işidir** (`HaldusEvents.Capture`; sürümler ve değişiklik günlüğünden sonra): eklenen,
+    değişen ve silinen her kayıt için bir olay. Yumuşak silme bir güncellemeye çevrildiği için `DeletedAt` alanının
+    dolmasından tanınır ve `deleted` olarak yazılır. Geçişin kendi olayı için üretilen uç, kaydetmeden önce
+    `HaldusEvents.Raise(context, entity, "ad")` çağırır; olay yine yakalama sırasında, kaydın son haliyle yazılır.
+    Entity aksiyonu ayrı bir olay üretmez. Yayın kopyaları atlanır.
+  - **Teslimat** `HaldusEvents.DeliverAsync` (bağlam başına) ve onu bütün bağlamlar için çağıran
+    `HaldusEventDispatcher.RunAsync`'tir; arka plandaki `HaldusEventService` onu `EventPollInterval` aralığıyla ve her
+    kaydetmeden sonra uyandırılarak (`Notify`) çalıştırır. Tek bir dağıtıcı çalışır (`HaldusOrdering` kilidi,
+    `Events`); olaylar kimlik sırasıyla okunur, teslim edilen silinir, başarısız olanın `Attempts` / `NextAttemptAt` /
+    `LastError` alanları yazılır ve tur orada durur. `MaxAttempts` aşılınca `DeadAt` dolar ve olay atlanır.
+  - Kayıtlı yayıncı yoksa dağıtıcı hiçbir olaya dokunmaz (teslim edilmemiş olayı silmek onu kaybetmek olurdu).
+    Entegrasyon testleri buna dayanır: asıl uygulamanın yayıncısı yoktur, her test kendi yayıncısıyla ikinci bir
+    uygulama açar.
+  - Yayın, veritabanı transaction'ı ve kilit tutulurken yapılır; yavaş bir yayıncı dağıtımı yavaşlatır.
+  - Sınırlar: `MapCrud`, `MapReadOnly`, `MapAppendOnly` ile birleşir; değişiklik izleyicisini atlayan yazmalar
+    (`ExecuteUpdate`, `ExecuteDelete`, toplanan alanların yazılması, bakımın temizliği) olay üretmez; olay kaydın
+    bağlamda yüklü halini taşır (uygulamanın kendi kodu satırları yüklemeden yazdıysa satırlar olayda eksik olur);
+    eşzamanlı transaction'ların olayları arasında sıra garanti edilmez (aynı kaydınkiler sıralıdır); vazgeçilen
+    olaylar kendiliğinden silinmez ve yeniden kuyruğa alınmaz; olayların okunabildiği bir uç yoktur (çekerek izlemek
+    için `ChangeFeed` vardır).
 - **Hassas alanlar.** `.Sensitive(...)` bağlayıcıda alanı `PropertyModel.IsInputOnly` yapar (içe aktarmanın içeriğiyle
   aynı bayrak): yanıt DTO'suna ve yanıt izdüşümüne (`ResourceEmitter.ResponseAssignments`) girmez, isteklerde kalır.
   İşaretleme arama, sıralama, doğal anahtar ve çeviri çözülmeden önce yapılır ve `FieldCandidates` böyle alanları
