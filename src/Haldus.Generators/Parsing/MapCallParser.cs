@@ -119,6 +119,12 @@ internal static class MapCallParser
             lifecycle.Members.AddRange(LifecycleReader.JobMembers());
         }
 
+        if (archetype == Archetype.Job && (traits & Traits.Rerunnable) != 0)
+        {
+            // Yeniden çalıştırılan iş, kopyalandığı işe işaret eder.
+            lifecycle.Members.Add(new TraitMember("RerunOfId", GuidType + "?", InResponse: true, Search: null));
+        }
+
         BalanceModel? balance = null;
 
         if (archetype == Archetype.Balance)
@@ -374,6 +380,7 @@ internal static class MapCallParser
         var sortRequests = new List<SearchFieldRequest>();
         var createOnlyRequests = new List<SearchFieldRequest>();
         var translatableRequests = new List<SearchFieldRequest>();
+        var sensitiveRequests = new List<SearchFieldRequest>();
         SearchFieldRequest? naturalKeyRequest = null;
         var effectiveKeyRequests = new List<SearchFieldRequest>();
         TransferModel? transfer = null;
@@ -401,6 +408,9 @@ internal static class MapCallParser
                     break;
                 case { Identifier.ValueText: "Translatable" }:
                     ReadFieldRequests(callName, call, translatableRequests, diagnostics);
+                    break;
+                case { Identifier.ValueText: "Sensitive" }:
+                    ReadFieldRequests(callName, call, sensitiveRequests, diagnostics);
                     break;
                 // Alan saymak isteğe bağlıdır: sayılmazsa kapsamın tamamında tek bir dönem dizisi tutulur.
                 case { Identifier.ValueText: "EffectiveDated" } when call.ArgumentList.Arguments.Count > 0:
@@ -654,6 +664,7 @@ internal static class MapCallParser
             SortRequests = sortRequests.ToEquatableArray(),
             CreateOnlyRequests = createOnlyRequests.ToEquatableArray(),
             TranslatableRequests = translatableRequests.ToEquatableArray(),
+            SensitiveRequests = sensitiveRequests.ToEquatableArray(),
             NaturalKeyRequest = naturalKeyRequest,
             EffectiveKeyRequests = effectiveKeyRequests.ToEquatableArray(),
             ReverseAttachments = reverseAttachments.ToEquatableArray(),
@@ -908,6 +919,31 @@ internal static class MapCallParser
             yield return "ChangeFeed cannot be combined with Under<T>(shallow: true): the feed could not tell whose deleted records it is listing";
         }
 
+        if ((traits & Traits.Purgeable) != 0)
+        {
+            // Ölçüt kaynağın filtresidir; her kayıt toplu silmenin öğe yolundan, yani tekil silmenin kurallarıyla silinir.
+            if (chain.All(call => call.Name != "Filterable") || chain.All(call => call.Name != "Batch"))
+            {
+                yield return "Purgeable needs Filterable<TFilter>() for its criteria and Batch() for the rules of deleting each record";
+            }
+
+            if ((operations & Operations.Delete) == 0)
+            {
+                yield return "Purgeable requires the Delete operation, which has been removed from this resource";
+            }
+
+            if ((traits & Traits.ConcurrencyChecked) != 0)
+            {
+                yield return "Purgeable cannot be combined with ConcurrencyChecked: records deleted by a criterion carry no version";
+            }
+        }
+
+        if ((traits & Traits.Rerunnable) != 0 && chain.Any(call => call.Name == "Imports"))
+        {
+            // İçe aktarmanın içeriği iş bitince boşaltılır; yeniden çalıştırılacak bir girdi kalmaz.
+            yield return "Rerunnable cannot be combined with Imports: the content of an import is cleared when the job ends";
+        }
+
         if (chain.Any(call => call.Name == "ChangeSets") && crudLike && (operations & Operations.Patch) == 0)
         {
             // Küme, kaydın kısmi güncellemesinin birikmiş halidir.
@@ -1121,6 +1157,10 @@ internal static class MapCallParser
 
                 // Saklama süresi, okundu takibi ve toplanan alanlar, anahtarıyla adreslenen koleksiyonlar içindir.
                 "Retention" or "ReadTracking" or "Counts" or "Sums" => crudLike || archetype is Archetype.AppendOnly or Archetype.ReadOnly,
+
+                // Ölçüte göre silme, istemcinin sildiği koleksiyonlar içindir; yeniden çalıştırma yalnızca işler için.
+                "Purgeable" => crudLike,
+                "Rerunnable" => archetype == Archetype.Job,
 
                 // Çeviriler ve değişiklik kümeleri, istemcinin yazıp değiştirdiği kayıtlar içindir.
                 "Translatable" or "ChangeSets" => crudLike,

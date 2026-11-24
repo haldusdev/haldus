@@ -351,6 +351,16 @@ internal sealed partial class EndpointEmitter
         if (_resource.Archetype == Archetype.Job)
         {
             EmitJobCancel();
+
+            if (_resource.Has(Traits.Rerunnable))
+            {
+                EmitJobRerun();
+            }
+        }
+
+        if (_resource.Has(Traits.Purgeable) && _resource.Filter is not null && _resource.Batch is not null)
+        {
+            EmitPurgeMatching();
         }
 
         if (_resource.Has(Traits.Previewable))
@@ -1125,6 +1135,123 @@ internal sealed partial class EndpointEmitter
                     }
 
                     return {{Http}}.TypedResults.Ok(ToResponse(entity));
+                }
+
+            """);
+    }
+
+    /// <summary>
+    /// Bitmiş bir işi aynı girdilerle yeniden çalıştırır: girdiler yeni bir iş kaydına kopyalanır ve o kayıt, oluşturma
+    /// ucundaki gibi kuyruğuyla birlikte kaydedilip teslim edilir. Asıl iş olduğu gibi kalır.
+    /// </summary>
+    private void EmitJobRerun()
+    {
+        _map.Append($$"""
+                    group.MapPost("{{_keyRoute}}/rerun", RerunAsync)
+                        .WithName("Rerun{{_entity}}")
+                        .ProducesProblem(404)
+                        .ProducesProblem(409){{IdempotencyFilter(null)}};
+
+
+            """);
+
+        _handlers.Append($$"""
+
+                private static async {{Task}}<{{Results}}.Results<{{Results}}.Accepted<{{_entity}}Response>, {{Problem}}>> RerunAsync(
+            {{KeyParameter}}{{HttpContextParameter}}{{TimeProviderParameter}}        global::Haldus.IHaldusJobDispatcher jobs,
+            {{ContextsParameter}}{{MessagesParameter}}{{CancellationParameter}}    {
+                    var context = contexts.For<{{_entity}}>();
+                    var source = await context.Set<{{_entity}}>().AsNoTracking().FirstOrDefaultAsync(item => {{Match}}, cancellationToken);
+
+                    if (source is null)
+                    {
+                        return {{NotFound}};
+                    }
+
+                    // Bekleyen veya çalışan işin kopyası, aynı işi istenmeden iki kez çalıştırırdı.
+                    if (source.Status is global::Haldus.JobStatus.Queued or global::Haldus.JobStatus.Running)
+                    {
+                        return {{Problems}}.StateConflict(messages, "rerun", source.Status);
+                    }
+
+                    var entity = new {{_entity}} { {{CreateInitializer(source: "source")}}, RerunOfId = source.{{_key}} };
+
+            {{ReferenceChecks(patch: false, source: "entity")}}        var ticket = new global::Haldus.HaldusJobTicket(global::Haldus.HaldusJobRegistry.Name<{{_entity}}>(), entity.{{_key}});
+                    jobs.Prepare(context, ticket);
+                    context.Set<{{_entity}}>().Add(entity);
+                    await context.SaveChangesAsync(cancellationToken);
+                    await jobs.DispatchAsync(ticket, cancellationToken);
+
+                    return {{Http}}.TypedResults.Accepted(global::Haldus.HaldusRoutes.Sibling(httpContext, entity.{{_key}}), ToResponse(entity));
+                }
+
+            """);
+    }
+
+    /// <summary>
+    /// Ölçüte uyan kayıtları topluca siler. Ölçüt kaynağın filtresidir; her kayıt toplu silmenin öğe yolundan, yani
+    /// tekil silmenin kurallarıyla silinir ve hepsi tek bir sınırın içindedir. <c>force</c> verilmedikçe yalnızca sayar.
+    /// </summary>
+    private void EmitPurgeMatching()
+    {
+        var filter = _resource.Filter!;
+        var unset = string.Join(
+            " && ",
+            filter.Properties.Select(property => property.IsArray
+                ? $"filter{property.Name} is null or {{ Length: 0 }}"
+                : $"filter{property.Name} is null"));
+        var result = $"global::Haldus.PurgeResult<{_resource.IdType}>";
+
+        _map.Append($$"""
+                    group.MapPost("/purge", PurgeMatchingAsync)
+                        .WithName("Purge{{_plural}}")
+                        .ProducesValidationProblem()
+                        .ProducesProblem(404)
+                        .ProducesProblem(409);
+
+
+            """);
+
+        _handlers.Append($$"""
+
+                /// <summary>Bir istekte silinen en çok kayıt; daha fazlası için istek yinelenir.</summary>
+                private const int MaxPurge = 1000;
+
+                private static async {{Task}}<{{Results}}.Results<{{Results}}.Ok<{{result}}>, {{Problem}}>> PurgeMatchingAsync(
+            {{ScopeParameter}}        bool? force,
+            {{FilterParameters()}}{{ContextsParameter}}{{MessagesParameter}}{{CancellationParameter}}    {
+                    // Ölçütsüz bir istek koleksiyonun tamamını silerdi.
+                    if ({{unset}})
+                    {
+                        return {{Problems}}.PurgeCriteriaRequired(messages);
+                    }
+
+            {{OwnerGuard("delete")}}        var context = contexts.For<{{_entity}}>();
+                    var query = context.Set<{{_entity}}>().AsNoTracking(){{ScopeFilter}};
+            {{ApplyFilter()}}
+                    var matched = await query.LongCountAsync(cancellationToken);
+                    var ids = await query.OrderBy(item => item.{{_key}}).Select(item => item.{{_key}}).Take(MaxPurge).ToListAsync(cancellationToken);
+                    var sample = ids.Take(100).ToList();
+
+                    if (force != true)
+                    {
+                        // Sayım modu: neyin silineceğini gösterir, hiçbir şey silmez.
+                        return {{Http}}.TypedResults.Ok(new {{result}}(matched, 0, sample));
+                    }
+
+                    await using var batch = await {{Batch}}.BeginAsync(context, cancellationToken);
+
+                    for (var index = 0; index < ids.Count; index++)
+                    {
+                        if (await BatchDeleteItemAsync({{ScopeArgument}}ids[index], context, messages, cancellationToken) is { } problem)
+                        {
+                            // Dönülürken silmenin tamamı geri alınır.
+                            return {{Batch}}.ItemProblem(problem, index);
+                        }
+                    }
+
+                    await batch.CommitAsync(cancellationToken);
+                    return {{Http}}.TypedResults.Ok(new {{result}}(matched, ids.Count, sample));
                 }
 
             """);
@@ -2950,7 +3077,8 @@ internal sealed partial class EndpointEmitter
         }
 
         // Ağaçtaki yer içerik değildir; düğümü eski yerine taşımak döngü kurabilir, bu yüzden geri yüklenmez.
-        var restored = _updatable.Where(property => _resource.References.All(reference =>
+        // Hassas alanlar sürümde saklanmaz; geri yükleme onlara dokunmaz.
+        var restored = _updatable.Where(property => !property.IsInputOnly && _resource.References.All(reference =>
             reference.Kind != ReferenceKind.Self || reference.PropertyName != property.Name));
         var assignments = string.Concat(restored.Select(property => $"        entity.{property.Name} = revision.{property.Name};\n"))
             + (HasMetadata ? "        entity.Metadata = new(revision.Metadata);\n" : string.Empty)

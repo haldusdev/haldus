@@ -28,6 +28,16 @@ public static class EngagementEndpoints
             .Under<Discussion>()
             .SoftDeletable();
 
+        // Kimlik numarası hassastır: isteklerde yazılır, hiçbir yanıtta ve saklanan sürümde yer almaz.
+        // Ölçüte uyan kayıtlar topluca silinir: POST /contacts/purge?source=import-2024 önce sayar,
+        // &force=true ile siler. Ölçüt, liste ucunun filtresidir.
+        app.MapCrud<Contact>()
+            .Revisioned()
+            .Sensitive(contact => contact.NationalId)
+            .Filterable<ContactFilter>()
+            .Batch()
+            .Purgeable();
+
         // İki bağımsız durum ekseni: kaydın kendi durumu (Status) ve faturalanması (TicketBilling). Geçişin hangi
         // eksende olduğunu durumlarının tipi söyler. EditableIn yalnızca asıl duruma bakar; kapalı kayıt da faturalanır.
         var tickets = app.MapCrud<Ticket>()

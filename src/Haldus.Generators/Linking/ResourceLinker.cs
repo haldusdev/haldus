@@ -63,6 +63,23 @@ internal static class ResourceLinker
                 }
             }
 
+            // Hassas alanlar önce işaretlenir ki arama, sıralama ve doğal anahtar onları aday saymasın.
+            foreach (var request in resource.SensitiveRequests)
+            {
+                var index = request.FieldName is null ? -1 : properties.FindIndex(property => property.Name == request.FieldName);
+
+                if (index < 0 || !properties[index].IsWritable || properties[index].IsEmbedded)
+                {
+                    Fail(
+                        "HALDUS010",
+                        request.Location,
+                        $"'{request.Expression}' cannot be sensitive: write it as 'item => item.Property', where the property is a writable scalar property of '{resource.EntityName}'");
+                    continue;
+                }
+
+                properties[index] = properties[index] with { IsInputOnly = true };
+            }
+
             var searchFields = ResolveSearchFields(resource, properties, Fail);
             var sortFields = ResolveSortFields(resource, properties, Fail);
             MarkCreateOnly(resource, properties, Fail);
@@ -92,7 +109,7 @@ internal static class ResourceLinker
             {
                 // Çevrilen alan, istemcinin yazdığı bir metindir; çevirisi de aynı kurallarla doğrulanır.
                 if (properties.FirstOrDefault(candidate => candidate.Name == request.FieldName)
-                    is { IsWritable: true, IsEmbedded: false, IsGenerated: false, NullableType: "string?" } text)
+                    is { IsWritable: true, IsEmbedded: false, IsGenerated: false, IsInputOnly: false, NullableType: "string?" } text)
                 {
                     translatable.Add(text.Name);
                 }
@@ -630,6 +647,7 @@ internal static class ResourceLinker
         "move" when resource.Has(Traits.Orderable) => nameof(Traits.Orderable),
         "preview" when resource.Has(Traits.Previewable) => nameof(Traits.Previewable),
         "cancel" when resource.Archetype == Archetype.Job => "MapJob",
+        "rerun" when resource.Has(Traits.Rerunnable) => nameof(Traits.Rerunnable),
         _ => null,
     };
 
@@ -1349,7 +1367,7 @@ internal static class ResourceLinker
 
         var property = request.FieldName is null ? null : properties.FirstOrDefault(candidate => candidate.Name == request.FieldName);
 
-        var constraint = property is { IsNonNullable: true, IsEmbedded: false }
+        var constraint = property is { IsNonNullable: true, IsEmbedded: false, IsInputOnly: false }
             ? property.Type switch
             {
                 "string" => string.Empty,
@@ -1420,8 +1438,9 @@ internal static class ResourceLinker
             candidates[resource.KeyName] = new SearchField(resource.KeyName, keyKind, resource.IdType, IsNullable: false);
         }
 
-        // Gömülü değer nesneleri tek bir koşul tipine oturmaz; aranamazlar.
-        foreach (var property in properties.Where(property => !property.IsEmbedded))
+        // Gömülü değer nesneleri tek bir koşul tipine oturmaz; aranamazlar. Yalnızca yazılan (hassas) alanlar da
+        // aday değildir: değerine göre aramak veya sıralamak onu dışarı sızdırırdı.
+        foreach (var property in properties.Where(property => !property.IsEmbedded && !property.IsInputOnly))
         {
             candidates[property.Name] = new SearchField(
                 property.Name, property.SearchKind, property.ValueType, IsNullable: !property.IsNonNullable);

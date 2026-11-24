@@ -78,6 +78,9 @@
   <data name="ChangeSet.Invalid" xml:space="preserve">
     <value>Değişiklikler, kaydın alanlarını kendi tiplerindeki değerlerle taşıyan bir JSON nesnesi olmalıdır; toplamda en çok {0} karakter.</value>
   </data>
+  <data name="Purge.Criteria" xml:space="preserve">
+    <value>En az bir ölçüt verin; ölçütsüz bir silme bütün kayıtları silerdi.</value>
+  </data>
   <data name="Locale.Invalid" xml:space="preserve">
     <value>'{0}' bir dil etiketi değil; 'tr' veya 'pt-BR' gibi yazın.</value>
   </data>

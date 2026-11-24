@@ -228,6 +228,14 @@ Bunlar kullanıcıyla kararlaştırıldı; yeniden sorma.
     adresi (`/edits/{id}`) kullanılmadı ki kümenin görünürlüğü hedefinkiyle aynı olsun.
   - Küme, açıldığı andaki değil uygulandığı andaki kayda uygulanır; "kayıt bu sırada değişti" çakışması üretilmez
     (sürüm kontrollü kaynakta `If-Match` zaten bunu sorar).
+- Hassas alan, ölçüte göre silme, yeniden çalıştırma (27. aşama). Kullanıcı sormamamı istedi; yazılan, önerdiğim
+  seçeneklerdir ve ayrıca onaylanmadı:
+  - `.Sensitive(alanlar...)` alanı yalnızca yazılan bir alan yapar; değer veritabanında düz saklanır (şifreleme veya
+    maskeleyerek gösterme yazılmadı).
+  - `.Purgeable()` (AIP-165): `POST /purge`, ölçüt kaynağın `Filterable` filtresidir, `force` verilmedikçe yalnızca
+    sayar. Eşzamanlı (arka plan işi olmayan) ve istek başına 1000 kayıtla sınırlıdır.
+  - `MapJob().Rerunnable()`: AIP-152'nin "iş tanımı + çalıştırmalar" modeli yazılmadı; bizde iş kaydı zaten bir
+    çalıştırmadır, yeniden çalıştırma girdileri kopyalanmış yeni bir iş kaydıdır.
 - Eşzamanlılık trait'inin adı `ConcurrencyChecked` (eski adı `Versioned`). Sürüm yanıt gövdesinde değil
   `ETag` başlığında taşınır; güncelleme ve silme `If-Match` ister (eksikse 428, uyuşmazlıkta 412).
 - Güncelleme için hem `PUT` (tam değiştirme) hem `PATCH` (kısmi) üretilir.
@@ -708,6 +716,23 @@ içeriyor (ilişki bildirimleri, `Sensitive`, `PublishesEvents`, `Purgeable`, ye
     listede olmayan geçişin token adresi yoktur. Token ebeveyn altındaki ve kullanıcıya ait kaynaklarla
     birleşmez (görünürlükleri, token'ı taşıyanın sahip olmadığı bir kimliğe bağlıdır). Bilinen sınır: token
     kullanılınca kendiliğinden geçersiz olmaz; ömrünü `Expiring` ve durum makinesi belirler. Oran sınırlama yoktur.
+- **Hassas alanlar.** `.Sensitive(...)` bağlayıcıda alanı `PropertyModel.IsInputOnly` yapar (içe aktarmanın içeriğiyle
+  aynı bayrak): yanıt DTO'suna ve yanıt izdüşümüne (`ResourceEmitter.ResponseAssignments`) girmez, isteklerde kalır.
+  İşaretleme arama, sıralama, doğal anahtar ve çeviri çözülmeden önce yapılır ve `FieldCandidates` böyle alanları
+  aday saymaz (değerine göre aramak veya sıralamak onu sızdırırdı). Sürümleri saklanan kaynakta üretilen modül
+  `HaldusRevisions.Hide<T>(...)` çağırır; alan anlık görüntüye girmez ve geri yükleme ona dokunmaz. Kopya ve yayın
+  kopyası alanı sunucu tarafında taşır. Sınırlar: kullanıcının yazdığı filtre sınıfı (`IFilter<T>`) alanı süzmekte
+  serbesttir; uygulamanın kendi kodu alanı bir yanıta koyarsa Haldus engelleyemez; `PUT` her alan gibi onu da ister.
+  **Yanıt üreten yeni bir yol `ResponseAssignments` dışında alan saymamalıdır.**
+- **Ölçüte göre silme.** `Traits.Purgeable`; `EmitPurgeMatching`. Ölçüt `ApplyFilter()` ile, liste ucundakiyle aynı
+  koddan uygulanır ve kaynağın sorgu filtrelerinden geçer; silme `BatchDeleteItemAsync` çağrılarıdır (bu yüzden
+  `Batch` ister ve sürüm kontrollü kaynakla birleşmez), hepsi tek bir `HaldusBatch` sınırındadır. Hiçbir ölçüt
+  parametresi verilmediyse 400 döner; verilen ölçütün gerçekten daraltıp daraltmadığına bakılmaz (ör. `false`
+  gönderilen bir bayrak), sayım modu bunun içindir. Yumuşak silinen kaynakta kayıtlar yumuşak silinir.
+- **Yeniden çalıştırma.** `Traits.Rerunnable`; `RerunOfId` `ExtraMembers`'tadır. `EmitJobRerun` yeni kaydı
+  `CreateInitializer(source: "source")` ile kurar (girdiler kopyalanır, çıktılar ve durum baştan başlar), referanslarını
+  kayıttan okuyarak doğrular ve oluşturma ucundaki `Prepare` / kaydet / `DispatchAsync` sırasıyla teslim eder. İçe
+  aktarma işiyle birleşmez (içeriği iş bitince boşaltılır). Yeni iş, isteği yapanın kimliği ve diliyle çalışır.
 - **Değişiklik kümeleri.** `ResourceModel.ChangeSets` (`LifecycleReader`; durumlar `ReadChainStates` ile okunur: durum
   makinesi varsa sayılmaları zorunludur, çünkü küme kaydın düzenlenemediği durumlarda da çalışan bir yazmadır).
   Uçları `EndpointEmitter.ChangeSets.cs` üretir; saklama (`HaldusChangeSets`, tek bir `HaldusChangeSets` tablosu) ve

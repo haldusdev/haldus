@@ -53,6 +53,9 @@ internal static class ChainReader
         "Publishable",
         "EffectiveDated",
         "CustomFields",
+        "Sensitive",
+        "Purgeable",
+        "Rerunnable",
         "Buckets",
         "AllowNegative",
         "ChangeSets",
@@ -178,6 +181,12 @@ internal static class ChainReader
                     break;
                 case "Translatable":
                     traits |= Traits.Translatable;
+                    break;
+                case "Purgeable":
+                    traits |= Traits.Purgeable;
+                    break;
+                case "Rerunnable":
+                    traits |= Traits.Rerunnable;
                     break;
                 case "Retention":
                     // Kaydın yaşı oluşturulma zamanından ölçülür.

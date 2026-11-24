@@ -28,6 +28,32 @@ public partial class Reply
     public int Score { get; set; }
 }
 
+/// <summary>İletişim kaydı. Kimlik numarası yalnızca yazılır; hiçbir yanıtta ve saklanan sürümde yer almaz.</summary>
+public partial class Contact
+{
+    [Required]
+    [MaxLength(200)]
+    public string Name { get; set; } = "";
+
+    [MaxLength(20)]
+    public string? NationalId { get; set; }
+
+    [MaxLength(100)]
+    public string? Source { get; set; }
+}
+
+/// <summary><c>GET /contacts</c> ve <c>POST /contacts/purge</c> için ölçütler.</summary>
+public sealed class ContactFilter : IFilter<Contact>
+{
+    public string? Source { get; set; }
+
+    public string? NameStartsWith { get; set; }
+
+    public IQueryable<Contact> Apply(IQueryable<Contact> query) => query
+        .WhereIf(Source is not null, contact => contact.Source == Source)
+        .WhereIf(NameStartsWith is not null, contact => contact.Name.StartsWith(NameStartsWith!));
+}
+
 public enum TicketStatus
 {
     Open,

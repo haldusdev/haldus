@@ -57,6 +57,16 @@ public static class HaldusRevisions
         where TEntity : class, IRevisioned =>
         Details[typeof(TEntity)] = details;
 
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<Type, HashSet<string>> Hidden = new();
+
+    /// <summary>
+    /// Anlık görüntüye girmeyecek alanları bildirir (<c>.Sensitive(...)</c>): hassas bir değer, kaydın geçmiş
+    /// hallerinde de saklanmamalıdır. Üretilen modül kodu çağırır.
+    /// </summary>
+    public static void Hide<TEntity>(params string[] fields)
+        where TEntity : class =>
+        Hidden[typeof(TEntity)] = new HashSet<string>(fields, StringComparer.Ordinal);
+
     /// <summary>Kaydedilmek üzere olan, sürümleri saklanan her kaydın anlık görüntüsünü bağlama ekler.</summary>
     internal static void Capture(DbContext context, DateTimeOffset now, Lazy<string?> users)
     {
@@ -165,8 +175,15 @@ public static class HaldusRevisions
     {
         var values = new Dictionary<string, JsonElement>(StringComparer.Ordinal);
 
+        Hidden.TryGetValue(entry.Metadata.ClrType, out var hidden);
+
         foreach (var property in entry.Properties.Where(property => !property.Metadata.IsShadowProperty()))
         {
+            if (hidden?.Contains(property.Metadata.Name) == true)
+            {
+                continue;
+            }
+
             values[property.Metadata.Name] = JsonSerializer.SerializeToElement(property.CurrentValue, property.Metadata.ClrType);
         }
 

@@ -164,6 +164,13 @@ public static class HaldusProblems
         return FieldProblem(messages, "changes", messages.Format(HaldusMessageKeys.ChangeSetInvalid, HaldusChangeSetRequests.MaxLength));
     }
 
+    /// <summary>Topluca silme hiçbir ölçüt taşımıyor; öyle bir istek koleksiyonun tamamını silerdi.</summary>
+    public static ProblemHttpResult PurgeCriteriaRequired(IHaldusMessages messages)
+    {
+        ArgumentNullException.ThrowIfNull(messages);
+        return FieldProblem(messages, "filter", messages.Format(HaldusMessageKeys.PurgeCriteria));
+    }
+
     /// <summary>Bakiye, istenen düşüşü karşılamıyor.</summary>
     public static ProblemHttpResult BalanceInsufficient(IHaldusMessages messages, string bucket, decimal balance)
     {

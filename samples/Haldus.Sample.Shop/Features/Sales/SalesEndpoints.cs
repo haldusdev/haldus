@@ -151,10 +151,12 @@ public static class SalesEndpoints
         quotes.MapTransition("withdraw", from: QuoteStatus.Sent, to: QuoteStatus.Withdrawn);
 
         // Uzun süren iş: POST 202 döner, iş arka planda çalışır. Mantığı ReportExportHandler sınıfındadır.
+        // Bitmiş iş aynı girdilerle yeniden çalıştırılabilir: POST /report-exports/{id}/rerun yeni bir iş oluşturur.
         app.MapJob<ReportExport>()
             .MultiTenant()
             .Auditable(trackUser: true)
-            .Idempotent();
+            .Idempotent()
+            .Rerunnable();
 
         // Numara bir sequence'ten gelir: iadeler birbirini beklemez, ama numaralarda boşluk olabilir.
         // İade değiştirilemez, ama işlenmeden önce iptal edilebilir.

@@ -118,6 +118,9 @@ internal sealed record ResourceModel(
     /// <summary>Asıl durumdan bağımsız ek durum eksenleri.</summary>
     public EquatableArray<AxisModel> Axes { get; init; } = EquatableArray<AxisModel>.Empty;
 
+    /// <summary><c>.Sensitive(...)</c> ile sayılan alanlar; henüz doğrulanmamıştır.</summary>
+    public EquatableArray<SearchFieldRequest> SensitiveRequests { get; init; } = EquatableArray<SearchFieldRequest>.Empty;
+
     /// <summary><c>.Translatable(...)</c> ile sayılan alanlar; henüz doğrulanmamıştır.</summary>
     public EquatableArray<SearchFieldRequest> TranslatableRequests { get; init; } = EquatableArray<SearchFieldRequest>.Empty;
 
@@ -365,6 +368,8 @@ internal enum Traits
     CustomFields = 4194304,
     ReadTracking = 8388608,
     Translatable = 16777216,
+    Purgeable = 33554432,
+    Rerunnable = 67108864,
 }
 
 /// <summary>

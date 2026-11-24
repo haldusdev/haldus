@@ -147,6 +147,12 @@ internal static class ModuleEmitter
                     $"        global::Haldus.HaldusDetails.Register<{entity}, {detail.QualifiedName}>({ResourceEmitter.Literal(detail.Parent!.PropertyName)});\n");
             }
 
+            if (resource.Has(Traits.Revisioned) && resource.Properties.Where(property => property.IsInputOnly).Select(property => ResourceEmitter.Literal(property.Name)).ToList() is { Count: > 0 } hidden)
+            {
+                // Hassas alanlar kaydın saklanan hallerine de girmez.
+                blocks.Add($"        global::Haldus.HaldusRevisions.Hide<{entity}>({string.Join(", ", hidden)});\n");
+            }
+
             if (resource.Has(Traits.Revisioned))
             {
                 // Gömülü satırlar sahibin anlık görüntüsüne girer.

@@ -46,6 +46,12 @@ public sealed class ResourceBuilder<TEntity>(RouteGroupBuilder group, IEndpointR
     public ResourceBuilder<TEntity> Sortable(params Expression<Func<TEntity, object?>>[] fields) => this;
 
     /// <summary>
+    /// Sayılan alanlar yalnızca yazılır: isteklerde yer alırlar, hiçbir yanıtta, dışa aktarmada ve saklanan sürümde
+    /// yer almazlar (kimlik numarası, banka hesabı gibi). Böyle bir alana göre aranamaz ve sıralanamaz.
+    /// </summary>
+    public ResourceBuilder<TEntity> Sensitive(params Expression<Func<TEntity, object?>>[] fields) => this;
+
+    /// <summary>
     /// Sayılan metin alanları başka dillere çevrilebilir. Alanın kendisi kaynak dildeki metni taşımaya devam eder;
     /// çeviriler kayıtla birlikte saklanır ve yanıtta <c>translations</c> altında görünür. Bir dilin çevirileri
     /// <c>PUT /{id}/translations/{locale}</c> ile yazılır, <c>DELETE</c> ile kaldırılır. Okurken <c>?locale=tr</c>

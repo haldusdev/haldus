@@ -79,6 +79,23 @@ public static class ResourceBuilderTraitExtensions
         where TEntity : class => builder;
 
     /// <summary>
+    /// Ölçüte uyan kayıtları topluca siler: <c>POST /purge?…&amp;force=true</c>. Ölçüt, kaynağın filtresidir
+    /// (<c>Filterable</c>) ve liste ucundaki sorgu parametreleriyle verilir; en az biri zorunludur. <c>force</c>
+    /// verilmezse hiçbir şey silinmez, yanıt yalnızca kaç kaydın silineceğini ve bir örneğini gösterir. Her kayıt
+    /// tekil silmenin kurallarından geçer; biri bile silinemiyorsa hiçbiri silinmez. <c>Filterable</c> ve
+    /// <c>Batch</c> ister.
+    /// </summary>
+    public static ResourceBuilder<TEntity> Purgeable<TEntity>(this ResourceBuilder<TEntity> builder)
+        where TEntity : class => builder;
+
+    /// <summary>
+    /// Bitmiş bir işi aynı girdilerle yeniden çalıştırır: <c>POST /{id}/rerun</c> yeni bir iş kaydı oluşturur (202)
+    /// ve onu, <c>RerunOfId</c> ile asıl işe bağlar. Bekleyen veya çalışan iş yeniden çalıştırılamaz (409).
+    /// </summary>
+    public static ResourceBuilder<TEntity> Rerunnable<TEntity>(this ResourceBuilder<TEntity> builder)
+        where TEntity : class => builder;
+
+    /// <summary>
     /// Bakiyeyi adlandırılmış kovalara böler (stokta "available", "reserved", "damaged" gibi). Her kova ayrı bir alan
     /// olur ve ayrı düzeltilir; <c>POST /{key}/move</c> bir miktarı bir kovadan ötekine tek işlemde taşır. Verilmezse
     /// bakiyenin tek bir kovası vardır: <c>quantity</c>.
