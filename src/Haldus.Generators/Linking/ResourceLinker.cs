@@ -869,6 +869,7 @@ internal static class ResourceLinker
         "restore" or "purge" when resource.Has(Traits.SoftDeletable) => nameof(Traits.SoftDeletable),
         "archive" or "unarchive" when resource.Has(Traits.Archivable) => nameof(Traits.Archivable),
         "read" or "unread" when resource.Has(Traits.ReadTracking) => nameof(Traits.ReadTracking),
+        "read" or "unread" or "read-state" when resource.Has(Traits.ReadReceipts) => nameof(Traits.ReadReceipts),
         "translations" when resource.Has(Traits.Translatable) => nameof(Traits.Translatable),
         "edits" when resource.ChangeSets is not null => "ChangeSets",
         "occurrences" when resource.Has(Traits.Recurring) => nameof(Traits.Recurring),

@@ -348,6 +348,11 @@ internal sealed partial class EndpointEmitter
             EmitReadAll();
         }
 
+        if (_resource.Has(Traits.ReadReceipts))
+        {
+            EmitReadReceipts();
+        }
+
         // Yalnızca token ile ulaşılan kaydın kimlikle çalışan adresi yoktur; süresi de ancak kendiliğinden dolar.
         if (_resource.Expiry is not null && !TokenOnly)
         {
@@ -542,7 +547,7 @@ internal sealed partial class EndpointEmitter
             + (EffectiveDated ? "        global::System.DateOnly? asOf,\n" : string.Empty)
             + string.Concat(axes.Select(axis => $"        {axis.StatusType}? {ResourceEmitter.CamelCase(axis.Property)},\n"))
             + (_resource.Subtypes.Length > 0 ? "        string? kind,\n" : string.Empty)
-            + (readTracking ? "        bool? unread,\n" : string.Empty)
+            + (readTracking || _resource.Has(Traits.ReadReceipts) ? "        bool? unread,\n" : string.Empty)
             + (Translatable ? "        string? locale,\n" : string.Empty);
 
         var paged = $"{Results}.Ok<global::Haldus.PagedResult<{_entity}Response>>";
@@ -615,6 +620,20 @@ internal sealed partial class EndpointEmitter
                         if (unread is { } unreadOnly)
                         {
                             query = query.Where(item => (item.ReadAt == null) == unreadOnly);
+                        }
+
+                """);
+        }
+
+        if (_resource.Has(Traits.ReadReceipts))
+        {
+            // Okundu bilgisi isteği yapana özgüdür; işaretler kayıtta değil ayrı bir tabloda durur.
+            _handlers.Append($$"""
+
+                        if (unread is { } unreadOnly)
+                        {
+                            var receipts = contexts.For<{{_entity}}>();
+                            query = global::Haldus.HaldusReadReceipts.Filter(receipts, query, {{ReceiptKey}}, global::Haldus.HaldusScope.UserId(receipts), unreadOnly);
                         }
 
                 """);

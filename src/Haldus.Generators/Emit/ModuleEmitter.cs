@@ -80,6 +80,11 @@ internal static class ModuleEmitter
                 model.Append("            global::Haldus.HaldusEvents.Configure(modelBuilder);\n");
             }
 
+            if (resources.Any(entry => entry.Resource.Has(Traits.ReadReceipts)))
+            {
+                model.Append("            global::Haldus.HaldusReadReceipts.Configure(modelBuilder);\n");
+            }
+
             if (resources.Any(entry => entry.Resource.Has(Traits.Recurring)))
             {
                 model.Append("            global::Haldus.HaldusRecurrence.Configure(modelBuilder);\n");

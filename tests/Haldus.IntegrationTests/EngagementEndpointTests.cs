@@ -19,6 +19,68 @@ public sealed class EngagementEndpointTests(ShopFixture fixture)
     // ── Okundu takibi ──────────────────────────────────────────────────────────────────────────────────
 
     [Fact]
+    public async Task ReadReceipts_AreKeptPerUserForSharedRecords()
+    {
+        async Task<long> UnreadAsync(string user) =>
+            (await ReadAsync<UnreadCount>(await SendAsync(HttpMethod.Get, "/announcements/unread-count", user: user))).Count;
+
+        var mineBefore = await UnreadAsync(_user);
+        var theirsBefore = await UnreadAsync(_otherUser);
+
+        var maintenance = await ReadAsync<AnnouncementResponse>(await SendAsync(HttpMethod.Post, "/announcements", new { title = "Maintenance" }));
+        var holiday = await ReadAsync<AnnouncementResponse>(await SendAsync(HttpMethod.Post, "/announcements", new { title = "Holiday" }));
+        var url = $"/announcements/{maintenance.Id}";
+
+        // Duyuru herkese açıktır ve herkes için okunmamış doğar.
+        Assert.Equal(mineBefore + 2, await UnreadAsync(_user));
+        Assert.Equal(theirsBefore + 2, await UnreadAsync(_otherUser));
+
+        // Okundu bilgisi işaretleyene özgüdür; ikinci kez işaretlemek bir şey değiştirmez.
+        Assert.Equal(HttpStatusCode.NoContent, (await SendAsync(HttpMethod.Post, $"{url}/read")).StatusCode);
+        Assert.Equal(HttpStatusCode.NoContent, (await SendAsync(HttpMethod.Post, $"{url}/read")).StatusCode);
+
+        var mine = await ReadAsync<ReadState>(await SendAsync(HttpMethod.Get, $"{url}/read-state"));
+        var theirs = await ReadAsync<ReadState>(await SendAsync(HttpMethod.Get, $"{url}/read-state", user: _otherUser));
+        Assert.True(mine.Read);
+        Assert.NotNull(mine.ReadAt);
+        Assert.Equal((false, null), (theirs.Read, theirs.ReadAt));
+
+        Assert.Equal(mineBefore + 1, await UnreadAsync(_user));
+        Assert.Equal(theirsBefore + 2, await UnreadAsync(_otherUser));
+
+        // Liste isteği yapanın okuduklarına göre süzülür.
+        var unread = await ReadAsync<PagedResult<AnnouncementResponse>>(await SendAsync(HttpMethod.Get, "/announcements?unread=true&pageSize=100"));
+        var read = await ReadAsync<PagedResult<AnnouncementResponse>>(await SendAsync(HttpMethod.Get, "/announcements?unread=false&pageSize=100"));
+        Assert.Contains(unread.Items, item => item.Id == holiday.Id);
+        Assert.DoesNotContain(unread.Items, item => item.Id == maintenance.Id);
+        Assert.Equal(maintenance.Id, Assert.Single(read.Items).Id);
+
+        // Kaydın kendisi değişmez; okundu bilgisi onun bir alanı değildir.
+        var json = await (await SendAsync(HttpMethod.Get, url)).Content.ReadAsStringAsync(CancellationToken);
+        Assert.DoesNotContain("readAt", json, StringComparison.OrdinalIgnoreCase);
+
+        Assert.Equal(HttpStatusCode.NoContent, (await SendAsync(HttpMethod.Post, $"{url}/unread")).StatusCode);
+        Assert.False((await ReadAsync<ReadState>(await SendAsync(HttpMethod.Get, $"{url}/read-state"))).Read);
+
+        // Hepsini okundu işaretlemek yalnızca isteği yapanı etkiler.
+        var all = await ReadAsync<ReadAllResult>(await SendAsync(HttpMethod.Post, "/announcements/read-all"));
+        Assert.Equal(mineBefore + 2, all.Updated);
+        Assert.Equal(0, await UnreadAsync(_user));
+        Assert.Equal(theirsBefore + 2, await UnreadAsync(_otherUser));
+        Assert.Equal(0, (await ReadAsync<ReadAllResult>(await SendAsync(HttpMethod.Post, "/announcements/read-all"))).Updated);
+
+        // Arşivlenen duyuru okunmamışlar arasında sayılmaz.
+        await ReadAsync<AnnouncementResponse>(await SendAsync(HttpMethod.Post, $"/announcements/{holiday.Id}/archive"));
+        Assert.Equal(theirsBefore + 1, await UnreadAsync(_otherUser));
+
+        // Kullanıcısı çözülemeyen istek reddedilir; olmayan kaydın okundu bilgisi de yoktur.
+        Assert.Equal(HttpStatusCode.Unauthorized, (await SendAsync(HttpMethod.Post, $"{url}/read", user: "")).StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await SendAsync(HttpMethod.Get, "/announcements/unread-count", user: "")).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await SendAsync(HttpMethod.Post, $"/announcements/{Guid.NewGuid()}/read")).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await SendAsync(HttpMethod.Get, $"/announcements/{Guid.NewGuid()}/read-state")).StatusCode);
+    }
+
+    [Fact]
     public async Task ReadTracking_MarksRecordsOfTheCurrentUser()
     {
         var mine = await NotifyAsync(_user, "Order shipped", "Invoice ready", "Welcome");

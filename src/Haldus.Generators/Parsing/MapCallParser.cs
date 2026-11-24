@@ -1028,7 +1028,12 @@ internal static class MapCallParser
         if ((traits & Traits.ReadTracking) != 0 && (traits & Traits.Owned) == 0)
         {
             // Okundu bilgisi kaydın kendisinde durur; kayıt tek bir kullanıcıya ait olmalıdır.
-            yield return "ReadTracking needs OwnedByCurrentUser: whether a record has been read is kept on the record, so it must belong to one user";
+            yield return "ReadTracking needs OwnedByCurrentUser: whether a record has been read is kept on the record, so it must belong to one user; use ReadReceipts for shared records";
+        }
+
+        if ((traits & Traits.ReadReceipts) != 0 && (traits & Traits.ReadTracking) != 0)
+        {
+            yield return "ReadReceipts cannot be combined with ReadTracking: both answer whether a record has been read, and their endpoints share the same addresses";
         }
 
         if (chain.Any(call => call.Name == "CustomFields") && chain.Any(call => call.Name == "Under"))
@@ -1248,7 +1253,7 @@ internal static class MapCallParser
                 "Document" => crudLike,
 
                 // Saklama süresi, okundu takibi ve toplanan alanlar, anahtarıyla adreslenen koleksiyonlar içindir.
-                "Retention" or "ReadTracking" or "Counts" or "Sums" => crudLike || archetype is Archetype.AppendOnly or Archetype.ReadOnly,
+                "Retention" or "ReadTracking" or "ReadReceipts" or "Counts" or "Sums" => crudLike || archetype is Archetype.AppendOnly or Archetype.ReadOnly,
 
                 // Ölçüte göre silme, istemcinin sildiği koleksiyonlar içindir; yeniden çalıştırma yalnızca işler için.
                 "Purgeable" => crudLike,

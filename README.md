@@ -650,6 +650,7 @@ app.MapCrud<Reply>().Under<Discussion>();
 |---|---|
 | `.Retention(süre)` | Oluşturulalı verilen süreden uzun olmuş kayıtlar bakım sırasında silinir. `Auditable` kendiliğinden eklenir |
 | `.ReadTracking()` | Kullanıcıya ait kayda `ReadAt` alanı ekler: `POST /{id}/read`, `POST /{id}/unread`, `POST /read-all` (okunmamışların hepsi), `GET /unread-count`; liste `?unread=true` ile süzülür. `OwnedByCurrentUser` ister |
+| `.ReadReceipts()` | Paylaşılan kayıtların (duyuru, ortak belge) kullanıcı başına okundu bilgisi; kayıtta değil ayrı bir tabloda durur ve kaydın kendisini değiştirmez. `POST /{id}/read` ve `/unread`, `GET /{id}/read-state`, `POST /read-all` (istek başına en çok 5000 kayıt), `GET /unread-count`; liste `?unread=true` ile süzülür. Uçlar kullanıcısı çözülemeyen isteği reddeder (401) |
 | `.Counts<TChild>(into:)` | Kayda, kendisine işaret eden `TChild` kayıtlarının sayısını tutan bir alan ekler (varsayılan adı `ReplyCount`) |
 | `.Sums<TChild>(child => child.Alan, into:)` | Aynısı, bir sayısal alanın toplamı için (varsayılan adı `ReplyScoreSum`) |
 

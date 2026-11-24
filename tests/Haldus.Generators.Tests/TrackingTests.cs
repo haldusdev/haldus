@@ -111,6 +111,53 @@ public sealed class TrackingTests
     }
 
     [Fact]
+    public void ReadReceipts_KeepTheReadMarkOutsideTheSharedRecord()
+    {
+        var run = Run("app.MapCrud<Discussion>().ConcurrencyChecked().Archivable().ReadReceipts();").AssertCompiles();
+
+        // Okundu bilgisi kaydın bir alanı değildir; işaretler kendi tablosundadır.
+        Assert.DoesNotContain("ReadAt", run.Sources["Shop.Discussion.Entity.g.cs"]);
+        Assert.DoesNotContain("ReadAt", run.Sources["Shop.Discussion.Dtos.g.cs"]);
+        Assert.Contains("global::Haldus.HaldusReadReceipts.Configure(modelBuilder);", run.Sources["HaldusModule.g.cs"]);
+        Assert.DoesNotContain("HaldusReadReceipts", Run("app.MapCrud<Discussion>();").AssertCompiles().Sources["HaldusModule.g.cs"]);
+
+        var endpoints = run.Sources["Shop.Discussion.Endpoints.g.cs"];
+
+        // Bütün uçlar kullanıcısı çözülemeyen isteği reddeder.
+        foreach (var map in new[]
+        {
+            """MapPost("/{id:guid}/read", MarkReadAsync)""",
+            """MapPost("/{id:guid}/unread", MarkUnreadAsync)""",
+            """MapGet("/{id:guid}/read-state", ReadStateAsync)""",
+            """MapPost("/read-all", ReadAllAsync)""",
+            """MapGet("/unread-count", UnreadCountAsync)""",
+        })
+        {
+            var mapped = endpoints.Substring(endpoints.IndexOf(map, StringComparison.Ordinal));
+            Assert.Contains(".AddEndpointFilter<global::Haldus.HaldusUserRequiredFilter>()", mapped.Substring(0, mapped.IndexOf(";", StringComparison.Ordinal)));
+        }
+
+        // Kayıt, isteği yapana görünür olarak aranır; kendisi yazılmadığı için sürümü sorulmaz.
+        foreach (var name in new[] { "MarkReadAsync", "MarkUnreadAsync", "ReadStateAsync" })
+        {
+            var handler = Handler(endpoints, name);
+            Assert.Contains("AnyAsync(item => item.Id == id, cancellationToken)", handler);
+            Assert.Contains("NotFound(messages, \"Discussion\", id)", handler);
+            Assert.DoesNotContain("IgnoreQueryFilters", handler);
+            Assert.DoesNotContain("ReadIfMatch", handler);
+            Assert.DoesNotContain("SaveChangesAsync", handler);
+        }
+
+        Assert.Contains("global::Haldus.HaldusReadReceipts.MarkAsync<Discussion>(context,", Handler(endpoints, "MarkReadAsync"));
+        Assert.Contains("global::Haldus.HaldusReadReceipts.UnmarkAsync<Discussion>(context,", Handler(endpoints, "MarkUnreadAsync"));
+
+        // Liste ve sayım isteği yapanın işaretlerine bakar; arşivlenen kayıt okunmamışlar arasında sayılmaz.
+        Assert.Contains("global::Haldus.HaldusReadReceipts.Filter(receipts, query, item => item.Id.ToString(), global::Haldus.HaldusScope.UserId(receipts), unreadOnly);", Handler(endpoints, "ListAsync"));
+        Assert.Contains(".Where(item => item.ArchivedAt == null)", Handler(endpoints, "UnreadCountAsync"));
+        Assert.Contains("global::Haldus.HaldusReadReceipts.MarkAllAsync(", Handler(endpoints, "ReadAllAsync"));
+    }
+
+    [Fact]
     public void ReadTracking_OfAVersionedRecord_ChecksTheVersion()
     {
         var run = Run("app.MapCrud<Notification>().OwnedByCurrentUser().ConcurrencyChecked().ReadTracking();").AssertCompiles();
@@ -199,6 +246,9 @@ public sealed class TrackingTests
     [InlineData("app.MapCrud<Notification>().Publishable().Retention(TimeSpan.FromDays(1));", "HALDUS007", "Publishable cannot be combined with Retention")]
     [InlineData("app.MapCrud<Notification>().ReadTracking();", "HALDUS007", "ReadTracking needs OwnedByCurrentUser")]
     [InlineData("app.MapSingleton<Notification>().ReadTracking();", "HALDUS007", "ReadTracking")]
+    [InlineData("app.MapCrud<Notification>().OwnedByCurrentUser().ReadTracking().ReadReceipts();", "HALDUS007", "ReadReceipts cannot be combined with ReadTracking")]
+    [InlineData("app.MapStore<Notification>().ReadReceipts();", "HALDUS007", "ReadReceipts")]
+    [InlineData("var discussions = app.MapCrud<Discussion>().ReadReceipts(); discussions.MapAction(\"read-state\", discussion => { });", "HALDUS007", "read-state")]
     [InlineData("var notifications = app.MapCrud<Notification>().OwnedByCurrentUser().ReadTracking(); notifications.MapAction(\"read\", notification => { });", "HALDUS007", "read")]
     [InlineData("app.MapCrud<Discussion>().Counts<Reply>();", "HALDUS009", "Reply")]
     [InlineData("app.MapCrud<Discussion>().Counts<Reply>(); app.MapCrud<Reply>();", "HALDUS007", "needs 'Reply' to refer to 'Discussion'")]

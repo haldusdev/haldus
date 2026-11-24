@@ -218,7 +218,8 @@ Bunlar kullanıcıyla kararlaştırıldı; yeniden sorma.
     bakım sırasında fiziksel olarak silinir. Süreyi geliştirici açıkça yazdığı için, `Expiring` kayıtlarının aksine
     ayrıca bir seçenekle açılmaz.
   - `.ReadTracking()` okundu bilgisini kaydın kendisinde tutar (`ReadAt`), bu yüzden `OwnedByCurrentUser` ister.
-    Paylaşılan bir kaydın kullanıcı başına okundu bilgisi (ayrı bir tablo) yazılmadı.
+    Paylaşılan bir kaydın kullanıcı başına okundu bilgisi planlardan sonra ayrı bir bildirim olarak yazıldı:
+    `.ReadReceipts()` işaretleri ayrı bir tabloda (`HaldusReadReceipts`) tutar.
   - `.Counts<TChild>()` / `.Sums<TChild>(...)`: alan artırılıp azaltılmaz, alt kayıt her yazıldığında baştan sayılır.
     Türetilmiş durum ayrı bir bildirim değildir: toplamdan sonra üst kaydın `Compute()` metodu çağrılır.
 - Yerelleştirilmiş alanlar (23. aşama). Kullanıcı sormamamı istedi; yazılan, önerdiğim seçeneklerdir ve ayrıca
@@ -1008,6 +1009,14 @@ denenmesi, yük ölçümü. Raporun "Bilinen sınırlar" tablosundaki kalemler d
   `ExecuteUpdate`'tir, `unread-count` arşivlenmiş kayıtları saymaz. İkisinin de adı geçiş ve aksiyon adı olamaz
   (`ReservedRoute`). Okundu bilgisi içerik değildir: salt-okunur kaynakta da değişir, ama `Auditable` kaynakta
   `UpdatedAt` alanını ilerletir. `read-all` değişiklik izleyicisini atlar (akışa ve sürümlere girmez).
+- **Okundu işaretleri.** `Traits.ReadReceipts`; entity'ye alan veya arayüz eklemez. Uçları
+  `EndpointEmitter.ReadReceipts.cs` üretir, mantık çalışma zamanındadır (`HaldusReadReceipts`: tek tablo; kaynak tipi +
+  kullanıcı + kayıt kimliği benzersizdir). Kayıt hiç yazılmaz, bu yüzden uçlar sürüm, onay ve düzenleme kurallarına
+  bakmaz; ama kaydı her zaman kendi filtrelerinden geçirerek arar (göremeyen işaretleyemez ve durumunu okuyamaz) ve
+  kullanıcısı çözülemeyen isteği reddeder. Liste ve sayım, kaydın anahtarının metin haliyle işaretlere bağlanır
+  (`ReceiptKey`: `item.Id.ToString()`; sağlayıcı bunu çevirebilmelidir). Aynı anda gelen iki işaretleme benzersiz
+  indekse takılır ve yutulur. Sınırlar: `read-all` istek başına 5000 kayıt işaretler; kimin okuduğunun listesi
+  ("görenler") yoktur; kayıt silinince işaretleri kalır; `ReadTracking` ile birleşmez (adresleri aynıdır).
 - **Toplanan alanlar.** Zincirdeki `Counts<T>()` / `Sums<T>(...)` `ResourceModel.Rollups` olur ve alanı
   `ExtraMembers`'a ekler (yalnızca yanıtta; aranabilir ve sıralanabilir). Alt kaynağı ve onun bu kaynağa işaret eden
   alanını `ResourceLinker.ResolveRollups` çözer (her tür referans olur: `References`, `Under`, `AttachedTo`,

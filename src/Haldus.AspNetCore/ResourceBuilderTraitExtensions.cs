@@ -266,6 +266,16 @@ public static class ResourceBuilderTraitExtensions
         where TEntity : class => builder;
 
     /// <summary>
+    /// Paylaşılan kayıtların (duyuru, ortak belge) kullanıcı başına okundu bilgisi. Bilgi kayıtta değil ayrı bir
+    /// tabloda durur; kaydın kendisi değişmez. <c>POST /{id}/read</c> ve <c>/unread</c> geçerli kullanıcı için
+    /// işaretler, <c>GET /{id}/read-state</c> durumu verir, <c>POST /read-all</c> görünen kayıtların hepsini okundu
+    /// yapar (istek başına en çok 5000), <c>GET /unread-count</c> okunmamışları sayar ve liste
+    /// <c>?unread=true</c> ile süzülür. Uçlar kullanıcısı çözülemeyen isteği reddeder (401).
+    /// </summary>
+    public static ResourceBuilder<TEntity> ReadReceipts<TEntity>(this ResourceBuilder<TEntity> builder)
+        where TEntity : class => builder;
+
+    /// <summary>
     /// Kayda, alanlarını kiracının tanımladığı bir değer çantası ekler (<c>customFields</c>). Tanımlar kaynağın
     /// adresinde yönetilir: <c>GET /custom-fields</c>, <c>PUT</c> ve <c>DELETE /custom-fields/{key}</c>; her alanın
     /// bir türü (metin, sayı, evet/hayır, gün, seçenek) vardır ve zorunlu olabilir. Değerler her yazmada tanımlara

@@ -65,6 +65,13 @@ public static class EngagementEndpoints
         garments.MapDetail<GarmentVariant>();
         garments.MapAction<GenerateVariants>();
         // Kimlik numarası hassastır: isteklerde yazılır, hiçbir yanıtta ve saklanan sürümde yer almaz.
+        // Paylaşılan kaydın kullanıcı başına okundu bilgisi: POST /announcements/{id}/read ve /unread,
+        // GET /announcements/{id}/read-state, POST /announcements/read-all, GET /announcements/unread-count,
+        // GET /announcements?unread=true. Duyurunun kendisi değişmez; işaretler ayrı bir tablodadır.
+        app.MapCrud<Announcement>()
+            .Archivable()
+            .ReadReceipts();
+
         // Ölçüte uyan kayıtlar topluca silinir: POST /contacts/purge?source=import-2024 önce sayar,
         // &force=true ile siler. Ölçüt, liste ucunun filtresidir.
         app.MapCrud<Contact>()

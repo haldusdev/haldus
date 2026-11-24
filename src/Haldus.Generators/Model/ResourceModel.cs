@@ -387,6 +387,9 @@ internal enum Traits
     Rerunnable = 67108864,
     PublishesEvents = 134217728,
     Recurring = 268435456,
+
+    /// <summary>Paylaşılan kaydın kullanıcı başına okundu bilgisi (<c>.ReadReceipts()</c>).</summary>
+    ReadReceipts = 536870912,
 }
 
 /// <summary>

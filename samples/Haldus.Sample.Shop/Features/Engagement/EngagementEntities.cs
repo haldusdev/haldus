@@ -48,6 +48,17 @@ public partial class Contact
     public string? Source { get; set; }
 }
 
+/// <summary>Duyuru herkese açıktır; kimin okuduğu kullanıcı başına, ayrı tutulur.</summary>
+public partial class Announcement
+{
+    [Required]
+    [MaxLength(200)]
+    public string Title { get; set; } = "";
+
+    [MaxLength(4000)]
+    public string? Body { get; set; }
+}
+
 /// <summary><c>GET /contacts</c> ve <c>POST /contacts/purge</c> için ölçütler.</summary>
 public sealed class ContactFilter : IFilter<Contact>
 {

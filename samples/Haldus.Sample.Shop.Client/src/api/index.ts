@@ -1,5 +1,6 @@
 export * from './address-notes/address-notes';
 export * from './addresses/addresses';
+export * from './announcements/announcements';
 export * from './api-keys/api-keys';
 export * from './articles/articles';
 export * from './attachments/attachments';

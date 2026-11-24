@@ -10,6 +10,10 @@ public interface IReadTracked
     DateTimeOffset? ReadAt { get; set; }
 }
 
+/// <summary>Geçerli kullanıcının bir kaydı okuyup okumadığı (<c>GET /{id}/read-state</c>).</summary>
+/// <param name="ReadAt">Kaydın okunduğu an; okunmadıysa boştur.</param>
+public sealed record ReadState(bool Read, DateTimeOffset? ReadAt);
+
 /// <summary>Okunmamış kayıtların sayısı.</summary>
 public sealed record UnreadCount(long Count);
 

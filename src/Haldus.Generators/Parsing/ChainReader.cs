@@ -69,6 +69,7 @@ internal static class ChainReader
         "ChangeSets",
         "Retention",
         "ReadTracking",
+        "ReadReceipts",
         "Translatable",
         "Counts",
         "Sums",
@@ -186,6 +187,9 @@ internal static class ChainReader
                     break;
                 case "ReadTracking":
                     traits |= Traits.ReadTracking;
+                    break;
+                case "ReadReceipts":
+                    traits |= Traits.ReadReceipts;
                     break;
                 case "Translatable":
                     traits |= Traits.Translatable;
