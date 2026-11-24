@@ -144,6 +144,26 @@ public static class HaldusProblems
         return FieldProblem(messages, "sort", messages.Format(HaldusMessageKeys.SortInvalid, requested, sortable));
     }
 
+    /// <summary>Değişiklik kümesi kapanmış: uygulanmış ya da ondan vazgeçilmiş; artık değiştirilemez ve uygulanamaz.</summary>
+    public static ProblemHttpResult ChangeSetClosed(IHaldusMessages messages, ChangeSetStatus status)
+    {
+        ArgumentNullException.ThrowIfNull(messages);
+
+        return TypedResults.Problem(
+            title: messages.Format(HaldusMessageKeys.ChangeSetClosedTitle),
+            detail: messages.Format(status == ChangeSetStatus.Committed
+                ? HaldusMessageKeys.ChangeSetCommittedDetail
+                : HaldusMessageKeys.ChangeSetDiscardedDetail),
+            statusCode: StatusCodes.Status409Conflict);
+    }
+
+    /// <summary>Gönderilen değişiklikler okunamıyor: bir JSON nesnesi değil, alanların tipine uymuyor ya da çok büyük.</summary>
+    public static ProblemHttpResult ChangeSetInvalid(IHaldusMessages messages)
+    {
+        ArgumentNullException.ThrowIfNull(messages);
+        return FieldProblem(messages, "changes", messages.Format(HaldusMessageKeys.ChangeSetInvalid, HaldusChangeSetRequests.MaxLength));
+    }
+
     /// <summary>Bakiye, istenen düşüşü karşılamıyor.</summary>
     public static ProblemHttpResult BalanceInsufficient(IHaldusMessages messages, string bucket, decimal balance)
     {

@@ -46,7 +46,7 @@ public sealed class TaxonomyTests
     public static readonly Row[] Rows =
     [
         // ── E-ticaret ────────────────────────────────────────────────────────────────────────────────
-        new(1, "Order", Fit.Partial,
+        new(1, "Order", Fit.Clean,
             """
             public enum OrderStatus { Draft, Placed, Cancelled }
             public enum PaymentState { Unpaid, Paid, Refunded }
@@ -65,7 +65,7 @@ public sealed class TaxonomyTests
             app.MapCrud<Cart>();
             var orders = app.MapCrud<Order>().MultiTenant().Auditable(trackUser: true).ConcurrencyChecked()
                 .Workflow<OrderStatus>(initial: OrderStatus.Draft).EditableIn(OrderStatus.Draft).DeletableIn(OrderStatus.Draft)
-                .Axis<PaymentState>().Axis<ShipmentState>()
+                .Axis<PaymentState>().Axis<ShipmentState>().ChangeSets(OrderStatus.Placed)
                 .Numbered("ORD-{yyyy}-{seq:6}", assignOn: OrderStatus.Placed).Idempotent().CreatedFrom<Cart>();
             orders.MapDetail<OrderItem>();
             orders.MapTransition("place", OrderStatus.Draft, OrderStatus.Placed);
@@ -630,8 +630,8 @@ public sealed class TaxonomyTests
     public void Tally_MatchesTheWrittenResults()
     {
         // reports/Haldus taksonomi sınaması.md dosyasındaki sayılar; biri değişirse diğeri de güncellenmelidir.
-        Assert.Equal(55, Rows.Count(row => row.Fit == Fit.Clean));
-        Assert.Equal(3, Rows.Count(row => row.Fit == Fit.Partial));
+        Assert.Equal(56, Rows.Count(row => row.Fit == Fit.Clean));
+        Assert.Equal(2, Rows.Count(row => row.Fit == Fit.Partial));
         Assert.Equal(1, Rows.Count(row => row.Fit == Fit.Missing));
     }
 }

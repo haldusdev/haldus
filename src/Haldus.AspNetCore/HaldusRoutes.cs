@@ -20,4 +20,16 @@ public static class HaldusRoutes
 
         return $"{httpContext.Request.PathBase}{(record < 0 ? string.Empty : path[..record])}/{id}";
     }
+
+    /// <summary>
+    /// Bir koleksiyon adresine (<c>/orders/{id}/edits</c>) yapılan isteğin oluşturduğu kaydın adresi:
+    /// <c>/orders/{id}/edits/{yeniId}</c>.
+    /// </summary>
+    public static string Child(HttpContext httpContext, object id)
+    {
+        ArgumentNullException.ThrowIfNull(httpContext);
+        ArgumentNullException.ThrowIfNull(id);
+
+        return $"{httpContext.Request.PathBase}{httpContext.Request.Path.Value?.TrimEnd('/')}/{id}";
+    }
 }

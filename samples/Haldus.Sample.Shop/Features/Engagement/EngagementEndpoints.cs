@@ -18,7 +18,10 @@ public static class EngagementEndpoints
         app.MapCrud<Discussion>()
             .Counts<Reply>()
             .Sums<Reply>(reply => reply.Score, into: "Score")
-            .Sortable(discussion => discussion.ReplyCount, discussion => discussion.Score);
+            .Sortable(discussion => discussion.ReplyCount, discussion => discussion.Score)
+
+            // Durum makinesi olmayan kayıt her zaman bir değişiklik kümesiyle düzenlenebilir.
+            .ChangeSets();
 
         // Silinen yanıt sayılmaz; geri yüklenince yeniden sayılır.
         app.MapCrud<Reply>()

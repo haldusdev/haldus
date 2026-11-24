@@ -54,6 +54,11 @@ public static class SalesEndpoints
             // Önizleme toplamı hesaplar ama kaydetmez: POST /orders/preview ve POST /orders/{id}/preview
             .Previewable()
 
+            // Verilmiş sipariş doğrudan düzenlenemez (EditableIn yalnızca taslak); bir değişiklik kümesiyle düzenlenir:
+            // POST /orders/{id}/edits başlatır, PATCH /orders/{id}/edits/{editId} değişiklik ekler,
+            // GET …/preview sonucu gösterir, POST …/commit hepsini tek seferde uygular, DELETE vazgeçer.
+            .ChangeSets(OrderStatus.Placed)
+
             // Sipariş bir sepetten de üretilebilir: POST /orders/from-cart/{cartId}
             // Sepetin satırlarını siparişe Order.CreateFrom taşır; sepet silinirse bağ boşalır.
             .CreatedFrom<Cart>(onDelete: OnDelete.SetNull);

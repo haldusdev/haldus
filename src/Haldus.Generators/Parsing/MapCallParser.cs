@@ -671,6 +671,7 @@ internal static class MapCallParser
             Transfer = archetype == Archetype.Job ? transfer : null,
             RetentionTicks = lifecycle.RetentionTicks,
             Balance = balance,
+            ChangeSets = lifecycle.ChangeSets,
             Axes = lifecycle.Axes.ToEquatableArray(),
             Rollups = rollups.ToEquatableArray(),
             ReversibleIn = lifecycle.ReversibleIn,
@@ -907,6 +908,12 @@ internal static class MapCallParser
             yield return "ChangeFeed cannot be combined with Under<T>(shallow: true): the feed could not tell whose deleted records it is listing";
         }
 
+        if (chain.Any(call => call.Name == "ChangeSets") && crudLike && (operations & Operations.Patch) == 0)
+        {
+            // Küme, kaydın kısmi güncellemesinin birikmiş halidir.
+            yield return "ChangeSets requires the Patch operation, which has been removed from this resource";
+        }
+
         if ((traits & Traits.Translatable) != 0 && (operations & (Operations.Update | Operations.Patch)) == 0)
         {
             // Çeviri yazmak kaydı güncellemektir.
@@ -1115,8 +1122,8 @@ internal static class MapCallParser
                 // Saklama süresi, okundu takibi ve toplanan alanlar, anahtarıyla adreslenen koleksiyonlar içindir.
                 "Retention" or "ReadTracking" or "Counts" or "Sums" => crudLike || archetype is Archetype.AppendOnly or Archetype.ReadOnly,
 
-                // Çeviriler, istemcinin yazıp değiştirdiği kayıtlar içindir.
-                "Translatable" => crudLike,
+                // Çeviriler ve değişiklik kümeleri, istemcinin yazıp değiştirdiği kayıtlar içindir.
+                "Translatable" or "ChangeSets" => crudLike,
 
                 // Özel alanlar, istemcinin yazıp değiştirdiği kayıtlar içindir.
                 "CustomFields" => crudLike,

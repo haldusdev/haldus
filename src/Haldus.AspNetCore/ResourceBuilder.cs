@@ -251,6 +251,18 @@ public sealed class ResourceBuilder<TEntity>(RouteGroupBuilder group, IEndpointR
         where TStatus : struct, Enum => this;
 
     /// <summary>
+    /// Kaydın, adım adım hazırlanıp sonunda tek seferde uygulanan düzenleme oturumlarını açar (verilmiş bir siparişin
+    /// düzenlenmesi gibi): <c>POST /{id}/edits</c> bir küme başlatır, <c>PATCH /{id}/edits/{editId}</c> kısmi güncelleme
+    /// gövdesiyle aynı biçimde değişiklik ekler, <c>GET …/preview</c> uygulanırsa kaydın nasıl olacağını gösterir,
+    /// <c>POST …/commit</c> uygular, <c>DELETE</c> vazgeçer. Uygulama, kaydın kısmi güncellemesinin bütün kurallarından
+    /// geçer; yalnızca <c>EditableIn</c> kuralının yerini burada sayılan durumlar alır.
+    /// </summary>
+    /// <param name="states">
+    /// Kaydın bir değişiklik kümesiyle düzenlenebildiği durumlar. Kaynağın durum makinesi varsa sayılmaları zorunludur.
+    /// </param>
+    public ResourceBuilder<TEntity> ChangeSets(params Enum[] states) => this;
+
+    /// <summary>
     /// Kayda, asıl durumundan bağımsız ilerleyen ek bir durum ekseni ekler (siparişin kendi durumunun yanında ödeme
     /// ve sevkiyat durumu gibi). Alan, durum tipinin adını taşır (<c>PaymentStatus</c>), istek gövdesinden yazılamaz
     /// ve yalnızca durumları o tipten olan <c>MapTransition</c> geçişleriyle değişir. <c>EditableIn</c> ve

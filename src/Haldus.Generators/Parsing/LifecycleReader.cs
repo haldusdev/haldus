@@ -44,6 +44,8 @@ internal static class LifecycleReader
 
         public bool AllowNegative { get; set; }
 
+        public ChangeSetModel? ChangeSets { get; set; }
+
         /// <summary>Kaydın ters çevrilebildiği durumlar; durum makinesi yoksa <c>null</c>.</summary>
         public EquatableArray<string>? ReversibleIn { get; set; }
 
@@ -69,6 +71,7 @@ internal static class LifecycleReader
         LocationInfo? numberingLocation = null;
         (SimpleNameSyntax Name, SeparatedSyntaxList<ArgumentSyntax> Arguments)? reversible = null;
         (SimpleNameSyntax Name, SeparatedSyntaxList<ArgumentSyntax> Arguments)? supersedes = null;
+        (SimpleNameSyntax Name, SeparatedSyntaxList<ArgumentSyntax> Arguments)? changeSets = null;
         var rotatable = false;
         long? overlap = null;
         SimpleNameSyntax? document = null;
@@ -159,6 +162,10 @@ internal static class LifecycleReader
 
                 case "Supersedes":
                     supersedes = (name, arguments);
+                    break;
+
+                case "ChangeSets":
+                    changeSets = (name, arguments);
                     break;
 
                 case "Document":
@@ -275,6 +282,13 @@ internal static class LifecycleReader
 
         result.ReversibleIn = ReadChainStates(semanticModel, reversible, result.Workflow, "reversed", Invalid, cancellationToken);
         result.SupersedableIn = ReadChainStates(semanticModel, supersedes, result.Workflow, "superseded", Invalid, cancellationToken);
+
+        if (changeSets is not null)
+        {
+            // Küme, kaydın düzenlenemediği durumlarda da çalışan bir yazmadır; durumları açıkça sayılmalıdır.
+            result.ChangeSets = new ChangeSetModel(
+                ReadChainStates(semanticModel, changeSets, result.Workflow, "edited through a change set", Invalid, cancellationToken));
+        }
 
         if (result.Workflow is { } workflow)
         {

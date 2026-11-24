@@ -27,6 +27,10 @@ public static class HaldusMessageKeys
     public const string DuplicateDetail = "Duplicate.Detail";
     public const string SortInvalid = "Sort.Invalid";
     public const string LocaleInvalid = "Locale.Invalid";
+    public const string ChangeSetClosedTitle = "ChangeSet.Closed.Title";
+    public const string ChangeSetCommittedDetail = "ChangeSet.Committed.Detail";
+    public const string ChangeSetDiscardedDetail = "ChangeSet.Discarded.Detail";
+    public const string ChangeSetInvalid = "ChangeSet.Invalid";
     public const string BalanceInsufficientTitle = "Balance.Insufficient.Title";
     public const string BalanceInsufficientDetail = "Balance.Insufficient.Detail";
     public const string BalanceChangedDetail = "Balance.Changed.Detail";

@@ -219,6 +219,15 @@ Bunlar kullanıcıyla kararlaştırıldı; yeniden sorma.
     ama okuması 404'tür.
   - Bakiye varsayılan olarak sıfırın altına düşemez (409); `.AllowNegative()` kuralı kaldırır.
   - Defter kaynak başına ayrı tablo değil, tek bir `HaldusBalanceEntries` tablosudur.
+- Değişiklik kümesi (26. aşama). Kullanıcı sormamamı istedi; yazılan, önerdiğim seçeneklerdir ve ayrıca onaylanmadı:
+  - Araştırmanın `MapChangeSet<TTarget>()` archetype'ı ayrı bir `Map*` çağrısı olarak değil, hedefin zincirinde
+    `.ChangeSets(durumlar...)` olarak yazıldı: küme kendi başına bir kaynak değil, hedefin bir yazma yoludur ve
+    kurallarını hedefin kısmi güncellemesinden alır.
+  - Küme "aksiyon listesi" değil, hedefin birikmiş `PATCH` gövdesidir (JSON olarak saklanır). Sahneleme
+    `PATCH /{id}/edits/{editId}` ile yapılır; uçlar hedefin adresi altındadır (`/orders/{id}/edits`), raporun kök
+    adresi (`/edits/{id}`) kullanılmadı ki kümenin görünürlüğü hedefinkiyle aynı olsun.
+  - Küme, açıldığı andaki değil uygulandığı andaki kayda uygulanır; "kayıt bu sırada değişti" çakışması üretilmez
+    (sürüm kontrollü kaynakta `If-Match` zaten bunu sorar).
 - Eşzamanlılık trait'inin adı `ConcurrencyChecked` (eski adı `Versioned`). Sürüm yanıt gövdesinde değil
   `ETag` başlığında taşınır; güncelleme ve silme `If-Match` ister (eksikse 428, uyuşmazlıkta 412).
 - Güncelleme için hem `PUT` (tam değiştirme) hem `PATCH` (kısmi) üretilir.
@@ -289,7 +298,7 @@ Bunlar kullanıcıyla kararlaştırıldı; yeniden sorma.
 
 İlk iki plan bitti: ilk sürümün on aşaması (3. aşamaya `.Searchable()`, 8. aşamaya fiziksel temizlik de eklendi) ve
 ikinci planın on bir aşaması. Üçüncü plan sürüyor (aşağıda). Sınamanın sonucu `reports/Haldus taksonomi sınaması.md`
-dosyasındadır: araştırmadaki 59 varlığın 55'i temiz, 3'ü kısmen ifade ediliyor, 1'i için gereken özellik yok (ilk
+dosyasındadır: araştırmadaki 59 varlığın 56'sı temiz, 2'si kısmen ifade ediliyor, 1'i için gereken özellik yok (ilk
 sınamada 19 / 29 / 11). Aynı veri `tests/Haldus.Generators.Tests/TaxonomyTests.cs` içinde derlenir; yeni bir archetype
 veya trait bir satırı kapatıyorsa ikisini birlikte güncelle. Kalan eksikler raporun "Kalan eksikler" tablosundadır.
 
@@ -699,6 +708,26 @@ içeriyor (ilişki bildirimleri, `Sensitive`, `PublishesEvents`, `Purgeable`, ye
     listede olmayan geçişin token adresi yoktur. Token ebeveyn altındaki ve kullanıcıya ait kaynaklarla
     birleşmez (görünürlükleri, token'ı taşıyanın sahip olmadığı bir kimliğe bağlıdır). Bilinen sınır: token
     kullanılınca kendiliğinden geçersiz olmaz; ömrünü `Expiring` ve durum makinesi belirler. Oran sınırlama yoktur.
+- **Değişiklik kümeleri.** `ResourceModel.ChangeSets` (`LifecycleReader`; durumlar `ReadChainStates` ile okunur: durum
+  makinesi varsa sayılmaları zorunludur, çünkü küme kaydın düzenlenemediği durumlarda da çalışan bir yazmadır).
+  Uçları `EndpointEmitter.ChangeSets.cs` üretir; saklama (`HaldusChangeSets`, tek bir `HaldusChangeSets` tablosu) ve
+  JSON'un istek tipine çevrilmesi (`HaldusChangeSetRequests`) çalışma zamanındadır.
+  - **Uygulama ve önizleme, kısmi güncelleme ucunun parçalarından kurulur** (`ChainGuard`, `WriteChecks`, `CycleCheck`,
+    `ExpectVersion`, `PatchAssignments`, `SyncDetails`, `Compute`, `Save`); tek fark `StateGuard`'a `EditableIn` yerine
+    kümenin durumlarının verilmesidir. `EmitWrite`'a eklenen bir kural buraya da eklenmelidir; paylaşılan parçaya
+    konan kural kendiliğinden gelir.
+  - Küme JSON olarak saklanır ve her kullanımda `Patch{Entity}Request`'e çevrilip yeniden doğrulanır; böylece
+    "gönderilmedi" ile "null gönderildi" ayrımı korunur ve hazırlanırken geçerli olan içerik uygulanırken de
+    doğrulanır. Sahneleme üst düzey alanları birleştirir (aynı alanın sonuncusu geçerlidir; gömülü satır listesi ve
+    metadata çantası bütün olarak değişir).
+  - Kümenin durumu eşzamanlılık belirtecidir ve küme, kayıtla aynı kaydetmede kapanır; birlikte gelen iki uygulama
+    isteğinden ikincisi 409 (sürüm kontrollü kaynakta 412) alır. Bu yüzden uygulama `Save(always: true)` ile kaydeder.
+  - Kümeyi bulan her uç önce kaydı kendi filtrelerinden geçirerek okur; küme tablosunun kiracısı yoktur, görünürlüğü
+    kayıttan gelir. Başka bir kaydın kümesi bu kaydın adresinde bulunamaz.
+  - Sınırlar: yalnızca `MapCrud` + `Patch` işlemiyle birleşir; kümenin toplu, ayrı uçlu detay ve komutla yazılan
+    satır karşılığı yoktur; bir kaydın birden çok açık kümesi olabilir ve birbirlerinden habersizdirler; kümeler
+    kendiliğinden silinmez ve kayıt silinince kalır; içerik en çok 1 milyon karakterdir; uygulama idempotency
+    anahtarı almaz (kümenin durumu zaten ikinci uygulamayı durdurur).
 - **Bakiye.** `Archetype.Balance` ana hattan geçer (ayrı bir üretici hattı değildir): anahtarı `MapStore` gibi istemci
   verir (`HasClientKey`), temel işlemleri liste ve tekil okumadır, kova alanları `ExtraMembers`'tadır (aranabilir,
   sıralanabilir) ve `Auditable` kendiliğinden eklenir. Komutları `EndpointEmitter.Balance.cs` üretir; kilit ve defter

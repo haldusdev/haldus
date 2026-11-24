@@ -423,6 +423,34 @@ app.MapJob<ProductImport>().Imports<Product>();
 CSV yeni bir bağımlılık olmadan okunur ve yazılır (RFC 4180). Dışa aktarılan metinlerden `=`, `+`, `-` veya `@` ile
 başlayanların önüne kesme işareti konur; böylece dosya bir tablolama programında açıldığında formül olarak çalışmaz.
 
+## Değişiklik kümeleri
+
+Verilmiş bir sipariş doğrudan düzenlenemez (`EditableIn` yalnızca taslak), ama düzeltilmesi gerekebilir. Değişiklik
+kümesi bunu bir düzenleme oturumu olarak sunar: değişiklikler adım adım biriktirilir, sonucu önizlenir ve hepsi tek
+seferde uygulanır ya da vazgeçilir.
+
+```csharp
+var orders = app.MapCrud<Order>()
+    .Workflow<OrderStatus>(initial: OrderStatus.Draft)
+    .EditableIn(OrderStatus.Draft)
+    .ChangeSets(OrderStatus.Placed);          // verilmiş sipariş küme ile düzenlenir
+```
+
+| Uç | Etkisi |
+|---|---|
+| `POST /orders/{id}/edits` | Boş bir küme açar (201) |
+| `PATCH /orders/{id}/edits/{editId}` | Değişiklik ekler. Gövde, kaydın `PATCH` gövdesiyle aynı biçimdedir ve aynı kurallardan geçer; aynı alan yeniden gönderilirse sonuncusu geçerlidir |
+| `GET /orders/{id}/edits/{editId}/preview` | Küme şimdi uygulansaydı kaydın nasıl olacağını, hesaplanan alanlarıyla döndürür; hiçbir şey kaydetmez |
+| `POST /orders/{id}/edits/{editId}/commit` | Değişiklikleri kayda uygular ve kümeyi kapatır; ikisi tek kaydetmededir |
+| `DELETE /orders/{id}/edits/{editId}` | Kümeden vazgeçer |
+| `GET /orders/{id}/edits`, `GET /orders/{id}/edits/{editId}` | Kaydın kümeleri ve biriken değişiklikler |
+
+Uygulama, kaydın kısmi güncellemesinin bütün kurallarından geçer (doğrulama, referanslar, benzersizlik, hesaplanan
+alanlar, `If-Match`, onaylanmış veya kapanmış kayıt); yalnızca `EditableIn` kuralının yerini `ChangeSets(...)` ile
+sayılan durumlar alır. Kaynağın durum makinesi varsa bu durumların sayılması zorunludur. Küme, kaydın uygulama
+anındaki haline uygulanır: hazırlanırken kayıt başka yoldan değiştiyse değişiklikler onun üzerine yazılır. Aynı küme
+iki kez uygulanamaz; birlikte gelen iki uygulama isteğinden biri 409 alır.
+
 ## Bakiyeler
 
 Stok seviyesi veya izin bakiyesi gibi bir nicelik `PUT` ile yazılmaz: aynı anda gelen iki yazmadan biri ötekini ezerdi
@@ -568,7 +596,7 @@ kısıtı olur, ayrı bağlamlardaysa referans yalnızca kimlikle tutulur ve var
 
 İlk iki plan tamamlandı: ilk sürümün on aşaması ve araştırmanın ikinci sürüm listesini kapatan on bir aşama. Üçüncü
 plan (araştırmanın üçüncü sürüm listesi ve sınamada kalan satırlar) sürüyor. Model, araştırmadaki 59 gerçek varlığa
-karşı sınanıyor: bugün 55'i eksiksiz, 3'ü kısmen ifade ediliyor, 1'i için gereken özellik yok (ilk sınamada bu
+karşı sınanıyor: bugün 56'sı eksiksiz, 2'si kısmen ifade ediliyor, 1'i için gereken özellik yok (ilk sınamada bu
 sayılar 19, 29 ve 11 idi). Ayrıntısı [taksonomi sınaması](reports/Haldus%20taksonomi%20sınaması.md) belgesindedir.
 
 Tasarım kararları için [CLAUDE.md](CLAUDE.md), kararların dayandığı araştırma için [reports](reports/)

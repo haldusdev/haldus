@@ -615,6 +615,7 @@ internal static class ResourceLinker
         "archive" or "unarchive" when resource.Has(Traits.Archivable) => nameof(Traits.Archivable),
         "read" or "unread" when resource.Has(Traits.ReadTracking) => nameof(Traits.ReadTracking),
         "translations" when resource.Has(Traits.Translatable) => nameof(Traits.Translatable),
+        "edits" when resource.ChangeSets is not null => "ChangeSets",
         "expire" when resource.Expiry is not null => "Expiring",
         "clone" when resource.Has(Traits.Cloneable) => nameof(Traits.Cloneable),
         "reverse" when resource.Has(Traits.Reversible) => nameof(Traits.Reversible),

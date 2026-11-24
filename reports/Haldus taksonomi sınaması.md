@@ -7,12 +7,12 @@ sonunda (10. aşama) ve ikinci planın sonunda (21. aşama); aşağıdaki tablo 
 
 ## Sonuç
 
-59 satırın 58'i bugünkü API ile yazılıp derleniyor; 55'i önerilen eşlemeyi eksiksiz ifade ediyor.
+59 satırın 58'i bugünkü API ile yazılıp derleniyor; 56'sı önerilen eşlemeyi eksiksiz ifade ediyor.
 
 | Sonuç | İlk sınama | Bugün | Anlamı |
 |---|---|---|---|
-| Temiz | 19 | 55 | Raporun önerdiği eşleme, yazılmış özelliklerle eksiksiz ifade ediliyor |
-| Kısmi | 29 | 3 | Çekirdek ifade ediliyor; önerilen eşlemedeki bir özellik yok |
+| Temiz | 19 | 56 | Raporun önerdiği eşleme, yazılmış özelliklerle eksiksiz ifade ediliyor |
+| Kısmi | 29 | 2 | Çekirdek ifade ediliyor; önerilen eşlemedeki bir özellik yok |
 | Yok | 11 | 1 | Gereken archetype veya trait yazılmadı |
 
 Araştırmanın başlangıçtaki düz katalog için kendi sayımı 10 oturuyor, 31 zorlanarak, 18 oturmuyor idi. Üç sayım
@@ -38,6 +38,7 @@ iyileşme ölçüsü olarak değil, yön olarak okunmalıdır.
 | 23. Yerelleştirilmiş alanlar | `Translatable` | 1 |
 | 24. Durum eksenleri | `Axis` | 1 |
 | 25. Bakiye | `MapBalance`, `Buckets`, `AllowNegative` | 2 |
+| 26. Değişiklik kümesi | `ChangeSets` | 1 |
 
 Dört katmanlı model (bir archetype, ilişkiler, en fazla bir durum modeli, trait'ler) iki sınamadan da sağlam çıktı:
 hiçbir satır iki archetype istemedi ve hiçbir satır modelin yeniden açılmasını gerektirmedi. Kapanan bütün boşluklar
@@ -60,7 +61,7 @@ yeni bir trait, ilişki bildirimi veya zincir metoduyla kapandı; kalanlar da ay
 
 | # | Varlık | Sonuç | Bugün nasıl yazılıyor | Eksik olan |
 |---|---|---|---|---|
-| 1 | Order | Kısmi | `MapCrud` + `Workflow` + `Axis<PaymentState>` + `Axis<ShipmentState>` + `Numbered(assignOn)` + `ConcurrencyChecked` + `Auditable` + `MapDetail` + `CreatedFrom<Cart>` | `MapChangeSet` |
+| 1 | Order | Temiz | `MapCrud` + `Workflow` + `Axis<PaymentState>` + `Axis<ShipmentState>` + `ChangeSets(Placed)` + `Numbered(assignOn)` + `ConcurrencyChecked` + `Auditable` + `MapDetail` + `CreatedFrom<Cart>` | |
 | 2 | OrderItem / LineItem | Temiz | Gömülü `MapDetail` + `IComputed` toplamlar | — |
 | 3 | Product + Variant + Option | Kısmi | `MapCrud` + `Publishable` + gömülü `MapDetail` (sırası korunur) + `Batch` | Varyant üretimi |
 | 4 | Category / Collection | Temiz | `MapCrud` + `Hierarchical` + `Archivable` + `Orderable` | — |
@@ -163,7 +164,7 @@ yeni bir trait, ilişki bildirimi veya zincir metoduyla kapandı; kalanlar da ay
 |---|---|---|
 
 
-| `MapChangeSet` | 1 | Üçüncü sürüm |
+
 
 | Sepet birleştirme, anonim oturumun sahipliği | 5 | Alana özgü; bir handler işi |
 | Kombinatoryal varyant üretimi | 3 | Alana özgü; bir aksiyon işi |

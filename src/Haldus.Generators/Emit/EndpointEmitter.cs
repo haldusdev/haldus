@@ -325,6 +325,11 @@ internal sealed partial class EndpointEmitter
             EmitBalance();
         }
 
+        if (_resource.ChangeSets is not null)
+        {
+            EmitChangeSets();
+        }
+
         if (Translatable)
         {
             EmitTranslations();
@@ -4257,9 +4262,13 @@ internal sealed partial class EndpointEmitter
     /// </summary>
     private bool GuardsState => (_resource.Workflow is not null || _resource.Approval is not null || _resource.Axes.Length > 0) && !_concurrency;
 
-    private string Save()
+    /// <param name="always">
+    /// Kaydetme, kaynağın kendi belirteçleri olmasa da çakışabilir mi (kayıtla birlikte, eşzamanlılık belirteci taşıyan
+    /// başka bir satır da yazılıyorsa).
+    /// </param>
+    private string Save(bool always = false)
     {
-        var concurrency = _concurrency || GuardsState
+        var concurrency = _concurrency || GuardsState || always
             ? $$"""
                         catch (global::Microsoft.EntityFrameworkCore.DbUpdateConcurrencyException)
                         {

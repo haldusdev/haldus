@@ -66,6 +66,18 @@
   <data name="Balance.Move.Same" xml:space="preserve">
     <value>Taşımanın kaynağı ve hedefi farklı kovalar olmalıdır.</value>
   </data>
+  <data name="ChangeSet.Closed.Title" xml:space="preserve">
+    <value>Değişiklik kümesi kapalı</value>
+  </data>
+  <data name="ChangeSet.Committed.Detail" xml:space="preserve">
+    <value>Değişiklikler kayda zaten uygulandı.</value>
+  </data>
+  <data name="ChangeSet.Discarded.Detail" xml:space="preserve">
+    <value>Değişikliklerden vazgeçildi.</value>
+  </data>
+  <data name="ChangeSet.Invalid" xml:space="preserve">
+    <value>Değişiklikler, kaydın alanlarını kendi tiplerindeki değerlerle taşıyan bir JSON nesnesi olmalıdır; toplamda en çok {0} karakter.</value>
+  </data>
   <data name="Locale.Invalid" xml:space="preserve">
     <value>'{0}' bir dil etiketi değil; 'tr' veya 'pt-BR' gibi yazın.</value>
   </data>

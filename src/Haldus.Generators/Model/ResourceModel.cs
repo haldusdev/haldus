@@ -200,6 +200,9 @@ internal sealed record ResourceModel(
     /// <summary>Tekrara karşı korunabilecek bir uç var mı: oluşturma veya en az bir geçiş.</summary>
     public bool HasWrites => Has(Operations.Create) || Transitions.Length > 0 || Archetype == Archetype.Balance;
 
+    /// <summary>Kayıt değişiklik kümeleriyle düzenlenebiliyorsa kuralları; değilse <c>null</c>.</summary>
+    public ChangeSetModel? ChangeSets { get; init; }
+
     /// <summary>Kaynak bir bakiyeyse (<c>MapBalance</c>) kovaları ve kuralları; değilse <c>null</c>.</summary>
     public BalanceModel? Balance { get; init; }
 
@@ -680,6 +683,10 @@ internal sealed record WorkflowModel(
     string Initial,
     EquatableArray<string>? EditableIn,
     EquatableArray<string>? DeletableIn);
+
+/// <summary>Kaydın değişiklik kümeleriyle düzenlenmesi (<c>.ChangeSets(...)</c>).</summary>
+/// <param name="AllowedIn">Kümenin açılıp uygulanabildiği durumlar; durum makinesi yoksa <c>null</c> (her zaman).</param>
+internal sealed record ChangeSetModel(EquatableArray<string>? AllowedIn);
 
 /// <summary>Bakiyenin bir kovası.</summary>
 /// <param name="Name">İsteklerde ve defterde geçen ad: <c>on-hand</c>.</param>

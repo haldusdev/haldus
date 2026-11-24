@@ -55,6 +55,7 @@ internal static class ChainReader
         "CustomFields",
         "Buckets",
         "AllowNegative",
+        "ChangeSets",
         "Retention",
         "ReadTracking",
         "Translatable",
