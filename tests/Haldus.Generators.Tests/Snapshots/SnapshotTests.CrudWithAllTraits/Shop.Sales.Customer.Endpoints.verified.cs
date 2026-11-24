@@ -371,9 +371,17 @@ public static partial class CustomerEndpoints
             .IgnoreQueryFilters(new[] { global::Haldus.HaldusFilters.SoftDelete })
             .Where(item => item.Id == id && item.DeletedAt != null);
 
-        var deleted = ifMatch.Version is { } expectedVersion
-            ? await query.Where(item => item.Version == expectedVersion).ExecuteDeleteAsync(cancellationToken)
-            : await query.ExecuteDeleteAsync(cancellationToken);
+        int deleted;
+        try
+        {
+            deleted = ifMatch.Version is { } expectedVersion
+                ? await query.Where(item => item.Version == expectedVersion).ExecuteDeleteAsync(cancellationToken)
+                : await query.ExecuteDeleteAsync(cancellationToken);
+        }
+        catch (global::System.Data.Common.DbException)
+        {
+            return global::Haldus.HaldusProblems.InUse(messages, "Customer", id);
+        }
 
         if (deleted == 0)
         {

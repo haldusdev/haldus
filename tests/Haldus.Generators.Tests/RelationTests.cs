@@ -150,7 +150,7 @@ public sealed class RelationTests
     }
 
     [Fact]
-    public void RestrictedTarget_ReportsDeletionAsConflictUnlessItIsSoftDeleted()
+    public void Deletion_ReportsADatabaseRefusalAsConflictUnlessItIsSoftDeleted()
     {
         var hard = Run("""
             app.MapCrud<Category>();
@@ -160,14 +160,12 @@ public sealed class RelationTests
             app.MapCrud<Category>().SoftDeletable();
             app.MapCrud<Product>().References<Category>();
             """).AssertCompiles();
-        var cascade = Run("""
-            app.MapCrud<Category>();
-            app.MapCrud<Product>().References<Category>(OnDelete.Cascade);
-            """).AssertCompiles();
 
         Assert.Contains("InUse(messages, \"Category\", id)", hard.Sources["Shop.Category.Endpoints.g.cs"]);
-        Assert.DoesNotContain("InUse", cascade.Sources["Shop.Category.Endpoints.g.cs"]);
-        Assert.DoesNotContain("InUse", hard.Sources["Shop.Product.Endpoints.g.cs"]);
+
+        // Kayda kimin referans verdiği bu derlemede bilinemeyebilir (başka bir modül, elle yazılmış bir ilişki);
+        // bu yüzden her fiziksel silme veritabanının reddini çakışma olarak bildirir.
+        Assert.Contains("InUse(messages, \"Product\", id)", hard.Sources["Shop.Product.Endpoints.g.cs"]);
 
         // Geri alınabilir silme kaydı fiziksel olarak kaldırmaz, dolayısıyla çakışma oluşmaz; çakışma ancak
         // kalıcı silmede ortaya çıkar.

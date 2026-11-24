@@ -15,6 +15,7 @@ internal static class HaldusModule
         {
             modelBuilder.Entity<global::Shop.ReportExport>(entity =>
             {
+                entity.ToTable("ReportExports");
                 entity.HasQueryFilter(global::Haldus.HaldusFilters.Tenant, item => item.TenantId == global::Haldus.HaldusScope.TenantId(context));
                 entity.HasIndex(item => item.TenantId);
                 entity.Property(item => item.Status).HasConversion<string>().HasMaxLength(64).IsConcurrencyToken();

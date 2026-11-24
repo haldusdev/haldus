@@ -6,8 +6,8 @@ using Microsoft.CodeAnalysis.CSharp.Syntax;
 namespace Haldus.Generators.Parsing;
 
 /// <summary>
-/// <c>AddHaldus&lt;AppDbContext&gt;()</c> çağrısını bulur. Bağlam aynı projede ve partial ise Haldus
-/// ona DbSet özellikleri ekleyebilir.
+/// <c>AddHaldus&lt;AppDbContext&gt;()</c> ve <c>AddHaldusModule&lt;CatalogDbContext&gt;()</c> çağrılarını bulur.
+/// Bağlam aynı projede ve partial ise Haldus ona, o projede üretilen entity'lerin DbSet özelliklerini ekler.
 /// </summary>
 internal static class DbContextParser
 {
@@ -18,7 +18,7 @@ internal static class DbContextParser
         {
             Expression: MemberAccessExpressionSyntax
             {
-                Name: GenericNameSyntax { Identifier.ValueText: "AddHaldus", TypeArgumentList.Arguments.Count: 1 },
+                Name: GenericNameSyntax { Identifier.ValueText: "AddHaldus" or "AddHaldusModule", TypeArgumentList.Arguments.Count: 1 },
             },
         };
 

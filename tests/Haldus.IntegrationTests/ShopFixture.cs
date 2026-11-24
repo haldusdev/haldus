@@ -11,7 +11,7 @@ public sealed class ShopFixture : IAsyncLifetime
 {
     private readonly PostgreSqlContainer _database = new PostgreSqlBuilder("postgres:17-alpine").Build();
 
-    private WebApplicationFactory<Program>? _factory;
+    private WebApplicationFactory<ShopMessages>? _factory;
 
     public HttpClient CreateClient() =>
         (_factory ?? throw new InvalidOperationException("The fixture has not been initialized.")).CreateClient();
@@ -21,7 +21,7 @@ public sealed class ShopFixture : IAsyncLifetime
     /// </summary>
     public HttpClient CreateClient(Action<IServiceCollection> configureServices) => CreateFactory(configureServices).CreateClient();
 
-    public WebApplicationFactory<Program> CreateFactory(Action<IServiceCollection> configureServices) =>
+    public WebApplicationFactory<ShopMessages> CreateFactory(Action<IServiceCollection> configureServices) =>
         (_factory ?? throw new InvalidOperationException("The fixture has not been initialized."))
             .WithWebHostBuilder(builder => builder.ConfigureTestServices(configureServices));
 
@@ -42,7 +42,7 @@ public sealed class ShopFixture : IAsyncLifetime
     {
         await _database.StartAsync();
 
-        _factory = new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
+        _factory = new WebApplicationFactory<ShopMessages>().WithWebHostBuilder(builder =>
             builder.UseSetting("ConnectionStrings:Default", _database.GetConnectionString()));
 
         await using var scope = _factory.Services.CreateAsyncScope();

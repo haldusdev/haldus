@@ -15,6 +15,7 @@ internal static class HaldusModule
         {
             modelBuilder.Entity<global::Shop.Sales.Customer>(entity =>
             {
+                entity.ToTable("Customers");
                 entity.HasQueryFilter(global::Haldus.HaldusFilters.Tenant, item => item.TenantId == global::Haldus.HaldusScope.TenantId(context));
                 entity.HasIndex(item => item.TenantId);
                 entity.HasQueryFilter(global::Haldus.HaldusFilters.SoftDelete, item => item.DeletedAt == null);

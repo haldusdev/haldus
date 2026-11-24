@@ -698,10 +698,15 @@ internal static class MapCallParser
             }
         }
 
-        // Hedef bir Haldus kaynağı değilse anahtar tipi Id özelliğinden okunur.
-        var targetKey = resolved
-            ? PublicInstanceProperties(target!).FirstOrDefault(property => property.Name == "Id")
-            : null;
+        // Hedef bu derlemede eşlenmiş bir kaynak değilse anahtarı tipinden okunur: başka bir modülde derlenmiş
+        // bir Haldus entity'sinde anahtar archetype'a göre Id, Code veya Key'dir.
+        var properties = resolved ? PublicInstanceProperties(target!).ToList() : [];
+        var targetKey = new[] { "Id", "Code", "Key" }
+            .Select(name => properties.FirstOrDefault(property => property.Name == name))
+            .FirstOrDefault(property => property is not null);
+
+        var external = resolved
+            && !SymbolEqualityComparer.Default.Equals(target!.ContainingAssembly, semanticModel.Compilation.Assembly);
 
         return new ReferenceDeclaration(
             kind,
@@ -712,7 +717,12 @@ internal static class MapCallParser
             onDelete,
             required,
             LocationInfo.From(targetSyntax.GetLocation()),
-            onDeleteExplicit);
+            onDeleteExplicit)
+        {
+            TargetKeyName = targetKey?.Name,
+            IsExternal = external,
+            TargetTenantScoped = resolved && target!.AllInterfaces.Any(candidate => candidate.ToDisplayString() == "Haldus.IMultiTenant"),
+        };
     }
 
     private static bool InheritsFrom(INamedTypeSymbol type, string baseTypeName)

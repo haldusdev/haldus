@@ -13,21 +13,30 @@ internal static class HaldusModule
     {
         global::Haldus.HaldusModelRegistry.Register(typeof(HaldusModule).Assembly, static (modelBuilder, context) =>
         {
-            modelBuilder.Entity<global::Shop.StockMovement>();
-            modelBuilder.Entity<global::Shop.StockLevel>();
+            modelBuilder.Entity<global::Shop.StockMovement>(entity =>
+            {
+                entity.ToTable("StockMovements");
+            });
+            modelBuilder.Entity<global::Shop.StockLevel>(entity =>
+            {
+                entity.ToTable("StockLevels");
+            });
             modelBuilder.Entity<global::Shop.Preference>(entity =>
             {
+                entity.ToTable("Preferences");
                 entity.HasKey(item => new { item.TenantId, item.Key });
                 entity.Property(item => item.Key).ValueGeneratedNever();
                 entity.HasQueryFilter(global::Haldus.HaldusFilters.Tenant, item => item.TenantId == global::Haldus.HaldusScope.TenantId(context));
             });
             modelBuilder.Entity<global::Shop.Country>(entity =>
             {
+                entity.ToTable("Countries");
                 entity.HasKey(item => item.Code);
                 entity.Property(item => item.Code).ValueGeneratedNever();
             });
             modelBuilder.Entity<global::Shop.StoreSettings>(entity =>
             {
+                entity.ToTable("StoreSettings");
                 entity.Property<int>(global::Haldus.HaldusModel.SingletonKey).ValueGeneratedNever();
                 entity.HasKey(global::Haldus.HaldusModel.SingletonKey);
             });

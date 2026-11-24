@@ -47,16 +47,19 @@ public static class HaldusMaintenance
 
         try
         {
-            var context = provider.GetRequiredService<IHaldusDbContextProvider>().For<HaldusIdempotencyRecord>();
-
-            // Tablo yalnızca idempotent bir kaynak varsa modeldedir.
-            if (context.Model.FindEntityType(typeof(HaldusIdempotencyRecord)) is not null)
+            foreach (var context in provider.GetRequiredService<IHaldusDbContextProvider>().All)
             {
+                // Tablo yalnızca o bağlamda idempotent bir kaynak varsa modeldedir.
+                if (context.Model.FindEntityType(typeof(HaldusIdempotencyRecord)) is null)
+                {
+                    continue;
+                }
+
                 var removed = await context.Set<HaldusIdempotencyRecord>()
                     .Where(record => record.ExpiresAt <= now)
                     .ExecuteDeleteAsync(cancellationToken);
 
-                logger.LogDebug("Removed {Count} expired idempotency records.", removed);
+                logger.LogDebug("Removed {Count} expired idempotency records from {Context}.", removed, context.GetType().Name);
             }
         }
         catch (DbException exception)
@@ -70,8 +73,16 @@ public static class HaldusMaintenance
             return;
         }
 
+        var contexts = provider.GetRequiredService<IOptions<HaldusContextOptions>>().Value;
+
         foreach (var resource in HaldusMaintenanceRegistry.ExpiringResources)
         {
+            // Kayıt süreç genelindedir; bu uygulamanın parçası olmayan bir modülün kaynağı atlanır.
+            if (contexts.ContextOf(resource.Key.Assembly) is null)
+            {
+                continue;
+            }
+
             try
             {
                 var removed = await resource.Value(provider, now - retention, cancellationToken);

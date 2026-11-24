@@ -15,6 +15,7 @@ internal static class HaldusModule
         {
             modelBuilder.Entity<global::Shop.Plan>(entity =>
             {
+                entity.ToTable("Plans");
                 entity.ComplexProperty(item => item.Price);
             });
         });

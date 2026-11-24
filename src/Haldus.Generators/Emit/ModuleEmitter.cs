@@ -157,10 +157,7 @@ internal static class ModuleEmitter
 
         foreach (var (resource, entityNamespace) in resources)
         {
-            // Tek kayıtlı kaynak koleksiyon değildir; adı çoğullanmaz.
-            var setName = resource.Archetype == Archetype.Singleton
-                ? resource.EntityName
-                : Naming.Pluralize(resource.EntityName);
+            var setName = TableName(resource);
             if (!existing.Add(setName))
             {
                 continue;
@@ -185,10 +182,17 @@ internal static class ModuleEmitter
             """;
     }
 
+    /// <summary>Tek kayıtlı kaynak koleksiyon değildir; adı çoğullanmaz.</summary>
+    private static string TableName(ResourceModel resource) =>
+        resource.Archetype == Archetype.Singleton ? resource.EntityName : Naming.Pluralize(resource.EntityName);
+
     private static void AppendModel(StringBuilder builder, ResourceModel resource, string entity)
     {
-        var statements = new List<string>();
         var tenant = resource.Has(Traits.MultiTenant);
+
+        // Tablo adı açıkça verilir. EF Core adı bağlamdaki DbSet özelliğinden alır; entity başka bir modülden
+        // geliyorsa o özellik yoktur ve tablo, entity nerede durduğuna göre farklı adlandırılırdı.
+        var statements = new List<string> { $"entity.ToTable(\"{TableName(resource)}\");" };
 
         if (resource.Archetype == Archetype.Singleton)
         {
@@ -280,6 +284,12 @@ internal static class ModuleEmitter
             // Ebeveyn altındaki kayıt, ancak ebeveyni görünürse görünür. Alt sorgu ebeveynin kendi
             // filtrelerinden (kiracı, silinmişlik, onun da ebeveyni) geçer. Koşul tek tek sorgulara değil
             // modele konur ki bu kaynağa referans veren veya onun altına yerleşen kaynaklar da korunsun.
+            if (parent.IsExternal)
+            {
+                // Ebeveyn başka bir modülde: iki modül aynı bağlamı paylaşmıyorsa hata model kurulurken verilir.
+                statements.Add($"global::Haldus.HaldusModel.RequireShared<{parent.TargetType}>(context, \"{resource.EntityName}\");");
+            }
+
             statements.Add(
                 $"entity.HasQueryFilter(global::Haldus.HaldusFilters.Parent, item => context.Set<{parent.TargetType}>()"
                 + $".Any(parent => parent.{parent.TargetKeyName} == item.{parent.PropertyName}));");
@@ -290,9 +300,17 @@ internal static class ModuleEmitter
 
         foreach (var reference in resource.References.Where(reference => !(embeddedDetail && reference.Kind == ReferenceKind.Parent)))
         {
-            statements.Add(
+            var relationship =
                 $"entity.HasOne<{reference.TargetType}>().WithMany().HasForeignKey(item => item.{reference.PropertyName})"
-                + $".OnDelete(global::Microsoft.EntityFrameworkCore.DeleteBehavior.{reference.OnDelete});");
+                + $".OnDelete(global::Microsoft.EntityFrameworkCore.DeleteBehavior.{reference.OnDelete});";
+
+            // Başka bir modüldeki kayda referans: iki modül aynı bağlamdaysa yabancı anahtar kısıtı kurulur;
+            // ayrı bağlamlardaysa hedefin tablosu bu modele alınmaz, referans yalnızca kimlikle tutulur ve
+            // varlığı yazma sırasında hedefin kendi bağlamında doğrulanır.
+            statements.Add(reference is { IsExternal: true, Kind: ReferenceKind.Reference }
+                ? $"if (global::Haldus.HaldusModel.Shares<{reference.TargetType}>(context)) {{ {relationship} }} "
+                    + $"else {{ entity.HasIndex(item => item.{reference.PropertyName}); }}"
+                : relationship);
         }
 
         if (embeddedDetail)
@@ -313,11 +331,6 @@ internal static class ModuleEmitter
             statements.Add("entity.Property(item => item.Version).IsRowVersion();");
         }
 
-        if (statements.Count == 0)
-        {
-            builder.Append($"            modelBuilder.Entity<{entity}>();\n");
-            return;
-        }
 
         builder.Append($"            modelBuilder.Entity<{entity}>(entity =>\n");
         builder.Append("            {\n");

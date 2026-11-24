@@ -804,21 +804,19 @@ internal sealed partial class EndpointEmitter
             """
             : "        var deleted = await query.ExecuteDeleteAsync(cancellationToken);\n";
 
-        if (_resource.IsReferenced)
-        {
-            // ExecuteDelete veritabanının reddini sarmalamadan fırlatır; o da çakışma olarak bildirilir.
-            delete = $$"""
-                        int deleted;
-                        try
-                        {
-                {{Indent(delete.Replace("var deleted = ", "deleted = "), 4)}}        }
-                        catch (global::System.Data.Common.DbException)
-                        {
-                            return {{Problems}}.InUse(messages, "{{_entity}}", {{_keyParameter}});
-                        }
+        // ExecuteDelete veritabanının reddini sarmalamadan fırlatır; o da çakışma olarak bildirilir. Kayda kimin
+        // referans verdiği burada bilinemez: referans başka bir modülden veya elle yazılmış bir ilişkiden gelebilir.
+        delete = $$"""
+                    int deleted;
+                    try
+                    {
+            {{Indent(delete.Replace("var deleted = ", "deleted = "), 4)}}        }
+                    catch (global::System.Data.Common.DbException)
+                    {
+                        return {{Problems}}.InUse(messages, "{{_entity}}", {{_keyParameter}});
+                    }
 
-                """;
-        }
+            """;
 
         // Sıfır satır silindiyse ya kayıt yoktur ya da sürümü değişmiştir; ikisi ayrı yanıtlanır.
         var staleCheck = _concurrency
@@ -1660,11 +1658,13 @@ internal sealed partial class EndpointEmitter
 
     /// <summary>
     /// Başka kayıtların referans verdiği bir kayıt silinemez; veritabanının reddi 500 yerine çakışma olarak
-    /// bildirilir. Silme geri alınabilirse kayıt fiziksel olarak kalkmadığı için bu durum oluşmaz.
+    /// bildirilir. Bu her fiziksel silmede yapılır, çünkü kayda kimin referans verdiği burada bilinemez:
+    /// referans başka bir modülden veya kullanıcının elle yazdığı bir ilişkiden gelebilir. Silme geri
+    /// alınabilirse kayıt fiziksel olarak kalkmadığı için bu durum oluşmaz.
     /// </summary>
     private string SaveDelete()
     {
-        if (!_resource.IsReferenced || _resource.Has(Traits.SoftDeletable))
+        if (_resource.Has(Traits.SoftDeletable))
         {
             return Save();
         }

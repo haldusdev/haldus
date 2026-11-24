@@ -162,12 +162,6 @@ public sealed class HaldusGenerator : IIncrementalGenerator
         var associations = ResourceLinker.LinkAssociations(
             associationDeclarations, [.. valid.Select(entry => entry.Resource)], diagnostic => Report(context, diagnostic));
 
-        valid =
-        [
-            .. ResourceLinker
-                .MarkRestrictedEnds([.. valid.Select(entry => entry.Resource)], associations)
-                .Select(resource => (resource, resource.Namespace)),
-        ];
 
         valid =
         [

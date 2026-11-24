@@ -21,6 +21,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\samples\Haldus.Sample.Shop\Haldus.Sample.Shop.csproj" />
+    <ProjectReference Include="..\..\samples\Haldus.Sample.Modular\Haldus.Sample.Modular.Host\Haldus.Sample.Modular.Host.csproj" />
     <ProjectReference Include="..\..\src\Haldus.Jobs.InMemory\Haldus.Jobs.InMemory.csproj" />
     <ProjectReference Include="..\..\src\Haldus.Jobs.Hangfire\Haldus.Jobs.Hangfire.csproj" />
   </ItemGroup>

@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Haldus.Sample.Modular.Catalog\Haldus.Sample.Modular.Catalog.csproj" />
+    <ProjectReference Include="..\Haldus.Sample.Modular.Sales\Haldus.Sample.Modular.Sales.csproj" />
+    <ProjectReference Include="..\Haldus.Sample.Modular.Support\Haldus.Sample.Modular.Support.csproj" />
+    <ProjectReference Include="..\..\..\src\Haldus.AspNetCore\Haldus.AspNetCore.csproj" />
+    <ProjectReference Include="..\..\..\src\Haldus.Generators\Haldus.Generators.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+  </ItemGroup>
+
+</Project>

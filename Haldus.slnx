@@ -1,5 +1,9 @@
 <Solution>
   <Folder Name="/samples/">
+    <Project Path="samples/Haldus.Sample.Modular/Haldus.Sample.Modular.Catalog/Haldus.Sample.Modular.Catalog.csproj" />
+    <Project Path="samples/Haldus.Sample.Modular/Haldus.Sample.Modular.Host/Haldus.Sample.Modular.Host.csproj" />
+    <Project Path="samples/Haldus.Sample.Modular/Haldus.Sample.Modular.Sales/Haldus.Sample.Modular.Sales.csproj" />
+    <Project Path="samples/Haldus.Sample.Modular/Haldus.Sample.Modular.Support/Haldus.Sample.Modular.Support.csproj" />
     <Project Path="samples/Haldus.Sample.Shop/Haldus.Sample.Shop.csproj" />
   </Folder>
   <Folder Name="/src/">

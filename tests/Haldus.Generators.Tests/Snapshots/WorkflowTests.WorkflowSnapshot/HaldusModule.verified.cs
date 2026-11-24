@@ -15,11 +15,13 @@ internal static class HaldusModule
         {
             modelBuilder.Entity<global::Shop.Order>(entity =>
             {
+                entity.ToTable("Orders");
                 entity.Property(item => item.Status).HasConversion<string>().HasMaxLength(64);
                 entity.Property(item => item.Version).IsRowVersion();
             });
             modelBuilder.Entity<global::Shop.OrderNote>(entity =>
             {
+                entity.ToTable("OrderNotes");
                 entity.HasQueryFilter(global::Haldus.HaldusFilters.Parent, item => context.Set<global::Shop.Order>().Any(parent => parent.Id == item.OrderId));
                 entity.HasOne<global::Shop.Order>().WithMany().HasForeignKey(item => item.OrderId).OnDelete(global::Microsoft.EntityFrameworkCore.DeleteBehavior.Cascade);
             });

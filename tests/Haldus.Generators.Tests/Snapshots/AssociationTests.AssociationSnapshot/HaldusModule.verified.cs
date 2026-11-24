@@ -15,12 +15,17 @@ internal static class HaldusModule
         {
             modelBuilder.Entity<global::Shop.Product>(entity =>
             {
+                entity.ToTable("Products");
                 entity.HasQueryFilter(global::Haldus.HaldusFilters.Tenant, item => item.TenantId == global::Haldus.HaldusScope.TenantId(context));
                 entity.HasIndex(item => item.TenantId);
             });
-            modelBuilder.Entity<global::Shop.Tag>();
+            modelBuilder.Entity<global::Shop.Tag>(entity =>
+            {
+                entity.ToTable("Tags");
+            });
             modelBuilder.Entity<global::Shop.ProductTag>(entity =>
             {
+                entity.ToTable("ProductTags");
                 entity.HasKey(item => new { item.ProductId, item.TagId });
                 entity.HasOne<global::Shop.Product>().WithMany().HasForeignKey(item => item.ProductId).OnDelete(global::Microsoft.EntityFrameworkCore.DeleteBehavior.Cascade);
                 entity.HasOne<global::Shop.Tag>().WithMany().HasForeignKey(item => item.TagId).OnDelete(global::Microsoft.EntityFrameworkCore.DeleteBehavior.Restrict);

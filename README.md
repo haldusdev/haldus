@@ -216,6 +216,24 @@ app.MapCrud<Customer>()
 | `.Filterable<TFilter>()` | Kendi yazdığın filtre sınıfını liste ucunun sorgu parametrelerine bağlar |
 | `.Searchable(...)` | `POST /search`: sayılan alanlarda VE/VEYA koşulları ve sıralama |
 
+## Modüler yapı
+
+Özellikler ayrı sınıf kütüphanelerine bölünebilir. Her modül kendi `Map*` çağrılarını ve entity'lerini
+taşır; veritabanı bağlamı proje başına seçilir ve iki seçenek birlikte kullanılabilir.
+
+```csharp
+// Ortak bağlam: kendi bağlamı olmayan modüllerin entity'leri buraya girer.
+builder.Services.AddHaldus<AppDbContext>();
+
+// Modül başına bağlam: modül kendi şemasına ve migration'larına sahip olur.
+builder.Services.AddHaldusModule<CatalogDbContext>();
+builder.Services.AddHaldusModule<SalesDbContext>();
+```
+
+Modüllerin ayrıca kaydedilmesi gerekmez; ana projenin başvurduğu modüller kendiliğinden bulunur. Bir modül
+başka bir modülün kaydına `.References<T>()` ile bağlanabilir: aynı bağlamdaysa gerçek bir yabancı anahtar
+kısıtı olur, ayrı bağlamlardaysa referans yalnızca kimlikle tutulur ve varlığı yazarken doğrulanır.
+
 ## Durum
 
 Geliştirme aşamasında. Tasarım kararları ve aşamalar için [CLAUDE.md](CLAUDE.md), kararların

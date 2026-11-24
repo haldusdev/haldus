@@ -25,7 +25,8 @@ internal static class GeneratorHarness
             .Select(path => (MetadataReference)MetadataReference.CreateFromFile(path)),
     ];
 
-    public static GeneratorRun Run(string source, string assemblyName = "Shop")
+    /// <param name="modules">Bu derlemenin başvurduğu, daha önce derlenmiş modüller.</param>
+    public static GeneratorRun Run(string source, string assemblyName = "Shop", params GeneratorRun[] modules)
     {
         var parseOptions = new CSharpParseOptions(LanguageVersion.Latest);
         var compilation = CSharpCompilation.Create(
@@ -34,7 +35,7 @@ internal static class GeneratorHarness
                 CSharpSyntaxTree.ParseText(GlobalUsings, parseOptions, path: "GlobalUsings.cs"),
                 CSharpSyntaxTree.ParseText(source, parseOptions, path: "Source.cs"),
             ],
-            References,
+            References.AddRange(modules.Select(module => module.ToReference())),
             new CSharpCompilationOptions(
                 OutputKind.DynamicallyLinkedLibrary,
                 nullableContextOptions: NullableContextOptions.Enable));
@@ -51,7 +52,7 @@ internal static class GeneratorHarness
             .Where(diagnostic => diagnostic.Severity == DiagnosticSeverity.Error)
             .ToImmutableArray();
 
-        return new GeneratorRun(sources, generatorDiagnostics, compileErrors);
+        return new GeneratorRun(sources, generatorDiagnostics, compileErrors) { Output = output };
     }
 }
 
@@ -60,6 +61,21 @@ internal sealed record GeneratorRun(
     ImmutableArray<Diagnostic> GeneratorDiagnostics,
     ImmutableArray<Diagnostic> CompileErrors)
 {
+    public required Compilation Output { get; init; }
+
+    /// <summary>
+    /// Derlemeyi, üretilen koduyla birlikte, başka bir derlemenin başvurabileceği bir assembly'ye çevirir.
+    /// Modüller arası senaryolarda ikinci modül ilkini böyle görür: kaynak olarak değil, derlenmiş tip olarak.
+    /// </summary>
+    public MetadataReference ToReference()
+    {
+        using var image = new MemoryStream();
+        var result = Output.Emit(image, cancellationToken: TestContext.Current.CancellationToken);
+
+        Assert.True(result.Success, string.Join(Environment.NewLine, result.Diagnostics));
+        return MetadataReference.CreateFromImage(image.ToArray());
+    }
+
     /// <summary>Üretilen kodun hatasız derlendiğini ve generator'ın hata bildirmediğini doğrular.</summary>
     public GeneratorRun AssertCompiles()
     {

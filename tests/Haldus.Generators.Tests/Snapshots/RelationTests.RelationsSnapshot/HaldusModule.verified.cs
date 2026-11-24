@@ -15,19 +15,23 @@ internal static class HaldusModule
         {
             modelBuilder.Entity<global::Shop.Category>(entity =>
             {
+                entity.ToTable("Categories");
                 entity.HasOne<global::Shop.Category>().WithMany().HasForeignKey(item => item.ParentId).OnDelete(global::Microsoft.EntityFrameworkCore.DeleteBehavior.Restrict);
             });
             modelBuilder.Entity<global::Shop.Product>(entity =>
             {
+                entity.ToTable("Products");
                 entity.HasOne<global::Shop.Category>().WithMany().HasForeignKey(item => item.CategoryId).OnDelete(global::Microsoft.EntityFrameworkCore.DeleteBehavior.Restrict);
             });
             modelBuilder.Entity<global::Shop.Project>(entity =>
             {
+                entity.ToTable("Projects");
                 entity.HasQueryFilter(global::Haldus.HaldusFilters.Tenant, item => item.TenantId == global::Haldus.HaldusScope.TenantId(context));
                 entity.HasIndex(item => item.TenantId);
             });
             modelBuilder.Entity<global::Shop.WorkItem>(entity =>
             {
+                entity.ToTable("WorkItems");
                 entity.HasQueryFilter(global::Haldus.HaldusFilters.Parent, item => context.Set<global::Shop.Project>().Any(parent => parent.Id == item.ProjectId));
                 entity.HasOne<global::Shop.Project>().WithMany().HasForeignKey(item => item.ProjectId).OnDelete(global::Microsoft.EntityFrameworkCore.DeleteBehavior.Cascade);
             });

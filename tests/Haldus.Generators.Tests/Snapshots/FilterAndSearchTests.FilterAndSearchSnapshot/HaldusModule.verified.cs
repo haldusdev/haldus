@@ -15,6 +15,7 @@ internal static class HaldusModule
         {
             modelBuilder.Entity<global::Shop.Catalog.Product>(entity =>
             {
+                entity.ToTable("Products");
                 entity.HasQueryFilter(global::Haldus.HaldusFilters.SoftDelete, item => item.DeletedAt == null);
             });
         });

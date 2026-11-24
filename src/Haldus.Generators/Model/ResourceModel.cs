@@ -33,8 +33,6 @@ internal sealed record ResourceModel(
     /// <summary>Hedefinin anahtar tipi ve adı çözülmüş referanslar.</summary>
     public EquatableArray<ResolvedReference> References { get; init; } = EquatableArray<ResolvedReference>.Empty;
 
-    /// <summary>Başka bir kayıt silinmesini engelleyecek biçimde bu kaynağa referans veriyor mu.</summary>
-    public bool IsReferenced { get; init; }
 
     /// <summary><c>MapDetail</c> ile bildirildiyse sahibi olan kaynağın adı ve (çözülebildiyse) tam tip adı.</summary>
     public string? DetailOfName { get; init; }
@@ -258,7 +256,17 @@ internal sealed record ReferenceDeclaration(
     OnDeleteBehavior OnDelete,
     bool Required,
     LocationInfo Location,
-    bool OnDeleteExplicit = false);
+    bool OnDeleteExplicit = false)
+{
+    /// <summary>Hedef başka bir assembly'de (modülde) derlenmiş bir entity ise anahtar özelliğinin adı.</summary>
+    public string? TargetKeyName { get; init; }
+
+    /// <summary>Hedef bu derlemenin dışında mı; öyleyse hakkında bilinenler derlenmiş tipinden okunur.</summary>
+    public bool IsExternal { get; init; }
+
+    /// <summary>Dış hedef kiracıya bağlı mı (<c>IMultiTenant</c> uyguluyor mu).</summary>
+    public bool TargetTenantScoped { get; init; }
+}
 
 /// <param name="TargetRoute">Hedef koleksiyonun rota parçası (ör. <c>projects</c>); <c>.Under&lt;T&gt;()</c> adresi kurarken kullanır.</param>
 internal sealed record ResolvedReference(
@@ -271,7 +279,8 @@ internal sealed record ResolvedReference(
     string TargetKeyName,
     string TargetKeyType,
     string TargetRoute,
-    OnDeleteBehavior OnDelete);
+    OnDeleteBehavior OnDelete,
+    bool IsExternal = false);
 
 /// <summary>Zincirsiz bir <c>MapAssociation&lt;TLeft, TRight&gt;()</c> çağrısı; uçları henüz çözülmemiştir.</summary>
 internal sealed record AssociationDeclaration(

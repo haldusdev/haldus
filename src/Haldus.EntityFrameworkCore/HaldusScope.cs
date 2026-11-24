@@ -33,6 +33,35 @@ public static class HaldusModel
     /// veri veya sonsuz döngü olasılığına karşı döngü sayılır.
     /// </summary>
     public const int MaxHierarchyDepth = 64;
+
+    /// <summary>
+    /// <typeparamref name="TEntity"/> bu bağlamda mı yaşıyor. Başka bir modülün entity'sine referans veren
+    /// üretilen model kodu, yabancı anahtar kısıtını yalnızca iki entity aynı bağlamdaysa kurar; ayrı
+    /// bağlamlarda referans yalnızca kimlikle tutulur.
+    /// </summary>
+    public static bool Shares<TEntity>(Microsoft.EntityFrameworkCore.DbContext context)
+        where TEntity : class
+    {
+        ArgumentNullException.ThrowIfNull(context);
+
+        return HaldusContextOptions.From(context) is not { } map
+            || map.ContextOf(typeof(TEntity).Assembly) == context.GetType();
+    }
+
+    /// <summary>
+    /// Bir kaynağın ebeveyni onunla aynı bağlamda olmalıdır: görünürlüğü ve zincirleme silme ebeveynin
+    /// tablosuna dayanır. Değilse hata, ilk istekte değil model kurulurken verilir.
+    /// </summary>
+    public static void RequireShared<TParent>(Microsoft.EntityFrameworkCore.DbContext context, string child)
+        where TParent : class
+    {
+        if (!Shares<TParent>(context))
+        {
+            throw new InvalidOperationException(
+                $"'{child}' is declared under '{typeof(TParent).Name}', but they live in different DbContexts. " +
+                "A resource and its parent must share a context; use References<T>() to refer to a record of another module by its key.");
+        }
+    }
 }
 
 /// <summary>Üretilen sorgu filtrelerinin, geçerli bağlam üzerinden istek kapsamındaki değerlere ulaştığı yer.</summary>

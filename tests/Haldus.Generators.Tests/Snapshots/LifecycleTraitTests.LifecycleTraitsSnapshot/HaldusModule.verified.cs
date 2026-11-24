@@ -15,6 +15,7 @@ internal static class HaldusModule
         {
             modelBuilder.Entity<global::Shop.Invoice>(entity =>
             {
+                entity.ToTable("Invoices");
                 entity.HasQueryFilter(global::Haldus.HaldusFilters.Tenant, item => item.TenantId == global::Haldus.HaldusScope.TenantId(context));
                 entity.HasIndex(item => item.TenantId);
                 entity.Property(item => item.Status).HasConversion<string>().HasMaxLength(64);
@@ -25,6 +26,7 @@ internal static class HaldusModule
             modelBuilder.HasSequence<long>("ReservationNumberSequence");
             modelBuilder.Entity<global::Shop.Reservation>(entity =>
             {
+                entity.ToTable("Reservations");
                 entity.Property(item => item.Number).HasMaxLength(64);
                 entity.HasIndex(item => item.Number).IsUnique();
                 entity.HasQueryFilter(global::Haldus.HaldusFilters.Expiry, item => item.ExpiresAt == null || item.ExpiresAt > global::Haldus.HaldusScope.UtcNow(context));

@@ -226,6 +226,7 @@ internal static class AssociationEmitter
         return $$"""
                         modelBuilder.Entity<{{link}}>(entity =>
                         {
+                            entity.ToTable("{{Haldus.Generators.Infrastructure.Naming.Pluralize(association.LinkName)}}");
                             entity.HasKey(item => new { item.{{association.LeftKey}}, item.{{association.RightKey}} });
                             entity.HasOne<{{left.QualifiedName}}>().WithMany().HasForeignKey(item => item.{{association.LeftKey}}).OnDelete({{DeleteBehavior}}.{{association.LeftOnDelete}});
                             entity.HasOne<{{right.QualifiedName}}>().WithMany().HasForeignKey(item => item.{{association.RightKey}}).OnDelete({{DeleteBehavior}}.{{association.RightOnDelete}});

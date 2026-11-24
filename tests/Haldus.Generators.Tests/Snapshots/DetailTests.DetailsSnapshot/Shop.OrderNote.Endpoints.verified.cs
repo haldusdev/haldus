@@ -177,7 +177,14 @@ public static partial class OrderNoteEndpoints
         }
 
         context.Set<OrderNote>().Remove(entity);
-        await context.SaveChangesAsync(cancellationToken);
+        try
+        {
+            await context.SaveChangesAsync(cancellationToken);
+        }
+        catch (global::Microsoft.EntityFrameworkCore.DbUpdateException)
+        {
+            return global::Haldus.HaldusProblems.InUse(messages, "OrderNote", id);
+        }
 
         return global::Microsoft.AspNetCore.Http.TypedResults.NoContent();
     }

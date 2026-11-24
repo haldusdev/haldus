@@ -175,7 +175,14 @@ public static partial class ProductEndpoints
         }
 
         context.Set<Product>().Remove(entity);
-        await context.SaveChangesAsync(cancellationToken);
+        try
+        {
+            await context.SaveChangesAsync(cancellationToken);
+        }
+        catch (global::Microsoft.EntityFrameworkCore.DbUpdateException)
+        {
+            return global::Haldus.HaldusProblems.InUse(messages, "Product", id);
+        }
 
         return global::Microsoft.AspNetCore.Http.TypedResults.NoContent();
     }

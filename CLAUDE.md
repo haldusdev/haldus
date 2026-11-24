@@ -26,6 +26,8 @@ EF Core yapılandırması üretilir.
 - `tests/Haldus.Generators.Tests`: generator çıktısı testleri.
 - `tests/Haldus.IntegrationTests`: örnek uygulamaya karşı gerçek PostgreSQL testleri.
 - `samples/Haldus.Sample.Shop`: örnek uygulama ve modelin sınandığı yer.
+- `samples/Haldus.Sample.Modular`: modüler yapının sınandığı küçük uygulama. `Catalog` ve `Sales` kendi
+  bağlamına sahip modüllerdir; `Support` modülü ve `Host` ortak bağlamı kullanır.
 - `reports/`, `research_notes/`: archetype/trait taksonomisi araştırması. Tasarım kararlarının dayanağı
   `reports/Haldus archetype ve trait taksonomisi.md` dosyasındadır.
 
@@ -109,6 +111,16 @@ Bunlar kullanıcıyla kararlaştırıldı; yeniden sorma.
   başına ayrı (`AddHaldusModule<TContext>()`).
 - Bu yüzden üretilen kod somut `DbContext` tipine bağlanmaz; `IHaldusDbContextProvider` üzerinden
   çalışır ve model katkıları modül (assembly) anahtarıyla kaydedilir.
+- İki mod aynı uygulamada birlikte kullanılabilir: `AddHaldus<TContext>()` ortak bağlamı,
+  `AddHaldusModule<TContext>()` o bağlamın bulunduğu assembly'nin kendi bağlamını bildirir. Modül kendi
+  generator'ını çalıştırır (sınıf kütüphanesi generator'a analyzer olarak başvurur).
+- Modüllerin ayrıca kaydedilmesi gerekmez: bağlamın assembly'sinden başvurularla ulaşılan, Haldus'un çalışma
+  zamanına başvuran her assembly modül sayılır ve yüklenir.
+- Modüller arası ilişkiler: `.References<T>()` başka modülün entity'sine bağlanabilir; iki modül aynı
+  bağlamdaysa gerçek bir yabancı anahtar kısıtı olur, ayrı bağlamlardaysa yalnızca kimlikle tutulur ve
+  varlığı yazarken hedefin bağlamında doğrulanır (silme davranışı uygulanamaz). `.Under<T>()` başka modülün
+  kaynağını ebeveyn alabilir, ama ikisi aynı bağlamda olmalıdır; değilse uygulama model kurulurken durur.
+  `MapAssociation`'ın iki ucu da aynı modülde eşlenmiş olmalıdır.
 
 ### Teknoloji
 
@@ -128,7 +140,7 @@ Bunlar kullanıcıyla kararlaştırıldı; yeniden sorma.
 
 ## Aşamalar
 
-1–8 tamamlandı (3. aşamaya `.Searchable()`, 8. aşamaya fiziksel temizlik de eklendi); sıradaki 9.
+1–9 tamamlandı (3. aşamaya `.Searchable()`, 8. aşamaya fiziksel temizlik de eklendi); sıradaki 10.
 
 1. İskelet
 2. Generator çekirdeği ve `MapCrud`
@@ -328,6 +340,31 @@ Bunlar kullanıcıyla kararlaştırıldı; yeniden sorma.
   üretilen modül `HaldusMaintenanceRegistry.RegisterExpiring<T>()` ile kaydeder. Bakım bir isteğe ait
   olmadığı için burada parametresiz `IgnoreQueryFilters()` bilerek kullanılır; üretilen uç kodunda yasak
   olmaya devam eder. Aynı yöntem testlerden ve yönetim komutlarından doğrudan çağrılabilir.
+- **Modüller ve bağlamlar.** Hangi modülün hangi bağlamı kullandığını `HaldusContextOptions` tutar
+  (`DefaultContext`, `ModuleContexts`, `Modules`). `HaldusDbContextProvider.For<TEntity>()` entity'nin
+  assembly'sine bakar; `HaldusModelRegistry.Apply` her bağlama yalnızca ona bağlı modüllerin katkısını
+  uygular (bağlam Haldus servisleri olmadan kurulduysa hepsini). Bir modüle ait olmayan tablolar (ör. iş
+  kuyruğu) `RegisterGlobal` ile kaydedilir ve hangi bağlama gireceklerine kendileri karar verir.
+  - Kayıt defterleri (`HaldusModelRegistry`, `HaldusServiceRegistry`, `HaldusMaintenanceRegistry`...) süreç
+    genelinde statiktir, ama bir uygulama yalnızca kendi modüllerini görmelidir: ortak bağlam ve handler
+    kaydı, `AddHaldus` sırasında bağlamın assembly'sinden başvurularla bulunan modüllerle (`Modules`)
+    sınırlanır. Aynı süreçte iki uygulama çalıştıran testler buna dayanır; statik bir kayıt defterini
+    gezen yeni kod da aynı süzmeyi yapmalıdır.
+  - Modülün üretilen kayıt kodu bir module initializer'dır ve assembly ilk kullanıldığında çalışır. Ana
+    proje `AddHaldus` çağırdığında modül henüz kullanılmamış olabilir; bu yüzden `LoadModules` onu
+    `RunModuleConstructor` ile çalıştırır. Bunu yapmadan handler sınıfları kaydedilmezdi.
+  - Generator başka bir assembly'deki entity'yi kaynak olarak değil derlenmiş tip olarak görür: anahtarını
+    `Id` / `Code` / `Key` özelliğinden, kiracıya bağlı olup olmadığını `IMultiTenant`'tan okur
+    (`ReferenceDeclaration.IsExternal`). Üretilen model, böyle bir referans için kısıtı
+    `HaldusModel.Shares<T>(context)` doğruysa kurar; ebeveyn için `HaldusModel.RequireShared` çağırır.
+  - Tablo adı üretilen modelde açıkça verilir (`ToTable`). EF Core adı bağlamdaki `DbSet` özelliğinden alır;
+    başka modülden gelen entity için o özellik yoktur ve tablo tekil adla oluşurdu. DbSet özellikleri
+    yalnızca bağlamla aynı projede üretilen entity'ler için eklenir; diğerlerine `Set<T>()` ile ulaşılır.
+  - Fiziksel silme, veritabanının reddini her zaman 409 `InUse` olarak bildirir. Bir modül, kendisine başka
+    bir modülden (veya elle yazılmış bir ilişkiden) referans verildiğini bilemez; bu yüzden "referans
+    veriliyor mu" bilgisine dayanan eski koşul kaldırıldı.
+  - Sınırlar: PostgreSQL iş kuyruğu tek bir bağlamdadır; işleri başka bağlamda duran bir modül onu kullanamaz
+    (açık bir hata verir). Ayrı bağlamlar arasında ortak transaction yoktur.
 - Haldus'un kendi tabloları (`HaldusCounters`, `HaldusIdempotencyRecords`) yalnızca onları kullanan bir
   kaynak varsa modele eklenir; ekleyen, üretilen modül kodudur.
 - Tanılar `HALDUS001`+ kodlarıyla `Diagnostics/HaldusDiagnostics.cs` ve `AnalyzerReleases.Unshipped.md`

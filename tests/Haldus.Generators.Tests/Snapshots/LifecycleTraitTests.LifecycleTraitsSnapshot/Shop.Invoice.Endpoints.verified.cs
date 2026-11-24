@@ -215,6 +215,10 @@ public static partial class InvoiceEndpoints
         {
             return global::Haldus.HaldusProblems.StateChanged(messages);
         }
+        catch (global::Microsoft.EntityFrameworkCore.DbUpdateException)
+        {
+            return global::Haldus.HaldusProblems.InUse(messages, "Invoice", id);
+        }
 
         return global::Microsoft.AspNetCore.Http.TypedResults.NoContent();
     }

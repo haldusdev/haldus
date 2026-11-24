@@ -13,7 +13,10 @@ internal static class HaldusModule
     {
         global::Haldus.HaldusModelRegistry.Register(typeof(HaldusModule).Assembly, static (modelBuilder, context) =>
         {
-            modelBuilder.Entity<global::Shop.Catalog.Product>();
+            modelBuilder.Entity<global::Shop.Catalog.Product>(entity =>
+            {
+                entity.ToTable("Products");
+            });
         });
 
         global::Haldus.HaldusEndpointRegistry.Register<global::Shop.Catalog.Product>(global::Shop.Catalog.ProductEndpoints.Map);

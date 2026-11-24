@@ -131,7 +131,6 @@ public sealed class AssociationTests
             var module = run.Sources["HaldusModule.g.cs"];
             Assert.Contains("HasForeignKey(item => item.ProductId).OnDelete(global::Microsoft.EntityFrameworkCore.DeleteBehavior.Cascade)", module);
             Assert.Contains("HasForeignKey(item => item.TagId).OnDelete(global::Microsoft.EntityFrameworkCore.DeleteBehavior.Cascade)", module);
-            Assert.DoesNotContain("InUse", run.Sources["Shop.Tag.Endpoints.g.cs"]);
         }
     }
 
@@ -151,7 +150,6 @@ public sealed class AssociationTests
 
         // Genel ucun silinmesi veritabanında reddedilir; bu 500 değil çakışma olarak bildirilir.
         Assert.Contains("InUse(messages, \"Tag\", id)", run.Sources["Shop.Tag.Endpoints.g.cs"]);
-        Assert.DoesNotContain("InUse", run.Sources["Shop.Product.Endpoints.g.cs"]);
     }
 
     [Fact]

@@ -201,11 +201,15 @@ public static class HaldusServiceRegistry
         Contributions[module] = configure;
     }
 
-    internal static void Apply(IServiceCollection services)
+    /// <summary>Yalnızca uygulamanın parçası olan modüllerin handler sınıflarını kaydeder.</summary>
+    internal static void Apply(IServiceCollection services, IEnumerable<Assembly> modules)
     {
-        foreach (var configure in Contributions.Values)
+        foreach (var module in modules)
         {
-            configure(services);
+            if (Contributions.TryGetValue(module, out var configure))
+            {
+                configure(services);
+            }
         }
     }
 }

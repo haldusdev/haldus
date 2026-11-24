@@ -165,7 +165,14 @@ public static partial class ProjectEndpoints
         }
 
         context.Set<Project>().Remove(entity);
-        await context.SaveChangesAsync(cancellationToken);
+        try
+        {
+            await context.SaveChangesAsync(cancellationToken);
+        }
+        catch (global::Microsoft.EntityFrameworkCore.DbUpdateException)
+        {
+            return global::Haldus.HaldusProblems.InUse(messages, "Project", id);
+        }
 
         return global::Microsoft.AspNetCore.Http.TypedResults.NoContent();
     }

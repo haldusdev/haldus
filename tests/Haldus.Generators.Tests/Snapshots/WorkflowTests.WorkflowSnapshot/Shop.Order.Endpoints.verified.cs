@@ -345,6 +345,10 @@ public static partial class OrderEndpoints
         {
             return global::Haldus.HaldusProblems.PreconditionFailed(messages);
         }
+        catch (global::Microsoft.EntityFrameworkCore.DbUpdateException)
+        {
+            return global::Haldus.HaldusProblems.InUse(messages, "Order", id);
+        }
 
         return global::Microsoft.AspNetCore.Http.TypedResults.NoContent();
     }

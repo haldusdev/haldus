@@ -67,7 +67,7 @@ public static class HaldusPostgreSqlJobsExtensions
         }
 
         // Kuyruk tablosu yalnızca seçilen bağlamın modeline girer.
-        HaldusModelRegistry.Register(typeof(HaldusQueuedJob).Assembly, static (modelBuilder, context) =>
+        HaldusModelRegistry.RegisterGlobal(typeof(HaldusQueuedJob).Assembly, static (modelBuilder, context) =>
         {
             if (context is TContext)
             {

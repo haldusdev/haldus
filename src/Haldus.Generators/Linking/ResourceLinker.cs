@@ -55,18 +55,13 @@ internal static class ResourceLinker
             }
         }
 
-        // Silmeyi engelleyen bir referansın hedefi olan kaynaklar, silme ucunda bunu çakışma olarak bildirir.
-        var restricted = new HashSet<string>(linked
-            .SelectMany(resource => resource.References)
-            .Where(reference => reference.OnDelete == OnDeleteBehavior.Restrict)
-            .Select(reference => reference.TargetType));
 
         // Gömülü detaylar sahiplerine iliştirilir; sahibin DTO'ları ve uçları onları taşır.
         return
         [
             .. linked.Select(resource => resource with
             {
-                IsReferenced = restricted.Contains(resource.QualifiedName),
+
                 Details = linked
                     .Where(detail => detail.Archetype == Archetype.Detail && detail.Parent?.TargetType == resource.QualifiedName)
                     .ToEquatableArray(),
@@ -352,19 +347,6 @@ internal static class ResourceLinker
         return associations;
     }
 
-    /// <summary>Bir bağın, silinmesi reddedilen ucu olan kaynakları işaretler; silme uçları bunu çakışma olarak bildirir.</summary>
-    public static List<ResourceModel> MarkRestrictedEnds(IReadOnlyList<ResourceModel> resources, IReadOnlyList<AssociationModel> associations)
-    {
-        var restricted = new HashSet<string>(associations.SelectMany(association => new[]
-        {
-            association.LeftOnDelete == OnDeleteBehavior.Restrict ? association.Left.QualifiedName : null,
-            association.RightOnDelete == OnDeleteBehavior.Restrict ? association.Right.QualifiedName : null,
-        }).OfType<string>());
-
-        return [.. resources.Select(resource =>
-            restricted.Contains(resource.QualifiedName) ? resource with { IsReferenced = true } : resource)];
-    }
-
     /// <summary>
     /// Kaynağın kayıtları bir kiracıya mı ait: ya kendisi kiracıya bağlıdır ya da kiracıya ait bir ebeveynin
     /// altındadır.
@@ -382,10 +364,15 @@ internal static class ResourceLinker
 
         var parent = resource.ReferenceDeclarations.FirstOrDefault(declaration => declaration.Kind == ReferenceKind.Parent);
 
-        return parent is not null
-            && depth < 8
-            && FindTarget(parent, resources, byType) is { } target
-            && IsTenantScoped(target, resources, byType, depth + 1);
+        if (parent is null || depth >= 8)
+        {
+            return false;
+        }
+
+        // Başka bir modüldeki ebeveyn hakkında bilinen tek şey, kendisinin kiracıya bağlı olup olmadığıdır.
+        return FindTarget(parent, resources, byType) is { } target
+            ? IsTenantScoped(target, resources, byType, depth + 1)
+            : parent is { IsExternal: true, TargetTenantScoped: true };
     }
 
     private static bool HasSingleColumnKey(ResourceModel resource) =>
@@ -418,10 +405,22 @@ internal static class ResourceLinker
             ? resource
             : FindTarget(declaration, resources, byType);
 
-        if (target is null && (declaration.TargetType is null || declaration.Kind == ReferenceKind.Parent))
+        // Başka bir modülde derlenmiş entity bu derlemede eşlenmez; anahtarı derlenmiş tipinden okunur.
+        var external = target is null && declaration.IsExternal;
+
+        if (target is null && (declaration.TargetType is null || (declaration.Kind == ReferenceKind.Parent && !external)))
         {
             // Hedef ne bilinen bir tip ne de bir Haldus kaynağı; ebeveyn ise adresi kurulamaz.
             fail("HALDUS009", declaration.Location, [declaration.TargetName, resource.EntityName]);
+            return null;
+        }
+
+        if (external && (declaration.TargetKeyName is null || (declaration.TargetTenantScoped && declaration.TargetKeyName != "Id")))
+        {
+            fail(
+                "HALDUS007",
+                declaration.Location,
+                [$"'{declaration.TargetName}' cannot be referenced: it has no single-column key (it is a singleton or a tenant-scoped store)"]);
             return null;
         }
 
@@ -435,7 +434,7 @@ internal static class ResourceLinker
             return null;
         }
 
-        var targetKeyName = target?.KeyName ?? "Id";
+        var targetKeyName = target?.KeyName ?? declaration.TargetKeyName ?? "Id";
         var targetKeyType = target?.IdType ?? declaration.TargetKeyType ?? GuidType;
         var propertyName = declaration.PropertyName
             ?? (declaration.Kind == ReferenceKind.Self ? "Parent" + targetKeyName : declaration.TargetName + targetKeyName);
@@ -453,9 +452,9 @@ internal static class ResourceLinker
         // açıkça seçmediyse o durumda silme reddedilir.
         var onDelete = declaration.OnDelete;
         if (declaration is { Kind: ReferenceKind.Parent, OnDeleteExplicit: false }
-            && target is not null
+            && (target is not null || external)
             && IsTenantScoped(resource, resources, byType)
-            && !IsTenantScoped(target, resources, byType))
+            && !(target is null ? declaration.TargetTenantScoped : IsTenantScoped(target, resources, byType)))
         {
             onDelete = OnDeleteBehavior.Restrict;
         }
@@ -490,8 +489,9 @@ internal static class ResourceLinker
             declaration.TargetName,
             targetKeyName,
             targetKeyType,
-            target is null ? string.Empty : Naming.ToKebabCase(Naming.Pluralize(target.EntityName)),
-            onDelete);
+            target is null && !external ? string.Empty : Naming.ToKebabCase(Naming.Pluralize(declaration.TargetName)),
+            onDelete,
+            IsExternal: external);
     }
 
     private static ResourceModel? FindTarget(

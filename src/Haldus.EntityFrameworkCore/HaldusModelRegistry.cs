@@ -11,6 +11,7 @@ namespace Haldus;
 public static class HaldusModelRegistry
 {
     private static readonly ConcurrentDictionary<Assembly, Action<ModelBuilder, DbContext>> Contributions = new();
+    private static readonly ConcurrentDictionary<Assembly, Action<ModelBuilder, DbContext>> GlobalContributions = new();
 
     /// <param name="module">Katkıyı yapan assembly.</param>
     /// <param name="configure">
@@ -24,9 +25,32 @@ public static class HaldusModelRegistry
         Contributions[module] = configure;
     }
 
+    /// <summary>
+    /// Bir modüle ait olmayan, her bağlama sunulan katkı (ör. bir altyapı paketinin kendi tablosu). Hangi
+    /// bağlama uygulanacağına katkının kendisi karar verir.
+    /// </summary>
+    public static void RegisterGlobal(Assembly owner, Action<ModelBuilder, DbContext> configure)
+    {
+        ArgumentNullException.ThrowIfNull(owner);
+        ArgumentNullException.ThrowIfNull(configure);
+        GlobalContributions[owner] = configure;
+    }
+
     internal static void Apply(ModelBuilder modelBuilder, DbContext context)
     {
-        foreach (var configure in Contributions.Values)
+        var map = HaldusContextOptions.From(context);
+        var contextType = context.GetType();
+
+        foreach (var contribution in Contributions)
+        {
+            // Her bağlam yalnızca kendisine bağlı modüllerin entity'lerini alır.
+            if (map is null || map.ContextOf(contribution.Key) == contextType)
+            {
+                contribution.Value(modelBuilder, context);
+            }
+        }
+
+        foreach (var configure in GlobalContributions.Values)
         {
             configure(modelBuilder, context);
         }
