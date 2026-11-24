@@ -742,8 +742,8 @@ Sayıların istemcide `number` olması için uygulamanın JSON ayarında sayıla
 
 Üç plan da tamamlandı: ilk sürümün on aşaması, araştırmanın ikinci sürüm listesini kapatan on bir aşama ve üçüncü
 sürüm listesiyle sınamada kalan satırları kapatan on bir aşama. Model, araştırmadaki 59 gerçek varlığa karşı sınandı:
-59'unun tamamı eksiksiz ifade ediliyor (ilk sınamada 19 eksiksiz, 29 kısmi, 11 karşılıksızdı). Ayrıntısı
-[taksonomi sınaması](reports/Haldus%20taksonomi%20sınaması.md) belgesindedir.
+59'unun tamamı eksiksiz ifade ediliyor (ilk sınamada 19 eksiksiz, 29 kısmi, 11 karşılıksızdı; ikincisinde 47, 10, 2).
+Ayrıntısı ve bilerek yazılmayanlar [taksonomi sınaması](reports/Haldus%20taksonomi%20sınaması.md) belgesindedir.
 
 Tasarım kararları için [CLAUDE.md](CLAUDE.md), kararların dayandığı araştırma için [reports](reports/)
 klasörüne bakın. İki örnek uygulama var: tek projeli [mağaza](samples/Haldus.Sample.Shop) ve

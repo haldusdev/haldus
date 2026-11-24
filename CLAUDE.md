@@ -331,11 +331,13 @@ Bunlar kullanıcıyla kararlaştırıldı; yeniden sorma.
 
 ## Aşamalar
 
-İlk iki plan bitti: ilk sürümün on aşaması (3. aşamaya `.Searchable()`, 8. aşamaya fiziksel temizlik de eklendi) ve
-ikinci planın on bir aşaması. Üçüncü plan sürüyor (aşağıda). Sınamanın sonucu `reports/Haldus taksonomi sınaması.md`
+Üç plan da bitti: ilk sürümün on aşaması (3. aşamaya `.Searchable()`, 8. aşamaya fiziksel temizlik de eklendi),
+ikinci planın on bir aşaması ve üçüncü planın on bir aşaması (22–32). Açık bir aşama yoktur; yeni bir iş yeni bir plandır
+ve tasarım soruları yeniden sorulur. Sınamanın sonucu `reports/Haldus taksonomi sınaması.md`
 dosyasındadır: araştırmadaki 59 varlığın 59'u da temiz ifade ediliyor (ilk
 sınamada 19 / 29 / 11). Aynı veri `tests/Haldus.Generators.Tests/TaxonomyTests.cs` içinde derlenir; yeni bir archetype
-veya trait bir satırı kapatıyorsa ikisini birlikte güncelle. Kalan eksikler raporun "Kalan eksikler" tablosundadır.
+veya trait bir satırı kapatıyorsa ikisini birlikte güncelle. Tabloda eksik satır kalmadı; bilerek
+yazılmayanlar raporun "Bilinen sınırlar" tablosundadır.
 
 1. İskelet
 2. Generator çekirdeği ve `MapCrud`
@@ -386,7 +388,8 @@ Raporun v1 listesindeki "uzatma kancaları" plana girmedi ve yazılmadı: rapord
 İkinci plan bitince iş bitmiş sayılmıştı; oturumun hedefi ("projenin tamamen bitmesini istiyorum, bana soru sorma")
 bunu kabul etmedi: araştırmanın üçüncü sürüm listesi, sınamada kalan satırlar ve açık duran frontend/mobil kapsamı
 da "tamamen"in parçasıdır. Bu planı kullanıcı ayrıca onaylamadı; kapsamı o hedeften çıkarıldı ve kararları, önceki
-aşamalardaki gibi, sorulmadan önerilen seçenekle verildi. Her aşama testleriyle birlikte ayrı commit olur.
+aşamalardaki gibi, sorulmadan önerilen seçenekle verildi. Her aşama testleriyle birlikte ayrı commit oldu; 22–32.
+aşamaların tamamı bitti.
 
 22. Saklama, okundu takibi, toplama: `Retention`, `ReadTracking`, `Counts` / `Sums` (türetilmiş durum dahil)
 23. Yerelleştirilmiş alanlar: `Translatable`
