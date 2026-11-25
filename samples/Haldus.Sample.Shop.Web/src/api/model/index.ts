@@ -35,6 +35,7 @@ export * from './listProductsParams';
 export * from './listProductTagsParams';
 export * from './listTagProductsParams';
 export * from './loginRequest';
+export * from './logoutRequest';
 export * from './moveRequest';
 export * from './orderItemResponse';
 export * from './orderResponse';

@@ -55,7 +55,8 @@ kiracıyı token'daki claim'lerden okur. Panelde:
 
 - Giriş ekranı kayıt, giriş ve parola sıfırlamayı (e-postayla gelen kod) taşır.
 - E-postası doğrulanmamış hesaba üstte bir şerit gösterilir; kod orada girilir.
-- Hesap menüsünden parola değiştirilir (öteki oturumlar kapanır) ve çıkış yapılır (oturum sunucuda iptal edilir).
+- Hesap menüsünden parola değiştirilir (hesabın bütün oturumları kapanır; bu sekme backend'in açtığı yeni oturumla
+  devam eder) ve çıkış yapılır (oturum sunucuda iptal edilir; erişim token'ı geçmese de yenileme token'ıyla).
 
 Posta ayarı (`Shop__Smtp__Host` …) verilmediyse e-posta gönderilmez. Yerelde denemek için backend geliştirme
 ortamında başlatılır (`dotnet run … -- --environment Development`); kod o zaman backend'in günlüğüne yazılır.

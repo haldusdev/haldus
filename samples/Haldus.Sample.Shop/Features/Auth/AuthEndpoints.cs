@@ -7,6 +7,7 @@ using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.Authentication.BearerToken;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Localization;
@@ -156,11 +157,12 @@ public static partial class AuthEndpoints
             .ProducesProblem(StatusCodes.Status401Unauthorized)
             .ProducesProblem(StatusCodes.Status409Conflict);
 
+        // Çıkış oturumsuz da çağrılabilir: erişim token'ı reddedilen (süresi dolmuş, yenilenemeyen) bir istemci de
+        // oturumunu yenileme token'ıyla kapatabilmelidir. Yanıt her durumda aynıdır.
         auth.MapPost("/logout", LogoutAsync)
             .WithName("Logout")
-            .RequireAuthorization()
-            .Produces(StatusCodes.Status204NoContent)
-            .ProducesProblem(StatusCodes.Status401Unauthorized);
+            .AllowAnonymous()
+            .Produces(StatusCodes.Status204NoContent);
 
         auth.MapPost("/logout-all", LogoutEverywhereAsync)
             .WithName("LogoutEverywhere")
@@ -197,7 +199,7 @@ public static partial class AuthEndpoints
             .RequireAuthorization()
             .RequireRateLimiting(RateLimitPolicy)
             .AddEndpointFilter<HaldusValidationFilter<ChangePasswordRequest>>()
-            .Produces(StatusCodes.Status204NoContent)
+            .Produces<AccessTokenResponse>()
             .ProducesValidationProblem()
             .ProducesProblem(StatusCodes.Status401Unauthorized)
             .ProducesProblem(StatusCodes.Status429TooManyRequests);
@@ -233,23 +235,20 @@ public static partial class AuthEndpoints
     /// <item><c>Shop:Auth:RequireVerifiedEmail</c> açıksa e-postası doğrulanmamış hesap yalnızca kimlik uçlarını
     /// kullanabilir.</item>
     /// </list>
-    /// Token istemeyen uçlar (giriş, yenileme, token ile erişim) bunun dışındadır: süresi dolmuş bir oturum onlara
-    /// takılmamalıdır.
+    /// Token istemeyen uçlar (giriş, yenileme, token ile erişim) reddedilen bir token yüzünden kapanmaz: süresi dolmuş
+    /// bir oturum onlara takılmamalıdır. Ama iptal edilmiş bir oturumun token'ı onlarda da kimlik sayılmaz; istek
+    /// kimliksiz sürer (yoksa çıkış yapılmış bir oturumun token'ı, süresi dolana kadar bu uçlarda kullanıcıyı ve
+    /// kiracıyı tanıtmaya devam ederdi).
     /// </summary>
     public static IApplicationBuilder UseSessionValidation(this IApplicationBuilder app) =>
         app.Use(async (context, next) =>
         {
-            if (context.GetEndpoint()?.Metadata.GetMetadata<IAllowAnonymous>() is not null)
-            {
-                await next(context);
-                return;
-            }
-
+            var open = context.GetEndpoint()?.Metadata.GetMetadata<IAllowAnonymous>() is not null;
             var messages = context.RequestServices.GetRequiredService<IStringLocalizer<ShopMessages>>();
 
             if (context.User.Identity?.IsAuthenticated != true)
             {
-                if (context.Request.Headers.Authorization.ToString().StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
+                if (!open && context.Request.Headers.Authorization.ToString().StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
                 {
                     await RejectAsync(context, messages);
                     return;
@@ -268,11 +267,19 @@ public static partial class AuthEndpoints
                 if (!Guid.TryParse(context.User.FindFirstValue(SessionClaim), out var sessionId)
                     || !await Live(db.Set<ShopSession>(), now).AnyAsync(session => session.Id == sessionId, context.RequestAborted))
                 {
+                    if (open)
+                    {
+                        context.User = new ClaimsPrincipal(new ClaimsIdentity());
+                        await next(context);
+                        return;
+                    }
+
                     await RejectAsync(context, messages);
                     return;
                 }
 
-                if (context.RequestServices.GetRequiredService<IOptions<ShopAuthOptions>>().Value.RequireVerifiedEmail
+                if (!open
+                    && context.RequestServices.GetRequiredService<IOptions<ShopAuthOptions>>().Value.RequireVerifiedEmail
                     && context.User.FindFirstValue(VerifiedClaim) != "true"
                     && !context.Request.Path.StartsWithSegments("/auth"))
                 {
@@ -452,11 +459,34 @@ public static partial class AuthEndpoints
         return SignIn(account, session, refresh.Value);
     }
 
-    private static async Task<IResult> LogoutAsync(ClaimsPrincipal user, AppDbContext db, TimeProvider time, CancellationToken cancellationToken)
+    private static async Task<IResult> LogoutAsync(
+        [FromBody] LogoutRequest? request,
+        ClaimsPrincipal user,
+        AppDbContext db,
+        TimeProvider time,
+        IOptionsMonitor<BearerTokenOptions> options,
+        CancellationToken cancellationToken)
     {
-        if (Guid.TryParse(user.FindFirstValue(SessionClaim), out var sessionId))
+        // Oturumu, sunulan erişim token'ı da yenileme token'ı da tanıtabilir. Yenileme token'ının sırası eskimiş veya
+        // süresi dolmuş olabilir; kapatmak için yeter: token'ı elinde tutan zaten o oturumun bir tarafıdır. Bu olmadan
+        // yenilemesi reddedilen bir istemci (ör. token'ı çalan kişi önce yenilediyse) oturumu sunucuda kapatamazdı.
+        var sessions = new HashSet<Guid>();
+
+        if (Guid.TryParse(user.FindFirstValue(SessionClaim), out var current))
         {
-            await RevokeAsync(db.Set<ShopSession>().Where(session => session.Id == sessionId), HaldusTime.UtcNow(time), cancellationToken);
+            sessions.Add(current);
+        }
+
+        if (request?.RefreshToken is { Length: > 0 and <= LogoutRequest.MaxTokenLength } token
+            && options.Get(BearerTokenDefaults.AuthenticationScheme).RefreshTokenProtector.Unprotect(token) is { } ticket
+            && Guid.TryParse(ticket.Principal.FindFirstValue(SessionClaim), out var presented))
+        {
+            sessions.Add(presented);
+        }
+
+        if (sessions.Count > 0)
+        {
+            await RevokeAsync(db.Set<ShopSession>().Where(session => sessions.Contains(session.Id)), HaldusTime.UtcNow(time), cancellationToken);
         }
 
         return Results.NoContent();
@@ -573,10 +603,14 @@ public static partial class AuthEndpoints
                     .SetProperty(candidate => candidate.LockedUntil, (DateTimeOffset?)null),
                 cancellationToken);
 
-        // Bu oturum açık kalır, ötekiler kapanır.
-        Guid.TryParse(user.FindFirstValue(SessionClaim), out var current);
-        await RevokeAsync(db.Set<ShopSession>().Where(session => session.AccountId == account.Id && session.Id != current), now, cancellationToken);
-        return Results.NoContent();
+        // Bütün oturumlar kapanır, isteği yapan da: token'lar kopyalanmışsa kopyalanan, parolayı değiştirenin kendi
+        // oturumudur ve açık kalsaydı kopya da geçerli kalırdı. İsteği yapana yeni bir oturum açılır.
+        await RevokeAsync(db.Set<ShopSession>().Where(session => session.AccountId == account.Id), now, cancellationToken);
+
+        var session = NewSession(account, now, options.Value);
+        db.Add(session);
+        await db.SaveChangesAsync(cancellationToken);
+        return SignIn(account, session, options.Value);
     }
 
     private static async Task<IResult> VerifyEmailAsync(

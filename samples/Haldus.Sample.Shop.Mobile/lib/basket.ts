@@ -1,3 +1,5 @@
+import { useSyncExternalStore } from 'react';
+
 import { useQueryClient } from '@tanstack/react-query';
 
 import {
@@ -17,6 +19,25 @@ const PARAMS = { pageSize: 1 } as const;
 // arda iki dokunuşu ise iki ayrı sepet oluştururdu. Sıra, hook'u kullanan bütün ekranlar için ortaktır.
 let queue: Promise<unknown> = Promise.resolve();
 
+// Sırada veya yolda bir değişiklik varken sepet "meşgul"dür. Hook'u kullanan bütün ekranlar aynı durumu görür ve
+// düğmelerini değişiklik sıraya girdiği anda kapatır; yalnızca süren isteğe bakılsaydı, sıradaki iş başlarken
+// kapanan düğme o sırada yapılan bir dokunuşu yutabilirdi.
+let pending = 0;
+const listeners = new Set<() => void>();
+
+function track(delta: number) {
+  pending += delta;
+  listeners.forEach((listener) => listener());
+}
+
+function subscribe(listener: () => void) {
+  listeners.add(listener);
+  return () => {
+    listeners.delete(listener);
+  };
+}
+
+const isBusy = () => pending > 0;
 /**
  * Kullanıcının sepeti (`/me/baskets`). Sepet, satırlarıyla birlikte bir bütündür: satırlar sepetin isteğinde gider
  * ve backend onları eşitler (kimliği verilen güncellenir, verilmeyen eklenir, istekte olmayan silinir). Bu yüzden
@@ -29,6 +50,8 @@ export function useBasket() {
   const baskets = useListBaskets(PARAMS);
   const create = useCreateBasket();
   const update = useUpdateBasket();
+
+  const saving = useSyncExternalStore(subscribe, isBusy, isBusy);
 
   const basket = baskets.data?.data.items[0] ?? null;
 
@@ -69,7 +92,9 @@ export function useBasket() {
   }
 
   function change(edit: Edit): Promise<void> {
-    const next = queue.then(() => apply(edit));
+    track(1);
+
+    const next = queue.then(() => apply(edit)).finally(() => track(-1));
     queue = next.catch(() => undefined);
     return next;
   }
@@ -79,7 +104,7 @@ export function useBasket() {
     isPending: baskets.isPending,
     isError: baskets.isError,
     error: baskets.error ?? create.error ?? update.error,
-    isSaving: create.isPending || update.isPending,
+    isSaving: saving,
     refetch: baskets.refetch,
     isRefetching: baskets.isRefetching,
 

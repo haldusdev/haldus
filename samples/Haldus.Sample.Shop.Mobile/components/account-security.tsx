@@ -3,12 +3,12 @@ import * as React from 'react';
 import { useTranslation } from 'react-i18next';
 import { View } from 'react-native';
 
-import { changePassword, resendEmailVerification } from '@/api/auth/auth';
+import { resendEmailVerification } from '@/api/auth/auth';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Text } from '@/components/ui/text';
-import { confirmEmail } from '@/lib/auth';
+import { changeOwnPassword, confirmEmail } from '@/lib/auth';
 import { fieldErrors, problemMessage } from '@/lib/problem';
 import { useSession } from '@/lib/session';
 
@@ -107,7 +107,7 @@ export function ChangePassword() {
   const [changed, setChanged] = React.useState(false);
 
   const change = useMutation({
-    mutationFn: () => changePassword({ currentPassword, newPassword }),
+    mutationFn: () => changeOwnPassword(currentPassword, newPassword),
     onSuccess: () => {
       setCurrentPassword('');
       setNewPassword('');

@@ -852,7 +852,8 @@ backend'e taşır; backend'in mesajları o dilde döner. Mobil uygulama Expo'nun
 doğrulandı; iOS'ta çalıştırılmadı.
 
 Kimlik doğrulama örnek mağazanın kendisindedir (`Features/Auth`): e-posta ve parola ile giriş, ASP.NET Core'un
-yerleşik taşıyıcı token şeması, sunucuda tutulan oturumlar (çıkış ve parola değişimi token'ları hemen geçersiz kılar),
+yerleşik taşıyıcı token şeması, sunucuda tutulan oturumlar (çıkış ve parola değişimi token'ları hemen geçersiz kılar;
+parola değişimi bütün oturumları kapatıp isteği yapana yenisini açar),
 e-postayla gönderilen kodla parola sıfırlama ve e-posta doğrulama, hesap kilidi ve adres başına hız sınırı; ayrı bir
 kimlik sağlayıcı veya paket yoktur. Haldus bunun yalnızca sonucunu görür: kullanıcıyı ve kiracıyı token'daki
 claim'lerden okur. Giriş yapılmadan hiçbir kaynağa ulaşılmaz; açık kalması gereken uçlar (misafir sepeti, token ile

@@ -30,6 +30,7 @@ import type {
   ForgotPasswordRequest,
   HttpValidationProblemDetails,
   LoginRequest,
+  LogoutRequest,
   ProblemDetails,
   RefreshRequest,
   RegisterRequest,
@@ -366,17 +367,10 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
   status: 204
 }
 
-export type logoutResponse401 = {
-  data: ProblemDetails
-  status: 401
-}
-
 export type logoutResponseSuccess = (logoutResponse204) & {
   headers: Headers;
 };
-export type logoutResponseError = (logoutResponse401) & {
-  headers: Headers;
-};
+;
 
 export const getLogoutUrl = () => {
 
@@ -386,14 +380,14 @@ export const getLogoutUrl = () => {
   return `/auth/logout`
 }
 
-export const logout = async ( options?: Parameters<typeof apiFetch>[1]): Promise<logoutResponseSuccess> => {
+export const logout = async (nullLogoutRequest?: null | LogoutRequest, options?: Parameters<typeof apiFetch>[1]): Promise<logoutResponseSuccess> => {
 
   return apiFetch<logoutResponseSuccess>(getLogoutUrl(),
   {
     ...options,
-    method: 'POST'
-
-
+    method: 'POST',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(nullLogoutRequest)
   }
 );}
 
@@ -403,9 +397,9 @@ export const logout = async ( options?: Parameters<typeof apiFetch>[1]): Promise
 
 export const getLogoutMutationKey = () => ['logout'] as const;
 
-export const getLogoutMutationOptions = <TError = ProblemDetails,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof logout>>, TError,void, TContext>, request?: SecondParameter<typeof apiFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof logout>>, TError,void, TContext> => {
+export const getLogoutMutationOptions = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof logout>>, TError,LogoutMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof logout>>, TError,LogoutMutationVariables, TContext> => {
 
 const mutationKey = getLogoutMutationKey();
 const {mutation: mutationOptions, request: requestOptions} = options ?
@@ -417,10 +411,10 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof logout>>, void> = () => {
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof logout>>, LogoutMutationVariables> = (props) => {
+          const {data} = props ?? {};
 
-
-          return  logout(requestOptions)
+          return  logout(data,requestOptions)
         }
 
 
@@ -431,16 +425,16 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
   return  { mutationFn, ...mutationOptions }}
 
     export type LogoutMutationResult = NonNullable<Awaited<ReturnType<typeof logout>>>
+    export type LogoutMutationBody = null | LogoutRequest | undefined
+    export type LogoutMutationError = unknown
+    export type LogoutMutationVariables = {data?: null | LogoutRequest}
 
-    export type LogoutMutationError = ProblemDetails
-
-
-    export const useLogout = <TError = ProblemDetails,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof logout>>, TError,void, TContext>, request?: SecondParameter<typeof apiFetch>}
+    export const useLogout = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof logout>>, TError,LogoutMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient): UseMutationResult<
         Awaited<ReturnType<typeof logout>>,
         TError,
-        void,
+        LogoutMutationVariables,
         TContext
       > => {
       return useMutation(getLogoutMutationOptions(options), queryClient);
@@ -817,9 +811,9 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
       > => {
       return useMutation(getResetPasswordMutationOptions(options), queryClient);
     }
-    export type changePasswordResponse204 = {
-  data: void
-  status: 204
+    export type changePasswordResponse200 = {
+  data: AccessTokenResponse
+  status: 200
 }
 
 export type changePasswordResponse400 = {
@@ -837,7 +831,7 @@ export type changePasswordResponse429 = {
   status: 429
 }
 
-export type changePasswordResponseSuccess = (changePasswordResponse204) & {
+export type changePasswordResponseSuccess = (changePasswordResponse200) & {
   headers: Headers;
 };
 export type changePasswordResponseError = (changePasswordResponse400 | changePasswordResponse401 | changePasswordResponse429) & {

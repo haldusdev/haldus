@@ -57,8 +57,14 @@ scene('a long list loads the next page when the end is reached', async ({ shop, 
   })()`);
 
   await page.see(text('Item 25'));
-  assert.equal(shop.last('GET', '/products').query.get('page'), '2');
-  assert.equal(shop.last('GET', '/products').query.get('pageSize'), '20');
+  // Liste yeniden okunabildiği için son isteğe değil, ikinci sayfanın istenmiş olmasına bakılır.
+  assert.ok(
+    shop
+      .sent('GET', '/products')
+      .some(
+        (request) => request.query.get('page') === '2' && request.query.get('pageSize') === '20'
+      )
+  );
 });
 
 scene(
@@ -221,6 +227,12 @@ scene('the password is changed from the account screen', async ({ shop, page, si
 
   await page.see(text(en.password.changed));
   assert.equal(shop.accounts[0].password, 'a-brand-new-password');
+
+  // Backend hesabın bütün oturumlarını kapatır ve bu cihaza yenisini açar: sonraki istek yeni token'la,
+  // yenilemeye gerek kalmadan geçer.
+  await page.goto(`${shop.origin}/favorites`);
+  await page.see(text(en.favorites.empty));
+  assert.equal(shop.sent('POST', '/auth/refresh').length, 0);
 });
 
 scene(
@@ -232,6 +244,10 @@ scene(
 
     await page.waitForPath('/sign-in');
     assert.equal(shop.sent('POST', '/auth/logout').length, 1);
+    assert.match(
+      JSON.stringify(shop.last('POST', '/auth/logout').body),
+      /^\{"refreshToken":"refresh-\d+"\}$/
+    );
     assert.equal(await page.storage(KEYS.accessToken), null);
     assert.equal(await page.storage(KEYS.refreshToken), null);
     assert.equal(await page.storage(KEYS.account), null);

@@ -549,7 +549,11 @@ Yapılmayanlar ve nedenleri:
     - `UseSessionValidation`: reddedilen bir token sunan istek her kaynakta 401 alır (`AllowAnonymous` uçlar
       hariç). İlk yazımda yoktu; panel tarayıcıda denenirken çıktı: geçersiz token'lı istek anonim sayılıyor,
       kiracıya ait kaynakta 403 alıyor ve istemci oturumu yenilemiyordu. Aynı ara katman token'ın oturumunu her
-      istekte veritabanına sorar (aşağıda).
+      istekte veritabanına sorar (aşağıda). Giriş istemeyen uçlar reddedilen token yüzünden kapanmaz, ama iptal
+      edilmiş bir oturumun token'ı onlarda da kimlik sayılmaz: istek kimliksiz sürer (`context.User` boşaltılır).
+      İlk yazımda bu uçlarda oturum hiç sorulmuyordu ve çıkış yapılmış bir oturumun token'ı, süresi dolana kadar
+      kullanıcıyı ve kiracıyı tanıtmaya devam ediyordu (bağımsız incelemede çıktı). **Giriş istemeyen ama kimliğe
+      bakan bir uç yazılırsa bu kurala güvenir; ara katmanın o dalı kaldırılmamalıdır.**
     - **Giriş yapılmadan hiçbir uca ulaşılmaz** (`FallbackPolicy`; demo kimliği kipinde konmaz). Açık kalanlar bunu
       kendileri söyler: giriş/kayıt/yenileme/sıfırlama uçları, Haldus'un token ile erişilen ve süreli bağlantı
       uçları, misafir sepeti (`guests.AllowAnonymous()`), API şeması. İlk yazımda yoktu: kiracıya ait olmayan
@@ -558,6 +562,13 @@ Yapılmayanlar ve nedenleri:
     - Oturumlar sunucudadır (`ShopSession`; token'daki `sid` claim'i) ve en çok 30 gün yaşar. Çıkış (`/auth/logout`,
       `/auth/logout-all`), parola sıfırlama ve parola değişimi oturumu iptal eder; iptal edilen oturumun erişim
       token'ı da yenileme token'ı da hemen reddedilir. Bedeli, token'lı her istekte bir birincil anahtar sorgusudur.
+      - Çıkış oturumsuz da çağrılır ve oturumu yenileme token'ı da tanıtır (gövdede, isteğe bağlı; sırası geçmiş bir
+        token da yeter). İlk yazımda geçerli bir erişim token'ı istiyordu: token'ı çalan kişi sahibinden önce
+        yenilediyse sahibin yenilemesi 409 alıyor, çıkışı da 401 alıyor ve oturum sunucuda açık kalıyordu
+        (incelemede çıktı). İstemciler çıkarken yenileme token'ını her zaman gönderir.
+      - Parola değişimi hesabın **bütün** oturumlarını kapatır, isteği yapanınkini de, ve isteği yapana yeni bir
+        oturum açar (yanıt yeni token'lardır). İlk yazımda isteği yapanın oturumu açık kalıyordu; token'lar
+        kopyalanmışsa kopyalanan da tam o oturumdu (incelemede çıktı).
     - Yenileme token'ı bir kez kullanılır (`RefreshVersion`; token'daki `rv` claim'i, tek bir koşullu `UPDATE` ile
       ilerler). Eskimiş bir yenileme token'ı yeniden sunulursa oturum çalınmış sayılır ve kapatılır; yenilemeden
       hemen sonra (`RefreshGraceSeconds`, 30 sn) bir önceki token'ı sunan istek oturumu kapatmaz, ama yeni token da

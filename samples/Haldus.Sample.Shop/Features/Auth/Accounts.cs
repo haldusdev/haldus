@@ -168,6 +168,14 @@ public sealed record RefreshRequest
     public string RefreshToken { get; init; } = "";
 }
 
+public sealed record LogoutRequest
+{
+    internal const int MaxTokenLength = 4096;
+
+    /// <summary>Kapatılacak oturumun yenileme token'ı; erişim token'ı artık geçmiyorsa oturumu bu tanıtır.</summary>
+    public string? RefreshToken { get; init; }
+}
+
 public sealed record ForgotPasswordRequest
 {
     [Required]

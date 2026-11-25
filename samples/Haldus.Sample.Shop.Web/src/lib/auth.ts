@@ -1,4 +1,5 @@
 import {
+  changePassword,
   getCurrentAccount,
   logout,
   refreshSession,
@@ -10,6 +11,7 @@ import {
   getSession,
   markEmailVerified,
   reloadSession,
+  renewTokens,
   signIn,
   signOut,
 } from "@/lib/session"
@@ -72,13 +74,37 @@ export async function confirmEmail(code: string): Promise<void> {
  * tarayıcıdan silinir, çünkü kullanıcı çıkmak istemiştir.
  */
 export async function closeSession(): Promise<void> {
-  if (getSession()) {
+  const session = getSession()
+
+  if (session) {
     try {
-      await logout()
+      // Yenileme token'ı da gönderilir: erişim token'ı artık geçmiyorsa (süresi dolmuş, yenilenemiyor) oturumu
+      // sunucuda o tanıtır ve kapatır.
+      await logout({ refreshToken: session.refreshToken })
     } catch {
       // Ağ hatası veya zaten kapanmış oturum: yerel çıkış yine yapılır.
     }
   }
 
   signOut()
+}
+
+/**
+ * Parolayı değiştirir. Backend hesabın bütün oturumlarını kapatır (bu sekmeninki dahil: token'lar kopyalanmışsa
+ * kopyalanan odur) ve isteği yapana yeni bir oturum açar; onun token'ları yazılır.
+ */
+export async function changeOwnPassword(
+  currentPassword: string,
+  newPassword: string
+): Promise<void> {
+  const before = getSession()
+  const response = await changePassword({ currentPassword, newPassword })
+
+  reloadSession()
+  const current = getSession()
+
+  // Yanıt beklenirken oturum kapandıysa veya başka bir hesaba geçtiyse yeni token'lar ona yazılmaz.
+  if (before && current && current.accountId === before.accountId) {
+    renewTokens(response.data.accessToken, response.data.refreshToken)
+  }
 }

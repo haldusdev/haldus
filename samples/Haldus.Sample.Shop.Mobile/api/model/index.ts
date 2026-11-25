@@ -30,6 +30,7 @@ export * from './listProductsParams';
 export * from './listProductTagsParams';
 export * from './listTagProductsParams';
 export * from './loginRequest';
+export * from './logoutRequest';
 export * from './mergeBasket';
 export * from './pagedResultOfBasketResponse';
 export * from './pagedResultOfProductResponse';

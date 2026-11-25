@@ -284,6 +284,7 @@ export * from './listTrucksParams';
 export * from './listVehiclesParams';
 export * from './listWebhookEndpointsParams';
 export * from './loginRequest';
+export * from './logoutRequest';
 export * from './machineResponse';
 export * from './machineResponseCustomFields';
 export * from './maintenanceNoticeResponse';

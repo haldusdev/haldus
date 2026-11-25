@@ -7,7 +7,12 @@ import type { Call } from "./support/fetch.ts"
 import { session, STORAGE_KEY, unauthorized } from "./support/fixtures.ts"
 
 // Üretilen istemci taklit edilmez; istekleri `fetch` taklidine kadar gerçek yoldan gider.
-import { closeSession, confirmEmail, openSession } from "@/lib/auth"
+import {
+  changeOwnPassword,
+  closeSession,
+  confirmEmail,
+  openSession,
+} from "@/lib/auth"
 import { getSession, signIn, signOut } from "@/lib/session"
 
 const account = {
@@ -98,6 +103,8 @@ describe("auth", () => {
       assert.equal(calls[0].url, "/api/auth/logout")
       assert.equal(calls[0].method, "POST")
       assert.equal(bearer(calls[0]), "Bearer access-1")
+      // Yenileme token'ı da gider: erişim token'ı geçmiyorsa oturumu sunucuda o tanıtır.
+      assert.deepEqual(calls[0].body, { refreshToken: "refresh-1" })
       assert.equal(getSession(), null)
       assert.equal(storage.getItem(STORAGE_KEY), null)
     })
@@ -164,6 +171,62 @@ describe("auth", () => {
 
       assert.equal(calls.length, 0)
       assert.equal(getSession(), null)
+    })
+  })
+
+  describe("changeOwnPassword", () => {
+    it("stores the tokens of the new session the backend opens", async () => {
+      signIn(session({ emailVerified: true }))
+      respondWith(() => json(200, renewedTokens))
+
+      await changeOwnPassword("old password", "new password")
+
+      assert.equal(calls[0].url, "/api/auth/password/change")
+      assert.deepEqual(calls[0].body, {
+        currentPassword: "old password",
+        newPassword: "new password",
+      })
+      const expected = session({ ...renewedTokens, emailVerified: true })
+      assert.deepEqual(getSession(), expected)
+      assert.deepEqual(storedSession(), expected)
+    })
+
+    it("does not write the new tokens into another account's session", async () => {
+      const other = session({
+        accountId: "account-2",
+        email: "grace@example.com",
+        accessToken: "access-b",
+        refreshToken: "refresh-b",
+      })
+      signIn(session())
+      respondWith(() => {
+        storage.setItem(STORAGE_KEY, JSON.stringify(other))
+        return json(200, renewedTokens)
+      })
+
+      await changeOwnPassword("old password", "new password")
+
+      assert.deepEqual(getSession(), other)
+      assert.deepEqual(storedSession(), other)
+    })
+
+    it("throws the problem of a wrong current password and keeps the session", async () => {
+      const problem = {
+        status: 400,
+        errors: { currentPassword: ["The current password is incorrect."] },
+      }
+      signIn(session())
+      respondWith(() => json(400, problem))
+
+      await assert.rejects(
+        changeOwnPassword("wrong", "new password"),
+        (error) => {
+          assert.deepEqual(error, problem)
+          return true
+        }
+      )
+
+      assert.deepEqual(getSession(), session())
     })
   })
 

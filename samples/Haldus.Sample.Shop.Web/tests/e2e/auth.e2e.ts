@@ -184,6 +184,11 @@ scene(
       shop.last("POST", "/auth/logout").headers.authorization ?? "",
       /^Bearer access-/
     )
+    // Yenileme token'ı da gider: erişim token'ı geçmiyorsa oturumu sunucuda o tanıtır.
+    assert.match(
+      JSON.stringify(shop.last("POST", "/auth/logout").body),
+      /^\{"refreshToken":"refresh-\d+"\}$/
+    )
   }
 )
 
@@ -239,5 +244,11 @@ scene(
     await page.see(text(en.password.changed))
     await page.gone(role("dialog", undefined))
     assert.equal(shop.accounts[0].password, "a-brand-new-password")
+
+    // Backend hesabın bütün oturumlarını kapatır ve bu sekmeye yenisini açar: sonraki istek yeni token'la,
+    // yenilemeye gerek kalmadan geçer.
+    await page.click(button(en.nav.orders))
+    await page.see(text(en.orders.empty))
+    assert.equal(shop.sent("POST", "/auth/refresh").length, 0)
   }
 )

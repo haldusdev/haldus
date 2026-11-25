@@ -3,7 +3,7 @@ import { useMutation } from "@tanstack/react-query"
 import { useTranslation } from "react-i18next"
 import { toast } from "sonner"
 
-import { changePassword } from "@/api/auth/auth"
+import { changeOwnPassword } from "@/lib/auth"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -36,7 +36,7 @@ export function ChangePasswordDialog({
   const [newPassword, setNewPassword] = useState("")
 
   const change = useMutation({
-    mutationFn: () => changePassword({ currentPassword, newPassword }),
+    mutationFn: () => changeOwnPassword(currentPassword, newPassword),
     onSuccess: () => {
       toast.success(t("password.changed"))
       close(false)

@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
+using System.Security.Claims;
 using Haldus.Sample.Shop;
 using Haldus.Sample.Shop.Features.Account;
 using Haldus.Sample.Shop.Features.Auth;
@@ -8,6 +9,11 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Haldus.Sample.Shop.Features.Sales;
 using Microsoft.AspNetCore.Authentication.BearerToken;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Http;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Haldus.IntegrationTests;
 
@@ -244,6 +250,7 @@ public sealed class AuthEndpointTests(ShopFixture fixture)
         var race = await Task.WhenAll(Enumerable.Range(0, 5).Select(_ =>
             SendAsync(client, HttpMethod.Post, "/auth/refresh", new { refreshToken = second.RefreshToken })));
         var third = await ReadAsync<AccessTokenResponse>(Assert.Single(race, response => response.StatusCode == HttpStatusCode.OK));
+        Assert.All(race.Where(response => response.StatusCode != HttpStatusCode.OK), response => Assert.Equal(HttpStatusCode.Conflict, response.StatusCode));
         Assert.Equal(HttpStatusCode.OK, (await SendAsync(client, HttpMethod.Get, "/auth/me", token: third.AccessToken)).StatusCode);
 
         // Tolerans kısadır. Sonrasında eskimiş bir yenileme token'ı sunulursa (çalınmış olabilir) oturumun tamamı
@@ -255,6 +262,91 @@ public sealed class AuthEndpointTests(ShopFixture fixture)
         Assert.Equal(HttpStatusCode.Unauthorized, (await SendAsync(client, HttpMethod.Post, "/auth/refresh", new { refreshToken = third.RefreshToken })).StatusCode);
         Assert.Equal(HttpStatusCode.OK, (await SendAsync(client, HttpMethod.Post, "/auth/login", new { email, password = Password })).StatusCode);
     }
+
+    [Fact]
+    public async Task RefreshToken_TwoTurnsBehind_ClosesTheSessionEvenInsideTheTolerance()
+    {
+        // Varsayılan tolerans (30 sn) içinde kalınır; yine de yalnızca bir önceki sıra hoş görülür.
+        var first = await ReadAsync<AccessTokenResponse>(await SendAsync(HttpMethod.Post, "/auth/register", new { email = NewEmail(), password = Password }));
+        var second = await ReadAsync<AccessTokenResponse>(await SendAsync(HttpMethod.Post, "/auth/refresh", new { refreshToken = first.RefreshToken }));
+        var third = await ReadAsync<AccessTokenResponse>(await SendAsync(HttpMethod.Post, "/auth/refresh", new { refreshToken = second.RefreshToken }));
+
+        // İki sıra geride kalan token aynı anda yenileyen bir sekme olamaz: yeniden kullanım sayılır ve oturum kapanır.
+        Assert.Equal(HttpStatusCode.Unauthorized, (await SendAsync(HttpMethod.Post, "/auth/refresh", new { refreshToken = first.RefreshToken })).StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await SendAsync(HttpMethod.Get, "/auth/me", token: third.AccessToken)).StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await SendAsync(HttpMethod.Post, "/auth/refresh", new { refreshToken = third.RefreshToken })).StatusCode);
+    }
+
+    [Fact]
+    public async Task Session_EndsAfterItsLifetimeAndCannotBeRenewedPastIt()
+    {
+        // Oturumun ömrü yenilemelerle uzamaz; ömrü sıfır olan oturum doğduğu anda biter.
+        await using var factory = fixture.CreateAuthenticatedFactory(
+            ("Shop:Auth:RequestsPerMinute", "100000"),
+            ("Shop:Auth:SessionDays", "0"));
+        using var client = factory.CreateClient();
+
+        var session = await ReadAsync<AccessTokenResponse>(await SendAsync(client, HttpMethod.Post, "/auth/register", new { email = NewEmail(), password = Password }));
+
+        Assert.Equal(HttpStatusCode.Unauthorized, (await SendAsync(client, HttpMethod.Get, "/auth/me", token: session.AccessToken)).StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await SendAsync(client, HttpMethod.Post, "/auth/refresh", new { refreshToken = session.RefreshToken })).StatusCode);
+    }
+
+    [Fact]
+    public async Task RevokedSession_IsNotAnIdentityOnOpenEndpointsEither()
+    {
+        await using var factory = fixture.CreateAuthenticatedFactory(("Shop:Auth:RequestsPerMinute", "100000"));
+        using var client = factory.CreateClient();
+
+        var session = await ReadAsync<AccessTokenResponse>(await SendAsync(client, HttpMethod.Post, "/auth/register", new { email = NewEmail(), password = Password }));
+        var account = await ReadAsync<AccountInfo>(await SendAsync(client, HttpMethod.Get, "/auth/me", token: session.AccessToken));
+
+        Guid sessionId;
+        await using (var scope = factory.Services.CreateAsyncScope())
+        {
+            sessionId = await scope.ServiceProvider.GetRequiredService<AppDbContext>().Set<ShopSession>()
+                .Where(candidate => candidate.AccountId == account.Id)
+                .Select(candidate => candidate.Id)
+                .SingleAsync(CancellationToken);
+        }
+
+        // Oturum denetimi, token'ı çözülmüş bir istekle doğrudan çalıştırılır: uç giriş istemiyorsa (AllowAnonymous)
+        // ya da istiyorsa, uca ulaşan kimlik ve yanıtın durumu.
+        async Task<(bool Reached, bool Authenticated, int Status)> RunAsync(bool open)
+        {
+            await using var scope = factory.Services.CreateAsyncScope();
+
+            var context = new DefaultHttpContext { RequestServices = scope.ServiceProvider };
+            context.Response.Body = new MemoryStream();
+            context.SetEndpoint(new Endpoint(null, new EndpointMetadataCollection(open ? [new AllowAnonymousAttribute()] : []), "probe"));
+            context.User = new ClaimsPrincipal(new ClaimsIdentity(
+                [new Claim(ClaimTypes.NameIdentifier, account.Id.ToString()), new Claim("sid", sessionId.ToString())],
+                BearerTokenDefaults.AuthenticationScheme));
+
+            ClaimsPrincipal? seen = null;
+            var pipeline = new ApplicationBuilder(scope.ServiceProvider);
+            pipeline.UseSessionValidation();
+            pipeline.Run(reached =>
+            {
+                seen = reached.User;
+                return Task.CompletedTask;
+            });
+
+            await pipeline.Build()(context);
+            return (seen is not null, seen?.Identity?.IsAuthenticated == true, context.Response.StatusCode);
+        }
+
+        Assert.Equal((true, true, 200), await RunAsync(open: true));
+        Assert.Equal((true, true, 200), await RunAsync(open: false));
+
+        Assert.Equal(HttpStatusCode.NoContent, (await SendAsync(client, HttpMethod.Post, "/auth/logout", token: session.AccessToken)).StatusCode);
+
+        // Giriş isteyen uç token'ı reddeder. Giriş istemeyen uç çalışır, ama iptal edilmiş oturumun kimliğiyle değil:
+        // yoksa çıkış yapılmış bir oturumun token'ı, süresi dolana kadar o uçlarda kullanıcıyı ve kiracıyı tanıtırdı.
+        Assert.Equal((false, false, 401), await RunAsync(open: false));
+        Assert.Equal((true, false, 200), await RunAsync(open: true));
+    }
+
     [Fact]
     public void RateLimit_CountsAnIpv6SubscriberAsOne()
     {
@@ -334,7 +426,25 @@ public sealed class AuthEndpointTests(ShopFixture fixture)
         Assert.Equal(HttpStatusCode.Unauthorized, (await SendAsync(HttpMethod.Post, "/auth/refresh", new { refreshToken = third.RefreshToken })).StatusCode);
 
         // Hesap yerinde durur: yeniden giriş yapılır.
-        Assert.Equal(HttpStatusCode.OK, (await SendAsync(HttpMethod.Post, "/auth/login", new { email, password = Password })).StatusCode);
+        var fourth = await ReadAsync<AccessTokenResponse>(await SendAsync(HttpMethod.Post, "/auth/login", new { email, password = Password }));
+
+        // Erişim token'ı olmadan da çıkılır: oturumu yenileme token'ı tanıtır. Erişim token'ı reddedilen ve
+        // yenileyemeyen bir istemci (ör. token'ı çalan kişi ondan önce yenilediyse) oturumu böyle kapatır.
+        Assert.Equal(HttpStatusCode.NoContent, (await SendAsync(HttpMethod.Post, "/auth/logout", new { refreshToken = fourth.RefreshToken })).StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await SendAsync(HttpMethod.Get, "/auth/me", token: fourth.AccessToken)).StatusCode);
+
+        // Sırası geçmiş bir yenileme token'ı da oturumu kapatır: yenilenmiş token'lar da artık geçmez.
+        var fifth = await ReadAsync<AccessTokenResponse>(await SendAsync(HttpMethod.Post, "/auth/login", new { email, password = Password }));
+        var renewed = await ReadAsync<AccessTokenResponse>(await SendAsync(HttpMethod.Post, "/auth/refresh", new { refreshToken = fifth.RefreshToken }));
+        Assert.Equal(HttpStatusCode.NoContent, (await SendAsync(HttpMethod.Post, "/auth/logout", new { refreshToken = fifth.RefreshToken })).StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await SendAsync(HttpMethod.Get, "/auth/me", token: renewed.AccessToken)).StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await SendAsync(HttpMethod.Post, "/auth/refresh", new { refreshToken = renewed.RefreshToken })).StatusCode);
+
+        // Tanınmayan bir token ve boş bir istek aynı yanıtı alır ve hiçbir oturumu kapatmaz.
+        var sixth = await ReadAsync<AccessTokenResponse>(await SendAsync(HttpMethod.Post, "/auth/login", new { email, password = Password }));
+        Assert.Equal(HttpStatusCode.NoContent, (await SendAsync(HttpMethod.Post, "/auth/logout", new { refreshToken = "not-a-token" })).StatusCode);
+        Assert.Equal(HttpStatusCode.NoContent, (await SendAsync(HttpMethod.Post, "/auth/logout")).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await SendAsync(HttpMethod.Get, "/auth/me", token: sixth.AccessToken)).StatusCode);
     }
 
     [Fact]
@@ -481,7 +591,7 @@ public sealed class AuthEndpointTests(ShopFixture fixture)
     }
 
     [Fact]
-    public async Task ChangingThePassword_ClosesTheOtherSessions()
+    public async Task ChangingThePassword_ClosesEverySessionAndOpensANewOne()
     {
         const string NewPassword = "another long passphrase";
         var email = NewEmail();
@@ -491,12 +601,16 @@ public sealed class AuthEndpointTests(ShopFixture fixture)
         Assert.Equal(
             ["currentPassword"],
             await ErrorsAsync(await SendAsync(HttpMethod.Post, "/auth/password/change", new { currentPassword = "not the password", newPassword = NewPassword }, current.AccessToken)));
-        Assert.Equal(
-            HttpStatusCode.NoContent,
-            (await SendAsync(HttpMethod.Post, "/auth/password/change", new { currentPassword = Password, newPassword = NewPassword }, current.AccessToken)).StatusCode);
+        var changed = await ReadAsync<AccessTokenResponse>(
+            await SendAsync(HttpMethod.Post, "/auth/password/change", new { currentPassword = Password, newPassword = NewPassword }, current.AccessToken));
 
-        Assert.Equal(HttpStatusCode.OK, (await SendAsync(HttpMethod.Get, "/auth/me", token: current.AccessToken)).StatusCode);
+        // İsteği yapanın eski token'ları da artık geçmez: token'lar kopyalanmışsa kopyalanan bu oturumdur. İsteği
+        // yapan, yanıttaki yeni oturumla devam eder.
+        Assert.Equal(HttpStatusCode.Unauthorized, (await SendAsync(HttpMethod.Get, "/auth/me", token: current.AccessToken)).StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await SendAsync(HttpMethod.Post, "/auth/refresh", new { refreshToken = current.RefreshToken })).StatusCode);
         Assert.Equal(HttpStatusCode.Unauthorized, (await SendAsync(HttpMethod.Get, "/auth/me", token: other.AccessToken)).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await SendAsync(HttpMethod.Get, "/auth/me", token: changed.AccessToken)).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await SendAsync(HttpMethod.Post, "/auth/refresh", new { refreshToken = changed.RefreshToken })).StatusCode);
         Assert.Equal(HttpStatusCode.Unauthorized, (await SendAsync(HttpMethod.Post, "/auth/login", new { email, password = Password })).StatusCode);
         Assert.Equal(HttpStatusCode.OK, (await SendAsync(HttpMethod.Post, "/auth/login", new { email, password = NewPassword })).StatusCode);
     }

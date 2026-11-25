@@ -452,10 +452,16 @@ export class Shop {
         return { status: 200, body: info };
       }
 
-      case 'POST /auth/logout':
-        this.authenticate(call);
-        this.revokeSessions();
+      case 'POST /auth/logout': {
+        // Oturumu erişim token'ı da yenileme token'ı da tanıtabilir; yanıt her durumda aynıdır.
+        const bearer = (call.headers.authorization ?? '').replace(/^Bearer /, '');
+
+        if (this.access.has(bearer) || this.refresh.has(text(body.refreshToken))) {
+          this.revokeSessions();
+        }
+
         return { status: 204 };
+      }
 
       case 'POST /auth/password/forgot':
         return { status: 202 };
@@ -485,7 +491,10 @@ export class Shop {
         }
 
         account.password = text(body.newPassword);
-        return { status: 204 };
+
+        // Bütün oturumlar kapanır; isteği yapana yeni bir oturum açılır.
+        this.revokeSessions();
+        return { status: 200, body: this.issue(account) };
       }
 
       case 'POST /auth/email/verify': {

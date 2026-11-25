@@ -1,9 +1,22 @@
-import { getCurrentAccount, logout, refreshSession, verifyEmail } from '@/api/auth/auth';
+import {
+  changePassword,
+  getCurrentAccount,
+  logout,
+  refreshSession,
+  verifyEmail,
+} from '@/api/auth/auth';
 import type { AccessTokenResponse } from '@/api/model';
 import { renewSession, setSessionRefresher } from '@/lib/api-fetch';
 import { Platform } from 'react-native';
 
-import { getSession, markEmailVerified, restoreSession, signIn, signOut } from '@/lib/session';
+import {
+  getSession,
+  markEmailVerified,
+  renewTokens,
+  restoreSession,
+  signIn,
+  signOut,
+} from '@/lib/session';
 
 // Süresi dolan erişim token'ı bu istekle yenilenir (api-fetch.ts).
 setSessionRefresher(async (refreshToken) => {
@@ -66,13 +79,40 @@ export async function confirmEmail(code: string): Promise<void> {
  * cihazdan silinir, çünkü kullanıcı çıkmak istemiştir.
  */
 export async function closeSession(): Promise<void> {
-  if (getSession()) {
+  const session = getSession();
+
+  if (session) {
     try {
-      await logout();
+      // Yenileme token'ı da gönderilir: erişim token'ı artık geçmiyorsa (süresi dolmuş, yenilenemiyor) oturumu
+      // sunucuda o tanıtır ve kapatır.
+      await logout({ refreshToken: session.refreshToken });
     } catch {
       // Ağ hatası veya zaten kapanmış oturum: yerel çıkış yine yapılır.
     }
   }
 
   await signOut();
+}
+
+/**
+ * Parolayı değiştirir. Backend hesabın bütün oturumlarını kapatır (bu cihazınki dahil: token'lar kopyalanmışsa
+ * kopyalanan odur) ve isteği yapana yeni bir oturum açar; onun token'ları yazılır.
+ */
+export async function changeOwnPassword(
+  currentPassword: string,
+  newPassword: string
+): Promise<void> {
+  const before = getSession();
+  const response = await changePassword({ currentPassword, newPassword });
+
+  if (Platform.OS === 'web') {
+    await restoreSession();
+  }
+
+  const current = getSession();
+
+  // Yanıt beklenirken oturum kapandıysa veya başka bir hesaba geçtiyse yeni token'lar ona yazılmaz.
+  if (before && current && current.accountId === before.accountId) {
+    await renewTokens(response.data.accessToken, response.data.refreshToken);
+  }
 }
