@@ -69,6 +69,8 @@ Bilinen sınırlar: biyometrik kilit, ayrı bir kimlik sağlayıcı ve iki adım
 | `pnpm android` / `pnpm ios` / `pnpm web` | Doğrudan o hedefte açar |
 | `pnpm generate:api` | `api` altındaki istemciyi backend'in `openapi.json` dosyasından yeniden üretir |
 | `pnpm typecheck` | Tip denetimi |
+| `pnpm test` | Oturum ve istek mantığının testleri (`tests/`) |
+| `pnpm typecheck:tests` | Testlerin tip denetimi |
 
 ## API istemcisi
 
@@ -116,4 +118,8 @@ Bu seçimler kullanıcıya sorulmadan, önerilen seçenekle verildi (deponun `CL
 - **Kalıcı depo:** `expo-secure-store`.
 - **Formlar:** ayrı bir form kütüphanesi yok; tek form giriş ekranıdır ve doğrulaması backend'dedir.
 - **Kimlik doğrulama:** backend'in kendi parola girişi ve taşıyıcı token'ı; ayrı bir kimlik sağlayıcı yok.
-- **Test:** test altyapısı kurulmadı.
+- **Test:** yeni bir paket eklenmedi. Oturum ve istek mantığı (`lib`: token'ın eklenmesi, 401'de tek yenileme, güvenli
+  depodaki üç anahtar, hata gövdeleri) Node'un yerleşik test çalıştırıcısıyla sınanır (`pnpm test`; `react-native`,
+  `expo-secure-store` ve `fetch` elle yazılmış taklitlerle). Ekranların testi yoktur: onları çizmek bir React Native
+  test kütüphanesi (yeni bir bağımlılık) ister. `pnpm typecheck:tests`, Expo'nun dolaylı getirdiği `@types/node`
+  paketine dayanır.

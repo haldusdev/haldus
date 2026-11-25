@@ -46,7 +46,12 @@ async function request<T>(
     url.startsWith(route)
   )
 
-  if (session && !credentialRoute && !headers.has("Authorization")) {
+  // Çağıran kendi token'ını verdiyse (ör. girişten hemen sonra hesabı sormak) oturumunki eklenmez ve o isteğin 401'i
+  // oturumu yenilemez: yinelenen istek yine çağıranın token'ını taşırdı ve bir yenileme boşa harcanırdı.
+  const usesSession =
+    session !== null && !credentialRoute && !headers.has("Authorization")
+
+  if (session && usesSession) {
     headers.set("Authorization", `Bearer ${session.accessToken}`)
   }
 
@@ -58,7 +63,7 @@ async function request<T>(
     response.status === 401 &&
     mayRenew &&
     session &&
-    !credentialRoute &&
+    usesSession &&
     (await renew(session))
   ) {
     return request<T>(url, options, false)
@@ -89,14 +94,13 @@ function renew(sent: Session): Promise<boolean> {
     reloadSession()
     const current = getSession()
 
-    if (!current) {
+    // Oturum bu arada kapanmış veya başka bir hesaba geçmiş olabilir; o zaman bu isteğin yenileyeceği bir şey yoktur.
+    if (!current || current.accountId !== sent.accountId) {
       return false
     }
 
     // Başka bir istek veya başka bir sekme bu arada yeniledi.
-    return current.accessToken !== sent.accessToken
-      ? true
-      : refresh(current.refreshToken)
+    return current.accessToken !== sent.accessToken ? true : refresh(current)
   }).finally(() => {
     renewal = undefined
   })
@@ -115,18 +119,37 @@ function exclusively<T>(work: () => Promise<T>): Promise<T> {
     ? navigator.locks.request("haldus-shop.session-refresh", work)
     : work()
 }
-async function refresh(refreshToken: string): Promise<boolean> {
+async function refresh(sent: Session): Promise<boolean> {
   if (!refresher) {
     return false
   }
 
+  // Yanıt beklenirken oturum değişebilir (çıkış, başka hesapla giriş); sonuç yalnızca hâlâ aynı oturuma uygulanır.
+  const unchanged = () => getSession()?.refreshToken === sent.refreshToken
+
   try {
-    const tokens = await refresher(refreshToken)
+    const tokens = await refresher(sent.refreshToken)
+
+    if (!unchanged()) {
+      // Yenilenen token'lar başka bir hesabın oturumuna yazılmaz.
+      return false
+    }
+
     renewTokens(tokens.accessToken, tokens.refreshToken)
     return true
   } catch (error) {
-    // Backend yenilemeyi reddettiyse oturum bitmiştir; ağ hatasında oturum korunur ve istek hatasıyla döner.
-    if (typeof error === "object" && error !== null && "status" in error) {
+    // Başka bir sekme tam bu sırada yenilediyse backend bu isteği reddeder ama oturumu kapatmaz; yeni token'lar
+    // depodadır.
+    reloadSession()
+    const current = getSession()
+
+    if (current && current.accountId === sent.accountId && !unchanged()) {
+      return true
+    }
+
+    // Oturumu yalnızca backend'in reddi bitirir (400 / 401). Ağ hatasında, sunucu hatasında veya bir vekilin hata
+    // sayfasında (5xx) oturum korunur ve istek hatasıyla döner; yoksa geçici bir arıza herkesi oturumdan atardı.
+    if (isRejection(error) && unchanged()) {
       signOut()
     }
 
@@ -134,6 +157,14 @@ async function refresh(refreshToken: string): Promise<boolean> {
   }
 }
 
+function isRejection(error: unknown): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "status" in error &&
+    (error.status === 400 || error.status === 401)
+  )
+}
 function parse(text: string): unknown {
   if (!text) {
     return undefined

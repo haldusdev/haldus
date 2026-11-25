@@ -8,6 +8,8 @@
     "ios": "expo start -c --ios",
     "web": "expo start -c --web",
     "typecheck": "tsc --noEmit",
+    "typecheck:tests": "tsc --noEmit -p tests",
+    "test": "node --import ./tests/register.mjs --test \"tests/**/*.test.mts\"",
     "generate:api": "orval"
   },
   "dependencies": {

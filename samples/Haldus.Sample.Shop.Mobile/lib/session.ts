@@ -39,7 +39,10 @@ function parseAccount(
       'tenantId' in parsed &&
       typeof parsed.accountId === 'string' &&
       typeof parsed.email === 'string' &&
-      typeof parsed.tenantId === 'string'
+      typeof parsed.tenantId === 'string' &&
+      parsed.accountId.length > 0 &&
+      parsed.email.length > 0 &&
+      parsed.tenantId.length > 0
     ) {
       return {
         accountId: parsed.accountId,

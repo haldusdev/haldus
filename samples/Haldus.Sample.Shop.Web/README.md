@@ -71,9 +71,20 @@ Panelin kimlikle ilgili kodu `src/lib` altındadır:
 - `auth.ts`: giriş yanıtından oturumu açar, çıkışta oturumu backend'de kapatır ve yenileme isteğini
   `api-fetch.ts`'e bağlar.
 
-Bilinen sınırlar: örnekte rol yoktur; kayıt herkese açıktır ve giriş yapan her hesap ortak kaynakları (ürünler,
-kategoriler) da yazar. Gerçek bir uygulama bu uçlara bir yetki kuralı ekler veya kaydı kapatır. Ayrı bir kimlik
-sağlayıcı (OpenID Connect), iki adımlı doğrulama, e-posta değiştirme ve hesap silme de yoktur.
+**Ürün ve kategorileri yalnızca personel yazar.** Kayıt herkese açıktır, ama kimseye ait olmayan (ortak) kaynakları
+değiştirmek `staff` rolü ister; öteki hesaplar onları yalnızca okur ve yazmaya çalışınca 403 alır. Paneli denemek
+için backend, giriş yapacağınız e-posta personel sayılarak başlatılır:
+
+```powershell
+$env:Shop__Auth__Staff__0 = "siz@example.com"
+```
+
+Rol, hesap e-postasını doğruladıktan sonra geçerli olur (üstteki şeritten; kod, geliştirme ortamında backend'in
+günlüğüne yazılır): adres kullanıcının yazdığı bir metindir ve doğrulanmadan yetki vermez. Siparişler kiracıya aittir
+ve bu kuralın dışındadır: her hesap kendi siparişlerini yazar.
+
+Bilinen sınırlar: rol tektir ve yapılandırmadan gelir. Ayrı bir kimlik sağlayıcı (OpenID Connect), iki adımlı
+doğrulama, e-posta değiştirme ve hesap silme yoktur.
 
 ## Komutlar
 
@@ -82,6 +93,7 @@ sağlayıcı (OpenID Connect), iki adımlı doğrulama, e-posta değiştirme ve 
 | `pnpm dev` | Geliştirme sunucusu |
 | `pnpm generate:api` | `src/api` altındaki istemciyi backend'in `openapi.json` dosyasından yeniden üretir |
 | `pnpm typecheck` | Tip denetimi |
+| `pnpm test` | Oturum ve istek mantığının testleri (`tests/`) |
 | `pnpm lint` | ESLint |
 | `pnpm build` | Tip denetimi + üretim derlemesi |
 | `pnpm format` | Prettier |
@@ -126,4 +138,7 @@ Bu seçimler kullanıcıya sorulmadan, önerilen seçenekle verildi (deponun `CL
 - **Formlar:** ayrı bir form kütüphanesi yok. Formlar shadcn `Field` bileşenleri ve bileşen durumuyla yazılır;
   doğrulama backend'dedir.
 - **Kimlik doğrulama:** backend'in kendi parola girişi ve taşıyıcı token'ı; ayrı bir kimlik sağlayıcı yok.
-- **Test:** test altyapısı kurulmadı.
+- **Test:** yeni bir paket eklenmedi. Oturum ve istek mantığı (`src/lib`: token'ın eklenmesi, 401'de tek yenileme,
+  sekmeler arası eşitleme, hata gövdeleri) Node'un yerleşik test çalıştırıcısıyla sınanır (`pnpm test`; `tests/`
+  altında, `fetch`, `localStorage` ve Web Locks elle yazılmış taklitlerle). Bileşenlerin ve sayfaların testi yoktur:
+  onları çizmek bir DOM kütüphanesi (yeni bir bağımlılık) ister.
