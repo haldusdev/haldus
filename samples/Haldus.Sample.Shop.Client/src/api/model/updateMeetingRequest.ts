@@ -14,7 +14,7 @@ export interface UpdateMeetingRequest {
      * @maximum 1440
      */
   durationMinutes?: number;
-  startsAt?: string;
+  startsAt: string;
   recurrenceFrequency?: RecurrenceFrequency;
   /**
      * @minimum 1

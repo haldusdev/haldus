@@ -283,8 +283,8 @@ throw new TransitionRejectedException(messages["OrderHasNoItems"]);
 Kurallar:
 
 - Reddedilen geçiş numara harcamaz: `Numbered(assignOn:)` ile ayrılan numara geri verilir.
-- İstisna geçişlerde ve entity aksiyonlarında 422'ye çevrilir. [Serbest aksiyonlarda ve sorgularda](#serbest-aksiyonlar-ve-sorgular)
-  çevrilmez; orada uygulamanızın kendi hata işleme düzeni geçerlidir.
+- İstisna geçişlerde, entity aksiyonlarında ve [serbest aksiyon ve sorgularda](#serbest-aksiyonlar-ve-sorgular) 422'ye
+  çevrilir.
 - Başka bir istisna fırlatmak 422 değildir; isteğin bir hatasıdır.
 - Mantığın içinde durum kontrolü yazmayın: yanlış durum `from:` ile 409 olarak zaten reddedilir.
 
@@ -715,7 +715,8 @@ app.MapAction<ApplyDiscountRequest, ApplyDiscountResult>(async (request, service
 - Bu uçlar bir kaynağa ait değildir: kiracı, sahiplik ve durum kuralları uygulanmaz. Mantığın okuduğu ve yazdığı
   kayıtlar yine de bağlamın sorgu filtrelerinden geçer (kiracı filtresi isteğin kiracısını okur).
 - Yetkilendirme dönen builder'a eklenir: `app.MapAction<ApplyDiscountRequest, ApplyDiscountResult>().RequireAuthorization("staff")`.
-- `TransitionRejectedException` burada 422'ye çevrilmez.
+- Mantık `TransitionRejectedException` fırlatırsa istemci 422 alır; `detail` istisnanın mesajıdır. Kayda bağlı
+  olmadıkları için geri alınacak bir kaydetme yoktur: mantığın istisnadan önce yazdıkları mantığın kendi işidir.
 - `Idempotent()` bir kaynağın bildirimidir; serbest aksiyonlar tekrara karşı korunmaz.
 
 ## Handler sınıflarının bulunması
@@ -771,9 +772,8 @@ Kurallar:
 
 - Geçişlerin ve aksiyonların toplu biçimi yoktur.
 - Lambda bağımlılık enjeksiyonu almaz; servisler `IServiceProvider` alan biçimle çözülür.
-- Serbest aksiyon ve sorgular kayda bağlı değildir: kiracı, sahiplik ve durum kurallarından, tekrara karşı korumadan ve
-  `TransitionRejectedException` çevirisinden yararlanmaz. Yetkilendirme kuralı da kaynak kapsamı bilinmediği için
-  sizin yazmanız gerekir.
+- Serbest aksiyon ve sorgular kayda bağlı değildir: kiracı, sahiplik ve durum kurallarından ve tekrara karşı korumadan
+  yararlanmaz. Yetkilendirme kuralı da kaynak kapsamı bilinmediği için sizin yazmanız gerekir.
 - Sorgu isteği yalnızca sorgu parametrelerinden doldurulur; gövde almaz ve her özellik ayrı bir parametredir.
 - Generic handler sınıfları bulunmaz.
 

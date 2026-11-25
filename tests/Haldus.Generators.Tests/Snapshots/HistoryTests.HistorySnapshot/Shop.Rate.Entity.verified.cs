@@ -7,6 +7,8 @@ partial class Rate : global::Haldus.IEffectiveDated
 {
     public global::System.Guid Id { get; set; }
 
+    [global::System.ComponentModel.DataAnnotations.RequiredAttribute]
+    [global::Haldus.HasValueAttribute]
     public global::System.DateOnly EffectiveFrom { get; set; }
 
     public global::System.DateOnly? EffectiveTo { get; set; }

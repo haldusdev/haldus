@@ -207,7 +207,6 @@ public static partial class AttachmentOnInvoiceEndpoints
         {
             return global::Haldus.HaldusProblems.InUse(messages, "Attachment", id);
         }
-        await global::Haldus.HaldusFiles.ReleaseAsync(context, entity, cancellationToken);
 
         return global::Microsoft.AspNetCore.Http.TypedResults.NoContent();
     }

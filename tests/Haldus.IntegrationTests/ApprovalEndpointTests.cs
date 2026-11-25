@@ -41,7 +41,8 @@ public sealed class ApprovalEndpointTests(ShopFixture fixture)
 
         Assert.Equal(HttpStatusCode.Forbidden, own.StatusCode);
         Assert.Equal(HttpStatusCode.Unauthorized, anonymous.StatusCode);
-        Assert.Equal("Bu kararı veremezsiniz", (await turkish.Content.ReadFromJsonAsync<ProblemDetails>(CancellationToken))!.Title);
+        var refusal = (await turkish.Content.ReadFromJsonAsync<ProblemDetails>(CancellationToken))!;
+        Assert.Equal(("Bu kararı veremezsiniz", "Bu kaydın içeriğini siz de yazdınız; kararı başka biri vermelidir."), (refusal.Title, refusal.Detail));
 
         var approved = await ReadAsync<ExpenseClaimResponse>(await SendAsync(HttpMethod.Post, $"{url}/approve", _first, new { note = "Looks fine" }));
         Assert.Equal(

@@ -2758,11 +2758,7 @@ internal sealed partial class EndpointEmitter
                         return {{Problems}}.InUse(messages, "{{_entity}}", {{_keyParameter}});
                     }
 
-            """ + (_resource.File is null
-                ? string.Empty
-
-                // Kayıt silindikten sonra içeriği de depodan kaldırılır; tersi olsaydı silinemeyen kayıt içeriksiz kalırdı.
-                : "        await global::Haldus.HaldusFiles.ReleaseAsync(context, entity, cancellationToken);\n");
+            """;
     }
 
     private string UpdateAssignments() =>

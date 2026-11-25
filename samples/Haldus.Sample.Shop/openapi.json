@@ -63,6 +63,16 @@
                 }
               }
             }
+          },
+          "422": {
+            "description": "Unprocessable Entity",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
           }
         }
       }
@@ -93,6 +103,16 @@
               "application/problem+json": {
                 "schema": {
                   "$ref": "#/components/schemas/HttpValidationProblemDetails"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Entity",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
                 }
               }
             }
@@ -150,6 +170,16 @@
                 }
               }
             }
+          },
+          "422": {
+            "description": "Unprocessable Entity",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
           }
         }
       }
@@ -187,6 +217,16 @@
               "application/problem+json": {
                 "schema": {
                   "$ref": "#/components/schemas/HttpValidationProblemDetails"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Entity",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
                 }
               }
             }
@@ -32824,7 +32864,8 @@
       },
       "CreateMeetingRequest": {
         "required": [
-          "title"
+          "title",
+          "startsAt"
         ],
         "type": "object",
         "properties": {
@@ -33397,7 +33438,8 @@
       },
       "CreateSupplierRateRequest": {
         "required": [
-          "currency"
+          "currency",
+          "effectiveFrom"
         ],
         "type": "object",
         "properties": {
@@ -41042,7 +41084,8 @@
       },
       "UpdateMeetingRequest": {
         "required": [
-          "title"
+          "title",
+          "startsAt"
         ],
         "type": "object",
         "properties": {
@@ -41493,7 +41536,8 @@
       },
       "UpdateSupplierRateRequest": {
         "required": [
-          "currency"
+          "currency",
+          "effectiveFrom"
         ],
         "type": "object",
         "properties": {

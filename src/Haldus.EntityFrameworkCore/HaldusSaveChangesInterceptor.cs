@@ -14,6 +14,7 @@ public sealed class HaldusSaveChangesInterceptor : SaveChangesInterceptor
 
         if (eventData.Context is { } context)
         {
+            HaldusFileCleanup.Collect(context);
             HaldusRollups.Begin(context);
         }
 
@@ -29,6 +30,7 @@ public sealed class HaldusSaveChangesInterceptor : SaveChangesInterceptor
 
         if (eventData.Context is { } context)
         {
+            await HaldusFileCleanup.CollectAsync(context, cancellationToken);
             await HaldusRollups.BeginAsync(context, cancellationToken);
         }
 
@@ -41,6 +43,7 @@ public sealed class HaldusSaveChangesInterceptor : SaveChangesInterceptor
         {
             // Eşzamanlı kaydetmede de aynı kural geçerlidir; üretilen kod her zaman asenkron kaydeder.
             HaldusRollups.ApplyAsync(context, CancellationToken.None).GetAwaiter().GetResult();
+            HaldusFileCleanup.SavedAsync(context, CancellationToken.None).GetAwaiter().GetResult();
         }
 
         HaldusEvents.Notify();
@@ -53,6 +56,7 @@ public sealed class HaldusSaveChangesInterceptor : SaveChangesInterceptor
         if (eventData.Context is { } context)
         {
             await HaldusRollups.ApplyAsync(context, cancellationToken);
+            await HaldusFileCleanup.SavedAsync(context, cancellationToken);
         }
 
         // Yazılan olayların dağıtıcısı beklemeden uyanır.
@@ -66,6 +70,7 @@ public sealed class HaldusSaveChangesInterceptor : SaveChangesInterceptor
         if (eventData.Context is { } context)
         {
             HaldusRollups.Forget(context);
+            HaldusFileCleanup.Failed(context);
         }
 
         base.SaveChangesFailed(eventData);
@@ -76,6 +81,7 @@ public sealed class HaldusSaveChangesInterceptor : SaveChangesInterceptor
         if (eventData.Context is { } context)
         {
             HaldusRollups.Forget(context);
+            HaldusFileCleanup.Failed(context);
         }
 
         return base.SaveChangesFailedAsync(eventData, cancellationToken);
@@ -87,6 +93,7 @@ public sealed class HaldusSaveChangesInterceptor : SaveChangesInterceptor
         {
             // İptal edilen kaydetme de başarısız olan gibi geri alınır; açılan transaction bağlamda asılı kalmaz.
             HaldusRollups.Forget(context);
+            HaldusFileCleanup.Failed(context);
         }
 
         base.SaveChangesCanceled(eventData);
@@ -97,6 +104,7 @@ public sealed class HaldusSaveChangesInterceptor : SaveChangesInterceptor
         if (eventData.Context is { } context)
         {
             HaldusRollups.Forget(context);
+            HaldusFileCleanup.Failed(context);
         }
 
         return base.SaveChangesCanceledAsync(eventData, cancellationToken);

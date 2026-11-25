@@ -7,6 +7,8 @@ partial class Meeting : global::Haldus.IRecurring
 {
     public global::System.Guid Id { get; set; }
 
+    [global::System.ComponentModel.DataAnnotations.RequiredAttribute]
+    [global::Haldus.HasValueAttribute]
     public global::System.DateTimeOffset StartsAt { get; set; }
 
     public global::Haldus.RecurrenceFrequency RecurrenceFrequency { get; set; }

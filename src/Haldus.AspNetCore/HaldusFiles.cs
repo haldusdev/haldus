@@ -164,7 +164,11 @@ public static class HaldusFiles
             enableRangeProcessing: content.CanSeek);
     }
 
-    /// <summary>Silinmiş bir dosya kaydının içeriğini depodan kaldırır.</summary>
+    /// <summary>
+    /// Silinmiş bir dosya kaydının içeriğini depodan hemen kaldırır. Gerekmez: silinen dosya kayıtlarının içeriği
+    /// kaydetme sırasında kendiliğinden kaldırılır (zincirleme silinenler dahil); bu metot yalnızca, değişiklik
+    /// izleyicisini atlayan bir silmeden (<c>ExecuteDelete</c>) sonra içeriği elle kaldırmak içindir.
+    /// </summary>
     public static Task ReleaseAsync<TEntity>(DbContext context, TEntity file, CancellationToken cancellationToken)
         where TEntity : class, IHaldusFile
     {

@@ -353,6 +353,47 @@ Davranış:
 > [!NOTE]
 > S3 deposu MinIO'ya karşı sınandı. Gerçek AWS S3'e karşı sınanmadı.
 
+### Silinen dosyanın içeriği
+
+Bir dosya kaydı silinince içeriği de depodan kaldırılır. Kural kaydetmeye bağlıdır, uçlara değil: dosyanın kendi
+`DELETE` ucu, toplu silme, uygulamanızın kendi kodu (`context.Remove(file)`) ve kaydın üst kaydıyla birlikte zincirleme
+silinmesi aynı yoldan geçer. Veritabanının kendisinin zincirleme sildiği dosya kayıtları (makale silinince ona takılı
+dosyalar, proje silinince altındaki işlerin dosyaları), silme kaydedilmeden önce yabancı anahtarlar izlenerek bulunur.
+
+İçeriğin ne zaman kalktığı depoya göre değişir:
+
+| Depo | İçerik ne zaman kalkar |
+|---|---|
+| Veritabanı | Kayıtla aynı kaydetmede. İkisi birlikte silinir ya da birlikte kalır. |
+| Dosya sistemi, S3, kendi deponuz | Silme kalıcı olunca: açık bir transaction varsa o commit edilince. Transaction geri alınırsa (veya silmeyi içeren kayıt noktasına dönülürse) içerik kalır. |
+
+Commit'ten sonra içerik kaldırılamazsa (depo erişilemez) hata günlüğe uyarı olarak yazılır ve istek başarısız sayılmaz:
+kayıtlar zaten silinmiştir. İçerik o durumda depoda kalır.
+
+<!-- example: file-cleanup -->
+```csharp
+app.MapCrud<Project>();
+app.MapFile<Document>().AttachedTo<Project>();
+
+// Proje silinince ona takılı dosya kayıtlarını veritabanı siler; içerikleri de depodan kalkar.
+app.MapDelete("/projects/{id:guid}/purge", async (Guid id, AppDbContext db) =>
+{
+    await db.Set<Project>().Where(project => project.Id == id).ExecuteDeleteAsync();
+    return Results.NoContent();
+});
+
+public partial class Project
+{
+    public string Name { get; set; } = "";
+}
+
+public partial class Document;
+```
+
+Yukarıdaki uç bir istisnadır: `ExecuteDelete` değişiklik izleyicisini atlar ve Haldus silinen kayıtları göremez.
+İçerikleri kaldırmak için kaydı yükleyip `context.Remove(...)` ile silin; ya da sildiğiniz dosyaların içeriğini
+`HaldusFiles.ReleaseAsync(context, file, ct)` ile elle kaldırın.
+
 ### Kendi deponuz
 
 Başka bir depo `IHaldusFileStorage` uygulanıp tekil servis olarak kaydedilerek kullanılır. Arayüz üç metottur:
@@ -514,8 +555,8 @@ Kurallar:
 - Hedef adresten gelir. Gövdede gönderilen `orderId` veya `invoiceId` yok sayılır; kayıt başka bir hedefe taşınamaz.
 - Hedef yoksa ya da isteği yapan onu göremiyorsa 404 döner.
 - Takılı kayıt, takıldığı kayıt görünürse görünür. Başka bir hedefin adresinden aranan kayıt 404'tür.
-- Hedef silinince ona takılı kayıtlar da silinir (`Cascade`); öteki hedeflere takılı olanlar kalır. Bu silme
-  veritabanının zincirleme silmesidir: takılı dosyaların içerikleri depodan kaldırılmaz (bkz. [Sınırlar](#sınırlar)).
+- Hedef silinince ona takılı kayıtlar da silinir (`Cascade`); öteki hedeflere takılı olanlar kalır. Takılı dosyaların
+  içerikleri de depodan kaldırılır (bkz. [silinen dosyanın içeriği](#silinen-dosyanın-içeriği)).
 - Hedeflerden biri kiracıya aitse takılan kaynak da kiracıya ait sayılır. Zincirleme silme kiracı sınırını aşmaz: öyle
   bir durumda kiracıya ait olmayan hedeflerin silme davranışı `Restrict` olur ve takılı kaydı olan hedef silinemez (409).
 - `Hierarchical()` birleşir: yanıtlanan kayıt aynı hedefe takılı olmalıdır; değilse 400 (`parentId`).
@@ -601,12 +642,14 @@ bir kaynak bir bağın ucu veya başka bir kaynağın ebeveyni de olamaz. Tanıl
 - Virüs taraması ve görsel işleme (küçük resim, boyutlandırma) yoktur.
 - İçerik tarayıcıda açılacak biçimde (`inline`) sunulamaz.
 - Yükleme bekleyen (`Pending`) dosya kayıtları kendiliğinden silinmez.
-- İçerik yalnızca dosya kaydı kendi silme ucundan silinince depodan kaldırılır. Kayıt zincirleme silmeyle (takıldığı
-  veya altında durduğu kayıt silinince) ya da uygulamanın kendi koduyla silinirse içeriği depoda sahipsiz kalır.
+- Değişiklik izleyicisini atlayan silmeler (`ExecuteDelete`, elle yazılmış SQL) ve veritabanında uygulamanın dışından
+  yapılan silmeler içeriği depoda bırakır. Zincirleme silme en çok sekiz ilişki boyunca ve yalnızca tek kolonlu yabancı
+  anahtarlarda izlenir.
 - Süreli bağlantılar tek tek iptal edilemez (içerik değişince veya süresi dolunca geçersiz olurlar), en çok bir gün
   yaşar ve kaç kez açıldıkları sayılmaz.
-- Veritabanı deposu içeriği belleğe alır. Dosya sistemi ve S3 depolarında içerik kayıtla aynı transaction'da değildir;
-  dosya sistemi deposunda atomik bir toplu silme geri alınırsa içerik geri gelmez.
+- Veritabanı deposu içeriği belleğe alır. Dosya sistemi ve S3 depolarında içerik kayıtla aynı transaction'da değildir:
+  silinen içerik commit'ten sonra kaldırılır, yazılan içerik ise kayıttan önce yazılır (kayıt kaydedilemezse sahipsiz
+  kalabilir).
 - S3 deposu kovayı oluşturmaz ve `Range` isteklerini desteklemez; gerçek AWS S3'e karşı sınanmadı.
 
 ## Ayrıca bakın

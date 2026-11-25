@@ -30,6 +30,7 @@ import type {
   EchoParams,
   EchoResponse,
   HttpValidationProblemDetails,
+  ProblemDetails,
   ShippingQuote,
   ShippingQuoteParams
 } from '../model';
@@ -195,10 +196,15 @@ export type echoResponse400 = {
   status: 400
 }
 
+export type echoResponse422 = {
+  data: ProblemDetails
+  status: 422
+}
+
 export type echoResponseSuccess = (echoResponse200) & {
   headers: Headers;
 };
-export type echoResponseError = (echoResponse400) & {
+export type echoResponseError = (echoResponse400 | echoResponse422) & {
   headers: Headers;
 };
 
@@ -256,7 +262,7 @@ export const getEchoQueryKey = (params?: EchoParams,) => {
     }
 
 
-export const getEchoQueryOptions = <TData = Awaited<ReturnType<typeof echo>>, TError = HttpValidationProblemDetails>(params?: EchoParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof echo>>, TError, TData>>, fetch?: RequestInit}
+export const getEchoQueryOptions = <TData = Awaited<ReturnType<typeof echo>>, TError = HttpValidationProblemDetails | ProblemDetails>(params?: EchoParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof echo>>, TError, TData>>, fetch?: RequestInit}
 ) => {
 
 const {query: queryOptions, fetch: fetchOptions} = options ?? {};
@@ -275,10 +281,10 @@ const {query: queryOptions, fetch: fetchOptions} = options ?? {};
 }
 
 export type EchoQueryResult = NonNullable<Awaited<ReturnType<typeof echo>>>
-export type EchoQueryError = HttpValidationProblemDetails
+export type EchoQueryError = HttpValidationProblemDetails | ProblemDetails
 
 
-export function useEcho<TData = Awaited<ReturnType<typeof echo>>, TError = HttpValidationProblemDetails>(
+export function useEcho<TData = Awaited<ReturnType<typeof echo>>, TError = HttpValidationProblemDetails | ProblemDetails>(
  params: undefined |  EchoParams, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof echo>>, TError, TData>> & Pick<
         DefinedInitialDataOptions<
           Awaited<ReturnType<typeof echo>>,
@@ -288,7 +294,7 @@ export function useEcho<TData = Awaited<ReturnType<typeof echo>>, TError = HttpV
       >, fetch?: RequestInit}
  , queryClient?: QueryClient
   ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useEcho<TData = Awaited<ReturnType<typeof echo>>, TError = HttpValidationProblemDetails>(
+export function useEcho<TData = Awaited<ReturnType<typeof echo>>, TError = HttpValidationProblemDetails | ProblemDetails>(
  params?: EchoParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof echo>>, TError, TData>> & Pick<
         UndefinedInitialDataOptions<
           Awaited<ReturnType<typeof echo>>,
@@ -298,11 +304,11 @@ export function useEcho<TData = Awaited<ReturnType<typeof echo>>, TError = HttpV
       >, fetch?: RequestInit}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useEcho<TData = Awaited<ReturnType<typeof echo>>, TError = HttpValidationProblemDetails>(
+export function useEcho<TData = Awaited<ReturnType<typeof echo>>, TError = HttpValidationProblemDetails | ProblemDetails>(
  params?: EchoParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof echo>>, TError, TData>>, fetch?: RequestInit}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useEcho<TData = Awaited<ReturnType<typeof echo>>, TError = HttpValidationProblemDetails>(
+export function useEcho<TData = Awaited<ReturnType<typeof echo>>, TError = HttpValidationProblemDetails | ProblemDetails>(
  params?: EchoParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof echo>>, TError, TData>>, fetch?: RequestInit}
  , queryClient?: QueryClient
  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
@@ -329,10 +335,15 @@ export type clearMaintenanceNoticeResponse400 = {
   status: 400
 }
 
+export type clearMaintenanceNoticeResponse422 = {
+  data: ProblemDetails
+  status: 422
+}
+
 export type clearMaintenanceNoticeResponseSuccess = (clearMaintenanceNoticeResponse204) & {
   headers: Headers;
 };
-export type clearMaintenanceNoticeResponseError = (clearMaintenanceNoticeResponse400) & {
+export type clearMaintenanceNoticeResponseError = (clearMaintenanceNoticeResponse400 | clearMaintenanceNoticeResponse422) & {
   headers: Headers;
 };
 
@@ -370,7 +381,7 @@ export const clearMaintenanceNotice = async (clearMaintenanceNoticeBody: ClearMa
 
 export const getClearMaintenanceNoticeMutationKey = () => ['clearMaintenanceNotice'] as const;
 
-export const getClearMaintenanceNoticeMutationOptions = <TError = HttpValidationProblemDetails,
+export const getClearMaintenanceNoticeMutationOptions = <TError = HttpValidationProblemDetails | ProblemDetails,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof clearMaintenanceNotice>>, TError,ClearMaintenanceNoticeMutationVariables, TContext>, fetch?: RequestInit}
 ): UseMutationOptions<Awaited<ReturnType<typeof clearMaintenanceNotice>>, TError,ClearMaintenanceNoticeMutationVariables, TContext> => {
 
@@ -399,10 +410,10 @@ const {mutation: mutationOptions, fetch: fetchOptions} = options ?
 
     export type ClearMaintenanceNoticeMutationResult = NonNullable<Awaited<ReturnType<typeof clearMaintenanceNotice>>>
     export type ClearMaintenanceNoticeMutationBody = ClearMaintenanceNotice
-    export type ClearMaintenanceNoticeMutationError = HttpValidationProblemDetails
+    export type ClearMaintenanceNoticeMutationError = HttpValidationProblemDetails | ProblemDetails
     export type ClearMaintenanceNoticeMutationVariables = {data: ClearMaintenanceNotice}
 
-    export const useClearMaintenanceNotice = <TError = HttpValidationProblemDetails,
+    export const useClearMaintenanceNotice = <TError = HttpValidationProblemDetails | ProblemDetails,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof clearMaintenanceNotice>>, TError,ClearMaintenanceNoticeMutationVariables, TContext>, fetch?: RequestInit}
  , queryClient?: QueryClient): UseMutationResult<
         Awaited<ReturnType<typeof clearMaintenanceNotice>>,
@@ -422,10 +433,15 @@ export type shippingQuoteResponse400 = {
   status: 400
 }
 
+export type shippingQuoteResponse422 = {
+  data: ProblemDetails
+  status: 422
+}
+
 export type shippingQuoteResponseSuccess = (shippingQuoteResponse200) & {
   headers: Headers;
 };
-export type shippingQuoteResponseError = (shippingQuoteResponse400) & {
+export type shippingQuoteResponseError = (shippingQuoteResponse400 | shippingQuoteResponse422) & {
   headers: Headers;
 };
 
@@ -475,7 +491,7 @@ export const getShippingQuoteQueryKey = (params?: ShippingQuoteParams,) => {
     }
 
 
-export const getShippingQuoteQueryOptions = <TData = Awaited<ReturnType<typeof shippingQuote>>, TError = HttpValidationProblemDetails>(params?: ShippingQuoteParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof shippingQuote>>, TError, TData>>, fetch?: RequestInit}
+export const getShippingQuoteQueryOptions = <TData = Awaited<ReturnType<typeof shippingQuote>>, TError = HttpValidationProblemDetails | ProblemDetails>(params?: ShippingQuoteParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof shippingQuote>>, TError, TData>>, fetch?: RequestInit}
 ) => {
 
 const {query: queryOptions, fetch: fetchOptions} = options ?? {};
@@ -494,10 +510,10 @@ const {query: queryOptions, fetch: fetchOptions} = options ?? {};
 }
 
 export type ShippingQuoteQueryResult = NonNullable<Awaited<ReturnType<typeof shippingQuote>>>
-export type ShippingQuoteQueryError = HttpValidationProblemDetails
+export type ShippingQuoteQueryError = HttpValidationProblemDetails | ProblemDetails
 
 
-export function useShippingQuote<TData = Awaited<ReturnType<typeof shippingQuote>>, TError = HttpValidationProblemDetails>(
+export function useShippingQuote<TData = Awaited<ReturnType<typeof shippingQuote>>, TError = HttpValidationProblemDetails | ProblemDetails>(
  params: undefined |  ShippingQuoteParams, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof shippingQuote>>, TError, TData>> & Pick<
         DefinedInitialDataOptions<
           Awaited<ReturnType<typeof shippingQuote>>,
@@ -507,7 +523,7 @@ export function useShippingQuote<TData = Awaited<ReturnType<typeof shippingQuote
       >, fetch?: RequestInit}
  , queryClient?: QueryClient
   ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useShippingQuote<TData = Awaited<ReturnType<typeof shippingQuote>>, TError = HttpValidationProblemDetails>(
+export function useShippingQuote<TData = Awaited<ReturnType<typeof shippingQuote>>, TError = HttpValidationProblemDetails | ProblemDetails>(
  params?: ShippingQuoteParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof shippingQuote>>, TError, TData>> & Pick<
         UndefinedInitialDataOptions<
           Awaited<ReturnType<typeof shippingQuote>>,
@@ -517,11 +533,11 @@ export function useShippingQuote<TData = Awaited<ReturnType<typeof shippingQuote
       >, fetch?: RequestInit}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useShippingQuote<TData = Awaited<ReturnType<typeof shippingQuote>>, TError = HttpValidationProblemDetails>(
+export function useShippingQuote<TData = Awaited<ReturnType<typeof shippingQuote>>, TError = HttpValidationProblemDetails | ProblemDetails>(
  params?: ShippingQuoteParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof shippingQuote>>, TError, TData>>, fetch?: RequestInit}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useShippingQuote<TData = Awaited<ReturnType<typeof shippingQuote>>, TError = HttpValidationProblemDetails>(
+export function useShippingQuote<TData = Awaited<ReturnType<typeof shippingQuote>>, TError = HttpValidationProblemDetails | ProblemDetails>(
  params?: ShippingQuoteParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof shippingQuote>>, TError, TData>>, fetch?: RequestInit}
  , queryClient?: QueryClient
  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
@@ -548,10 +564,15 @@ export type applyDiscountResponse400 = {
   status: 400
 }
 
+export type applyDiscountResponse422 = {
+  data: ProblemDetails
+  status: 422
+}
+
 export type applyDiscountResponseSuccess = (applyDiscountResponse200) & {
   headers: Headers;
 };
-export type applyDiscountResponseError = (applyDiscountResponse400) & {
+export type applyDiscountResponseError = (applyDiscountResponse400 | applyDiscountResponse422) & {
   headers: Headers;
 };
 
@@ -589,7 +610,7 @@ export const applyDiscount = async (applyDiscountRequest: ApplyDiscountRequest, 
 
 export const getApplyDiscountMutationKey = () => ['applyDiscount'] as const;
 
-export const getApplyDiscountMutationOptions = <TError = HttpValidationProblemDetails,
+export const getApplyDiscountMutationOptions = <TError = HttpValidationProblemDetails | ProblemDetails,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof applyDiscount>>, TError,ApplyDiscountMutationVariables, TContext>, fetch?: RequestInit}
 ): UseMutationOptions<Awaited<ReturnType<typeof applyDiscount>>, TError,ApplyDiscountMutationVariables, TContext> => {
 
@@ -618,10 +639,10 @@ const {mutation: mutationOptions, fetch: fetchOptions} = options ?
 
     export type ApplyDiscountMutationResult = NonNullable<Awaited<ReturnType<typeof applyDiscount>>>
     export type ApplyDiscountMutationBody = ApplyDiscountRequest
-    export type ApplyDiscountMutationError = HttpValidationProblemDetails
+    export type ApplyDiscountMutationError = HttpValidationProblemDetails | ProblemDetails
     export type ApplyDiscountMutationVariables = {data: ApplyDiscountRequest}
 
-    export const useApplyDiscount = <TError = HttpValidationProblemDetails,
+    export const useApplyDiscount = <TError = HttpValidationProblemDetails | ProblemDetails,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof applyDiscount>>, TError,ApplyDiscountMutationVariables, TContext>, fetch?: RequestInit}
  , queryClient?: QueryClient): UseMutationResult<
         Awaited<ReturnType<typeof applyDiscount>>,

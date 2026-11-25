@@ -99,10 +99,9 @@ public sealed class FileTests
         Assert.DoesNotContain("IgnoreQueryFilters", download);
         Assert.Contains("HaldusFiles.SendAsync(httpContext, context, entity, messages, \"Attachment\", id, cancellationToken)", download);
 
-        // Kayıt silindikten sonra içeriği de depodan kaldırılır.
-        var delete = Handler(endpoints, "DeleteAsync");
-        Assert.True(
-            delete.IndexOf("SaveChangesAsync", StringComparison.Ordinal) < delete.IndexOf("HaldusFiles.ReleaseAsync(context, entity, cancellationToken)", StringComparison.Ordinal));
+        // İçeriği depodan kaldırmak ucun değil kaydetmenin işidir (HaldusFileCleanup): zincirleme silinen dosyalar da
+        // aynı yoldan geçer.
+        Assert.DoesNotContain("ReleaseAsync", Handler(endpoints, "DeleteAsync"));
 
         var module = run.Sources["HaldusModule.g.cs"];
         Assert.Contains("global::Haldus.HaldusFileStore.Configure(modelBuilder);", module);

@@ -32,6 +32,19 @@ public sealed class OperationEndpointTests(ShopFixture fixture)
     }
 
     [Fact]
+    public async Task Query_RejectedByItsLogicReturns422WithTheMessage()
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Get, "/shipping-quote?country=TR&weight=50&express=true");
+        request.Headers.AcceptLanguage.Add(new StringWithQualityHeaderValue("tr"));
+
+        var response = await _client.SendAsync(request, CancellationToken);
+
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, response.StatusCode);
+        var problem = await response.Content.ReadFromJsonAsync<ProblemDetails>(CancellationToken);
+        Assert.Equal("Hızlı gönderim en çok 30 kg için yapılır.", problem?.Detail);
+    }
+
+    [Fact]
     public async Task Query_OmittedParameterKeepsTheDefaultOfTheRequestClass()
     {
         var quote = await _client.GetFromJsonAsync<ShippingQuote>("/shipping-quote?country=NOWHERE", CancellationToken);

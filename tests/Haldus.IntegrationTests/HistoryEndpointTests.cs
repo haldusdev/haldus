@@ -183,6 +183,26 @@ public sealed class HistoryEndpointTests : IDisposable
     // ── Dönemli kayıtlar ───────────────────────────────────────────────────────────────────────────────
 
     [Fact]
+    public async Task EffectiveDated_RequiresTheStartOfThePeriod()
+    {
+        var supplier = await ReadAsync<SupplierResponse>(await SendAsync(HttpMethod.Post, "/suppliers", new { name = "Undated" }));
+        var url = $"/suppliers/{supplier.Id}/supplier-rates";
+
+        // Gönderilmeyen başlangıç 0001-01-01 sayılıp sonsuz geriye uzanan bir dönem açmaz; alan düzeyinde 400 olur.
+        var missing = await SendAsync(HttpMethod.Post, url, new { currency = "TRY", unitPrice = 10 }, language: "tr");
+        Assert.Equal(HttpStatusCode.BadRequest, missing.StatusCode);
+        var problem = await missing.Content.ReadFromJsonAsync<ValidationProblemDetails>(CancellationToken);
+        Assert.Equal(["EffectiveFrom alanı zorunludur."], problem!.Errors["effectiveFrom"]);
+
+        // PATCH'te gönderilmeyen alan değişmez; açıkça boş gönderilen alan reddedilir.
+        var rate = await ReadAsync<SupplierRateResponse>(await SendAsync(HttpMethod.Post, url, new { currency = "TRY", unitPrice = 10, effectiveFrom = "2026-01-01" }));
+        var patched = await ReadAsync<SupplierRateResponse>(await SendAsync(HttpMethod.Patch, $"{url}/{rate.Id}", new { unitPrice = 11 }));
+        Assert.Equal(new DateOnly(2026, 1, 1), patched.EffectiveFrom);
+        Assert.Equal(HttpStatusCode.BadRequest, (await SendAsync(HttpMethod.Patch, $"{url}/{rate.Id}", new { effectiveFrom = (string?)null })).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await SendAsync(HttpMethod.Patch, $"{url}/{rate.Id}", new { effectiveFrom = "0001-01-01" })).StatusCode);
+    }
+
+    [Fact]
     public async Task EffectiveDated_KeepsOnePeriodPerDayAndClosesThePreviousOne()
     {
         var supplier = await ReadAsync<SupplierResponse>(await SendAsync(HttpMethod.Post, "/suppliers", new { name = "Dated" }));

@@ -486,7 +486,7 @@ public partial class SupplierRate
 
 | Alan | Tipi | Anlamı |
 |---|---|---|
-| `effectiveFrom` | `DateOnly` | Dönemin ilk günü (dahil). |
+| `effectiveFrom` | `DateOnly` | Dönemin ilk günü (dahil). Zorunludur. |
 | `effectiveTo` | `DateOnly?` | Dönemin bittiği gün (hariç). Boşsa dönem açık uçludur. |
 
 İki alan da istemcinin yazdığı sıradan alanlardır. Dönem yarı açıktır: `effectiveTo` olan gün artık dönemin içinde
@@ -535,6 +535,7 @@ Content-Type: application/json
 
 | Durum | Yanıt |
 |---|---|
+| `effectiveFrom` gönderilmedi (oluşturmada, `PUT`'ta) ya da `PATCH`'te `null` gönderildi | 400, hata `effectiveFrom` alanında. |
 | `effectiveTo`, `effectiveFrom`'dan sonra değil | 400, hata `effectiveTo` alanında. |
 | Dönem, kapsamdaki başka bir kaydın dönemiyle çakışıyor (oluşturmada veya güncellemede) | 409 |
 | Yeni dönem, kapsamdaki tek açık uçlu dönemin içinde başlıyor | Kabul edilir; önceki dönem yeninin başladığı gün kapanır. |
@@ -582,7 +583,7 @@ public partial class Meeting
 
 | Alan | Tipi | Anlamı |
 |---|---|---|
-| `startsAt` | `DateTimeOffset` | İlk oluşun zamanı; sonrakiler buna göre hesaplanır. |
+| `startsAt` | `DateTimeOffset` | İlk oluşun zamanı; sonrakiler buna göre hesaplanır. Zorunludur. |
 | `recurrenceFrequency` | `None`, `Daily`, `Weekly`, `Monthly`, `Yearly` | Yinelenme sıklığı. `None` tek bir oluştur. Adıyla yazılır ve okunur. |
 | `recurrenceInterval` | `int?` (1–1000) | Kaç aralıkta bir; iki haftada bir için `2`. Boşsa 1. |
 | `recurrenceUntil` | `DateTimeOffset?` | Bu zamandan sonra oluş yoktur. |

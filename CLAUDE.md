@@ -1023,7 +1023,8 @@ Yapılmayanlar ve nedenleri:
   liste işlemi kaldırılmış bir kaynakta `Searchable` arama ucu açamaz.
 - `MapQuery` generator gerektirir (istek tipinin özellikleri sorgu parametrelerine tek tek bağlanır);
   `MapAction` gerektirmez (gövdeden bağlanır, endpoint çalışma zamanında kurulur). Handler eksikse hata
-  ilk istekte değil uygulama açılırken verilir.
+  ilk istekte değil uygulama açılırken verilir. İkisinde de mantığın fırlattığı `TransitionRejectedException` 422 olur
+  (`HaldusRejectionFilter`; geçişlerdekiyle aynı yanıt). Belge yazılırken çevrilmediği görülmüş, sonra eklenmiştir.
 - Eşzamanlılık kontrollü kaynakta durum değiştiren her uç (`restore`, `purge`, `archive` dahil) `If-Match`
   ister; yeni bir uç eklerken `ReadIfMatch` / `ExpectVersion` / `Save` üçlüsünü kullan.
 - Üretilen kod çalışma zamanına bir module initializer ile bağlanır: `HaldusEndpointRegistry` (entity →
@@ -1603,7 +1604,19 @@ Yapılmayanlar ve nedenleri:
     bulur, yazma kurallarından geçirir (`If-Match`, `ChainGuard`) ve `Save()` ile kaydeder. Gövde okunurken sayılır
     ve sınır aşılınca okuma kesilir; `Content-Length` yalan söylese de sınır geçerlidir.
   - Depo `IHaldusFileStorage`'dır ve bağlamı parametre alır: veritabanı deposu içeriği dosya kaydıyla aynı
-    kaydetmede yazar. İçerik, kayıt silindikten sonra kaldırılır (`SaveDelete` içinde `HaldusFiles.ReleaseAsync`).
+    kaydetmede yazar.
+  - **Silinen dosyanın içeriğini kaldırmak uçların değil kaydetmenin işidir** (`HaldusFileCleanup`; interceptor ve bir
+    transaction interceptor'ı). Kaydetmeden önce silinen `IHaldusFile` kayıtları toplanır; veritabanının zincirleme
+    sileceği, bağlamda izlenmeyen dosya kayıtları da EF modelindeki `Cascade` yabancı anahtarlar izlenerek (en çok sekiz
+    ilişki, tek kolonlu anahtarlar) ham SQL ile bulunur; izlenen ve silinmeyen dosyaların anahtarları çıkarılır.
+    Veritabanı deposunda içerik satırları aynı kaydetmeye silinmek üzere eklenir (`RemoveWithAsync`); başka depoda
+    anahtarlar silme kalıcı olunca kaldırılır: açık transaction yoksa kaydetmeden hemen sonra, varsa commit'te.
+    Geri alma ve kayıt noktasına dönme (EF Core'un kendi kayıt noktaları ve `HaldusBatch` dahil) bekleyenleri düşürür;
+    kayıt noktası adları olay verisinde olmadığı için bir yığınla izlenir ve dönülen kayıt noktası orada biter.
+    Depodan kaldırma commit'ten sonra başarısız olursa günlüğe yazılır, istek başarısız sayılmaz. İlk yazımda içerik
+    yalnızca dosyanın kendi silme ucunda kaldırılıyordu: zincirleme ve uygulamanın kendi koduyla silinen dosyaların
+    içeriği depoda sahipsiz kalıyor, dosya sistemi deposunda geri alınan toplu silme içeriği geri getirmiyordu (belge
+    yazılırken çıktı). `ExecuteDelete` bunu atlar; `HaldusFiles.ReleaseAsync` o durumda elle kullanılır.
     Dosya sistemi deposunda anahtarı Haldus üretir; yine de klasörün dışını gösteren anahtar reddedilir.
   - **İçerik her yüklemede yeni bir anahtara yazılır**; kayıt ancak içerik kabul edilince ona geçer ve eski içerik
     kayıt kaydedildikten sonra kaldırılır (`FileUpload.CompleteAsync`). Aynı anahtarın üzerine yazmak, reddedilen
@@ -1624,8 +1637,7 @@ Yapılmayanlar ve nedenleri:
     (özet uymuyorsa) veya kayıt yoksa 404 döner. Sınırlar: bağlantı tek tek iptal edilemez (ancak içerik değişince
     veya süresi dolunca ölür); en çok bir gün yaşar; kaç kez açıldığı sayılmaz; `Under` ve `AttachedTo` ile birleşmez
     (bağlantının adresi kaynağın kendi koleksiyonundadır).
-  - Sınırlar: dosya sistemi deposunda atomik toplu silme geri alınırsa içerik geri gelmez; veritabanı deposu
-    içeriği belleğe alır; `Workflow`, `Document`, `SoftDeletable`, `Cloneable`, `Publishable`, zincir işlemleri ve
+  - Sınırlar: veritabanı deposu içeriği belleğe alır; `Workflow`, `Document`, `SoftDeletable`, `Cloneable`, `Publishable`, zincir işlemleri ve
     `CreatedFrom` ile birleşmez; virüs taraması, görsel işleme ve devam ettirilebilir yükleme yoktur.
 - **S3 deposu.** `Haldus.Storage.S3` (`AddHaldusS3Storage`; MinIO ve AWS S3, varsayılan yol biçimli adres). Servisle
   AWS SDK konuşur (`AmazonS3Client`); `ServiceUrl` verilmezse AWS'nin bölgedeki adresi kullanılır. Erişim anahtarı
@@ -1754,7 +1766,11 @@ Yapılmayanlar ve nedenleri:
   olur. **Dönemli bir kaynağı kaydeden yeni bir yol bu sarmalayıcıdan geçmelidir** (generator testi toplu
   oluşturmanın atlandığını yakalamıştı). Kapsam `SiblingsOf` + sayılan alanlardır. Veritabanı kısıtı yoktur
   (çakışmasız aralık kısıtı `btree_gist` eklentisi isterdi); koruma kilittir ve entegrasyon testi eşzamanlı
-  yazmalarla doğrular. Silme serbesttir (araya boşluk bırakır).
+  yazmalarla doğrular. Silme serbesttir (araya boşluk bırakır). `EffectiveFrom` zorunludur: istek tiplerinde
+  `Required` ve `HasValue` taşır (`LifecycleReader.RequiredValue`), çünkü gönderilmeyen değer tipli alan `default`
+  olur ve `Required` onu yakalamaz; ilk yazımda gönderilmeyen başlangıç 0001-01-01 sayılıyordu (belge yazılırken
+  çıktı). Tekrar serisinin `StartsAt` alanı da aynı kuralla zorunludur. **Üretilen, zorunlu, değer tipli yeni bir
+  alan aynı ikiliyi taşımalıdır.**
 - **Taslak ve yayın.** `Traits.Publishable`; `PublishedOfId` (yanıtta yok) ve `PublishedAt` `ExtraMembers`'tadır.
   Kopyaları gizleyen `HaldusFilters.Publication` filtresi modeldedir; kaynağa dokunan her sorgu yalnızca taslakları
   görür ve yalnızca yayın uçları (`EmitPublishing`) o filtreyi adıyla kaldırır. Kopya her yayında yeniden kurulur

@@ -118,7 +118,7 @@
     <value>Karar bir kullanıcı gerektirir, ancak istek için kullanıcı belirlenemedi.</value>
   </data>
   <data name="Approval.OwnRequest" xml:space="preserve">
-    <value>Bu kaydı en son siz yazdınız; kararı başka biri vermelidir.</value>
+    <value>Bu kaydın içeriğini siz de yazdınız; kararı başka biri vermelidir.</value>
   </data>
   <data name="Approval.AlreadyApproved" xml:space="preserve">
     <value>Bu kaydı önceki bir düzeyde zaten onayladınız; sıradaki onayı başka biri vermelidir.</value>

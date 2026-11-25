@@ -118,7 +118,7 @@
     <value>A decision needs a user, but no user could be determined for the request.</value>
   </data>
   <data name="Approval.OwnRequest" xml:space="preserve">
-    <value>You wrote this record last, so someone else has to decide on it.</value>
+    <value>You have written content of this record, so someone else has to decide on it.</value>
   </data>
   <data name="Approval.AlreadyApproved" xml:space="preserve">
     <value>You have already approved this record at an earlier level; the next approval has to come from someone else.</value>

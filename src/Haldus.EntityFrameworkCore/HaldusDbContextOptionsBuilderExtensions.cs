@@ -6,6 +6,7 @@ namespace Haldus;
 public static class HaldusDbContextOptionsBuilderExtensions
 {
     private static readonly HaldusSaveChangesInterceptor Interceptor = new();
+    private static readonly HaldusFileTransactionInterceptor FileTransactions = new();
 
     /// <summary>
     /// Haldus'un ürettiği entity'leri ve yapılandırmalarını bu bağlamın modeline ekler; trait alanlarını
@@ -17,6 +18,6 @@ public static class HaldusDbContextOptionsBuilderExtensions
 
         return optionsBuilder
             .ReplaceService<IModelCustomizer, HaldusModelCustomizer>()
-            .AddInterceptors(Interceptor);
+            .AddInterceptors(Interceptor, FileTransactions);
     }
 }

@@ -614,7 +614,10 @@ internal static class LifecycleReader
             attributes.Select(attribute => new AttributeModel(attribute, IsRequired: false)).ToEquatableArray(),
             IsGenerated: true);
 
-        yield return Field("StartsAt", DateTimeOffset, required: true, DateTimeOffset, SearchKind.Range);
+        yield return Field("StartsAt", DateTimeOffset, required: true, DateTimeOffset, SearchKind.Range) with
+        {
+            ValidationAttributes = RequiredValue,
+        };
         yield return Field("RecurrenceFrequency", Frequency, required: true, Frequency, SearchKind.Equality);
         yield return Field("RecurrenceInterval", "int", required: false, "int", SearchKind.Range, Range);
         yield return Field("RecurrenceUntil", DateTimeOffset, required: false, DateTimeOffset, SearchKind.Range);
@@ -637,6 +640,16 @@ internal static class LifecycleReader
             "global::Haldus.TimeZoneIdAttribute");
     }
 
+    /// <summary>
+    /// Değer tipli zorunlu alanın kuralları. <c>Required</c> şemada alanı zorunlu gösterir ve PATCH'te açıkça gönderilen
+    /// <c>null</c> değerini reddeder; <c>HasValue</c> ise hiç gönderilmeyip tipin varsayılan değerini alan alanı yakalar.
+    /// </summary>
+    private static readonly EquatableArray<AttributeModel> RequiredValue = new[]
+    {
+        new AttributeModel("global::System.ComponentModel.DataAnnotations.RequiredAttribute", IsRequired: true),
+        new AttributeModel("global::Haldus.HasValueAttribute", IsRequired: false),
+    }.ToEquatableArray();
+
     /// <summary>Dönemli kaydın (<c>.EffectiveDated()</c>) istemcinin yazdığı iki alanı.</summary>
     public static IEnumerable<PropertyModel> EffectivePeriod()
     {
@@ -649,7 +662,7 @@ internal static class LifecycleReader
             IsNonNullableValue: true,
             SearchKind.Range,
             DateOnly,
-            EquatableArray<AttributeModel>.Empty,
+            RequiredValue,
             IsGenerated: true);
 
         yield return new PropertyModel(

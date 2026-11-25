@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
+using Microsoft.AspNetCore.Mvc;
 using Haldus.Sample.Shop.Features.Engagement;
 
 namespace Haldus.IntegrationTests;
@@ -13,6 +14,17 @@ public sealed class RecurrenceEndpointTests(ShopFixture fixture)
     private readonly HttpClient _client = fixture.CreateClient();
 
     private static CancellationToken CancellationToken => TestContext.Current.CancellationToken;
+
+    [Fact]
+    public async Task Series_RequiresItsFirstOccurrence()
+    {
+        // Gönderilmeyen ilk oluş 0001-01-01 sayılmaz; alan düzeyinde 400 olur.
+        var missing = await SendAsync(HttpMethod.Post, "/meetings", new { title = "No start", recurrenceFrequency = "Weekly" });
+
+        Assert.Equal(HttpStatusCode.BadRequest, missing.StatusCode);
+        var problem = await missing.Content.ReadFromJsonAsync<ValidationProblemDetails>(CancellationToken);
+        Assert.True(problem!.Errors.ContainsKey("startsAt"), string.Join(", ", problem.Errors.Keys));
+    }
 
     [Fact]
     public async Task Occurrences_AreComputedFromTheRule()

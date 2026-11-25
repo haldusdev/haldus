@@ -21,6 +21,8 @@ public sealed partial record CreateMeetingRequest
     [global::System.ComponentModel.DataAnnotations.RequiredAttribute(AllowEmptyStrings = true)]
     public string Title { get; init; } = default!;
 
+    [global::System.ComponentModel.DataAnnotations.RequiredAttribute]
+    [global::Haldus.HasValueAttribute]
     public global::System.DateTimeOffset StartsAt { get; init; }
 
     public global::Haldus.RecurrenceFrequency RecurrenceFrequency { get; init; }
@@ -47,6 +49,8 @@ public sealed partial record UpdateMeetingRequest
     [global::System.ComponentModel.DataAnnotations.RequiredAttribute(AllowEmptyStrings = true)]
     public string Title { get; init; } = default!;
 
+    [global::System.ComponentModel.DataAnnotations.RequiredAttribute]
+    [global::Haldus.HasValueAttribute]
     public global::System.DateTimeOffset StartsAt { get; init; }
 
     public global::Haldus.RecurrenceFrequency RecurrenceFrequency { get; init; }
@@ -98,7 +102,8 @@ public sealed partial record PatchMeetingRequest : global::Haldus.IHaldusPatch
         }
     }
 
-    [global::Haldus.NotNullWhenSetAttribute(AllowEmptyStrings = true)]
+    [global::Haldus.NotNullWhenSetAttribute]
+    [global::Haldus.HasValueAttribute]
     public global::System.DateTimeOffset? StartsAt
     {
         get => _startsAt;

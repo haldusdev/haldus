@@ -25,3 +25,22 @@ public sealed class NotNullWhenSetAttribute : ValidationAttribute
     public override bool IsValid(object? value) =>
         value is not null && (AllowEmptyStrings || value is not string text || !string.IsNullOrWhiteSpace(text));
 }
+
+/// <summary>
+/// Zorunlu değer tipli alanı işaretler. İstekte hiç gönderilmeyen değer tipli alan, tipinin varsayılan değerini alır
+/// (<see cref="DateOnly"/> için 0001-01-01) ve <see cref="RequiredAttribute"/> onu yakalamaz; bu attribute varsayılan
+/// değeri gönderilmemiş sayar. Boş değer geçerlidir: PATCH isteğinde gönderilmeyen alan böyle gelir.
+/// </summary>
+[AttributeUsage(AttributeTargets.Property)]
+public sealed class HasValueAttribute : ValidationAttribute
+{
+    public override bool IsValid(object? value) => value switch
+    {
+        null => true,
+        DateOnly date => date != default,
+        DateTime time => time != default,
+        DateTimeOffset time => time != default,
+        Guid guid => guid != Guid.Empty,
+        _ => true,
+    };
+}

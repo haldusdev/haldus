@@ -17,6 +17,16 @@ kıran değişiklik içerebilir; her biri "Kıran değişiklikler" altında yaz�
 
 ### Düzeltilenler
 
+- Silinen dosya kaydının içeriği, kayıt nasıl silinirse silinsin depodan kaldırılır: takıldığı veya altında durduğu
+  kayıtla birlikte zincirleme silinen ve uygulamanın kendi koduyla silinen dosyaların içeriği artık depoda kalmaz.
+  Dosya sistemi ve S3 depolarında içerik silme commit edilince kaldırılır; geri alınan silme (atomik toplu silme dahil)
+  içeriğe dokunmaz.
+- `EffectiveDated` kaynağında `effectiveFrom`, tekrar serisinde `startsAt` zorunludur; gönderilmeyen alan 0001-01-01
+  sayılmak yerine alan düzeyinde 400 alır. API şemasında iki alan da artık zorunlu görünür.
+- Serbest `MapAction` ve `MapQuery` uçlarında mantığın fırlattığı `TransitionRejectedException` 422 olur (önceden
+  500'dü); uçların şemasına 422 yanıtı eklendi.
+- Onayda "kendi yazdığını onaylayamaz" mesajı (`Approval.OwnRequest`) kuralı doğru anlatır: içeriği yazmış herkesi
+  kapsar, yalnızca son yazanı değil.
 - Yanlış yere düşmüş belge yorumları (`HaldusProblems.KeyRequired` / `Duplicate`, `AddHaldusModule`) ve `RoleOf`'un
   silme davranışını eksik anlatan yorumu.
 

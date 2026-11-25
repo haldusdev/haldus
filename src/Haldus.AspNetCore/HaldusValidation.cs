@@ -185,7 +185,7 @@ internal static class HaldusValidator
 
         return attribute switch
         {
-            RequiredAttribute or NotNullWhenSetAttribute => messages.Format(HaldusMessageKeys.ValidationRequired, name),
+            RequiredAttribute or NotNullWhenSetAttribute or HasValueAttribute => messages.Format(HaldusMessageKeys.ValidationRequired, name),
             MaxLengthAttribute maxLength => messages.Format(HaldusMessageKeys.ValidationMaxLength, name, maxLength.Length),
             MinLengthAttribute minLength => messages.Format(HaldusMessageKeys.ValidationMinLength, name, minLength.Length),
             StringLengthAttribute { MinimumLength: > 0 } stringLength => messages.Format(

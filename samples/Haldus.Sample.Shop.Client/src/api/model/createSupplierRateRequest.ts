@@ -16,7 +16,7 @@ export interface CreateSupplierRateRequest {
      * @maximum 1000000
      */
   unitPrice?: number;
-  effectiveFrom?: string;
+  effectiveFrom: string;
   /** @nullable */
   effectiveTo?: string | null;
 }

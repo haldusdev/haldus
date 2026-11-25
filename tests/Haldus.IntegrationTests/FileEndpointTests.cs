@@ -143,6 +143,123 @@ public sealed class FileEndpointTests(ShopFixture fixture)
     }
 
     [Fact]
+    public async Task File_ContentGoesWithTheRecordItIsAttachedTo()
+    {
+        // Makale silinince ona takılı dosya kayıtlarını veritabanı zincirleme siler; içerikleri de depodan kalkar.
+        var article = await CreateArticleAsync();
+        var keys = new List<string>();
+
+        foreach (var name in new[] { "a.txt", "b.txt" })
+        {
+            var file = await ReadAsync<AttachmentResponse>(await SendAsync(HttpMethod.Post, $"/articles/{article.Id}/attachments", new { fileName = name }));
+            await ReadAsync<AttachmentResponse>(await UploadAsync($"/articles/{article.Id}/attachments/{file.Id}/content", [1, 2, 3], "text/plain"));
+
+            await fixture.WithDbContextAsync(async context =>
+                keys.Add((await context.Set<Attachment>().SingleAsync(item => item.Id == file.Id, CancellationToken)).StorageKey!));
+        }
+
+        Assert.Equal(HttpStatusCode.NoContent, (await SendAsync(HttpMethod.Delete, $"/articles/{article.Id}")).StatusCode);
+
+        await fixture.WithDbContextAsync(async context =>
+        {
+            Assert.False(await context.Set<Attachment>().IgnoreQueryFilters().AnyAsync(item => item.ArticleId == article.Id, CancellationToken));
+            Assert.False(await context.Set<HaldusFileContent>().AnyAsync(content => keys.Contains(content.Key), CancellationToken));
+        });
+    }
+
+    [Fact]
+    public async Task File_ContentStaysWhenTheDeleteIsRolledBack()
+    {
+        var article = await CreateArticleAsync();
+        var file = await ReadAsync<AttachmentResponse>(await SendAsync(HttpMethod.Post, $"/articles/{article.Id}/attachments", new { fileName = "kept.txt" }));
+        await ReadAsync<AttachmentResponse>(await UploadAsync($"/articles/{article.Id}/attachments/{file.Id}/content", [4, 5, 6], "text/plain"));
+
+        // Veritabanı deposunda içerik, kayıtla aynı kaydetmede silinir; transaction geri alınınca ikisi de kalır.
+        await fixture.WithDbContextAsync(async context =>
+        {
+            await using var transaction = await context.Database.BeginTransactionAsync(CancellationToken);
+            context.Remove(await context.Set<Article>().SingleAsync(item => item.Id == article.Id, CancellationToken));
+            await context.SaveChangesAsync(CancellationToken);
+            await transaction.RollbackAsync(CancellationToken);
+        });
+
+        var download = await SendAsync(HttpMethod.Get, $"/articles/{article.Id}/attachments/{file.Id}/content");
+        Assert.Equal(HttpStatusCode.OK, download.StatusCode);
+        Assert.Equal([4, 5, 6], await download.Content.ReadAsByteArrayAsync(CancellationToken));
+    }
+
+    [Fact]
+    public async Task FileSystemStorage_RemovesContentOnlyOnceTheDeleteIsCommitted()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "haldus-files-" + Guid.NewGuid().ToString("N"));
+
+        try
+        {
+            await using var factory = fixture.CreateFactory(services => services.AddHaldusFileSystemStorage(root));
+            var client = factory.CreateClient();
+            var stored = () => Directory.Exists(root) ? Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories).Count() : 0;
+
+            async Task<(Guid Article, Guid File)> AttachAsync(string name)
+            {
+                var article = await ReadAsync<ArticleResponse>(await client.PostAsJsonAsync(
+                    "/articles", new { title = "Stored article", slug = $"article-{Guid.NewGuid():N}" }, CancellationToken));
+                var file = await ReadAsync<AttachmentResponse>(await client.PostAsJsonAsync(
+                    $"/articles/{article.Id}/attachments", new { fileName = name }, CancellationToken));
+
+                using var upload = new HttpRequestMessage(HttpMethod.Put, $"/articles/{article.Id}/attachments/{file.Id}/content")
+                {
+                    Content = new ByteArrayContent([7, 8, 9]) { Headers = { ContentType = new MediaTypeHeaderValue("text/plain") } },
+                };
+                await ReadAsync<AttachmentResponse>(await client.SendAsync(upload, CancellationToken));
+                return (article.Id, file.Id);
+            }
+
+            // Dosyanın kendi silme ucu.
+            var own = await AttachAsync("own.txt");
+            Assert.Equal(1, stored());
+            Assert.Equal(HttpStatusCode.NoContent, (await client.DeleteAsync($"/articles/{own.Article}/attachments/{own.File}", CancellationToken)).StatusCode);
+            Assert.Equal(0, stored());
+
+            // Geri alınan silme içeriğe dokunmaz; commit edilen silme içeriği kaldırır.
+            var cascaded = await AttachAsync("cascaded.txt");
+            Assert.Equal(1, stored());
+
+            await using (var scope = factory.Services.CreateAsyncScope())
+            {
+                var context = scope.ServiceProvider.GetRequiredService<Haldus.Sample.Shop.AppDbContext>();
+
+                await using (var transaction = await context.Database.BeginTransactionAsync(CancellationToken))
+                {
+                    context.Remove(await context.Set<Article>().SingleAsync(item => item.Id == cascaded.Article, CancellationToken));
+                    await context.SaveChangesAsync(CancellationToken);
+                    Assert.Equal(1, stored());
+                    await transaction.RollbackAsync(CancellationToken);
+                }
+
+                Assert.Equal(1, stored());
+                context.ChangeTracker.Clear();
+
+                await using (var transaction = await context.Database.BeginTransactionAsync(CancellationToken))
+                {
+                    context.Remove(await context.Set<Article>().SingleAsync(item => item.Id == cascaded.Article, CancellationToken));
+                    await context.SaveChangesAsync(CancellationToken);
+                    Assert.Equal(1, stored());
+                    await transaction.CommitAsync(CancellationToken);
+                }
+
+                Assert.Equal(0, stored());
+            }
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
     public async Task FileSystemStorage_WritesReadsAndDeletesUnderItsRoot()
     {
         var root = Path.Combine(Path.GetTempPath(), "haldus-tests-" + Guid.NewGuid().ToString("N"));

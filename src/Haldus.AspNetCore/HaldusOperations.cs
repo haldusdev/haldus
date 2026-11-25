@@ -55,7 +55,9 @@ public static class HaldusOperationExtensions
                     TypedResults.Ok(await handler(request, httpContext.RequestServices, cancellationToken)))
             .WithName(HaldusOperationNaming.Name<TRequest>())
             .AddEndpointFilter<HaldusValidationFilter<TRequest>>()
-            .ProducesValidationProblem();
+            .AddEndpointFilter<HaldusRejectionFilter>()
+            .ProducesValidationProblem()
+            .ProducesProblem(StatusCodes.Status422UnprocessableEntity);
     }
 
     /// <summary>Sonuç döndürmeyen komutu, kayıtlı <see cref="IActionHandler{TRequest}"/> ile eşler.</summary>
@@ -100,7 +102,9 @@ public static class HaldusOperationExtensions
                 })
             .WithName(HaldusOperationNaming.Name<TRequest>())
             .AddEndpointFilter<HaldusValidationFilter<TRequest>>()
-            .ProducesValidationProblem();
+            .AddEndpointFilter<HaldusRejectionFilter>()
+            .ProducesValidationProblem()
+            .ProducesProblem(StatusCodes.Status422UnprocessableEntity);
     }
 
     /// <summary>
@@ -142,7 +146,9 @@ public static class HaldusOperationExtensions
         // İsteğin sorgu parametrelerinden doldurulması ve doğrulanması derleme zamanında üretilir.
         return HaldusQueryRegistry
             .Map(endpoints, HaldusOperationNaming.Route<TRequest>(route), handler)
-            .WithName(HaldusOperationNaming.Name<TRequest>());
+            .WithName(HaldusOperationNaming.Name<TRequest>())
+            .AddEndpointFilter<HaldusRejectionFilter>()
+            .ProducesProblem(StatusCodes.Status422UnprocessableEntity);
     }
 
     /// <summary>Handler eksikse hata ilk istekte değil, uygulama açılırken verilir.</summary>
@@ -156,6 +162,25 @@ public static class HaldusOperationExtensions
             throw new InvalidOperationException(
                 $"{method} needs a handler, but no '{typeof(THandler)}' is registered. " +
                 "Add a class that implements it (Haldus registers it automatically) or pass the logic as a lambda.");
+        }
+    }
+}
+
+/// <summary>
+/// İş mantığının <see cref="TransitionRejectedException"/> ile reddettiği isteği, geçişlerde olduğu gibi 422 ile
+/// yanıtlar; mesajı (ve çevirisi) fırlatanın işidir.
+/// </summary>
+internal sealed class HaldusRejectionFilter(IHaldusMessages messages) : IEndpointFilter
+{
+    public async ValueTask<object?> InvokeAsync(EndpointFilterInvocationContext context, EndpointFilterDelegate next)
+    {
+        try
+        {
+            return await next(context);
+        }
+        catch (TransitionRejectedException rejection)
+        {
+            return HaldusProblems.TransitionRejected(messages, rejection.Message);
         }
     }
 }

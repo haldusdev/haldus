@@ -183,8 +183,8 @@ Handler classes are discovered and registered in DI automatically; a missing han
 | Job | `IJobHandler<TJob> { Task HandleAsync(TJob job, JobContext context, CancellationToken ct); }`, or a lambda passed to `MapJob`. |
 | List filter | `IFilter<TEntity> { IQueryable<TEntity> Apply(IQueryable<TEntity> query); }`; see [Reading](#reading). |
 
-To reject a transition or an entity action, throw `TransitionRejectedException(message)`: the response is 422 and nothing
-is saved. Free actions and queries (`app.MapAction`, `app.MapQuery`) do not translate it; return your own result instead. To fail a job with a message for the client, throw `JobFailedException(message)`. Lambdas receive no injected
+To reject a transition, an entity action, a free action or a query, throw `TransitionRejectedException(message)`: the
+response is 422 with the message as `detail`, and for transitions and entity actions nothing is saved. To fail a job with a message for the client, throw `JobFailedException(message)`. Lambdas receive no injected
 services; use the overload that takes `IServiceProvider`. Logic may add or remove embedded rows; Haldus assigns their
 ids and order.
 
@@ -253,8 +253,8 @@ There are no automatic per-field query parameters and no filter expression langu
 | `.Expiring()` / `.Expiring(TimeSpan lifetime, sliding: false)` | `ExpiresAt`: set by the client, or computed on create, or restarted on every write (`sliding`). An expired record is hidden and cannot be written; `POST /{id}/expire` ends it now. |
 | `.Retention(TimeSpan period)` | Records older than the period are physically deleted by maintenance. |
 | `.Idempotent(required: false)` | Create and transitions honour the `Idempotency-Key` header. |
-| `.EffectiveDated(x => x.Currency)` | `EffectiveFrom` / `EffectiveTo`; periods cannot overlap within the scope (409); `?asOf=2026-06-01` returns what is valid that day. |
-| `.Recurring()` | Recurrence rule fields (`startsAt`, `recurrenceFrequency`, `recurrenceInterval`, `recurrenceUntil`, `recurrenceCount`, `recurrenceByDay`, `recurrenceTimeZone`); `GET /{id}/occurrences?from=&to=`, `PUT` / `DELETE /{id}/occurrences/{start}` for single-occurrence exceptions. Not full iCalendar `RRULE`. |
+| `.EffectiveDated(x => x.Currency)` | `EffectiveFrom` (required) / `EffectiveTo`; periods cannot overlap within the scope (409); `?asOf=2026-06-01` returns what is valid that day. |
+| `.Recurring()` | Recurrence rule fields (`startsAt` (required), `recurrenceFrequency`, `recurrenceInterval`, `recurrenceUntil`, `recurrenceCount`, `recurrenceByDay`, `recurrenceTimeZone`); `GET /{id}/occurrences?from=&to=`, `PUT` / `DELETE /{id}/occurrences/{start}` for single-occurrence exceptions. Not full iCalendar `RRULE`. |
 
 ### Operations on a record
 
@@ -314,7 +314,9 @@ are allowed.
 | `.SignedLinks()` | `POST /{id}/content/link?expiresInSeconds=300` returns a temporary anonymous download URL. |
 
 Content is stored in the database by default; `AddHaldusFileSystemStorage(path)` or `AddHaldusS3Storage(...)`
-(`Haldus.Storage.S3`) move it elsewhere; implement `IHaldusFileStorage` for another store.
+(`Haldus.Storage.S3`) move it elsewhere; implement `IHaldusFileStorage` for another store. Deleting a file record removes
+its content however the record is deleted, including a database cascade from the record it is attached to or lives
+under; outside the database the content is removed once the transaction commits. `ExecuteDelete` bypasses this.
 
 ### Events
 

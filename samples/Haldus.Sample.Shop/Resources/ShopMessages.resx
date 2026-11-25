@@ -18,6 +18,9 @@
   <data name="NothingToExport" xml:space="preserve">
     <value>There are no orders to export.</value>
   </data>
+  <data name="ExpressTooHeavy" xml:space="preserve">
+    <value>Express shipping is offered up to 30 kg.</value>
+  </data>
   <data name="CouponExhausted" xml:space="preserve">
     <value>This coupon has no redemptions left.</value>
   </data>

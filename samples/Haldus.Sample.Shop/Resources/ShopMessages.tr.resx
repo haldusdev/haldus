@@ -18,6 +18,9 @@
   <data name="NothingToExport" xml:space="preserve">
     <value>Dışa aktarılacak sipariş yok.</value>
   </data>
+  <data name="ExpressTooHeavy" xml:space="preserve">
+    <value>Hızlı gönderim en çok 30 kg için yapılır.</value>
+  </data>
   <data name="CouponExhausted" xml:space="preserve">
     <value>Bu kuponun kullanım hakkı doldu.</value>
   </data>

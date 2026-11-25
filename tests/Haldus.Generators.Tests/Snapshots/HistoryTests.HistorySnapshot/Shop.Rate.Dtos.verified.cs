@@ -19,6 +19,8 @@ public sealed partial record CreateRateRequest
 
     public decimal Price { get; init; }
 
+    [global::System.ComponentModel.DataAnnotations.RequiredAttribute]
+    [global::Haldus.HasValueAttribute]
     public global::System.DateOnly EffectiveFrom { get; init; }
 
     public global::System.DateOnly? EffectiveTo { get; init; }
@@ -31,6 +33,8 @@ public sealed partial record UpdateRateRequest
 
     public decimal Price { get; init; }
 
+    [global::System.ComponentModel.DataAnnotations.RequiredAttribute]
+    [global::Haldus.HasValueAttribute]
     public global::System.DateOnly EffectiveFrom { get; init; }
 
     public global::System.DateOnly? EffectiveTo { get; init; }
@@ -69,7 +73,8 @@ public sealed partial record PatchRateRequest : global::Haldus.IHaldusPatch
         }
     }
 
-    [global::Haldus.NotNullWhenSetAttribute(AllowEmptyStrings = true)]
+    [global::Haldus.NotNullWhenSetAttribute]
+    [global::Haldus.HasValueAttribute]
     public global::System.DateOnly? EffectiveFrom
     {
         get => _effectiveFrom;

@@ -94,6 +94,33 @@ public sealed class HaldusDatabaseFileStorage : IHaldusFileStorage
         return content is null ? null : new MemoryStream(content, writable: false);
     }
 
+    /// <summary>
+    /// İçerikleri, sürmekte olan kaydetmenin parçası olarak siler: dosya kayıtları ile içerikleri birlikte silinir veya
+    /// birlikte kalır. Kaydetmeden hemen önce çağrılır.
+    /// </summary>
+    internal async Task RemoveWithAsync(DbContext context, IReadOnlyCollection<string> keys, CancellationToken cancellationToken)
+    {
+        var tracked = new HashSet<string>(StringComparer.Ordinal);
+
+        foreach (var entry in context.ChangeTracker.Entries<HaldusFileContent>().Where(entry => keys.Contains(entry.Entity.Key)).ToList())
+        {
+            tracked.Add(entry.Entity.Key);
+            entry.State = entry.State == EntityState.Added ? EntityState.Detached : EntityState.Deleted;
+        }
+
+        var stored = await context.Set<HaldusFileContent>()
+            .AsNoTracking()
+            .Where(content => keys.Contains(content.Key))
+            .Select(content => content.Key)
+            .ToListAsync(cancellationToken);
+
+        // Yalnızca var olan satır silinmek üzere bağlanır; olmayan satırın silinmesi bir eşzamanlılık hatası sayılırdı.
+        foreach (var key in stored.Where(key => !tracked.Contains(key)))
+        {
+            context.Set<HaldusFileContent>().Attach(new HaldusFileContent { Key = key }).State = EntityState.Deleted;
+        }
+    }
+
     public Task DeleteAsync(DbContext context, string key, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(context);

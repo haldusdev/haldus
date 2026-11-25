@@ -160,7 +160,7 @@ Content-Type: application/problem+json
 {
   "title": "Not allowed to decide",
   "status": 403,
-  "detail": "You wrote this record last, so someone else has to decide on it."
+  "detail": "You have written content of this record, so someone else has to decide on it."
 }
 ```
 
@@ -593,7 +593,6 @@ Reddedilen gönderme 422 alır ve numara harcamaz. Geçişlerin mantığı: [İ�
 - Silme onaya bağlı değildir.
 - Değişiklik izleyicisini atlayan yazmalar (`ExecuteUpdate`, `ExecuteDelete`) onayı düşürmez.
 - Kayıt silindiğinde kararları kalır; kendiliğinden temizlenmez.
-- Hata mesajı (`Approval.OwnRequest`) "en son siz yazdınız" der; kural ise içeriği yazmış herkesi kapsar.
 - Belgenin durumları sabittir; `Draft`, `Submitted` ve `Cancelled` dışında durum eklenemez. Ek bir durum gerekiyorsa
   [ek durum eksenleri](state-machines.md#ek-durum-eksenleri) veya `Workflow` kullanın.
 
