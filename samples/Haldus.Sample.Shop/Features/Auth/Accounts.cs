@@ -52,6 +52,12 @@ public sealed class ShopSession
     /// olabilir) oturum iptal edilir.
     /// </summary>
     public int RefreshVersion { get; set; }
+
+    /// <summary>
+    /// Sıranın en son ilerlediği an. Hemen ardından bir önceki token'ı sunan istek (yanıtı yolda kaybolan istemci,
+    /// aynı anda yenileyen ikinci sekme) çalınmış sayılmaz.
+    /// </summary>
+    public DateTimeOffset? RotatedAt { get; set; }
 }
 
 public enum AccountCodePurpose
@@ -62,8 +68,9 @@ public enum AccountCodePurpose
 
 /// <summary>
 /// E-postayla gönderilen tek kullanımlık kod. Kodun kendisi saklanmaz, özeti saklanır; hesap ve amaç başına tek kod
-/// vardır (yenisi eskisinin yerine geçer). Deneme ve gönderim sayıları koda değil pencereye aittir: yeni bir kod
-/// istemek deneme hakkını yenilemez, yoksa altı haneli kod "yeni kod iste, beş kez dene" döngüsüyle bulunurdu.
+/// vardır (yenisi eskisinin yerine geçer). Kod sekiz karakterdir (40 bit): denenerek bulunamayacak kadar uzun olduğu
+/// için hesap başına bir deneme sınırı yoktur. Öyle bir sınır, başkasının yanlış kodlar göndererek hesabın parola
+/// sıfırlamasını engellemesine izin verirdi; kısa (altı haneli) kod ise sınırsız denemeyle bulunurdu.
 /// </summary>
 public sealed class ShopAccountCode
 {
@@ -77,14 +84,11 @@ public sealed class ShopAccountCode
 
     public DateTimeOffset ExpiresAt { get; set; }
 
-    /// <summary>Sayımların başladığı an; pencere dolunca sayımlar sıfırlanır.</summary>
+    /// <summary>Gönderim sayımının başladığı an; pencere dolunca sayım sıfırlanır.</summary>
     public DateTimeOffset WindowStart { get; set; }
 
-    /// <summary>Bu pencerede gönderilen kod sayısı.</summary>
+    /// <summary>Bu pencerede gönderilen kod sayısı; adrese e-posta yağdırılmasını sınırlar.</summary>
     public int Issued { get; set; }
-
-    /// <summary>Bu pencerede yapılan deneme sayısı (bütün kodlar için).</summary>
-    public int Attempts { get; set; }
 }
 
 /// <summary>Kimlik doğrulamanın ayarları (<c>Shop:Auth</c>).</summary>
@@ -98,14 +102,14 @@ public sealed class ShopAuthOptions
     /// <summary>E-postayla gönderilen kodun ömrü.</summary>
     public int CodeMinutes { get; set; } = 15;
 
-    /// <summary>Bir hesabın, bir amaç için, bir pencerede en çok kaç kod deneyebileceği.</summary>
-    public int MaxCodeAttempts { get; set; } = 5;
-
     /// <summary>Bir hesaba, bir amaç için, bir pencerede en çok kaç kod gönderileceği.</summary>
     public int MaxCodesPerWindow { get; set; } = 3;
 
-    /// <summary>Kod deneme ve gönderim sayılarının sıfırlandığı aralık.</summary>
+    /// <summary>Kod gönderim sayısının sıfırlandığı aralık.</summary>
     public int CodeWindowSeconds { get; set; } = 3600;
+
+    /// <summary>Yenilemeden sonra bir önceki yenileme token'ının da kabul edildiği süre.</summary>
+    public int RefreshGraceSeconds { get; set; } = 30;
 
     /// <summary>Bir oturumun en uzun ömrü; dolunca yeniden giriş gerekir.</summary>
     public int SessionDays { get; set; } = 30;
@@ -162,7 +166,7 @@ public sealed record ResetPasswordRequest
     public string Email { get; init; } = "";
 
     [Required]
-    [MaxLength(16)]
+    [MaxLength(32)]
     public string Code { get; init; } = "";
 
     [Required]
@@ -186,7 +190,7 @@ public sealed record ChangePasswordRequest
 public sealed record VerifyEmailRequest
 {
     [Required]
-    [MaxLength(16)]
+    [MaxLength(32)]
     public string Code { get; init; } = "";
 }
 

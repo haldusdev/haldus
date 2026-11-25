@@ -48,7 +48,7 @@
   },
   "verify": {
     "title": "Verify your e-mail address",
-    "description": "We sent a 6-digit code to {{email}}.",
+    "description": "We sent a code to {{email}}.",
     "code": "Code",
     "submit": "Verify",
     "resend": "Send again",
@@ -86,7 +86,7 @@
     "forgotDescription": "Enter the e-mail of your account. We will send a code if it is registered.",
     "forgotSubmit": "Send code",
     "resetTitle": "Choose a new password",
-    "resetDescription": "Enter the 6-digit code from the e-mail and your new password.",
+    "resetDescription": "Enter the code from the e-mail and your new password.",
     "resetSubmit": "Reset password",
     "code": "Code",
     "newPassword": "New password",

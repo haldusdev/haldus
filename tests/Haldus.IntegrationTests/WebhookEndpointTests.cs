@@ -140,6 +140,15 @@ public sealed class WebhookEndpointTests(ShopFixture fixture)
         Assert.Throws<OptionsValidationException>(() => Options(options =>
             options.Endpoints.Add(new HaldusWebhookEndpoint(new Uri("/hook", UriKind.Relative), Secret))));
 
+        // "whsec_" anahtarı çözüldükten sonraki uzunluğuyla ölçülür; çözülemeyen anahtar kabul edilmez.
+        Assert.Throws<OptionsValidationException>(() => Options(options =>
+            options.Endpoints.Add(new HaldusWebhookEndpoint(new Uri("https://example.com/hook"), "whsec_AAAAAAAAAAAAAAAA"))));
+        Assert.Throws<OptionsValidationException>(() => Options(options =>
+            options.Endpoints.Add(new HaldusWebhookEndpoint(new Uri("https://example.com/hook"), "whsec_not base64 at all!"))));
+        Assert.Throws<ArgumentException>(() => HaldusWebhookSignature.Compute("whsec_not base64 at all!", "1", 1, []));
+        Assert.Single(Options(options =>
+            options.Endpoints.Add(new HaldusWebhookEndpoint(new Uri("https://example.com/hook"), "whsec_MfKQ9r8GKYqrTwjUPD8ILPZIo2LaLaSw"))).Endpoints);
+
         Assert.Single(Options(options => options.Endpoints.Add(new HaldusWebhookEndpoint(new Uri("https://example.com/hook"), Secret))).Endpoints);
 
         static HaldusWebhookOptions Options(Action<HaldusWebhookOptions> configure)

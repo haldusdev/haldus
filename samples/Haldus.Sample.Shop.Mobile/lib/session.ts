@@ -1,5 +1,7 @@
 import { useSyncExternalStore } from 'react';
 
+import { Platform } from 'react-native';
+
 import { readItem, removeItem, writeItem } from '@/lib/storage';
 
 /**
@@ -118,6 +120,16 @@ export function subscribeSession(listener: () => void) {
   return () => {
     listeners.delete(listener);
   };
+}
+
+// Tarayıcıda (Expo'nun web hedefi) başka bir sekme oturumu değiştirdiyse bu sekme de onu izler; yoksa eskimiş yenileme
+// token'ını sunup oturumun kapanmasına yol açardı. Cihazda tek bir uygulama vardır ve buna gerek yoktur.
+if (Platform.OS === 'web' && typeof window !== 'undefined') {
+  window.addEventListener('storage', (event) => {
+    if (event.key !== null && Object.values<string>(KEYS).includes(event.key)) {
+      void restoreSession();
+    }
+  });
 }
 
 export function useSession(): Session | null {

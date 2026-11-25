@@ -5,7 +5,7 @@ import {
   verifyEmail,
 } from "@/api/auth/auth"
 import type { AccessTokenResponse } from "@/api/model"
-import { setSessionRefresher } from "@/lib/api-fetch"
+import { renewSession, setSessionRefresher } from "@/lib/api-fetch"
 import { getSession, markEmailVerified, signIn, signOut } from "@/lib/session"
 
 // Süresi dolan erişim token'ı bu istekle yenilenir (api-fetch.ts).
@@ -36,16 +36,19 @@ export async function openSession(tokens: AccessTokenResponse): Promise<void> {
  */
 export async function confirmEmail(code: string): Promise<void> {
   const response = await verifyEmail({ code })
-  const session = getSession()
 
   if (response.status === 200) {
     markEmailVerified(response.data.accessToken, response.data.refreshToken)
-  } else if (session) {
-    const renewed = await refreshSession({ refreshToken: session.refreshToken })
-    markEmailVerified(renewed.data.accessToken, renewed.data.refreshToken)
+    return
+  }
+
+  // Yenileme, 401 sonrası yenilemeyle aynı sıradan geçer; ikisi aynı token'ı ayrı ayrı sunmaz.
+  const session = (await renewSession()) ? getSession() : null
+
+  if (session) {
+    markEmailVerified(session.accessToken, session.refreshToken)
   }
 }
-
 /**
  * Oturumu kapatır. Backend oturumu iptal eder (token'lar artık kabul edilmez); istek başarısız olsa da token'lar
  * tarayıcıdan silinir, çünkü kullanıcı çıkmak istemiştir.

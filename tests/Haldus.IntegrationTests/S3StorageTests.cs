@@ -526,7 +526,7 @@ public sealed class MinioFixture : IAsyncLifetime
     private const string Region = "eu-test-1";
 
     // MinIO'nun resmi imajı (minio/minio) Docker Hub'dan kaldırıldı; Chainguard'ın derlediği imaj kullanılır.
-    private static readonly string Image = Environment.GetEnvironmentVariable("HALDUS_TEST_MINIO_IMAGE") ?? "cgr.dev/chainguard/minio:latest";
+    private static readonly string Image = Environment.GetEnvironmentVariable("HALDUS_TEST_MINIO_IMAGE") ?? "cgr.dev/chainguard/minio@sha256:9f0aab4471ebb181be3cfabea21b719303ec583cd9abdb7779f9e53032b844f7";
 
     private readonly List<ServiceProvider> _providers = [];
 

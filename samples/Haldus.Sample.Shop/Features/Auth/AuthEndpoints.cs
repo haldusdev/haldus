@@ -32,6 +32,12 @@ public static partial class AuthEndpoints
 
     internal const string VerifiedClaim = "email_verified";
 
+    // Crockford base32: birbirine karışan harfler (I, L, O, U) yoktur. Sekiz karakter 40 bittir.
+    private const string CodeAlphabet = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
+    private const int CodeLength = 8;
+
+    private static readonly TimeSpan MailTimeout = TimeSpan.FromSeconds(30);
+
     private static readonly PasswordHasher<ShopAccount> Hasher = new();
 
     // Hesap bulunamadığında da bir parola doğrulaması yapılır; yoksa yanıt süresi e-postanın kayıtlı olup olmadığını söylerdi.
@@ -384,6 +390,7 @@ public static partial class AuthEndpoints
         AppDbContext db,
         TimeProvider time,
         IOptionsMonitor<BearerTokenOptions> options,
+        IOptions<ShopAuthOptions> refresh,
         IStringLocalizer<ShopMessages> messages,
         CancellationToken cancellationToken)
     {
@@ -401,20 +408,26 @@ public static partial class AuthEndpoints
 
         // Yenileme token'ı bir kez kullanılır: sıra, token'daki değerle aynıysa bir ilerler. Aynı token'ı sunan iki
         // istekten yalnızca biri bu güncellemeyi yapabilir.
-        var rotated = await Live(db.Set<ShopSession>(), now)
-            .Where(candidate => candidate.Id == sessionId && candidate.RefreshVersion == version)
-            .ExecuteUpdateAsync(setters => setters.SetProperty(candidate => candidate.RefreshVersion, candidate => candidate.RefreshVersion + 1), cancellationToken) == 1;
+        var rotated = await RotateAsync(
+            Live(db.Set<ShopSession>(), now).Where(candidate => candidate.Id == sessionId && candidate.RefreshVersion == version),
+            now,
+            cancellationToken);
 
-        if (!rotated)
+        var session = await Live(db.Set<ShopSession>(), now).AsNoTracking().FirstOrDefaultAsync(candidate => candidate.Id == sessionId, cancellationToken);
+
+        // Sıra az önce ilerlediyse bir önceki token da kabul edilir ve geçerli token'lar yeniden verilir: yanıtı yolda
+        // kaybolan istemci veya aynı anda yenileyen ikinci sekme oturumunu kaybetmez. Bundan eski bir token ise ya
+        // çalınmıştır ya da çalan kişi asıl sahibinden önce davranmıştır; hangisi olduğu bilinemez, oturum kapatılır.
+        var grace = now.AddSeconds(-refresh.Value.RefreshGraceSeconds);
+        var tolerated = !rotated && session is not null && session.RefreshVersion == version + 1 && session.RotatedAt > grace;
+
+        if (session is null || (!rotated && !tolerated))
         {
-            // Eskimiş bir yenileme token'ı sunuldu: ya çalındı ya da çalan kişi asıl sahibinden önce davrandı. Hangisi
-            // olduğu bilinemez; oturum kapatılır ve herkes yeniden giriş yapar.
             await RevokeAsync(db.Set<ShopSession>().Where(candidate => candidate.Id == sessionId), now, cancellationToken);
             return SessionExpired(messages);
         }
 
-        if (await db.Set<ShopSession>().AsNoTracking().FirstOrDefaultAsync(candidate => candidate.Id == sessionId, cancellationToken) is not { } session
-            || await db.Set<ShopAccount>().AsNoTracking().FirstOrDefaultAsync(candidate => candidate.Id == session.AccountId, cancellationToken) is not { } account)
+        if (await db.Set<ShopAccount>().AsNoTracking().FirstOrDefaultAsync(candidate => candidate.Id == session.AccountId, cancellationToken) is not { } account)
         {
             return SessionExpired(messages);
         }
@@ -487,14 +500,8 @@ public static partial class AuthEndpoints
         var now = HaldusTime.UtcNow(time);
         var account = await db.Set<ShopAccount>().AsNoTracking().FirstOrDefaultAsync(candidate => candidate.Email == email, cancellationToken);
 
-        if (account is null)
-        {
-            // Kayıtlı adresteki doğrulamanın süresi burada da harcanır.
-            Hasher.VerifyHashedPassword(new ShopAccount(), DummyHash, request.Code);
-            return InvalidCode(messages);
-        }
-
-        if (!await ConsumeCodeAsync(db, account, AccountCodePurpose.PasswordReset, request.Code, now, options.Value, cancellationToken))
+        // Hesap yoksa da bir kod doğrulaması yapılır (ConsumeCodeAsync); yanıtın süresi adresin kayıtlı olduğunu söylemez.
+        if (!await ConsumeCodeAsync(db, account, AccountCodePurpose.PasswordReset, request.Code, now, cancellationToken) || account is null)
         {
             return InvalidCode(messages);
         }
@@ -561,7 +568,6 @@ public static partial class AuthEndpoints
         ClaimsPrincipal user,
         AppDbContext db,
         TimeProvider time,
-        IOptions<ShopAuthOptions> options,
         IStringLocalizer<ShopMessages> messages,
         CancellationToken cancellationToken)
     {
@@ -580,7 +586,7 @@ public static partial class AuthEndpoints
 
         var now = HaldusTime.UtcNow(time);
 
-        if (!await ConsumeCodeAsync(db, account, AccountCodePurpose.EmailVerification, request.Code, now, options.Value, cancellationToken))
+        if (!await ConsumeCodeAsync(db, account, AccountCodePurpose.EmailVerification, request.Code, now, cancellationToken))
         {
             return InvalidCode(messages);
         }
@@ -592,9 +598,7 @@ public static partial class AuthEndpoints
 
         // Token'daki claim eskidir; doğrulanmış haliyle yenisi verilir. Yeni bir yenileme token'ı verildiği için sıra
         // ilerler ve eskisi geçersiz olur.
-        await Live(db.Set<ShopSession>(), now)
-            .Where(candidate => candidate.Id == sessionId)
-            .ExecuteUpdateAsync(setters => setters.SetProperty(candidate => candidate.RefreshVersion, candidate => candidate.RefreshVersion + 1), cancellationToken);
+        await RotateAsync(Live(db.Set<ShopSession>(), now).Where(candidate => candidate.Id == sessionId), now, cancellationToken);
 
         return await Live(db.Set<ShopSession>(), now).AsNoTracking().FirstOrDefaultAsync(candidate => candidate.Id == sessionId, cancellationToken) is { } session
             ? SignIn(account, session)
@@ -646,7 +650,7 @@ public static partial class AuthEndpoints
 
     /// <summary>
     /// Yeni bir kod üretir (eskisinin yerine geçer) ve e-postayla gönderir. Pencerenin gönderim hakkı dolduysa kod
-    /// üretilmez ve e-posta gönderilmez; deneme sayısı yeni kodla sıfırlanmaz. Gönderim hatası isteği düşürmez.
+    /// üretilmez ve e-posta gönderilmez. Gönderim hatası isteği düşürmez.
     /// </summary>
     private static async Task SendCodeAsync(
         AppDbContext db,
@@ -659,14 +663,14 @@ public static partial class AuthEndpoints
         CancellationToken cancellationToken,
         bool background = false)
     {
-        var code = RandomNumberGenerator.GetInt32(0, 1_000_000).ToString("D6", CultureInfo.InvariantCulture);
+        var code = new string(RandomNumberGenerator.GetItems<char>(CodeAlphabet, CodeLength));
         var hash = Hasher.HashPassword(account, code);
         var expiresAt = now.AddMinutes(options.CodeMinutes);
         var windowEnded = now.AddSeconds(-options.CodeWindowSeconds);
         var maxIssued = options.MaxCodesPerWindow;
         var codes = db.Set<ShopAccountCode>().Where(candidate => candidate.AccountId == account.Id && candidate.Purpose == purpose);
 
-        // Tek ifade: pencere dolduysa sayımlar sıfırlanır, dolmadıysa gönderim sayılır ve deneme sayısı korunur.
+        // Tek ifade: pencere dolduysa sayım sıfırlanır, dolmadıysa gönderim sayılır.
         var renewed = await codes
             .Where(candidate => candidate.WindowStart <= windowEnded || candidate.Issued < maxIssued)
             .ExecuteUpdateAsync(
@@ -674,7 +678,7 @@ public static partial class AuthEndpoints
                     .SetProperty(candidate => candidate.CodeHash, hash)
                     .SetProperty(candidate => candidate.ExpiresAt, expiresAt)
                     .SetProperty(candidate => candidate.Issued, candidate => candidate.WindowStart <= windowEnded ? 1 : candidate.Issued + 1)
-                    .SetProperty(candidate => candidate.Attempts, candidate => candidate.WindowStart <= windowEnded ? 0 : candidate.Attempts)
+
                     .SetProperty(candidate => candidate.WindowStart, candidate => candidate.WindowStart <= windowEnded ? now : candidate.WindowStart),
                 cancellationToken) == 1;
 
@@ -714,8 +718,24 @@ public static partial class AuthEndpoints
 
         if (background)
         {
-            // İstek bittikten sonra da sürer; bu yüzden isteğin iptal belirtecine bağlanmaz. Dil, çalışma bağlamıyla taşınır.
-            _ = Task.Run(() => DeliverAsync(mailer, account.Email, purpose, code, logger, CancellationToken.None), CancellationToken.None);
+            // İstek bittikten sonra da sürer; bu yüzden isteğin iptal belirtecine değil kendi süre sınırına bağlanır
+            // (yanıt vermeyen bir posta sunucusu görev ve bağlantı biriktirmesin). Dil, çalışma bağlamıyla taşınır.
+            // Süreç bu sırada kapanırsa e-posta gitmez; kullanıcı yeni bir kod ister.
+            _ = Task.Run(
+                async () =>
+                {
+                    using var timeout = new CancellationTokenSource(MailTimeout);
+
+                    try
+                    {
+                        await DeliverAsync(mailer, account.Email, purpose, code, logger, timeout.Token);
+                    }
+                    catch (OperationCanceledException exception)
+                    {
+                        LogMailFailed(logger, exception, purpose);
+                    }
+                },
+                CancellationToken.None);
         }
         else
         {
@@ -743,31 +763,48 @@ public static partial class AuthEndpoints
     }
 
     /// <summary>
-    /// Kodu sınar ve doğruysa tüketir. Deneme önce, tek bir ifadeyle sayılır (aynı anda gelen denemeler sınırı aşamaz);
-    /// sayım pencereye aittir, yeni bir kod istemek onu sıfırlamaz. Kod bir kez kullanılır; kullanılınca kaydı da
-    /// (sayımlarıyla birlikte) silinir.
+    /// Kodu sınar ve doğruysa tüketir; kod bir kez kullanılır. Hesap veya geçerli bir kod yoksa da bir doğrulama
+    /// yapılır, böylece yanıtın süresi hangisi olduğunu söylemez.
     /// </summary>
     private static async Task<bool> ConsumeCodeAsync(
         AppDbContext db,
-        ShopAccount account,
+        ShopAccount? account,
         AccountCodePurpose purpose,
         string code,
         DateTimeOffset now,
-        ShopAuthOptions options,
         CancellationToken cancellationToken)
     {
-        var maxAttempts = options.MaxCodeAttempts;
-        var candidates = db.Set<ShopAccountCode>().Where(candidate => candidate.AccountId == account.Id && candidate.Purpose == purpose);
+        var record = account is null
+            ? null
+            : await db.Set<ShopAccountCode>().AsNoTracking().FirstOrDefaultAsync(
+                candidate => candidate.AccountId == account.Id && candidate.Purpose == purpose && candidate.ExpiresAt > now,
+                cancellationToken);
 
-        var counted = await candidates
-            .Where(candidate => candidate.ExpiresAt > now && candidate.Attempts < maxAttempts)
-            .ExecuteUpdateAsync(setters => setters.SetProperty(candidate => candidate.Attempts, candidate => candidate.Attempts + 1), cancellationToken);
+        var matches = Hasher.VerifyHashedPassword(account ?? new ShopAccount(), record?.CodeHash ?? DummyHash, NormalizeCode(code)) != PasswordVerificationResult.Failed;
 
-        return counted == 1
-            && await candidates.AsNoTracking().FirstOrDefaultAsync(cancellationToken) is { } record
-            && Hasher.VerifyHashedPassword(account, record.CodeHash, code.Trim()) != PasswordVerificationResult.Failed
+        // Silme, aynı kodu aynı anda sunan iki istekten yalnızca birini geçirir.
+        return record is not null
+            && matches
             && await db.Set<ShopAccountCode>().Where(candidate => candidate.Id == record.Id).ExecuteDeleteAsync(cancellationToken) == 1;
     }
+
+    /// <summary>
+    /// Kodu yazıldığı biçimden bağımsız kılar: boşluk ve tire atılır, harfler büyütülür ve alfabede olmayan, birbirine
+    /// benzeyen harfler karşılıklarına çevrilir (O → 0, I ve L → 1).
+    /// </summary>
+    private static string NormalizeCode(string code) =>
+        string.Concat(code.Where(character => character is not (' ' or '-')).Select(character => char.ToUpperInvariant(character) switch
+        {
+            'O' => '0',
+            'I' or 'L' => '1',
+            var other => other,
+        }));
+    private static async Task<bool> RotateAsync(IQueryable<ShopSession> sessions, DateTimeOffset now, CancellationToken cancellationToken) =>
+        await sessions.ExecuteUpdateAsync(
+            setters => setters
+                .SetProperty(session => session.RefreshVersion, session => session.RefreshVersion + 1)
+                .SetProperty(session => session.RotatedAt, now),
+            cancellationToken) == 1;
 
     /// <summary>İptal edilmemiş ve süresi dolmamış oturumlar.</summary>
     private static IQueryable<ShopSession> Live(IQueryable<ShopSession> sessions, DateTimeOffset now) =>

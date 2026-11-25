@@ -1,5 +1,5 @@
 import i18n from "@/i18n"
-import { getSession, renewTokens, signOut } from "@/lib/session"
+import { getSession, reloadSession, renewTokens, signOut } from "@/lib/session"
 import type { Session } from "@/lib/session"
 
 /** Backend'in adresi. Geliştirmede Vite bu öneki örnek backend'e yönlendirir (vite.config.ts). */
@@ -80,28 +80,41 @@ async function request<T>(
 }
 
 /**
- * Aynı anda 401 alan istekler tek bir yenilemeyi bekler. Yenileme token'ı bir kez kullanılır: backend eskisini yeniden
- * görürse oturumu çalınmış sayıp kapatır.
+ * Aynı anda 401 alan istekler tek bir yenilemeyi bekler. Yenileme token'ı bir kez kullanılır: backend eskisini
+ * (kısa bir toleransın dışında) yeniden görürse oturumu çalınmış sayıp kapatır. Bu yüzden yenileme sekmeler arasında
+ * da sıraya girer (Web Locks) ve kilidi alan sekme önce başka bir sekmenin yenileyip yenilemediğine bakar.
  */
 function renew(sent: Session): Promise<boolean> {
-  const current = getSession()
+  renewal ??= exclusively(async () => {
+    reloadSession()
+    const current = getSession()
 
-  if (!current) {
-    return Promise.resolve(false)
-  }
+    if (!current) {
+      return false
+    }
 
-  if (current.accessToken !== sent.accessToken) {
-    // Başka bir istek bu arada yeniledi.
-    return Promise.resolve(true)
-  }
-
-  renewal ??= refresh(current.refreshToken).finally(() => {
+    // Başka bir istek veya başka bir sekme bu arada yeniledi.
+    return current.accessToken !== sent.accessToken
+      ? true
+      : refresh(current.refreshToken)
+  }).finally(() => {
     renewal = undefined
   })
 
   return renewal
 }
 
+/** Oturumu şimdi yeniler (ör. hesabın bilgisi değiştiğinde); süregelen bir yenileme varsa onu bekler. */
+export function renewSession(): Promise<boolean> {
+  const session = getSession()
+  return session ? renew(session) : Promise.resolve(false)
+}
+
+function exclusively<T>(work: () => Promise<T>): Promise<T> {
+  return "locks" in navigator
+    ? navigator.locks.request("haldus-shop.session-refresh", work)
+    : work()
+}
 async function refresh(refreshToken: string): Promise<boolean> {
   if (!refresher) {
     return false

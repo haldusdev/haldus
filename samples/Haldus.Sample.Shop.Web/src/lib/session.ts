@@ -109,6 +109,16 @@ export function subscribeSession(listener: () => void) {
   }
 }
 
+/** Oturumu depodan yeniden okur; başka bir sekmenin yazdığı değişikliği olayını beklemeden görmek için. */
+export function reloadSession() {
+  const stored = read()
+
+  if (JSON.stringify(stored) !== JSON.stringify(current)) {
+    current = stored
+    listeners.forEach((listener) => listener())
+  }
+}
+
 // Başka bir sekme oturumu değiştirdiyse (giriş, çıkış, token yenileme) bu sekme de onu izler. Yenileme token'ı bir kez
 // kullanılır: eskisini sunan sekme, backend'in oturumu çalınmış sayıp kapatmasına yol açardı.
 window.addEventListener("storage", (event) => {

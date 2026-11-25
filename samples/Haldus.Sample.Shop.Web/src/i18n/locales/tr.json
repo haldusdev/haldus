@@ -48,7 +48,7 @@
   },
   "verify": {
     "title": "E-posta adresinizi doğrulayın",
-    "description": "{{email}} adresine 6 haneli bir kod gönderdik.",
+    "description": "{{email}} adresine bir kod gönderdik.",
     "code": "Kod",
     "submit": "Doğrula",
     "resend": "Yeniden gönder",
@@ -86,7 +86,7 @@
     "forgotDescription": "Hesabınızın e-postasını yazın. Kayıtlıysa bir kod göndereceğiz.",
     "forgotSubmit": "Kod gönder",
     "resetTitle": "Yeni bir parola seçin",
-    "resetDescription": "E-postadaki 6 haneli kodu ve yeni parolanızı yazın.",
+    "resetDescription": "E-postadaki kodu ve yeni parolanızı yazın.",
     "resetSubmit": "Parolayı sıfırla",
     "code": "Kod",
     "newPassword": "Yeni parola",

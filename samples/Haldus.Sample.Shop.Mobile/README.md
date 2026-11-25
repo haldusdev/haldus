@@ -54,7 +54,7 @@ claim'den okur.
   bir oturum alır ve isteği bir kez yineler; aynı anda 401 alan istekler tek bir yenilemeyi bekler. Yenileme de
   reddedilirse oturum kapanır.
 
-- Giriş ekranı kayıt, giriş ve parola sıfırlamayı (e-postayla gelen altı haneli kod) taşır. Hesap sekmesinde
+- Giriş ekranı kayıt, giriş ve parola sıfırlamayı (e-postayla gelen kod) taşır. Hesap sekmesinde
   e-posta doğrulanır, parola değiştirilir ve çıkış yapılır; çıkış oturumu backend'de de iptal eder.
 - Posta ayarı verilmediyse e-posta gönderilmez; yerelde denemek için backend geliştirme ortamında başlatılır
   (`-- --environment Development`) ve kod backend'in günlüğünden okunur.

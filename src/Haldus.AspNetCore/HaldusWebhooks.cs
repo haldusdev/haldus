@@ -24,7 +24,7 @@ public sealed class HaldusWebhookEndpoint
 
     public Uri Url { get; }
 
-    /// <summary>İmzanın anahtarı; alıcıyla paylaşılır ve en az 16 karakter olmalıdır.</summary>
+    /// <summary>İmzanın anahtarı; alıcıyla paylaşılır ve en az 16 bayt olmalıdır (<c>whsec_</c> anahtarında çözüldükten sonra).</summary>
     public string Secret { get; }
 
     /// <summary>
@@ -94,23 +94,30 @@ public static class HaldusWebhookSignature
         return Version + Convert.ToBase64String(HMACSHA256.HashData(KeyOf(secret), signed));
     }
 
-    // Standard Webhooks anahtarı "whsec_" önekiyle ve base64 olarak yazar; öyle yazılmış bir anahtar çözülerek
-    // kullanılır ki o belirtimin hazır doğrulayıcıları da imzayı kabul etsin. Başka her anahtar olduğu gibi kullanılır.
-    private static byte[] KeyOf(string secret)
+    private static byte[] KeyOf(string secret) =>
+        TryGetKey(secret, out var key)
+            ? key
+            : throw new ArgumentException("A secret that starts with 'whsec_' must be base64 after the prefix.", nameof(secret));
+
+    /// <summary>
+    /// İmzanın anahtarı. Standard Webhooks anahtarı "whsec_" önekiyle ve base64 olarak yazar; öyle yazılmış bir anahtar
+    /// çözülerek kullanılır ki o belirtimin hazır doğrulayıcıları da imzayı kabul etsin (çözülemiyorsa anahtar
+    /// geçersizdir). Başka her anahtar olduğu gibi, UTF-8 baytlarıyla kullanılır.
+    /// </summary>
+    internal static bool TryGetKey(string secret, out byte[] key)
     {
         const string Prefix = "whsec_";
 
-        if (secret.StartsWith(Prefix, StringComparison.Ordinal))
+        if (!secret.StartsWith(Prefix, StringComparison.Ordinal))
         {
-            var decoded = new byte[secret.Length];
-
-            if (Convert.TryFromBase64String(secret[Prefix.Length..], decoded, out var written) && written > 0)
-            {
-                return decoded[..written];
-            }
+            key = Encoding.UTF8.GetBytes(secret);
+            return true;
         }
 
-        return Encoding.UTF8.GetBytes(secret);
+        var decoded = new byte[secret.Length];
+        var valid = Convert.TryFromBase64String(secret[Prefix.Length..], decoded, out var written);
+        key = valid ? decoded[..written] : [];
+        return valid;
     }
 
     /// <summary>
@@ -231,8 +238,8 @@ public static class HaldusWebhookServiceCollectionExtensions
                     && (endpoint.Url.Scheme == Uri.UriSchemeHttps || (options.AllowInsecureHttp && endpoint.Url.Scheme == Uri.UriSchemeHttp))),
                 "Webhook endpoints must be absolute https:// URLs (or http:// when AllowInsecureHttp is set).")
             .Validate(
-                options => options.Endpoints.All(endpoint => endpoint.Secret.Length >= 16),
-                "Webhook secrets must be at least 16 characters long.")
+                options => options.Endpoints.All(endpoint => HaldusWebhookSignature.TryGetKey(endpoint.Secret, out var key) && key.Length >= 16),
+                "Webhook secrets must be at least 16 bytes long (after base64 decoding for 'whsec_' secrets).")
             .ValidateOnStart();
 
         // Yönlendirme izlenmez: imzalı gövde, adresin gösterdiği başka bir yere gitmemelidir.

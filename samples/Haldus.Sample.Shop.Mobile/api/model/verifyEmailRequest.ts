@@ -6,6 +6,6 @@
  */
 
 export interface VerifyEmailRequest {
-  /** @maxLength 16 */
+  /** @maxLength 32 */
   code: string;
 }

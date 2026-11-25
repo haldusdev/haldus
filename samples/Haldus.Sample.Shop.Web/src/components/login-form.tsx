@@ -215,8 +215,9 @@ export function LoginForm({
                       value={code}
                       onChange={(event) => setCode(event.target.value)}
                       autoComplete="one-time-code"
-                      inputMode="numeric"
-                      maxLength={6}
+                      autoCapitalize="characters"
+                      spellCheck={false}
+                      maxLength={12}
                       className="font-mono tracking-widest"
                       aria-invalid={errors.code ? true : undefined}
                       required

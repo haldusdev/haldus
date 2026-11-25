@@ -203,8 +203,9 @@ export default function SignInScreen() {
                     onChangeText={setCode}
                     autoComplete="one-time-code"
                     textContentType="oneTimeCode"
-                    keyboardType="number-pad"
-                    maxLength={6}
+                    autoCapitalize="characters"
+                    autoCorrect={false}
+                    maxLength={12}
                   />
                   <FieldErrors messages={errors.code} />
                 </View>

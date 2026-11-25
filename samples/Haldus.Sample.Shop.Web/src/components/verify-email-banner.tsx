@@ -83,8 +83,9 @@ export function VerifyEmailBanner() {
           onChange={(event) => setCode(event.target.value)}
           placeholder={t("verify.code")}
           autoComplete="one-time-code"
-          inputMode="numeric"
-          maxLength={6}
+          autoCapitalize="characters"
+          spellCheck={false}
+          maxLength={12}
           className="w-32 font-mono tracking-widest"
           aria-invalid={error ? true : undefined}
           aria-describedby={error ? "verify-email-error" : undefined}

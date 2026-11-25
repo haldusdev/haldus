@@ -8,7 +8,7 @@
 export interface ResetPasswordRequest {
   /** @maxLength 256 */
   email: string;
-  /** @maxLength 16 */
+  /** @maxLength 32 */
   code: string;
   /**
      * @minLength 8

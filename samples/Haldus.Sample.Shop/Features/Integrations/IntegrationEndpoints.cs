@@ -26,7 +26,10 @@ public static class IntegrationEndpoints
                 .FindBySecretAsync(http.Request.Headers[ApiKeyHeader], HaldusTime.UtcNow(time), cancellationToken);
 
             return key is null ? Results.Unauthorized() : Results.Ok(new WhoAmI(key.Id, key.Name, key.TenantId));
-        });
+        })
+
+            // Bu ucu oturum değil sunulan anahtar tanıtır.
+            .AllowAnonymous();
 
         // İmza sırrını sunucunun kendisi kullanır; recoverable: true onu şifreleyerek de saklar.
         // Döndürmede eski sır hemen geçersiz olur.

@@ -519,15 +519,19 @@ Yapılmayanlar ve nedenleri:
       `/auth/logout-all`), parola sıfırlama ve parola değişimi oturumu iptal eder; iptal edilen oturumun erişim
       token'ı da yenileme token'ı da hemen reddedilir. Bedeli, token'lı her istekte bir birincil anahtar sorgusudur.
     - Yenileme token'ı bir kez kullanılır (`RefreshVersion`; token'daki `rv` claim'i, tek bir koşullu `UPDATE` ile
-      ilerler). Eskimiş bir yenileme token'ı yeniden sunulursa oturum çalınmış sayılır ve kapatılır. Bu yüzden web
-      paneli oturumu sekmeler arasında eşitler (`storage` olayı); eşitlemeden önce eski token'ı sunan ikinci sekme
-      oturumu kapatırdı.
-    - Parola sıfırlama ve e-posta doğrulama, e-postayla gönderilen altı haneli kodladır (bağlantı değil: mobilde
-      derin bağlantı, web'de adreste token gerekmez). Kodun özeti saklanır, 15 dakika yaşar ve bir kez kullanılır.
-      **Deneme ve gönderim sayıları koda değil saatlik pencereye aittir** (hesap + amaç başına beş deneme, üç kod):
-      yeni kod istemek deneme hakkını yenilemez. İlk yazımda yeniliyordu ve altı haneli kod "kod iste, beş kez dene"
-      döngüsüyle bulunabiliyordu (incelemede çıktı). Sayımlar tek bir `UPDATE` ile, sınanmadan önce yapılır.
-      Sıfırlama e-postası yanıt beklenmeden gönderilir (süre, adresin kayıtlı olduğunu ele vermesin diye).
+      ilerler). Eskimiş bir yenileme token'ı yeniden sunulursa oturum çalınmış sayılır ve kapatılır; yenilemeden
+      hemen sonra (`RefreshGraceSeconds`, 30 sn) bir önceki token da kabul edilir ki yanıtı yolda kaybolan istemci
+      veya aynı anda yenileyen ikinci sekme oturumunu kaybetmesin (toleranssız ilk hali ikinci incelemede çıktı).
+      Web paneli ayrıca yenilemeyi sekmeler arasında sıraya sokar (Web Locks) ve oturumu `storage` olayıyla eşitler.
+    - Parola sıfırlama ve e-posta doğrulama, e-postayla gönderilen kodladır (bağlantı değil: mobilde derin bağlantı,
+      web'de adreste token gerekmez). Kod sekiz karakterdir (Crockford base32, 40 bit); özeti saklanır, 15 dakika
+      yaşar ve bir kez kullanılır; yazılışı normalleştirilir (küçük harf, tire, O/0, I/L/1). **Hesap başına deneme
+      sınırı bilerek yoktur.** İki önceki hali de kusurluydu: altı haneli kod + kod başına beş deneme "kod iste, beş
+      kez dene" döngüsüyle bulunabiliyordu; pencereye bağlanan deneme sınırı ise başkasının yanlış kodlar göndererek
+      hesabın parola sıfırlamasını engellemesine izin veriyordu (ikisi de incelemelerde çıktı). Uzun kod ikisini de
+      kapatır: denenerek bulunamaz, kilitlenecek bir sayaç da yoktur. Sınırlı olan gönderimdir (hesap + amaç başına
+      saatte üç kod; adrese e-posta yağdırılmasın diye). Sıfırlama e-postası yanıt beklenmeden, 30 saniyelik bir süre
+      sınırıyla gönderilir (süre, adresin kayıtlı olduğunu ele vermesin diye).
       `Shop:Auth:RequireVerifiedEmail` (varsayılan kapalı) doğrulanmamış hesabı kimlik uçlarının dışında tutar.
       Zaten doğrulanmış hesapta doğrulama ucu token vermez (204).
     - Hesap kilidi: art arda beş başarısız parola denemesinden sonra 15 dakika (`Shop:Auth`). Deneme, parola
@@ -544,10 +548,13 @@ Yapılmayanlar ve nedenleri:
     - İstemciler token'ı `Authorization` başlığında taşır, 401'de bir kez yeniler (eşzamanlı istekler tek yenilemeyi
       bekler) ve giriş/kayıt/yenileme uçlarına token eklemez. Web'de token'lar `localStorage` içindedir (XSS'e açık;
       örnek için kabul edilmiş ödünleşim), mobilde güvenli depoda, her biri ayrı anahtarda.
-    - Bilinen sınırlar: kimlik sağlayıcı (OpenID Connect) desteği yoktur (JWT doğrulaması ayrı bir paket ister);
-      iki adımlı doğrulama, e-posta değiştirme ve hesap silme yoktur; hesap kilidi bir hesabın başkası tarafından
-      kilitlenmesine izin verir (parola sıfırlama kilidi açar); iptal edilmiş oturum ve kullanılmış kod kayıtları
-      kendiliğinden temizlenmez. Token'lar Data Protection anahtarlarına bağlıdır; anahtarların kalıcılığı ve
+    - Bilinen sınırlar: **örnekte rol yoktur**: kayıt herkese açıktır ve giriş yapan her hesap kiracıya ait olmayan
+      (ortak) kaynakları da yazar (ürünler, kategoriler, özellik bayrakları). Gerçek bir uygulama bu kaynakların
+      builder'ına bir yetki kuralı ekler (`app.MapCrud<Product>().RequireAuthorization("staff")`; builder kuralları
+      uçlarına taşır) veya kaydı kapatır. Kimlik sağlayıcı (OpenID Connect) desteği yoktur (JWT doğrulaması ayrı bir
+      paket ister); iki adımlı doğrulama, e-posta değiştirme ve hesap silme yoktur; hesap kilidi bir hesabın başkası
+      tarafından kilitlenmesine izin verir (parola sıfırlama kilidi açar); iptal edilmiş oturum ve kullanılmış kod
+      kayıtları kendiliğinden temizlenmez; süreç kapanırken yolda olan sıfırlama e-postası gitmez. Token'lar Data Protection anahtarlarına bağlıdır; anahtarların kalıcılığı ve
       paylaşımı uygulamanın işidir.
   - Arayüzün dili `Accept-Language` ile backend'e de gider; backend'in mesajları o dilde döner.
   - Mobil uygulamada (aynı gerekçeyle, **ayrıca onaylanmadı**): yönlendirme genel kurallardaki Expo Router'dır; i18n
@@ -1227,8 +1234,8 @@ Yapılmayanlar ve nedenleri:
   kalan yükleme iptal edilir ve özgün hata aynen yeniden fırlatılır (`HaldusFiles` boyut sınırını ondan 413'e
   çevirir). Ayarlar açılışta değil depo ilk kullanıldığında doğrulanır (build sırasındaki şema üretimi kimlik bilgisi
   olmadan çalışsın diye). Testler MinIO'yu genel Testcontainers kapsayıcısıyla başlatır; `minio/minio` imajı artık
-  çekilemediği için `cgr.dev/chainguard/minio:latest` kullanılır (`HALDUS_TEST_MINIO_IMAGE` ile değiştirilir; sürüme
-  sabit değildir). Sınırlar: gerçek AWS S3'e karşı denenmedi; geçici kimlik bilgisi (oturum token'ı, rol) yoktur;
+  çekilemediği için `cgr.dev/chainguard/minio` kullanılır, özetiyle (`@sha256:…`) sabitlenmiş olarak
+  (`HALDUS_TEST_MINIO_IMAGE` ile değiştirilir; kayıt defteri o özeti kaldırırsa testler imajı çekemez). Sınırlar: gerçek AWS S3'e karşı denenmedi; geçici kimlik bilgisi (oturum token'ı, rol) yoktur;
   kovayı Haldus oluşturmaz; içerik kayıtla aynı transaction'da değildir (kayıt kaydedilemezse nesne sahipsiz kalabilir);
   indirmede `Range` desteklenmez; nesne deposuna doğrudan (ön imzalı) yükleme ve devam ettirilebilir yükleme yoktur.
 - **Webhook yayıncısı.** `AddHaldusWebhookPublisher` (`HaldusWebhooks.cs`) olayları yapılandırılmış adreslere imzalı
@@ -1241,7 +1248,7 @@ Yapılmayanlar ve nedenleri:
   gelir; kullanıcıların tanımladığı adreslere gönderim (örnekteki `WebhookEndpoint` kaynağı gibi) SSRF koruması ister
   ve bu yayıncının işi değildir.** Sınırlar: birden çok adresten biri başarısız olursa yeniden denemede ötekilere de
   yeniden gönderilir; adres başına ayrı kuyruk ve devre kesici yoktur. Anahtar `whsec_…` biçimindeyse base64
-  çözülerek kullanılır (belirtimin örnek vektörüyle sınanır). Yanıtın gövdesi okunmaz; hata metnine yalnızca
+  çözülerek kullanılır (belirtimin örnek vektörüyle sınanır); anahtar çözüldükten sonra en az 16 bayt olmalıdır. Yanıtın gövdesi okunmaz; hata metnine yalnızca
   sunucunun adı yazılır. **Yayıncının zaman aşımı bir `OperationCanceledException`'dır:** `HaldusEvents.DeliverAsync`
   ve dağıtıcı servis onu ancak kendi iptal belirteçleri iptal edilmişse dışarı bırakır. İlk yazımda her iptal
   istisnası dışarı çıkıyordu ve yanıt vermeyen bir alıcı arka plan servisini, onunla birlikte uygulamayı durduruyordu

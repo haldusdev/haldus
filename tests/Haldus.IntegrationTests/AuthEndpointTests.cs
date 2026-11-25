@@ -121,34 +121,46 @@ public sealed class AuthEndpointTests(ShopFixture fixture)
         Assert.Equal(HttpStatusCode.Created, basket.StatusCode);
         Assert.Equal(HttpStatusCode.OK, (await SendAsync(HttpMethod.Get, "/openapi/v1.json")).StatusCode);
 
+        // API anahtarıyla tanınan uç da oturum istemez; onu sunulan anahtar tanıtır.
+        var owner = await RegisterAsync();
+        var key = await ReadAsync<System.Text.Json.JsonElement>(await SendAsync(HttpMethod.Post, "/api-keys", new { name = "Robot" }, owner.Token));
+        using var withKey = new HttpRequestMessage(HttpMethod.Get, "/whoami");
+        withKey.Headers.Add("X-Api-Key", key.GetProperty("secret").GetString());
+        Assert.Equal(HttpStatusCode.OK, (await _client.SendAsync(withKey, CancellationToken)).StatusCode);
+
         // Giriş yapan hesap kiracıya ait olmayan kaynağı yazar.
         var account = await RegisterAsync();
         Assert.Equal(HttpStatusCode.Created, (await SendAsync(HttpMethod.Post, "/products", new { name = $"Signed {Guid.NewGuid():N}", price = 1 }, account.Token)).StatusCode);
     }
 
     [Fact]
-    public async Task RefreshToken_IsSingleUseAndReusingItClosesTheSession()
+    public async Task RefreshToken_IsRotatedAndReusingAnOldOneClosesTheSession()
     {
+        await using var factory = fixture.CreateAuthenticatedFactory(
+            ("Shop:Auth:RequestsPerMinute", "100000"),
+            ("Shop:Auth:RefreshGraceSeconds", "1"));
+        using var client = factory.CreateClient();
         var email = NewEmail();
-        var first = await ReadAsync<AccessTokenResponse>(await SendAsync(HttpMethod.Post, "/auth/register", new { email, password = Password }));
-        var second = await ReadAsync<AccessTokenResponse>(await SendAsync(HttpMethod.Post, "/auth/refresh", new { refreshToken = first.RefreshToken }));
-        var third = await ReadAsync<AccessTokenResponse>(await SendAsync(HttpMethod.Post, "/auth/refresh", new { refreshToken = second.RefreshToken }));
-        Assert.Equal(HttpStatusCode.OK, (await SendAsync(HttpMethod.Get, "/auth/me", token: third.AccessToken)).StatusCode);
+        var first = await ReadAsync<AccessTokenResponse>(await SendAsync(client, HttpMethod.Post, "/auth/register", new { email, password = Password }));
+        var second = await ReadAsync<AccessTokenResponse>(await SendAsync(client, HttpMethod.Post, "/auth/refresh", new { refreshToken = first.RefreshToken }));
 
-        // Kullanılmış bir yenileme token'ı yeniden sunulursa (çalınmış olabilir) oturumun tamamı kapanır: en yeni
-        // token'lar da artık geçmez ve yeniden giriş gerekir.
-        Assert.Equal(HttpStatusCode.Unauthorized, (await SendAsync(HttpMethod.Post, "/auth/refresh", new { refreshToken = first.RefreshToken })).StatusCode);
-        Assert.Equal(HttpStatusCode.Unauthorized, (await SendAsync(HttpMethod.Get, "/auth/me", token: third.AccessToken)).StatusCode);
-        Assert.Equal(HttpStatusCode.Unauthorized, (await SendAsync(HttpMethod.Post, "/auth/refresh", new { refreshToken = third.RefreshToken })).StatusCode);
-        Assert.Equal(HttpStatusCode.OK, (await SendAsync(HttpMethod.Post, "/auth/login", new { email, password = Password })).StatusCode);
+        // Hemen ardından bir önceki token da kabul edilir: yanıtı yolda kaybolan istemci veya aynı anda yenileyen
+        // ikinci sekme oturumunu kaybetmez. Aynı anda gelen yenilemelerin hepsi geçerli bir oturumla döner.
+        var repeated = await Task.WhenAll(Enumerable.Range(0, 4).Select(_ =>
+            SendAsync(client, HttpMethod.Post, "/auth/refresh", new { refreshToken = first.RefreshToken })));
+        Assert.All(repeated, response => Assert.Equal(HttpStatusCode.OK, response.StatusCode));
+        Assert.Equal(HttpStatusCode.OK, (await SendAsync(client, HttpMethod.Get, "/auth/me", token: second.AccessToken)).StatusCode);
 
-        // Aynı token'ı aynı anda sunan isteklerden yalnızca biri yenilenir.
-        var session = await ReadAsync<AccessTokenResponse>(await SendAsync(HttpMethod.Post, "/auth/login", new { email, password = Password }));
-        var race = await Task.WhenAll(Enumerable.Range(0, 6).Select(_ =>
-            SendAsync(HttpMethod.Post, "/auth/refresh", new { refreshToken = session.RefreshToken })));
-        Assert.Single(race, response => response.StatusCode == HttpStatusCode.OK);
+        // Tolerans kısadır. Sonrasında eskimiş bir yenileme token'ı sunulursa (çalınmış olabilir) oturumun tamamı
+        // kapanır: en yeni token'lar da artık geçmez ve yeniden giriş gerekir.
+        var third = await ReadAsync<AccessTokenResponse>(await SendAsync(client, HttpMethod.Post, "/auth/refresh", new { refreshToken = second.RefreshToken }));
+        await Task.Delay(TimeSpan.FromSeconds(1.3), CancellationToken);
+
+        Assert.Equal(HttpStatusCode.Unauthorized, (await SendAsync(client, HttpMethod.Post, "/auth/refresh", new { refreshToken = second.RefreshToken })).StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await SendAsync(client, HttpMethod.Get, "/auth/me", token: third.AccessToken)).StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await SendAsync(client, HttpMethod.Post, "/auth/refresh", new { refreshToken = third.RefreshToken })).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await SendAsync(client, HttpMethod.Post, "/auth/login", new { email, password = Password })).StatusCode);
     }
-
     [Fact]
     public void RateLimit_CountsAnIpv6SubscriberAsOne()
     {
@@ -245,15 +257,17 @@ public sealed class AuthEndpointTests(ShopFixture fixture)
 
         Assert.Equal(HttpStatusCode.Accepted, (await SendAsync(HttpMethod.Post, "/auth/password/forgot", new { email = email.ToUpperInvariant() })).StatusCode);
         var code = await ResetCodeAsync(email);
-        Assert.Matches("^[0-9]{6}$", code);
+        Assert.Matches("^[0-9A-HJKMNP-TV-Z]{8}$", code);
 
         // Yanlış kod, kayıtlı olmayan e-posta ve kısa parola reddedilir.
-        var wrong = code == "000000" ? "000001" : "000000";
+        var wrong = Wrong(code);
         Assert.Equal(["code"], await ErrorsAsync(await SendAsync(HttpMethod.Post, "/auth/password/reset", new { email, code = wrong, newPassword = NewPassword })));
         Assert.Equal(["code"], await ErrorsAsync(await SendAsync(HttpMethod.Post, "/auth/password/reset", new { email = unknown, code, newPassword = NewPassword })));
         Assert.Equal(["newPassword"], await ErrorsAsync(await SendAsync(HttpMethod.Post, "/auth/password/reset", new { email, code, newPassword = "short" })));
 
-        Assert.Equal(HttpStatusCode.NoContent, (await SendAsync(HttpMethod.Post, "/auth/password/reset", new { email, code, newPassword = NewPassword })).StatusCode);
+        // Kod yazıldığı biçimden bağımsızdır: küçük harf, tire ve boşluk kabul edilir.
+        var typed = $" {code[..4].ToLowerInvariant()}-{code[4..].ToLowerInvariant()} ";
+        Assert.Equal(HttpStatusCode.NoContent, (await SendAsync(HttpMethod.Post, "/auth/password/reset", new { email, code = typed, newPassword = NewPassword })).StatusCode);
 
         // Eski parola ve eski oturumlar artık geçmez; kod ikinci kez kullanılamaz.
         Assert.Equal(HttpStatusCode.Unauthorized, (await SendAsync(HttpMethod.Post, "/auth/login", new { email, password = Password })).StatusCode);
@@ -267,7 +281,7 @@ public sealed class AuthEndpointTests(ShopFixture fixture)
     }
 
     [Fact]
-    public async Task MailedCode_HasAnAttemptBudgetThatANewCodeDoesNotRefill()
+    public async Task MailedCode_CannotBeBlockedByWrongGuessesAndIsNotMailedEndlessly()
     {
         await using var factory = fixture.CreateAuthenticatedFactory(
             ("Shop:Auth:RequestsPerMinute", "100000"),
@@ -277,35 +291,34 @@ public sealed class AuthEndpointTests(ShopFixture fixture)
         await ReadAsync<AccessTokenResponse>(await SendAsync(client, HttpMethod.Post, "/auth/register", new { email, password = Password }));
         await SendAsync(client, HttpMethod.Post, "/auth/password/forgot", new { email });
         var code = await ResetCodeAsync(email);
-        var wrong = code == "000000" ? "000001" : "000000";
 
-        // Beş yanlış denemeden sonra doğru kod da kabul edilmez.
-        for (var attempt = 0; attempt < 5; attempt++)
+        // Kod denenerek bulunamayacak kadar uzundur; bu yüzden hesap başına deneme sınırı yoktur ve başkasının yanlış
+        // kodlar göndermesi hesabın sahibini engellemez.
+        for (var attempt = 0; attempt < 12; attempt++)
         {
-            Assert.Equal(["code"], await ErrorsAsync(await SendAsync(client, HttpMethod.Post, "/auth/password/reset", new { email, code = wrong, newPassword = Password })));
+            Assert.Equal(["code"], await ErrorsAsync(await SendAsync(client, HttpMethod.Post, "/auth/password/reset", new { email, code = Wrong(code), newPassword = Password })));
         }
 
-        Assert.Equal(["code"], await ErrorsAsync(await SendAsync(client, HttpMethod.Post, "/auth/password/reset", new { email, code, newPassword = Password })));
-
-        // Yeni bir kod istemek deneme hakkını yenilemez: "yeni kod iste, beş kez dene" döngüsüyle altı haneli kod bulunamaz.
+        // Yeni kod eskisinin yerine geçer.
         await SendAsync(client, HttpMethod.Post, "/auth/password/forgot", new { email });
         var second = await ResetCodeAsync(email, mails: 2);
-        Assert.Equal(["code"], await ErrorsAsync(await SendAsync(client, HttpMethod.Post, "/auth/password/reset", new { email, code = second, newPassword = Password })));
+        Assert.NotEqual(code, second);
+        Assert.Equal(["code"], await ErrorsAsync(await SendAsync(client, HttpMethod.Post, "/auth/password/reset", new { email, code, newPassword = Password })));
 
-        // Gönderim de sınırlıdır: pencerede üç koddan sonra yeni e-posta gitmez (yanıt yine aynıdır).
+        // Gönderim sınırlıdır: pencerede üç koddan sonra yeni e-posta gitmez (yanıt yine aynıdır) ve son kod geçerli kalır.
         await SendAsync(client, HttpMethod.Post, "/auth/password/forgot", new { email });
-        await ResetCodeAsync(email, mails: 3);
+        var third = await ResetCodeAsync(email, mails: 3);
         Assert.Equal(HttpStatusCode.Accepted, (await SendAsync(client, HttpMethod.Post, "/auth/password/forgot", new { email })).StatusCode);
         await Task.Delay(300, CancellationToken);
         Assert.Equal(3, fixture.Mail.CountFor(email, AccountCodePurpose.PasswordReset));
 
-        // Pencere dolunca hak yenilenir: yeni kod gönderilir ve kabul edilir.
+        // Pencere dolunca gönderim hakkı yenilenir.
         await Task.Delay(TimeSpan.FromSeconds(3.2), CancellationToken);
         await SendAsync(client, HttpMethod.Post, "/auth/password/forgot", new { email });
         var renewed = await ResetCodeAsync(email, mails: 4);
+        Assert.Equal(["code"], await ErrorsAsync(await SendAsync(client, HttpMethod.Post, "/auth/password/reset", new { email, code = third, newPassword = Password })));
         Assert.Equal(HttpStatusCode.NoContent, (await SendAsync(client, HttpMethod.Post, "/auth/password/reset", new { email, code = renewed, newPassword = Password })).StatusCode);
     }
-
     [Fact]
     public async Task ChangingThePassword_CountsWrongGuessesTowardsTheLockout()
     {
@@ -338,7 +351,7 @@ public sealed class AuthEndpointTests(ShopFixture fixture)
         Assert.False((await ReadAsync<AccountInfo>(await SendAsync(HttpMethod.Get, "/auth/me", token: session.AccessToken))).EmailVerified);
 
         var code = fixture.Mail.CodeFor(email, AccountCodePurpose.EmailVerification)!;
-        var wrong = code == "000000" ? "000001" : "000000";
+        var wrong = Wrong(code);
         Assert.Equal(["code"], await ErrorsAsync(await SendAsync(HttpMethod.Post, "/auth/email/verify", new { code = wrong }, session.AccessToken)));
         Assert.Equal(HttpStatusCode.Unauthorized, (await SendAsync(HttpMethod.Post, "/auth/email/verify", new { code })).StatusCode);
 
@@ -481,6 +494,9 @@ public sealed class AuthEndpointTests(ShopFixture fixture)
 
         return fixture.Mail.CodeFor(email, AccountCodePurpose.PasswordReset)!;
     }
+    /// <summary>Aynı uzunlukta ve aynı alfabeden, ama yanlış bir kod.</summary>
+    private static string Wrong(string code) => (code[0] == '0' ? '1' : '0') + code[1..];
+
     private static async Task<string[]> ErrorsAsync(HttpResponseMessage response)
     {
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);

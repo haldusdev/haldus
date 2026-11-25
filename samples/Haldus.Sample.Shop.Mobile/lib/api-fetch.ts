@@ -75,8 +75,8 @@ async function request<T>(url: string, options: RequestInit, mayRenew: boolean):
 }
 
 /**
- * Aynı anda 401 alan istekler tek bir yenilemeyi bekler. Yenileme token'ı bir kez kullanılır: backend eskisini yeniden
- * görürse oturumu çalınmış sayıp kapatır.
+ * Aynı anda 401 alan istekler tek bir yenilemeyi bekler. Yenileme token'ı bir kez kullanılır: backend eskisini
+ * (kısa bir toleransın dışında) yeniden görürse oturumu çalınmış sayıp kapatır.
  */
 function renew(sent: Session): Promise<boolean> {
   const current = getSession();
@@ -97,6 +97,11 @@ function renew(sent: Session): Promise<boolean> {
   return renewal;
 }
 
+/** Oturumu şimdi yeniler (ör. hesabın bilgisi değiştiğinde); süregelen bir yenileme varsa onu bekler. */
+export function renewSession(): Promise<boolean> {
+  const session = getSession();
+  return session ? renew(session) : Promise.resolve(false);
+}
 async function refresh(refreshToken: string): Promise<boolean> {
   if (!refresher) {
     return false;

@@ -233,6 +233,11 @@ durum modeli" kuralı da açılmadı: ek durum eksenleri asıl durumun yanında,
   vazgeçilemeyen yüklemenin sessiz kalması, demo kimliğinin üretimde yanlışlıkla açılabilmesi. Buradan çıkan ders
   öncekilerle aynı değil: bunlar iki özelliğin kesişimi değil, yeni yazılmış kodun ilk halinin eksikleriydi ve hiçbirini
   testler yakalamamıştı.
+- **Düzeltmeler yeniden incelendi ve ikisi kendi kusurunu getirmişti.** Kodun deneme sınırını pencereye bağlamak,
+  başkasının yanlış kodlar göndererek bir hesabın parola sıfırlamasını engellemesine izin veriyordu; yenileme
+  token'ının bir kez kullanılması ise yanıtı yolda kaybolan istemcinin veya aynı anda yenileyen ikinci sekmenin
+  oturumunu kapatıyordu. İlki kodu uzatıp (sekiz karakter, 40 bit) deneme sınırını kaldırarak, ikincisi kısa bir
+  toleransla kapatıldı. Kalan ve bilinen eksik: örnekte rol yoktur; kayıt olan her hesap ortak kaynakları yazabilir.
 - **Güvenlik incelemeleri üçüncü planda da aynı türden bulgular verdi.** Dört aşamadan sonra düzeltme gerekti:
   kullanıcılara ait kayıtların ortak bir kayıtta örtük toplanması (22), hassas alanın değişiklik kümesinde saklanıp
   geri gösterilmesi ve ölçütsüz sayılabilecek toplu silme (27), rolün zincirleme silmesinin kiracı sınırını aşması
@@ -264,7 +269,7 @@ sınırları ayrıca [README](../README.md) ve `CLAUDE.md` dosyalarında, özell
 | "İş tanımı + çalıştırmalar" modeli (AIP-152) | — | İş kaydı zaten bir çalıştırmadır; yeniden çalıştırma yeni bir iş kaydıdır |
 | İstemcinin verdiği metin kimlik (slug) | — | ULID ve istemcinin verdiği `Guid` kimlik sonradan yazıldı; anlamlı metin anahtar için `NaturalKey` veya `MapStore` vardır |
 | "Uzatma kancaları" | — | Araştırmanın ilk sürüm listesinde adı geçiyor, tanımı yok |
-| Kimlik sağlayıcılı (OpenID Connect) örnek; iki adımlı doğrulama | — | Gerçek kimlik doğrulama sonradan yazıldı: parola ile giriş, sunucuda oturum ve çıkış, kodla parola sıfırlama ve e-posta doğrulama, hesap kilidi, hız sınırı; iki arayüz de bunları kullanır. Kimlik sağlayıcının token'ını doğrulamak ayrı bir paket (yeni bağımlılık) ister |
+| Kimlik sağlayıcılı (OpenID Connect) örnek; iki adımlı doğrulama; örnekte roller | — | Gerçek kimlik doğrulama sonradan yazıldı: parola ile giriş, sunucuda oturum ve çıkış, kodla parola sıfırlama ve e-posta doğrulama, hesap kilidi, hız sınırı; iki arayüz de bunları kullanır. Kimlik sağlayıcının token'ını doğrulamak ayrı bir paket (yeni bağımlılık) ister |
 | Arayüzler için otomatik test | — | Test çerçevesinin kurulumu izin sistemi tarafından reddedildi (yeni bağımlılık ve test altyapısı kullanıcının onayını ister); arayüzler tip denetimi, derleme ve elle (tarayıcı, Android emülatörü) doğrulandı |
 
 ## Yük altında ölçüm

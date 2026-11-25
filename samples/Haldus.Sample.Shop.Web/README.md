@@ -53,7 +53,7 @@ başlar.
 (`/auth/*`). Oturumlar sunucudadır: çıkış ve parola değişimi token'ları hemen geçersiz kılar. Haldus kullanıcıyı ve
 kiracıyı token'daki claim'lerden okur. Panelde:
 
-- Giriş ekranı kayıt, giriş ve parola sıfırlamayı (e-postayla gelen altı haneli kod) taşır.
+- Giriş ekranı kayıt, giriş ve parola sıfırlamayı (e-postayla gelen kod) taşır.
 - E-postası doğrulanmamış hesaba üstte bir şerit gösterilir; kod orada girilir.
 - Hesap menüsünden parola değiştirilir (öteki oturumlar kapanır) ve çıkış yapılır (oturum sunucuda iptal edilir).
 
@@ -71,8 +71,9 @@ Panelin kimlikle ilgili kodu `src/lib` altındadır:
 - `auth.ts`: giriş yanıtından oturumu açar, çıkışta oturumu backend'de kapatır ve yenileme isteğini
   `api-fetch.ts`'e bağlar.
 
-Bilinen sınırlar: ayrı bir kimlik sağlayıcı (OpenID Connect), iki adımlı doğrulama, e-posta değiştirme ve hesap silme
-yoktur.
+Bilinen sınırlar: örnekte rol yoktur; kayıt herkese açıktır ve giriş yapan her hesap ortak kaynakları (ürünler,
+kategoriler) da yazar. Gerçek bir uygulama bu uçlara bir yetki kuralı ekler veya kaydı kapatır. Ayrı bir kimlik
+sağlayıcı (OpenID Connect), iki adımlı doğrulama, e-posta değiştirme ve hesap silme de yoktur.
 
 ## Komutlar
 

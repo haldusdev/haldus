@@ -62,8 +62,9 @@ export function VerifyEmail() {
           onChangeText={setCode}
           autoComplete="one-time-code"
           textContentType="oneTimeCode"
-          keyboardType="number-pad"
-          maxLength={6}
+          autoCapitalize="characters"
+          autoCorrect={false}
+          maxLength={12}
           returnKeyType="done"
           onSubmitEditing={() => verification.mutate()}
         />
