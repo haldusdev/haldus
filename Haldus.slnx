@@ -14,6 +14,7 @@
     <Project Path="src/Haldus.Jobs.Hangfire/Haldus.Jobs.Hangfire.csproj" />
     <Project Path="src/Haldus.Jobs.InMemory/Haldus.Jobs.InMemory.csproj" />
     <Project Path="src/Haldus.Jobs.PostgreSql/Haldus.Jobs.PostgreSql.csproj" />
+    <Project Path="src/Haldus.Storage.S3/Haldus.Storage.S3.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Haldus.Generators.Tests/Haldus.Generators.Tests.csproj" />
