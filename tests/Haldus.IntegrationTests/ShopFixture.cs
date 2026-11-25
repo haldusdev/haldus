@@ -38,6 +38,9 @@ public sealed class ShopFixture : IAsyncLifetime
     /// Gerçek kimlik doğrulamayla çalışan, ayarları verilen ayrı bir uygulama (ör. kısa bir hesap kilidiyle). Hesap
     /// e-postaları gönderilmez, <see cref="Mail"/> içinde toplanır. Çağıran atar.
     /// </summary>
+    /// <summary>Testlerin PostgreSQL'inin bağlantı dizesi; ayrı bir veritabanı isteyen test adını değiştirerek kullanır.</summary>
+    public string ConnectionString => _database.GetConnectionString();
+
     public WebApplicationFactory<ShopMessages> CreateAuthenticatedFactory(params (string Key, string Value)[] settings) =>
         new WebApplicationFactory<ShopMessages>().WithWebHostBuilder(builder =>
         {

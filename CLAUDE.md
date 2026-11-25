@@ -681,7 +681,13 @@ Yapılmayanlar ve nedenleri:
           `Audience`'ın öteki bölümün istemci kimliğiyle karşılaştırılması iki ayrı sağlayıcıda da uygulamayı durdurur
           (kapalı tarafa düşer; mesaj iki ayarın adını da söyler).
         - Örnekte migration yoktur: `ShopAccount`'a eklenen kolonlar (`ExternalIssuer`, `SignedOutEverywhereAt`...)
-          `Shop:CreateDatabase` ile daha önce oluşturulmuş bir veritabanına eklenmez; o veritabanı yeniden oluşturulur.
+          `Shop:CreateDatabase` ile daha önce oluşturulmuş bir veritabanına eklenmez. Öyle bir veritabanı sessizce
+          kullanılmaz: `DemoDatabase.EnsureAsync` veritabanına, onu kuran şemanın parmak izini yazar
+          (`ShopDemoSchema`; modelin oluşturma betiğinin özeti) ve şema değiştiyse ya da işaret yoksa uygulama,
+          veritabanının silinmesi gerektiğini söyleyerek açılmaz. Veri kendiliğinden silinmez. (İlk yazımda eski
+          veritabanı çalışma anında bulunamayan kolonlarla, 500 vererek bozuluyordu.) Testlerin veritabanı
+          `EnsureCreated` ile doğrudan kurulur ve bu denetimden geçmez; **modeli değiştiren bir iş bu yüzden deneme
+          veritabanını geçersiz kılar ve bunu söylemek gerekir.**
       - **İstemciler** (kullanıcının onayladığı paketlerle; panelde `oidc-client-ts`, mobilde `expo-auth-session`).
         İkisi de sağlayıcıyı `/auth/config` yanıtından öğrenir ve Authorization Code + PKCE akışını kendisi yapar;
         backend'e sağlayıcının erişim token'ını sunar ve hesabı `/auth/me` ile sorar. Oturum kaydı türünü taşır

@@ -74,11 +74,12 @@ var app = builder.Build();
 
 // Örnek arayüzlerin (Haldus.Sample.Shop.Web, Haldus.Sample.Shop.Mobile) karşısında çalıştırmak için: istenirse
 // (Shop:CreateDatabase) tablolar açılışta, yoksa oluşturulur. Varsayılan olarak kapalıdır ve build sırasındaki şema
-// üretiminde hiç çalışmaz; gerçek bir uygulama şemasını migration'larla yönetir.
+// üretiminde hiç çalışmaz; gerçek bir uygulama şemasını migration'larla yönetir. Örneğin eski bir sürümüyle
+// oluşturulmuş veritabanı değiştirilmez: uygulama, nedenini söyleyerek açılmaz (DemoDatabase).
 if (app.Configuration.GetValue<bool>("Shop:CreateDatabase") && !HaldusJobs.IsGeneratingOpenApiDocument)
 {
     await using var scope = app.Services.CreateAsyncScope();
-    await scope.ServiceProvider.GetRequiredService<AppDbContext>().Database.EnsureCreatedAsync();
+    await DemoDatabase.EnsureAsync(scope.ServiceProvider.GetRequiredService<AppDbContext>());
 }
 
 if (corsOrigins.Length > 0)
