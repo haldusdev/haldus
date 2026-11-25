@@ -507,7 +507,7 @@ Yapılmayanlar ve nedenleri:
   hatası (5xx dahil) oturumu kapatıyordu; yenilenen token'lar o sırada değişmiş başka bir hesabın oturumuna
   yazılabiliyordu. Panelin bileşenleri de DOM kütüphanesi olmadan, sunucu tarafı çizimle sınandı (panelde toplam 251,
   mobilde 112 test); o testler iç içe iki `<main>` ve çeviriden geçmeyen birkaç erişilebilirlik etiketi buldu.
-  Etkileşim testleri sonradan, yine paket eklenmeden yazıldı (`pnpm test:e2e`: panelde 32, mobilde 16 senaryo;
+  Etkileşim testleri sonradan, yine paket eklenmeden yazıldı (`pnpm test:e2e`: bugün panelde 49, mobilde 34 senaryo;
   yukarıda, "Komutlar"). Onlar da gerçek hatalar buldu ve düzeltildi: mobilde sepete art arda eklemek her dokunuşta
   yeni bir sepet oluşturuyordu (değişiklikler artık sıraya girer ve sepetin güncel halini okur, `lib/basket.ts`);
   mobilde dil ve tema seçenekleri web'de seçili olduklarını bildirmiyordu (`accessibilityState` yerine
@@ -536,7 +536,8 @@ Yapılmayanlar ve nedenleri:
     - Frontend test framework'ü: **kurulmadı** (genel kural: test altyapısı yoksa kendiliğinden kurma). Panel
       `pnpm typecheck`, `pnpm lint`, `pnpm build` ile ve çalışan backend'e karşı tarayıcıda elle doğrulandı.
     - Bunlar yeni bağımlılıklardır (`react-router`, `i18next`, `react-i18next`) ve onayı alınmadı. Geri kalan
-      bağımlılıklar genel kurallarda adı geçen araçlardan ve onların CLI'ından gelir.
+      bağımlılıklar genel kurallarda adı geçen araçlardan ve onların CLI'ından gelir. `oidc-client-ts` ise
+      kullanıcının onayıyla eklendi (aşağıda, "Kimlik sağlayıcı").
   - Kimlik doğrulama (planlardan sonra; kimlik sağlayıcı seçimi sorulamadığı için yeni bağımlılık gerektirmeyen yol
     seçildi, **ayrıca onaylanmadı**): örnek mağaza e-posta + parola ile giriş yapar ve ASP.NET Core'un yerleşik
     taşıyıcı token şemasını kullanır (`AddBearerToken`; `Features/Auth/AuthEndpoints.cs`). Hesap (`ShopAccount`) elle
@@ -584,6 +585,30 @@ Yapılmayanlar ve nedenleri:
         sağlayıcılara (Entra ID, Auth0...) karşı sınanmadı. Sınırlar: tek sağlayıcı; sağlayıcıdaki adres sonradan değişirse hesaba
         yansımaz; sağlayıcıdan çıkış (tek oturum kapatma) yoktur; dış hesabın parolası yoktur ve parola uçları onu
         kabul etmez; erişim token'ında `email` / `email_verified` yoksa hesap adressiz açılır.
+      - **İstemciler** (kullanıcının onayladığı paketlerle; panelde `oidc-client-ts`, mobilde `expo-auth-session`).
+        İkisi de sağlayıcıyı `/auth/config` yanıtından öğrenir ve Authorization Code + PKCE akışını kendisi yapar;
+        backend'e sağlayıcının erişim token'ını sunar ve hesabı `/auth/me` ile sorar. Oturum kaydı türünü taşır
+        (`kind`: parola veya sağlayıcı; tür yazılmamış eski kayıt parola oturumudur). Sağlayıcı oturumu 401 üzerine
+        sağlayıcının token ucundan, yenileme token'ı ile yenilenir ve parola oturumuyla **aynı** yenileme
+        hattından geçer (`api-fetch`: tek yenileme, sekmeler arası kilit, başka hesabın oturumuna yazmama, yalnızca
+        kesin rette çıkış; sağlayıcı için kesin ret RFC 6749'un ret kodlarıdır, ağ hatası ve 5xx oturumu korur).
+        Çıkış yalnızca yereldir. Parola değiştirme ve e-posta doğrulama sağlayıcı hesabında gizlenir.
+        - Panel: dönüş `/login/callback` rotasındadır. Token'lar yalnızca panelin kendi oturum kaydında durur;
+          kitaplığın kullanıcı deposu bellektedir ve her işlemden sonra boşaltılır (tek kaynak: sekmeler arası
+          eşitleme iki tür için aynı koddur), `state` ve PKCE doğrulayıcısı `sessionStorage`'dadır, kitaplığın
+          zamanlayıcıyla ve iframe ile yenilemesi kapalıdır (`src/lib/provider.ts`).
+        - Mobil: dönüş adresi `haldus-shop://sign-in`'dir (Expo Go'da `exp://…/--/sign-in`, web'de `/sign-in`);
+          sağlayıcının token ucu oturumla birlikte saklanır (`lib/provider.ts`, `lib/provider-sign-in.ts`).
+        - Sınananlar: iki projede birim testleri ve sahte bir sağlayıcıya karşı etkileşim testleri (mobilde web
+          hedefinde, açılır pencere dahil). Panel ayrıca gerçek backend ve kapsayıcıdaki Keycloak ile tarayıcıda elle
+          denendi: Keycloak'ın giriş sayfasından giriş, doğrulanmış personel adresiyle ortak kaynağa yazma, imzası
+          bozulan erişim token'ının sağlayıcıdan yenilenmesi, çıkış, sağlayıcı açıkken parola ile kayıt.
+          **Mobilde sağlayıcıyla giriş cihazda veya emülatörde denenmedi** (Expo Go OAuth için uygun değildir;
+          bir geliştirme derlemesi gerekir).
+        - Sınırlar: sağlayıcının oturumu kapatılmaz ve token'ı iptal edilmez (çıkış yereldir); kimlik token'ı
+          (`id_token`) kullanılmaz; yalnızca kapsam gönderilir (`audience` / `resource` parametresi isteyen
+          sağlayıcılar yapılandırılamaz); panelde `serverSignIn` için düğme yoktur; panel paketi `oidc-client-ts`'i
+          sağlayıcı ayarlanmamışken de yükler.
     - `Shop:DemoIdentity` açıksa kimlik, doğrulanmadan, başlıklardan okunur (`X-User-Id`, `X-Tenant-Id`,
       `X-User-Roles`). Varsayılan olarak kapalıdır ve **yalnızca geliştirme ortamında açılabilir**: başka ortamda
       uygulama açılmaz. Entegrasyon testleri açar (`ShopFixture`), kimlik doğrulama testleri kapalı haliyle ikinci
@@ -675,7 +700,8 @@ Yapılmayanlar ve nedenleri:
   - Mobil uygulamada (aynı gerekçeyle, **ayrıca onaylanmadı**): yönlendirme genel kurallardaki Expo Router'dır; i18n
     web'deki gibi i18next + react-i18next, cihazın dili `expo-localization` ile okunur; oturum ve dil seçimi
     `expo-secure-store` ile saklanır (tarayıcıda `localStorage`); form kütüphanesi ve test altyapısı yoktur.
-    `expo-localization` ve `expo-secure-store` da onayı alınmamış yeni bağımlılıklardır.
+    `expo-localization` ve `expo-secure-store` da onayı alınmamış yeni bağımlılıklardır. `expo-auth-session`,
+    `expo-web-browser` ve `expo-crypto` ise kullanıcının onayıyla eklendi (yukarıda, "Kimlik sağlayıcı").
   - Mobil uygulama Expo'nun web hedefinde ve Android'de (emülatör, Android 17, Expo Go 56) çalışan backend'e karşı
     doğrulandı: kayıt, alan hatası, ürünler, favori, sepet, e-posta doğrulama, uygulama yeniden başlatılınca
     oturumun güvenli depodan geri gelmesi, çıkış, parola sıfırlama. Emülatör `adb` ile sürüldü (`uiautomator dump`

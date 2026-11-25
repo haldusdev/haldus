@@ -918,9 +918,10 @@ serisinde haftanın günleri ve saat dilimi, şifreli alan, onay zinciri, kullan
 yayın, ULID ve istemcinin verdiği kimlik, bakiyeye karşı tutma, multipart yükleme ve süreli indirme bağlantısı), örnek
 mağaza gerçek kimlik doğrulamaya geçirildi ve kilide dayanan özellikler yük altında ölçüldü. Yapılmayanlar aynı
 belgededir; başlıcaları: mobil uygulama iOS'ta çalıştırılmadı (Android'de emülatörde denendi), mobil uygulamanın
-otomatik ekran testleri yalnızca web hedefinde çalışır, kimlik sağlayıcı (OpenID Connect) girişi henüz yazılmadı
-(paketleri kararlaştırıldı). S3 uyumlu dosya deposu ile SQS, RabbitMQ ve Kafka olay yayıncıları resmi istemci
-paketleriyle, ayrı paketler olarak yazıldı; webhook yayıncısı çekirdektedir.
+otomatik ekran testleri yalnızca web hedefinde çalışır, mobil uygulamada kimlik sağlayıcıyla giriş cihazda denenmedi.
+S3 uyumlu dosya deposu ile SQS, RabbitMQ ve Kafka olay yayıncıları resmi istemci paketleriyle, ayrı paketler olarak
+yazıldı; webhook yayıncısı çekirdektedir. Örnek mağazaya kimlik sağlayıcıyla giriş (OpenID Connect) backend'de, panelde
+ve mobil uygulamada eklendi; backend ve panel kapsayıcıda çalışan Keycloak'a karşı denendi.
 
 Tasarım kararları için [CLAUDE.md](CLAUDE.md), kararların dayandığı araştırma için [reports](reports/)
 klasörüne bakın. İki örnek backend var: tek projeli [mağaza](samples/Haldus.Sample.Shop) ve
