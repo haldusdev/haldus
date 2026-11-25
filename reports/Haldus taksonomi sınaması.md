@@ -64,7 +64,7 @@ durum modeli" kuralı da açılmadı: ek durum eksenleri asıl durumun yanında,
   eşlemeye en yakın biçimde ve yalnızca yazılmış özelliklerle bildirir, generator'dan geçirir ve üretilen kodun
   hatasız derlendiğini doğrular. Aşağıdaki tablo o dosyadaki verinin aynısıdır; sayılar bir testle bağlıdır.
 - **Çalışma:** Derleme, uçların doğru davrandığını göstermez. Tablodaki özelliklerin her biri örnek uygulamalarda
-  gerçek PostgreSQL'e karşı sınanıyor (bugün 432 entegrasyon testi); ama her satırın kendi birleşimi değil.
+  gerçek PostgreSQL'e karşı sınanıyor (bugün 433 entegrasyon testi); ama her satırın kendi birleşimi değil.
   Örnek mağazada bulunmayan birleşimler (ör. iade, abonelik, rezervasyon satırlarının tam hali) yalnızca derleme
   düzeyinde doğrulandı.
 - **Hüküm:** "Temiz" ile "kısmi" arasındaki ayrım benim yorumumdur: önerilen eşlemede adı geçen bir özellik
@@ -284,7 +284,7 @@ sınırları ayrıca [README](../README.md) ve `CLAUDE.md` dosyalarında, özell
 | İstemcinin verdiği metin kimlik (slug) | — | ULID ve istemcinin verdiği `Guid` kimlik sonradan yazıldı; anlamlı metin anahtar için `NaturalKey` veya `MapStore` vardır |
 | "Uzatma kancaları" | — | Araştırmanın ilk sürüm listesinde adı geçiyor, tanımı yok |
 | İki adımlı doğrulama; rol yönetimi; birden çok kimlik sağlayıcı | — | Gerçek kimlik doğrulama sonradan yazıldı: parola ile giriş, sunucuda oturum ve çıkış, kodla parola sıfırlama ve e-posta doğrulama, hesap kilidi, hız sınırı; ardından kimlik sağlayıcıyla giriş (OpenID Connect: backend'de `JwtBearer` ve `OpenIdConnect`, panelde `oidc-client-ts`, mobilde `expo-auth-session`). Backend ve panel kapsayıcıdaki Keycloak'a karşı denendi; mobildeki giriş cihazda tamamlanamadı, başka sağlayıcılar denenmedi |
-| Mobil ekranların cihazda otomatik testi | — | Arayüzlerin testleri paket eklenmeden yazıldı: oturum ve istek mantığı (Node'un yerleşik test çalıştırıcısı; panel 376, mobil 238 test), panelin bileşenlerinin sunucu tarafı çizimle denetimi ve gerçek bir tarayıcının DevTools protokolüyle sürüldüğü etkileşim testleri (`pnpm test:e2e`; panel 49, mobil 34 senaryo). Mobilde sürülen uygulamanın web hedefidir; cihaza özgü olanlar (güvenli depo, klavye, yerel bileşenler) yalnızca Android emülatöründe elle denendi. Etkileşim testleri API'nin bir taklidiyle konuşur; panelin ve uygulamanın gerçek backend'le birlikte çalışması elle doğrulandı |
+| Mobil ekranların cihazda otomatik testi | — | Arayüzlerin testleri paket eklenmeden yazıldı: oturum ve istek mantığı (Node'un yerleşik test çalıştırıcısı; panel 376, mobil 239 test), panelin bileşenlerinin sunucu tarafı çizimle denetimi ve gerçek bir tarayıcının DevTools protokolüyle sürüldüğü etkileşim testleri (`pnpm test:e2e`; panel 49, mobil 34 senaryo). Mobilde sürülen uygulamanın web hedefidir; cihaza özgü olanlar (güvenli depo, klavye, yerel bileşenler) yalnızca Android emülatöründe elle denendi. Etkileşim testleri API'nin bir taklidiyle konuşur; panelin ve uygulamanın gerçek backend'le birlikte çalışması elle doğrulandı |
 
 ## Yük altında ölçüm
 

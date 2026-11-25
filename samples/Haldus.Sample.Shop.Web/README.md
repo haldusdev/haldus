@@ -124,9 +124,9 @@ ve bu kuralın dışındadır: her hesap kendi siparişlerini yazar.
 Bilinen sınırlar: rol tektir ve yapılandırmadan gelir. İki adımlı doğrulama, e-posta değiştirme ve hesap silme
 yoktur. Kimlik sağlayıcıyla girişin sınırları:
 
-- **Gerçek bir sağlayıcıya karşı denenmedi.** Akış, testlerde panelle aynı adresten sunulan sahte bir sağlayıcıya
-  karşı, gerçek `oidc-client-ts` ile sınanır (aşağıda); Keycloak, Entra ID, Auth0 gibi bir ürünle ve gerçek backend'le
-  uçtan uca çalıştırılmadı.
+- **Yalnızca Keycloak'a karşı denendi.** Akış, testlerde panelle aynı adresten sunulan sahte bir sağlayıcıya karşı,
+  gerçek `oidc-client-ts` ile sınanır (aşağıda) ve gerçek backend ile kapsayıcıda çalışan Keycloak'a karşı tarayıcıda
+  elle denendi (aşağıda, "Elle doğrulama"). Entra ID, Auth0 gibi başka ürünlerle çalıştırılmadı.
 - Çıkış sağlayıcının çıkış ucunu (`end_session_endpoint`) çağırmaz ve token'ları sağlayıcıda iptal etmez: kullanıcının
   sağlayıcıdaki oturumu açık kalır (düğmeye yeniden basınca parola sorulmadan girilebilir) ve erişim token'ı süresi
   dolana kadar geçerlidir. Backend'de de bu oturumlar için kapatılacak bir kayıt yoktur.
@@ -235,5 +235,9 @@ Bu seçimler kullanıcıya sorulmadan, önerilen seçenekle verildi (deponun `CL
 - **Elle doğrulama:** panel, çalışan backend'e karşı tarayıcıda denendi. Güvenlik incelemelerinin düzeltmelerinden
   sonraki son turda: e-postasını doğrulamamış personel adresi ürün oluşturamadı (backend'in Türkçe 403 mesajı
   pencerede göründü), "Yeniden gönder" yeni bir kod üretti, küçük harf ve tireyle yazılan kod hesabı doğruladı ve
-  ardından ürün oluşturulabildi. Kimlik sağlayıcıyla giriş bu turun dışındadır: gerçek bir sağlayıcıya ve gerçek
-  backend'e karşı elle denenmedi; yalnızca yukarıdaki testlerle, sahte sağlayıcıya karşı çalıştırıldı.
+  ardından ürün oluşturulabildi. Kimlik sağlayıcıyla giriş, gerçek backend ve kapsayıcıda çalışan Keycloak (26.4) ile
+  ayrıca denendi; sağlayıcı girişinin son güvenlik düzeltmelerinden sonra yinelenen turda: giriş ekranındaki düğme
+  Keycloak'ın giriş sayfasına götürdü (PKCE, `S256`), dönüşte istenen sayfa sağlayıcı oturumuyla açıldı, sağlayıcının
+  doğruladığı personel adresiyle ürün oluşturuldu, "her yerden çık"tan sonra eski erişim token'ı 401 aldı ve panel
+  token'ı Keycloak'tan yenileyip devam etti, hesap menüsünde parola değiştirme görünmedi, çıkış oturumu sildi ve
+  sağlayıcı açıkken parola ile kayıt çalıştı.

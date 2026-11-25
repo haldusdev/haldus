@@ -79,7 +79,13 @@ public sealed class ExternalSignInTests(ShopFixture fixture)
             ["no subject"] = provider.AccessToken(subject: null),
 
             // Verildiği anı söylemeyen token ilk istekten reddedilir ("her yerden çık" o ana dayanır).
-            ["no issue time"] = provider.AccessToken(subject, timestamps: false),
+            ["no issue time"] = provider.AccessToken(subject, iat: false, nbf: false),
+
+            // Başka bir alan onun yerine geçmez: `nbf` sabit ya da geriye çekilmiş olabilir.
+            ["only a not-before time"] = provider.AccessToken(subject, iat: false),
+
+            // Kabul edilen saat farkından daha ileride verilmiş görünen token (doğrulayıcı `iat`'e bakmaz).
+            ["issued too far ahead"] = provider.AccessToken(subject, issuedIn: TimeSpan.FromMinutes(10), nbf: false),
         };
 
         foreach (var (reason, token) in rejected)
@@ -149,11 +155,31 @@ public sealed class ExternalSignInTests(ShopFixture fixture)
         Assert.Equal(HttpStatusCode.Unauthorized, (await SendAsync(client, HttpMethod.Get, "/auth/me", token: token)).StatusCode);
 
         // Sınır, isteği yapan token'ın verildiği andır; sağlayıcının ondan sonra verdiği token geçer.
-        Assert.Equal(HttpStatusCode.OK, (await SendAsync(client, HttpMethod.Get, "/auth/me", token: provider.AccessToken(subject, issuedIn: TimeSpan.FromSeconds(32)))).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await SendAsync(client, HttpMethod.Get, "/auth/me", token: provider.AccessToken(subject, issuedIn: TimeSpan.FromSeconds(40)))).StatusCode);
+    }
 
-        // Sınır geri alınmaz: saati doğru bir yoldan yinelenen çıkış, ilerideki sınırı öne çekmez.
-        Assert.Equal(HttpStatusCode.NoContent, (await SendAsync(client, HttpMethod.Post, "/auth/logout-all", token: provider.AccessToken(subject, issuedIn: TimeSpan.FromSeconds(32)))).StatusCode);
-        Assert.Equal(HttpStatusCode.Unauthorized, (await SendAsync(client, HttpMethod.Get, "/auth/me", token: provider.AccessToken(subject, issuedIn: TimeSpan.FromSeconds(31)))).StatusCode);
+    [Fact]
+    public async Task SignOutEverywhere_NeverMovesTheLimitBack()
+    {
+        using var provider = new FakeProvider();
+        await using var factory = CreateFactory(
+            provider,
+            ("Shop:Auth:Oidc:Authority", FakeProvider.Issuer),
+            ("Shop:Auth:Oidc:ClientId", FakeProvider.ServerClient),
+            ("Shop:Auth:Oidc:ClientSecret", FakeProvider.ServerSecret));
+        using var client = factory.CreateClient();
+        using var browser = factory.CreateClient(new WebApplicationFactoryClientOptions { BaseAddress = new Uri("https://localhost"), AllowAutoRedirect = false, HandleCookies = true });
+        var subject = NewSubject();
+
+        // Saati ileride bir yoldan gelen çıkış sınırı ileriye koyar.
+        var ahead = provider.AccessToken(subject, issuedIn: TimeSpan.FromSeconds(30));
+        Assert.Equal(HttpStatusCode.NoContent, (await SendAsync(client, HttpMethod.Post, "/auth/logout-all", token: ahead)).StatusCode);
+
+        // Aynı kişi çerezle girip (bizim saatimizle) yeniden "her yerden çık" der: sınır "şimdi"ye geri çekilmez;
+        // çekilseydi, ilk çıkışın öldürdüğü token'lar (aşağıdaki gibi, arada verilmiş görünenler) yeniden geçerdi.
+        Assert.Equal(HttpStatusCode.Redirect, (await ServerSignInAsync(browser, provider, subject, NewEmail())).StatusCode);
+        Assert.Equal(HttpStatusCode.NoContent, (await SendAsync(browser, HttpMethod.Post, "/auth/logout-all", ownRequest: true)).StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await SendAsync(client, HttpMethod.Get, "/auth/me", token: provider.AccessToken(subject, issuedIn: TimeSpan.FromSeconds(15)))).StatusCode);
     }
 
     [Fact]
@@ -356,6 +382,12 @@ public sealed class ExternalSignInTests(ShopFixture fixture)
                 ("Shop:Auth:Oidc:Authority", "https://IDP.test.:443/"), ("Shop:Auth:Oidc:ClientId", "shop-server"), ("Shop:Auth:Oidc:ClientSecret", "secret"),
             ],
 
+            // Öteki bölümün istemcisi de bir istemcidir, sağlayıcının adresi başka yazılmış olsa bile.
+            [
+                ("Shop:Auth:Jwt:Authority", "https://idp.test"), ("Shop:Auth:Jwt:Audience", "shop-server"),
+                ("Shop:Auth:Oidc:Authority", "https://login.idp.test"), ("Shop:Auth:Oidc:ClientId", "shop-server"), ("Shop:Auth:Oidc:ClientSecret", "secret"),
+            ],
+
             // Çerez oturumunun ömrü sınırlıdır.
             [
                 ("Shop:Auth:Oidc:Authority", "https://idp.test"), ("Shop:Auth:Oidc:ClientId", "shop-server"), ("Shop:Auth:Oidc:ClientSecret", "secret"),
@@ -426,13 +458,35 @@ public sealed class ExternalSignInTests(ShopFixture fixture)
         var written = await SendAsync(browser, HttpMethod.Post, "/orders", new { customerName = "Ada" }, idempotencyKey: Guid.NewGuid().ToString(), ownRequest: true);
         Assert.Equal(HttpStatusCode.Created, written.StatusCode);
 
-        // 4. Çerez sunucudaki bir oturuma bağlıdır: oturum kapatılınca (burada "her yerden çık" ile) tarayıcıda
-        // duran çerez de artık kimlik değildir. Kopyalanmış bir çerez sekiz saat boyunca geçerli kalmaz.
-        Assert.Equal(HttpStatusCode.NoContent, (await SendAsync(browser, HttpMethod.Post, "/auth/logout-all", ownRequest: true)).StatusCode);
+        // 4. Çıkış ucu çerezi sildirir ve oturumu sunucuda da kapatır: çıkıştan önce kopyalanmış bir çerez de artık
+        // kimlik değildir (ve sunulduğunda tarayıcıdan sildirilir).
+        var copied = string.Join("; ", signedIn.Headers.GetValues("Set-Cookie")
+            .Select(value => value.Split(';')[0])
+            .Where(value => value.StartsWith(ExternalSignIn.CookieName, StringComparison.Ordinal) && !value.EndsWith('=')));
+        using var thief = factory.CreateClient(new WebApplicationFactoryClientOptions { BaseAddress = new Uri("https://localhost"), AllowAutoRedirect = false, HandleCookies = false });
+
+        async Task<HttpResponseMessage> ReplayAsync()
+        {
+            using var request = new HttpRequestMessage(HttpMethod.Get, "/auth/me");
+            request.Headers.Add("Cookie", copied);
+            return await thief.SendAsync(request, CancellationToken);
+        }
+
+        Assert.Equal(HttpStatusCode.OK, (await ReplayAsync()).StatusCode);
+
+        var signedOut = await SendAsync(browser, HttpMethod.Post, "/auth/oidc/sign-out", ownRequest: true);
+        Assert.True(signedOut.IsSuccessStatusCode);
+        Assert.Contains(signedOut.Headers.GetValues("Set-Cookie"), value => value.StartsWith($"{ExternalSignIn.CookieName}=;", StringComparison.Ordinal));
         Assert.Equal(HttpStatusCode.Unauthorized, (await SendAsync(browser, HttpMethod.Get, "/auth/me")).StatusCode);
 
-        // 5. Çıkış ucu çerezi siler ve oturumu kapatır.
-        Assert.True((await SendAsync(browser, HttpMethod.Post, "/auth/oidc/sign-out", ownRequest: true)).IsSuccessStatusCode);
+        var replayed = await ReplayAsync();
+        Assert.Equal(HttpStatusCode.Unauthorized, replayed.StatusCode);
+        Assert.Contains(replayed.Headers.GetValues("Set-Cookie"), value => value.StartsWith($"{ExternalSignIn.CookieName}=;", StringComparison.Ordinal));
+
+        // 5. "Her yerden çık" da çerezin oturumunu kapatır: çerez sekiz saat boyunca geçerli kalmaz.
+        Assert.Equal(HttpStatusCode.Redirect, (await ServerSignInAsync(browser, provider, NewSubject(), NewEmail())).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await SendAsync(browser, HttpMethod.Get, "/auth/me")).StatusCode);
+        Assert.Equal(HttpStatusCode.NoContent, (await SendAsync(browser, HttpMethod.Post, "/auth/logout-all", ownRequest: true)).StatusCode);
         Assert.Equal(HttpStatusCode.Unauthorized, (await SendAsync(browser, HttpMethod.Get, "/auth/me")).StatusCode);
     }
 
@@ -587,6 +641,16 @@ public sealed class ExternalSignInTests(ShopFixture fixture)
                 services.Configure<OpenIdConnectOptions>(ExternalSignIn.OidcScheme, options => options.BackchannelHttpHandler = provider);
             }));
 
+    /// <summary>Yönlendirmeli girişi baştan sona yapar; dönen, sağlayıcıdan dönüş isteğinin yanıtıdır.</summary>
+    private static async Task<HttpResponseMessage> ServerSignInAsync(HttpClient browser, FakeProvider provider, string subject, string email)
+    {
+        var challenge = await SendAsync(browser, HttpMethod.Get, "/auth/oidc/sign-in");
+        var query = HttpUtility.ParseQueryString(challenge.Headers.Location!.Query);
+        var code = provider.Authorize(query["nonce"]!, query["code_challenge"]!, subject, email);
+        using var callback = new FormUrlEncodedContent(new Dictionary<string, string> { ["code"] = code, ["state"] = query["state"]! });
+        return await browser.PostAsync("/auth/oidc/callback", callback, CancellationToken);
+    }
+
     private static string NewEmail() => $"user-{Guid.NewGuid():N}@example.com";
 
     private static string NewSubject() => $"subject-{Guid.NewGuid():N}";
@@ -656,8 +720,9 @@ public sealed class ExternalSignInTests(ShopFixture fixture)
             TimeSpan? expiresIn = null,
             RSA? key = null,
             TimeSpan? issuedIn = null,
-            bool timestamps = true) =>
-            Sign(subject, email, emailVerified, audience ?? ApiAudience, issuer ?? Issuer, expiresIn ?? TimeSpan.FromMinutes(10), key ?? _key, nonce: null, issuedIn ?? TimeSpan.Zero, timestamps);
+            bool iat = true,
+            bool nbf = true) =>
+            Sign(subject, email, emailVerified, audience ?? ApiAudience, issuer ?? Issuer, expiresIn ?? TimeSpan.FromMinutes(20), key ?? _key, nonce: null, issuedIn ?? TimeSpan.Zero, iat, nbf);
 
         /// <summary>Kullanıcının sağlayıcıda giriş yaptığını ve backend'e döneceği kodu aldığını varsayar.</summary>
         public string Authorize(string nonce, string challenge, string subject, string email)
@@ -731,7 +796,7 @@ public sealed class ExternalSignInTests(ShopFixture fixture)
                         token_type = "Bearer",
                         access_token = Convert.ToHexStringLower(RandomNumberGenerator.GetBytes(16)),
                         expires_in = 600,
-                        id_token = Sign(granted.Subject, granted.Email, emailVerified: true, ServerClient, Issuer, TimeSpan.FromMinutes(10), _key, granted.Nonce, TimeSpan.Zero, timestamps: true),
+                        id_token = Sign(granted.Subject, granted.Email, emailVerified: true, ServerClient, Issuer, TimeSpan.FromMinutes(10), _key, granted.Nonce, TimeSpan.Zero, iat: true, nbf: true),
                     });
 
                 default:
@@ -750,7 +815,7 @@ public sealed class ExternalSignInTests(ShopFixture fixture)
         }
 
         private static string Sign(
-            string? subject, string? email, bool emailVerified, string audience, string issuer, TimeSpan expiresIn, RSA key, string? nonce, TimeSpan issuedIn, bool timestamps)
+            string? subject, string? email, bool emailVerified, string audience, string issuer, TimeSpan expiresIn, RSA key, string? nonce, TimeSpan issuedIn, bool iat, bool nbf)
         {
             var claims = new Dictionary<string, object>();
 
@@ -771,7 +836,7 @@ public sealed class ExternalSignInTests(ShopFixture fixture)
             }
 
             // Token şimdi verilmiştir (saati ileride bir sağlayıcıda: biraz sonra); süresi dolmuş bir örnek istenirse
-            // geçmişte verilmiş olur. `timestamps` kapalıysa token verildiği anı hiç söylemez (`iat` ve `nbf` yok).
+            // geçmişte verilmiş olur. `iat` / `nbf` kapalıysa token o alanı taşımaz.
             var now = DateTime.UtcNow;
             var expires = now + expiresIn;
             var issued = expires > now ? now + issuedIn : expires.AddMinutes(-20);
@@ -781,8 +846,8 @@ public sealed class ExternalSignInTests(ShopFixture fixture)
                 Issuer = issuer,
                 Audience = audience,
                 Claims = claims,
-                IssuedAt = timestamps ? issued : null,
-                NotBefore = timestamps ? issued : null,
+                IssuedAt = iat ? issued : null,
+                NotBefore = nbf ? issued : null,
                 Expires = expires,
                 SigningCredentials = new SigningCredentials(new RsaSecurityKey(key) { KeyId = KeyId }, SecurityAlgorithms.RsaSha256),
             });

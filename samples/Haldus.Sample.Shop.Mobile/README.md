@@ -133,8 +133,13 @@ dönüş bir derin bağlantıdır, Expo Router onu da açar ve var olmayan bir y
 - Kimlik token'ı (`id_token`) doğrulanmaz ve kullanılmaz; hesabın kim olduğunu backend söyler. `nonce` gönderilmez.
 - Sağlayıcının token ucu oturumla birlikte saklanır; sağlayıcı ucunu taşırsa oturum yenilenemez ve yeniden giriş
   gerekir. Backend'in sunduğu sağlayıcı değişirse eski oturum ancak yenileme reddedilince ya da elle çıkışla biter.
-- Yenileme başarılı olduğu halde backend yeni token'ı da reddederse (ör. hesap backend'de kapatıldı) oturum
-  kendiliğinden kapanmaz; istekler hata verir ve kullanıcı elle çıkar. Parola oturumunda da kural aynıdır.
+- Yenileme başarılı olduğu halde backend yeni token'ı da reddederse (ör. sağlayıcıyla giriş backend'de kapatıldı)
+  sağlayıcı oturumu kapatılır ve giriş ekranına dönülür; yoksa her istek sağlayıcıda bir yenileme token'ı harcardı.
+- Sağlayıcının adresi ve keşif belgesinin söylediği yetkilendirme ve token uçları `https` olmalıdır. Düz `http`
+  yalnızca cihazın kendisinde (`localhost`, `127.0.0.1`) ve, yalnızca geliştirme derlemesinde, Android emülatörünün
+  bilgisayar adresinde (`10.0.2.2`) kabul edilir; kullanıcı bilgisi taşıyan adres (`http://localhost:1@başka.sunucu`)
+  hiç kabul edilmez. Saklı token ucu her yenilemede yeniden denetlenir: kurala uymayan bir uç taşıyan eski oturum
+  yenilenmez, biter.
 - Güvenli depo yaklaşık 2 KB'tan büyük değerleri her platformda kabul etmez; çok sayıda claim taşıyan büyük bir
   erişim token'ı iOS'ta saklanamayabilir.
 - Tarayıcıda iki sekme aynı anda yenilerse ve sağlayıcı yenileme token'ını her kullanımda değiştiriyorsa ikinci sekme

@@ -60,8 +60,18 @@ export function providerRedirectUri(): string {
   return AuthSession.makeRedirectUri({ native: 'haldus-shop://sign-in', path: 'sign-in' });
 }
 
+// Düz HTTP'nin kabul edildiği adresler. Cihazın kendisi her derlemede güvenlidir (istek cihazdan çıkmaz). Android
+// emülatörünün geliştirme bilgisayarı için kullandığı `10.0.2.2` ise gerçek bir cihazda sıradan bir ağ adresidir; yalnızca
+// geliştirme derlemesinde (Expo Go, development build) kabul edilir.
+const LOOPBACK = ['localhost', '127.0.0.1', '[::1]'];
+const EMULATOR_HOST = '10.0.2.2';
+
+function isDevelopmentBuild(): boolean {
+  return typeof __DEV__ !== 'undefined' && __DEV__;
+}
+
 /**
- * Adres HTTPS mi, ya da yalnızca cihazın kendisine (veya emülatörün bilgisayarına) giden bir geliştirme adresi mi?
+ * Adres HTTPS mi, ya da yalnızca cihazın kendisine (geliştirmede: emülatörün bilgisayarına) giden bir adres mi?
  *
  * Sunucu adı, kendisinden sonra yalnızca bağlantı noktası ve yol gelebilecek biçimde okunur. Kullanıcı bilgisi taşıyan
  * adres (`http://localhost:1@evil.test`) hiç kabul edilmez: orada `localhost` sunucu değil kullanıcı adıdır ve istek
@@ -74,9 +84,12 @@ function isTrustworthy(address: string): boolean {
     return false;
   }
 
+  const host = match[2].toLowerCase();
+
   return (
     match[1].toLowerCase() === 'https' ||
-    ['localhost', '127.0.0.1', '10.0.2.2', '[::1]'].includes(match[2].toLowerCase())
+    LOOPBACK.includes(host) ||
+    (host === EMULATOR_HOST && isDevelopmentBuild())
   );
 }
 
@@ -195,6 +208,12 @@ export async function renewProviderTokens(
   link: ProviderLink,
   current: string
 ): Promise<{ accessToken: string; refreshToken: string }> {
+  // Token ucu oturumla birlikte saklanır ve girişte denetlenmiştir; ama bu denetimden önce yazılmış bir kayıt (ya da
+  // geliştirme derlemesinden kalan bir emülatör adresi) yenileme token'ını şifresiz gönderirdi. Öyle bir oturum biter.
+  if (!isTrustworthy(link.tokenEndpoint)) {
+    throw new ProviderRejectionError('insecure_token_endpoint');
+  }
+
   let accessToken: unknown;
   let refreshToken: unknown;
   try {

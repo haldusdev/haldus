@@ -37,7 +37,14 @@ describe('the address of the provider', () => {
     assert.equal(calls.length, 0);
   });
 
-  it('accepts plain http for the device itself and the emulator host', async () => {
+  it('accepts plain http for the device itself and, in a development build, the emulator host', async (t) => {
+    const scope = globalThis as { __DEV__?: boolean };
+    const before = scope.__DEV__;
+    t.after(() => {
+      scope.__DEV__ = before;
+    });
+
+    scope.__DEV__ = true;
     for (const authority of [
       'http://localhost:8080/realms/shop',
       'http://10.0.2.2:8080/realms/shop',
@@ -47,6 +54,27 @@ describe('the address of the provider', () => {
       const prompt = await prepareProviderSignIn({ ...provider, authority });
       assert.equal(prompt.tokenEndpoint, metadata.token_endpoint);
     }
+
+    // Yayınlanan derlemede `10.0.2.2` sıradan bir ağ adresidir; cihazın kendisi yine kabul edilir.
+    scope.__DEV__ = false;
+    respondWith(() => json(200, { ...metadata, issuer: 'http://10.0.2.2:8080/realms/shop' }));
+    await assert.rejects(
+      prepareProviderSignIn({ ...provider, authority: 'http://10.0.2.2:8080/realms/shop' }),
+      ProviderSignInError
+    );
+
+    respondWith(() => json(200, { ...metadata, issuer: 'http://localhost:8080/realms/shop' }));
+    await prepareProviderSignIn({ ...provider, authority: 'http://localhost:8080/realms/shop' });
+  });
+
+  it('does not send the refresh token to a stored endpoint that is not https', async () => {
+    respondWith(() => json(200, { access_token: 'new', refresh_token: 'next' }));
+
+    await assert.rejects(
+      renewProviderTokens({ ...link, tokenEndpoint: 'http://id.test/connect/token' }, 'refresh-1'),
+      ProviderRejectionError
+    );
+    assert.equal(calls.length, 0);
   });
 
   it('reads the host as the server does, not from the user information in front of it', async () => {

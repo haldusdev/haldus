@@ -1065,7 +1065,7 @@ public static partial class AuthEndpoints
         db.Set<ShopAccount>().AsNoTracking().Where(account => account.ExternalIssuer == null);
 
     // Token doğrulayıcının kabul ettiği saat farkıyla aynıdır (TokenValidationParameters.DefaultClockSkew).
-    private static readonly TimeSpan MaxClockSkew = TimeSpan.FromMinutes(5);
+    internal static readonly TimeSpan MaxClockSkew = TimeSpan.FromMinutes(5);
 
     /// <summary>Çerezin oturumunu değiştiren, giriş istemeyen uç: çerezle gelen istek başlığı burada da taşımalıdır.</summary>
     internal sealed class ChangesSession;

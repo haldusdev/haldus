@@ -581,10 +581,15 @@ Yapılmayanlar ve nedenleri:
         (`…@external.invalid`) ve doğrulanmamış olarak açılır. Yer tutucu adres rastgeledir (kimlikten türetilseydi,
         kişinin sağlayıcıdaki kimliğini bilen biri o adresle önceden kayıt olup hesabının açılmasını engelleyebilirdi).
         Hesap açılırken yalnızca iki çakışma karşılanır (aynı kimliğin eşzamanlı ilk isteği; adresin bu arada
-        alınması, o zaman hesap adressiz açılır); başka bir hata yutulmaz, istek hata verir ve sonraki istek yeniden
-        dener. Adresini ilk gelişinde alamamış hesap (erişim token'ı adresi taşımıyordu, adres o sırada başkasındaydı)
-        doğrulanmış adres sonradan gelirse onu alır; yoksa sonsuza kadar doğrulanmamış kalırdı. Bir kez yazılan adres
-        değişmez.
+        alınması, o zaman hesap adressiz açılır); başka bir hata yutulmaz, istek hata verir (yönlendirmeli girişte de
+        400 ile örtülmez, 500'dür) ve sonraki istek yeniden dener. Adresini ilk gelişinde alamamış hesap (erişim
+        token'ı adresi taşımıyordu, adres o sırada başkasındaydı) doğrulanmış adres sonradan gelirse onu alır; yoksa
+        sonsuza kadar doğrulanmamış kalırdı. Bir kez yazılan adres değişmez. **Bilinen sınır (bilerek):** adres başka
+        bir hesaptaysa, o hesap adresi hiç doğrulamamış bir parola hesabı olsa da, dış kimlik onu alamaz ve adressiz
+        kalır; personel adresiyle önceden parola hesabı açan biri, o kişinin sağlayıcıyla gelince rol almasını
+        engelleyebilir (kendisi rol alamaz). Doğrulanmamış hesabın adresini elinden almak, adresini henüz
+        doğrulamamış gerçek sahibini kendi verisinden ederdi; ikisinden bu seçildi (ayrıca onaylanmadı). Adresin
+        sahibi parola hesabını "parolamı unuttum" ile geri alabilir.
       - **Sağlayıcı hesabının parolası yoktur ve parola uçlarından bir parola da edinemez.** Giriş, "parolamı
         unuttum" ve sıfırlama uçları öyle bir hesabı hiç yokmuş gibi yanıtlar (`PasswordAccounts`); parola değiştirme,
         e-posta doğrulama ve kodu yeniden gönderme 409 döner (`ManagedByProvider`). İlk yazımda sıfırlama ucu hesaba
@@ -600,7 +605,9 @@ Yapılmayanlar ve nedenleri:
         de dış hesap için kayıttaki değeri değil, isteğin taşıdığı doğrulama ve rol bilgisini döndürür. İki
         bölüm aynı sağlayıcıyı gösteriyorsa ayar ikisinde aynı olmalıdır (adresler yazılışlarıyla değil anlamlarıyla
         karşılaştırılır); değilse uygulama açılmaz. `RequireVerifiedEmail` açıkken adresine güvenilmeyen bir sağlayıcı
-        da uygulamayı açtırmaz: hesapları adreslerini hiçbir yoldan doğrulayamazdı.
+        da uygulamayı açtırmaz: hesapları adreslerini hiçbir yoldan doğrulayamazdı. Açılış denetiminin göremediği
+        durum: sağlayıcıya güvenilir ama token doğrulanmış bir adres taşımaz (erişim token'ları çoğu zaman taşımaz);
+        öyle bir hesap açılırken uyarı günlüğe yazılır ve hesap, adres gelene kadar kimlik uçlarının dışında kalır.
       - İstemciler neyin sunulduğunu `GET /auth/config` ucundan okur (gizli bir şey taşımaz).
       - Oturum denetimi (`sid`) yalnızca kendi token'larımız içindir; sağlayıcının token'ının ömrünü ve iptalini
         sağlayıcı yönetir. `RequireVerifiedEmail` her yoldan giriş için geçerlidir.
@@ -615,21 +622,25 @@ Yapılmayanlar ve nedenleri:
         kabul etmez; erişim token'ında `email` / `email_verified` yoksa hesap adressiz açılır (sonradan gelirse yazılır).
       - Çıkış ve token'ın türü (incelemede sınır olarak not edilmiş, sonra düzeltilmiştir):
         - `/auth/logout-all` sağlayıcının o ana kadar verdiği **erişim** token'larını da geçersiz kılar: hesap o anı
-          taşır (`ShopAccount.SignedOutEverywhereAt`) ve o andan önce verilmiş token (`iat`, yoksa `nbf`; kesirli de
-          yazılabilir) reddedilir. Verildiği anı hiç söylemeyen token ilk istekten reddedilir (yoksa hesap çalışır
-          görünür ve ilk "her yerden çık"tan sonra kalıcı olarak kilitlenirdi; uyumsuz sağlayıcı kurulurken fark
-          edilir). Sınır en az, isteği yapan token'ın verildiği andır (saati ileride bir sağlayıcının token'ı da ölür;
-          beş dakikalık saat farkıyla sınırlı) ve geri alınmaz. Sağlayıcıda yeniden alınan token geçer. **Bu,
-          sağlayıcıdaki oturumu kapatmaz:** yenileme token'ı tutan başka bir cihaz yeni bir erişim token'ı alıp geri
-          gelir; onu ancak sağlayıcı iptal eder. Saat farkının bilinen etkisi: sağlayıcının saati gerideyse, çıkıştan
-          sonra o fark kadar süre içinde aldığı token'lar da reddedilir (kullanıcı o süre dolana kadar giremez).
-        - `Audience` bir istemcinin kimliği olamaz (uygulama açılmaz; sondaki eğik çizgi sayılmaz): kimlik token'ının
+          taşır (`ShopAccount.SignedOutEverywhereAt`) ve o andan önce verilmiş token (`iat`) reddedilir. `iat`
+          taşımayan token ilk istekten reddedilir (yoksa hesap çalışır görünür ve ilk "her yerden çık"tan sonra
+          kalıcı olarak kilitlenirdi; uyumsuz sağlayıcı kurulurken fark edilir). `nbf` onun yerine geçmez: sabit veya
+          geriye çekilmiş bir `nbf` aynı kilitlenmeyi getirirdi (ikinci incelemede çıktı). Beş dakikadan daha ileride
+          verilmiş görünen token da reddedilir (doğrulayıcı `iat`'e bakmaz; öyle bir token her sınırın üstünde
+          kalırdı). Sınır en az, isteği yapan token'ın verildiği andır (saati ileride bir sağlayıcının o token'ı da
+          ölür) ve geri alınmaz. Sağlayıcıda yeniden alınan token geçer. **Bu, sağlayıcıdaki oturumu kapatmaz:**
+          yenileme token'ı tutan başka bir cihaz yeni bir erişim token'ı alıp geri gelir; onu ancak sağlayıcı iptal
+          eder. Saat farkının bilinen etkisi iki yönlüdür ve farkla sınırlıdır: sağlayıcının saati gerideyse, çıkıştan
+          sonra o fark kadar süre içinde aldığı token'lar da reddedilir (kullanıcı o süre dolana kadar giremez);
+          ilerideyse, çıkıştan hemen önce o fark kadar süre içinde verdiği başka token'lar sınırın üstünde kalabilir.
+        - `Audience` bir istemcinin kimliği olamaz (uygulama açılmaz; sondaki eğik çizgi sayılmaz, öteki bölümün
+          istemcisi de sayılır): kimlik token'ının
           audience'ı istemcinin kimliğidir ve öyle bir ayarda kimlik token'ı da erişim token'ı sayılırdı. Token'ın
           türü (`typ: at+jwt`) ayrıca istenmez: Keycloak erişim token'ını `JWT` türüyle verir.
         - Çerez oturumunun ömrü ayardır (`Shop:Auth:Oidc:SessionMinutes`, varsayılan 480). Sağlayıcıdaki oturum
           kapandığında backend'e haber gelmez: sağlayıcının ön kanal çıkışı `SameSite=Lax` çerezle çalışmaz, arka
           kanal çıkışı (imzalı çıkış token'ının doğrulanması) yazılmadı. Çerez en geç bu süre sonunda biter; süre
-          kısaltılarak daraltılır.
+          kısaltılarak daraltılır. Oturumu kapanmış bir çerez sunulduğunda tarayıcıdan sildirilir.
         - Örnekte migration yoktur: `ShopAccount`'a eklenen kolonlar (`ExternalIssuer`, `SignedOutEverywhereAt`...)
           `Shop:CreateDatabase` ile daha önce oluşturulmuş bir veritabanına eklenmez; o veritabanı yeniden oluşturulur.
       - **İstemciler** (kullanıcının onayladığı paketlerle; panelde `oidc-client-ts`, mobilde `expo-auth-session`).
@@ -648,14 +659,18 @@ Yapılmayanlar ve nedenleri:
           zamanlayıcıyla ve iframe ile yenilemesi kapalıdır (`src/lib/provider.ts`).
         - Mobil: dönüş adresi `haldus-shop://sign-in`'dir (Expo Go'da `exp://…/--/sign-in`, web'de `/sign-in`);
           sağlayıcının token ucu oturumla birlikte saklanır (`lib/provider.ts`, `lib/provider-sign-in.ts`).
-          Sağlayıcının adresi HTTPS olmalıdır (düz HTTP yalnızca `localhost` ve emülatörün `10.0.2.2` adresinde;
-          kullanıcı bilgisi taşıyan adres, `http://localhost:1@başka.sunucu`, hiç kabul edilmez; keşif belgesinin
-          söylediği yetkilendirme ve token uçları da aynı kuraldan geçer) ve
+          Sağlayıcının adresi HTTPS olmalıdır (düz HTTP yalnızca cihazın kendisinde, `localhost`, ve yalnızca
+          geliştirme derlemesinde emülatörün `10.0.2.2` adresinde; kullanıcı bilgisi taşıyan adres,
+          `http://localhost:1@başka.sunucu`, hiç kabul edilmez; keşif belgesinin söylediği yetkilendirme ve token
+          uçları da aynı kuraldan geçer, saklı token ucu her yenilemede yeniden denetlenir) ve
           keşif belgesinin `issuer` alanı istenen adresle aynı olmalıdır.
         - Sınananlar: iki projede birim testleri ve sahte bir sağlayıcıya karşı etkileşim testleri (mobilde web
           hedefinde, açılır pencere dahil). Panel ayrıca gerçek backend ve kapsayıcıdaki Keycloak ile tarayıcıda elle
           denendi: Keycloak'ın giriş sayfasından giriş, doğrulanmış personel adresiyle ortak kaynağa yazma, imzası
-          bozulan erişim token'ının sağlayıcıdan yenilenmesi, çıkış, sağlayıcı açıkken parola ile kayıt.
+          bozulan erişim token'ının sağlayıcıdan yenilenmesi, çıkış, sağlayıcı açıkken parola ile kayıt. İncelemelerin
+          düzeltmelerinden (`0d7eade`) sonra tur yinelendi: giriş, personel adresiyle ürün oluşturma, "her yerden
+          çık"tan sonra eski token'ın 401 alması ve panelin token'ı Keycloak'tan yenileyip sürmesi, çıkış, parola ile
+          kayıt. (Keycloak'ın erişim token'ı `iat` taşır; türü `JWT`'dir.)
           Mobilde emülatörde (Expo Go, Keycloak ve backend `adb reverse` ile) görülenler: giriş ekranında düğmenin
           çıkması ve dokununca sistem tarayıcısının açılması. **Giriş tamamlanamadı:** emülatördeki Chrome ilk
           açılış ekranında kaldı ve devam etmek Google'ın hizmet şartlarını kabul etmek demekti; bu, kullanıcı adına

@@ -96,10 +96,13 @@ public static partial class ExternalSignIn
     /// <summary>Sağlayıcının token'ının verildiği an (saniye); "her yerden çık" isteği yapan token'ı buradan tanır.</summary>
     internal const string IssuedAtClaim = "provider_iat";
 
+    // Yönlendirmeli girişte hesabın yazılamadığını (bizim arızamız) sağlayıcının hatasından ayıran işaret.
+    private static readonly object AccountFailure = new();
+
     public static void AddExternalSignIn(this AuthenticationBuilder builder, ShopJwtOptions jwt, ShopOidcOptions oidc, bool development)
     {
-        // Hesabın adresi ilk gelişte yazılır; aynı sağlayıcıya iki yoldan farklı güvenilseydi, kullanıcı ilk girişini
-        // güvenilen yoldan yaparak ötekinin kuralını aşardı.
+        // Hesabın adresi, doğrulanmış olarak ilk geldiği yoldan yazılır; aynı sağlayıcıya iki yoldan farklı
+        // güvenilseydi, kullanıcı girişini güvenilen yoldan yaparak ötekinin kuralını aşardı.
         Require(
             !jwt.Enabled || !oidc.Enabled || !SameAuthority(jwt.Authority!, oidc.Authority!) || jwt.TrustEmailVerified == oidc.TrustEmailVerified,
             "Shop:Auth:Jwt and Shop:Auth:Oidc point at the same provider; TrustEmailVerified must be the same in both.");
@@ -111,9 +114,9 @@ public static partial class ExternalSignIn
             // Kimlik token'ının (id_token) audience'ı istemcinin kimliğidir. API'nin audience'ı da o olsaydı, erişim
             // token'ı yerine kimlik token'ı da kabul edilirdi.
             // Sondaki eğik çizgi sayılmaz: token doğrulayıcı audience'ı karşılaştırırken onu yok sayar.
+            // Öteki bölümün istemcisi de sayılır, adresler farklı yazılmış olsa bile: aynı sağlayıcının iki adı olabilir.
             Require(
-                !SameName(jwt.Audience, jwt.ClientId)
-                    && !(oidc.Enabled && SameAuthority(jwt.Authority!, oidc.Authority!) && SameName(jwt.Audience, oidc.ClientId)),
+                !SameName(jwt.Audience, jwt.ClientId) && !(oidc.Enabled && SameName(jwt.Audience, oidc.ClientId)),
                 "Shop:Auth:Jwt:Audience must name the API, not a client: with a client id as the audience, ID tokens would be accepted as access tokens.");
             RequireAuthority("Shop:Auth:Jwt", jwt.Authority!, jwt.RequireHttpsMetadata, development);
 
@@ -170,7 +173,9 @@ public static partial class ExternalSignIn
                     }
                     else
                     {
+                        // Oturumu kapanmış çerez tarayıcıda durmaz: yoksa her istekte yeniden gönderilir ve sınanırdı.
                         context.RejectPrincipal();
+                        await context.HttpContext.SignOutAsync(CookieScheme);
                     }
                 };
 
@@ -211,6 +216,13 @@ public static partial class ExternalSignIn
                     // Sağlayıcının reddi, bozuk veya sahte bir dönüş isteği: işlenmeyen bir hata (500) değil, 400.
                     OnRemoteFailure = context =>
                     {
+                        // Bizim arızamız (hesap yazılamadı) sağlayıcının veya isteğin hatası değildir: 400 ile
+                        // örtülmez, işlenmeyen hata olarak sürer (500) ve günlüğe ayrıntısıyla düşer.
+                        if (context.HttpContext.Items.ContainsKey(AccountFailure))
+                        {
+                            return Task.CompletedTask;
+                        }
+
                         // Neden istemciye yazılmaz. Günlüğe yalnızca hatanın türü yazılır: bu uca herkes istek
                         // gönderebilir ve hatanın metni (sağlayıcının `error_description` alanı) isteği yapanın
                         // yazdığı bir metin olabilir. Ayrıntıyı ASP.NET Core'un kendi günlüğü taşır.
@@ -231,7 +243,19 @@ public static partial class ExternalSignIn
                     },
                     OnTokenValidated = async context =>
                     {
-                        if (await ResolveAsync(context.HttpContext, context.Principal, CookieScheme, oidc.TrustEmailVerified, openSession: true) is { } principal)
+                        ClaimsPrincipal? principal;
+
+                        try
+                        {
+                            principal = await ResolveAsync(context.HttpContext, context.Principal, CookieScheme, oidc.TrustEmailVerified, openSession: true);
+                        }
+                        catch (Exception exception) when (exception is not OperationCanceledException)
+                        {
+                            context.HttpContext.Items[AccountFailure] = true;
+                            throw;
+                        }
+
+                        if (principal is not null)
                         {
                             context.Principal = principal;
                         }
@@ -288,12 +312,15 @@ public static partial class ExternalSignIn
 
         if (!openSession)
         {
-            // Erişim token'ı verildiği anı söylemelidir (RFC 9068 zorunlu tutar): "her yerden çık" buna dayanır.
+            // Erişim token'ı verildiği anı söylemelidir (`iat`; RFC 9068 zorunlu tutar): "her yerden çık" buna dayanır.
             // Söylemeyen token ilk istekten reddedilir; yoksa hesap çalışır görünür ve ilk "her yerden çık"tan
             // sonra kalıcı olarak kilitlenirdi. Uyumsuz bir sağlayıcı böylece kurulurken fark edilir.
+            // Kabul edilen saat farkından daha ileride verilmiş görünen token da reddedilir: doğrulayıcı `iat`'e
+            // bakmaz ve öyle bir token "her yerden çık"ın koyabildiği her sınırın üstünde kalırdı.
             issuedAt = IssuedAt(external);
+            var latest = (HaldusTime.UtcNow(http.RequestServices.GetRequiredService<TimeProvider>()) + AuthEndpoints.MaxClockSkew).ToUnixTimeSeconds();
 
-            if (issuedAt is null)
+            if (issuedAt is null || issuedAt > latest)
             {
                 LogNoIssuedAt(Logger(http));
                 return null;
@@ -359,6 +386,14 @@ public static partial class ExternalSignIn
             };
 
             db.Add(account);
+
+            if (!usable && trustEmail && options.RequireVerifiedEmail)
+            {
+                // Açılış denetimi bunu göremez: sağlayıcıya güveniliyor, ama token doğrulanmış bir adres taşımıyor
+                // (erişim token'ları çoğu zaman taşımaz) ya da adres başka bir hesapta. Hesap, adres gelene kadar
+                // kimlik uçlarının dışında hiçbir şey yapamaz.
+                LogUnverifiable(Logger(http));
+            }
 
             try
             {
@@ -499,22 +534,16 @@ public static partial class ExternalSignIn
             : null;
 
     /// <summary>
-    /// Token'ın verildiği an (saniye): <c>iat</c>, yoksa <c>nbf</c>. Sayı kesirli de yazılabilir (RFC 7519); aşağı
-    /// yuvarlanır. Kullanıcının sağlayıcıda giriş yaptığı an (<c>auth_time</c>) kullanılmaz: yenilenen token'da eskidir.
+    /// Token'ın verildiği an (saniye): yalnızca <c>iat</c>. Başka bir alan onun yerine geçmez: <c>nbf</c> sabit veya
+    /// geriye çekilmiş olabilir, <c>auth_time</c> yenilenen token'da eskidir; ikisi de hesabı ilk "her yerden çık"tan
+    /// sonra kalıcı olarak kilitlerdi. Kesirli yazılmış değeri (RFC 7519 izin verir) token kitaplığı en yakın tam
+    /// sayıya yuvarlayarak verir; öyle bir sağlayıcıda sınır yarım saniyeye kadar kayabilir.
     /// </summary>
-    private static long? IssuedAt(ClaimsPrincipal external)
-    {
-        foreach (var type in (ReadOnlySpan<string>)["iat", "nbf"])
-        {
-            if (decimal.TryParse(external.FindFirstValue(type), NumberStyles.AllowDecimalPoint, CultureInfo.InvariantCulture, out var seconds)
-                && seconds is >= 0 and < 253402300800m)
-            {
-                return (long)decimal.Floor(seconds);
-            }
-        }
-
-        return null;
-    }
+    private static long? IssuedAt(ClaimsPrincipal external) =>
+        decimal.TryParse(external.FindFirstValue("iat"), NumberStyles.AllowDecimalPoint, CultureInfo.InvariantCulture, out var seconds)
+        && seconds is >= 0 and < 253402300800m
+            ? (long)decimal.Floor(seconds)
+            : null;
 
     // Adresler yazılışlarıyla değil anlamlarıyla karşılaştırılır: varsayılan bağlantı noktası, büyük-küçük harf,
     // sondaki eğik çizgi, sunucu adının sonundaki nokta ve uluslararası adların iki yazımı (punycode) aynı sayılır.
@@ -537,8 +566,11 @@ public static partial class ExternalSignIn
     [LoggerMessage(Level = LogLevel.Information, Message = "The sign-in at the identity provider did not complete ({Reason}).")]
     private static partial void LogRemoteFailure(ILogger logger, string reason);
 
-    [LoggerMessage(Level = LogLevel.Warning, Message = "An access token of the identity provider was rejected: it carries neither iat nor nbf.")]
+    [LoggerMessage(Level = LogLevel.Warning, Message = "An access token of the identity provider was rejected: it does not say when it was issued (iat), or says a time further ahead than the accepted clock skew.")]
     private static partial void LogNoIssuedAt(ILogger logger);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "An account of the identity provider was opened without a verified address while Shop:Auth:RequireVerifiedEmail is on; it can do nothing until a token carries email and email_verified.")]
+    private static partial void LogUnverifiable(ILogger logger);
 
     private static void RequireAuthority(string section, string authority, bool requireHttps, bool development)
     {
