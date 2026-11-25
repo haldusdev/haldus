@@ -540,7 +540,10 @@ Yapılmayanlar ve nedenleri:
       çıktı.) Tolerans içindeki yanıt ayrıdır (409): istemciler onu ret saymaz, oturumu kapatmaz ve yeni token'ları
       yenilemeyi yapan istekten (öteki sekmenin depoya yazmasından) kısa bir süre bekler. Web paneli ayrıca yenilemeyi
       sekmeler arasında sıraya sokar (Web Locks; yalnızca güvenli bağlamda vardır) ve oturumu `storage` olayıyla
-      eşitler. E-posta doğrulaması da sırayı ilerlettiği için tolerans iki sıra geriyi kapsar. Bilinen ödünleşimler:
+      eşitler. Tolerans yalnızca bir önceki sırayı kapsar; e-posta doğrulaması yenileme sırasını ilerletmez (ilerletseydi
+      onunla aynı anda gelen sıradan bir yenileme yeniden kullanım sayılırdı; toleransı iki sıraya genişleten ara
+      çözüm tespiti zayıflattığı için geri alındı). 409 yanıtı, eskimiş token'ı sunana oturumun hâlâ açık olduğunu
+      söyler; istemcilerin oturumu yanlışlıkla kapatmaması için bilerek kabul edildi. Bilinen ödünleşimler:
       yanıtı yolda kaybolan istemci tolerans bitince yeniden giriş yapar; çalan kişi asıl sahibinden önce yenilerse ve
       sahibin eskimiş token'ı tolerans içinde gelirse hırsızlık o an fark edilmez (sahip oturumdan düşer, oturum
       kapanmaz).

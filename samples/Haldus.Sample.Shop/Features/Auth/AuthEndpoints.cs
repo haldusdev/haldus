@@ -429,13 +429,9 @@ public static partial class AuthEndpoints
             // verilmez (verilseydi, çalınmış bir token bu pencerede geçerli bir oturuma çevrilebilirdi); istemci yeni
             // token'ları öteki istekten alır. Bundan eski bir token ise ya çalınmıştır ya da çalan kişi asıl
             // sahibinden önce davranmıştır; hangisi olduğu bilinemez, oturum kapatılır.
-            // İki sıra geriye kadar hoş görülür: e-posta doğrulaması da sırayı ilerletir ve onunla aynı anda gelen bir
-            // yenileme iki geride kalabilir.
+            // Yalnızca bir önceki sıra hoş görülür; daha eskisi her zaman yeniden kullanım sayılır.
             var grace = now.AddSeconds(-refresh.Value.RefreshGraceSeconds);
-            var justRotated = session is not null
-                && version < session.RefreshVersion
-                && version >= session.RefreshVersion - 2
-                && session.RotatedAt > grace;
+            var justRotated = session is not null && session.RefreshVersion == version + 1 && session.RotatedAt > grace;
 
             if (!justRotated)
             {
@@ -617,10 +613,9 @@ public static partial class AuthEndpoints
             .ExecuteUpdateAsync(setters => setters.SetProperty(candidate => candidate.EmailVerifiedAt, now), cancellationToken);
         account.EmailVerifiedAt = now;
 
-        // Token'daki claim eskidir; doğrulanmış haliyle yenisi verilir. Yeni bir yenileme token'ı verildiği için sıra
-        // ilerler ve eskisi geçersiz olur.
-        await RotateAsync(Live(db.Set<ShopSession>(), now).Where(candidate => candidate.Id == sessionId), now, cancellationToken);
-
+        // Token'daki claim eskidir; doğrulanmış haliyle yenisi verilir. Yenileme sırası ilerletilmez: sırayı yalnızca
+        // yenileme ilerletir, yoksa doğrulamayla aynı anda gelen sıradan bir yenileme "yeniden kullanım" sayılırdı.
+        // İstemcinin elindeki önceki yenileme token'ı aynı sırayı taşır; ikisinden ilk kullanılan sırayı ilerletir.
         return await Live(db.Set<ShopSession>(), now).AsNoTracking().FirstOrDefaultAsync(candidate => candidate.Id == sessionId, cancellationToken) is { } session
             ? SignIn(account, session, options.Value)
             : SessionExpired(messages);

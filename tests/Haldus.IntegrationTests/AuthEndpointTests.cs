@@ -463,6 +463,13 @@ public sealed class AuthEndpointTests(ShopFixture fixture)
         Assert.True((await ReadAsync<AccountInfo>(await SendAsync(HttpMethod.Get, "/auth/me", token: verified.AccessToken))).EmailVerified);
         Assert.Equal(HttpStatusCode.OK, (await SendAsync(HttpMethod.Get, "/auth/me", token: session.AccessToken)).StatusCode);
 
+        // Doğrulama yenileme sırasını ilerletmez: doğrulamadan önce alınmış yenileme token'ı sıradan bir yenilemedir,
+        // "yeniden kullanım" sayılıp oturumu kapatmaz.
+        var renewedAfterwards = await SendAsync(HttpMethod.Post, "/auth/refresh", new { refreshToken = session.RefreshToken });
+        Assert.Equal(HttpStatusCode.OK, renewedAfterwards.StatusCode);
+        verified = await ReadAsync<AccessTokenResponse>(renewedAfterwards);
+        Assert.True((await ReadAsync<AccountInfo>(await SendAsync(HttpMethod.Get, "/auth/me", token: verified.AccessToken))).EmailVerified);
+
         // Doğrulanmış hesapta bu uç kod sınamaz ve yeni token da vermez.
         var again = await SendAsync(HttpMethod.Post, "/auth/email/verify", new { code = "000000" }, verified.AccessToken);
         Assert.Equal(HttpStatusCode.NoContent, again.StatusCode);
