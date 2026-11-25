@@ -140,5 +140,8 @@ Bu seçimler kullanıcıya sorulmadan, önerilen seçenekle verildi (deponun `CL
 - **Kimlik doğrulama:** backend'in kendi parola girişi ve taşıyıcı token'ı; ayrı bir kimlik sağlayıcı yok.
 - **Test:** yeni bir paket eklenmedi. Oturum ve istek mantığı (`src/lib`: token'ın eklenmesi, 401'de tek yenileme,
   sekmeler arası eşitleme, hata gövdeleri) Node'un yerleşik test çalıştırıcısıyla sınanır (`pnpm test`; `tests/`
-  altında, `fetch`, `localStorage` ve Web Locks elle yazılmış taklitlerle). Bileşenlerin ve sayfaların testi yoktur:
-  onları çizmek bir DOM kütüphanesi (yeni bir bağımlılık) ister.
+  altında, `fetch`, `localStorage` ve Web Locks elle yazılmış taklitlerle). Bileşenler ve sayfalar `react-dom/server`
+  ile metne çizilip çıktıları denetlenir (`tests/ui`): etiketler, erişilebilir adlar, iki dilde de çevrilmemiş metin
+  kalmaması, giriş yönlendirmeleri, yüklenen ve boş liste durumları. Bu testler yalnızca ilk çizimi görür:
+  tıklama, yazma, veri yükleme ve açılır pencerelerin içeriği sınanmaz; onlar bir DOM kütüphanesi (yeni bir
+  bağımlılık) ister.

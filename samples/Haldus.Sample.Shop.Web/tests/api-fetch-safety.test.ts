@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 import { beforeEach, describe, it } from "node:test"
 
-import { setLocksAvailable } from "./support/browser.ts"
+import { setLocksAvailable, storage } from "./support/browser.ts"
 import {
   callsTo,
   deferred,
@@ -10,7 +10,7 @@ import {
   settle,
   text,
 } from "./support/fetch.ts"
-import { session, unauthorized } from "./support/fixtures.ts"
+import { session, STORAGE_KEY, unauthorized } from "./support/fixtures.ts"
 
 // Yenileme işlevini kaydeder; yenileme isteği üretilen istemciden ve `fetch` taklidinden geçer.
 import "@/lib/auth"
@@ -116,6 +116,44 @@ describe("apiFetch renewal safety", () => {
     assert.deepEqual(getSession(), other)
   })
 
+  it("keeps the session when another request has just renewed it", async () => {
+    // 409: backend oturumu az önce başka bir istekle (başka bir sekme) yeniledi; bu isteğe token vermez.
+    respondWith((call) =>
+      call.url.endsWith("/auth/refresh")
+        ? json(409, { status: 409, title: "Conflict" })
+        : json(401, expired)
+    )
+
+    await assert.rejects(apiFetch("/orders", {}))
+    assert.deepEqual(getSession(), session())
+  })
+
+  it("adopts the tokens the other tab stores after a 409", async () => {
+    const renewed = session({
+      accessToken: "access-2",
+      refreshToken: "refresh-2",
+    })
+
+    respondWith((call) => {
+      if (call.url.endsWith("/auth/refresh")) {
+        // Öteki sekme yeni token'ları yanıttan biraz sonra depoya yazar.
+        setTimeout(
+          () => storage.setItem(STORAGE_KEY, JSON.stringify(renewed)),
+          120
+        )
+        return json(409, { status: 409, title: "Conflict" })
+      }
+
+      return call.headers.get("Authorization") === "Bearer access-2"
+        ? json(200, { ok: true })
+        : json(401, expired)
+    })
+
+    const result = await apiFetch<{ data: unknown }>("/orders", {})
+
+    assert.deepEqual(result.data, { ok: true })
+    assert.deepEqual(getSession(), renewed)
+  })
   it("does not renew the session for a request that carried its own token", async () => {
     respondWith(() => json(401, expired))
 

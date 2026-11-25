@@ -25,6 +25,7 @@
     "backToProducts": "Ürünlere dön"
   },
   "pagination": {
+    "label": "Sayfalama",
     "previous": "Önceki",
     "next": "Sonraki",
     "summary_one": "Sayfa {{page}} / {{pages}} · {{count}} kayıt",
@@ -44,6 +45,8 @@
     "signOut": "Çıkış yap",
     "tenant": "Kiracı {{tenant}}",
     "userMenu": "Hesap menüsü",
+    "toggleSidebar": "Kenar çubuğunu aç veya kapat",
+    "breadcrumb": "Konum",
     "changePassword": "Parolayı değiştir"
   },
   "verify": {

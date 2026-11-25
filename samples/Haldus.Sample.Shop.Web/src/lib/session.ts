@@ -129,5 +129,6 @@ window.addEventListener("storage", (event) => {
 })
 
 export function useSession(): Session | null {
-  return useSyncExternalStore(subscribeSession, getSession)
+  // Üçüncü argüman yalnızca tarayıcı dışında (sunucuda çizilen testlerde) okunur.
+  return useSyncExternalStore(subscribeSession, getSession, getSession)
 }

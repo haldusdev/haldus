@@ -68,10 +68,11 @@ export function DashboardLayout() {
             </Breadcrumb>
           </div>
         </header>
-        <main className="flex flex-1 flex-col gap-4 p-4 pt-0">
+        {/* SidebarInset zaten <main> çizer; içine ikinci bir <main> konmaz. */}
+        <div className="flex flex-1 flex-col gap-4 p-4 pt-0">
           <VerifyEmailBanner />
           <Outlet />
-        </main>
+        </div>
       </SidebarInset>
     </SidebarProvider>
   )

@@ -9,7 +9,7 @@
     "lint": "eslint .",
     "format": "prettier --write \"**/*.{ts,tsx}\"",
     "typecheck": "tsc -b --noEmit",
-    "test": "node --import ./tests/register.mjs --test \"tests/**/*.test.ts\"",
+    "test": "node --enable-source-maps --import ./tests/register.mjs --test \"tests/**/*.test.ts\" \"tests/**/*.test.tsx\"",
     "generate:api": "orval",
     "preview": "vite preview"
   },

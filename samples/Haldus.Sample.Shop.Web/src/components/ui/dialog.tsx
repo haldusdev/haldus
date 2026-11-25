@@ -1,5 +1,6 @@
 "use client"
 
+import { useTranslation } from "react-i18next"
 import * as React from "react"
 import { cn } from "cn"
 import { Dialog as DialogPrimitive } from "radix-ui"
@@ -75,7 +76,9 @@ function DialogContent({
               size="icon-sm"
             >
               <XIcon />
-              <span className="sr-only">Close</span>
+              <span className="sr-only">
+                <CloseLabel />
+              </span>
             </Button>
           </DialogPrimitive.Close>
         )}
@@ -114,7 +117,9 @@ function DialogFooter({
       {children}
       {showCloseButton && (
         <DialogPrimitive.Close asChild>
-          <Button variant="outline">Close</Button>
+          <Button variant="outline">
+            <CloseLabel />
+          </Button>
         </DialogPrimitive.Close>
       )}
     </div>
@@ -164,4 +169,10 @@ export {
   DialogPortal,
   DialogTitle,
   DialogTrigger,
+}
+
+/** Kapatma düğmesinin etiketi; arayüzün dilinde. */
+function CloseLabel() {
+  const { t } = useTranslation()
+  return <>{t("common.close")}</>
 }

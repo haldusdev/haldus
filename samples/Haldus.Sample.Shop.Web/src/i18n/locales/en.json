@@ -25,6 +25,7 @@
     "backToProducts": "Back to products"
   },
   "pagination": {
+    "label": "Pagination",
     "previous": "Previous",
     "next": "Next",
     "summary_one": "Page {{page}} of {{pages}} · {{count}} record",
@@ -44,6 +45,8 @@
     "signOut": "Sign out",
     "tenant": "Tenant {{tenant}}",
     "userMenu": "Account menu",
+    "toggleSidebar": "Toggle sidebar",
+    "breadcrumb": "Breadcrumb",
     "changePassword": "Change password"
   },
   "verify": {

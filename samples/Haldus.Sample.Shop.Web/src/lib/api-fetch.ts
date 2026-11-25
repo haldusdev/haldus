@@ -138,8 +138,12 @@ async function refresh(sent: Session): Promise<boolean> {
     renewTokens(tokens.accessToken, tokens.refreshToken)
     return true
   } catch (error) {
-    // Başka bir sekme tam bu sırada yenilediyse backend bu isteği reddeder ama oturumu kapatmaz; yeni token'lar
-    // depodadır.
+    // 409: oturumu az önce başka bir istek (başka bir sekme) yeniledi. Backend bu isteğe token vermez ama oturumu da
+    // kapatmaz; yeni token'lar o sekme depoya yazınca alınır. Oturum kapatılmaz: yazma henüz gerçekleşmemiş olabilir.
+    if (isRenewedElsewhere(error)) {
+      return adoptRenewal(sent)
+    }
+
     reloadSession()
     const current = getSession()
 
@@ -155,6 +159,35 @@ async function refresh(sent: Session): Promise<boolean> {
 
     return false
   }
+}
+
+function isRenewedElsewhere(error: unknown): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "status" in error &&
+    error.status === 409
+  )
+}
+
+/** Öteki sekmenin yenilediği oturumu depodan alır; yazılması için kısa bir süre bekler. */
+async function adoptRenewal(sent: Session): Promise<boolean> {
+  for (let attempt = 0; attempt < 5; attempt++) {
+    reloadSession()
+    const current = getSession()
+
+    if (
+      current &&
+      current.accountId === sent.accountId &&
+      current.refreshToken !== sent.refreshToken
+    ) {
+      return true
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, 100))
+  }
+
+  return false
 }
 
 function isRejection(error: unknown): boolean {

@@ -20,7 +20,7 @@ export function DataPagination({
 
   return (
     <nav
-      aria-label="pagination"
+      aria-label={t("pagination.label")}
       className="flex flex-wrap items-center justify-between gap-2 text-sm text-muted-foreground"
     >
       <p aria-live="polite">

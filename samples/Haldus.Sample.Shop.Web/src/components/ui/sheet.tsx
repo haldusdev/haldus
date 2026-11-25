@@ -1,5 +1,6 @@
 "use client"
 
+import { useTranslation } from "react-i18next"
 import * as React from "react"
 import { cn } from "cn"
 import { Dialog as SheetPrimitive } from "radix-ui"
@@ -76,7 +77,9 @@ function SheetContent({
               size="icon-sm"
             >
               <XIcon />
-              <span className="sr-only">Close</span>
+              <span className="sr-only">
+                <CloseLabel />
+              </span>
             </Button>
           </SheetPrimitive.Close>
         )}
@@ -143,4 +146,10 @@ export {
   SheetFooter,
   SheetTitle,
   SheetDescription,
+}
+
+/** Kapatma düğmesinin etiketi; arayüzün dilinde. */
+function CloseLabel() {
+  const { t } = useTranslation()
+  return <>{t("common.close")}</>
 }

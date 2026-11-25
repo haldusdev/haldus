@@ -13,6 +13,8 @@ function subscribe(onChange: () => void) {
 export function useIsMobile() {
   return React.useSyncExternalStore(
     subscribe,
-    () => window.matchMedia(QUERY).matches
+    () => window.matchMedia(QUERY).matches,
+    // Tarayıcı dışında (sunucuda çizilen testlerde) ekran yoktur; geniş ekran varsayılır.
+    () => false
   )
 }

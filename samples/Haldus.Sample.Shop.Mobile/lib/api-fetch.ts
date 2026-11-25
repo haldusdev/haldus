@@ -1,5 +1,5 @@
 import i18n from '@/i18n';
-import { getSession, renewTokens, signOut } from '@/lib/session';
+import { getSession, renewTokens, restoreSession, signOut } from '@/lib/session';
 import type { Session } from '@/lib/session';
 
 /**
@@ -120,6 +120,12 @@ async function refresh(sent: Session): Promise<boolean> {
     await renewTokens(tokens.accessToken, tokens.refreshToken);
     return true;
   } catch (error) {
+    // 409: oturumu az önce başka bir istek yeniledi (tarayıcıda başka bir sekme). Backend bu isteğe token vermez ama
+    // oturumu da kapatmaz; yeni token'lar depoya yazılınca alınır. Oturum kapatılmaz.
+    if (isRenewedElsewhere(error)) {
+      return adoptRenewal(sent);
+    }
+
     // Oturumu yalnızca backend'in reddi bitirir (400 / 401). Ağ hatasında, sunucu hatasında veya bir vekilin hata
     // sayfasında (5xx) oturum korunur ve istek hatasıyla döner; yoksa geçici bir arıza herkesi oturumdan atardı.
     if (isRejection(error) && unchanged()) {
@@ -128,6 +134,30 @@ async function refresh(sent: Session): Promise<boolean> {
 
     return false;
   }
+}
+
+function isRenewedElsewhere(error: unknown): boolean {
+  return typeof error === 'object' && error !== null && 'status' in error && error.status === 409;
+}
+
+/** Yenilemeyi yapan öteki isteğin depoya yazdığı oturumu alır; yazılması için kısa bir süre bekler. */
+async function adoptRenewal(sent: Session): Promise<boolean> {
+  for (let attempt = 0; attempt < 5; attempt++) {
+    await restoreSession();
+    const current = getSession();
+
+    if (
+      current &&
+      current.accountId === sent.accountId &&
+      current.refreshToken !== sent.refreshToken
+    ) {
+      return true;
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+
+  return false;
 }
 
 function isRejection(error: unknown): boolean {

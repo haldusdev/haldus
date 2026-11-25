@@ -77,6 +77,17 @@ describe('apiFetch renewal safety', () => {
     assert.deepEqual(getSession(), other);
   });
 
+  it('keeps the session when another request has just renewed it', async () => {
+    // 409: backend oturumu az önce başka bir istekle yeniledi; bu isteğe token vermez ama oturumu da kapatmaz.
+    respondWith((call) =>
+      call.url.endsWith('/auth/refresh')
+        ? json(409, { status: 409, title: 'Conflict' })
+        : json(401, expired)
+    );
+
+    await assert.rejects(apiFetch('/me/baskets', {}));
+    assert.deepEqual(getSession(), session());
+  });
   it('does not renew the session for a request that carried its own token', async () => {
     respondWith(() => json(401, expired));
 

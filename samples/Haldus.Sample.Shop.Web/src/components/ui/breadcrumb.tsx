@@ -1,12 +1,15 @@
+import { useTranslation } from "react-i18next"
 import * as React from "react"
 import { cn } from "cn"
 import { Slot } from "radix-ui"
 import { ChevronRightIcon, MoreHorizontalIcon } from "lucide-react"
 
 function Breadcrumb({ className, ...props }: React.ComponentProps<"nav">) {
+  const { t } = useTranslation()
+
   return (
     <nav
-      aria-label="breadcrumb"
+      aria-label={t("nav.breadcrumb")}
       data-slot="breadcrumb"
       className={cn(className)}
       {...props}
