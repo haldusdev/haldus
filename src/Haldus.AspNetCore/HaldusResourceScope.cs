@@ -19,3 +19,14 @@ public sealed class HaldusResourceScope(bool tenantScoped, bool ownerScoped)
     /// <summary>Kayıtlar ne bir kiracıya ne bir kullanıcıya ait: onları gören herkes için ortaktır.</summary>
     public bool IsShared => !TenantScoped && !OwnerScoped;
 }
+
+/// <summary>
+/// Gövde taşıdığı için <c>POST</c> ile çağrılan ama hiçbir şey yazmayan uçların işareti: arama (<c>/search</c>), toplu
+/// okuma (<c>/batch-get</c>) ve önizleme (<c>/preview</c>). Yetki kuralları okumayı yazmadan HTTP metoduna bakarak
+/// ayıramaz; adresin sonuna bakmak da güvenilir değildir (bir aksiyonun veya anahtarın adı aynı olabilir). Bu yüzden
+/// uç kendisi söyler.
+/// </summary>
+public sealed class HaldusReadOnly
+{
+    public static HaldusReadOnly Instance { get; } = new();
+}

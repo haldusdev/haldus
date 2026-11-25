@@ -47,6 +47,7 @@ public static partial class ProductEndpoints
 
         group.MapPost("/batch-get", BatchGetAsync)
             .WithName("BatchGetProducts")
+            .WithMetadata(global::Haldus.HaldusReadOnly.Instance)
             .AddEndpointFilter<global::Haldus.HaldusValidationFilter<global::Haldus.BatchIdsRequest<global::System.Guid>>>()
             .ProducesValidationProblem();
 

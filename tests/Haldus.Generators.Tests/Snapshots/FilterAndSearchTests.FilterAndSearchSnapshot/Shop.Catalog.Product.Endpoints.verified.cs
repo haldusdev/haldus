@@ -22,6 +22,7 @@ public static partial class ProductEndpoints
 
         group.MapPost("/search", SearchAsync)
             .WithName("SearchProducts")
+            .WithMetadata(global::Haldus.HaldusReadOnly.Instance)
             .ProducesProblem(400);
 
         group.MapGet("/{id:guid}", GetAsync)

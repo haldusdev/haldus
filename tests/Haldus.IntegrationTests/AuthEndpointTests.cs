@@ -175,6 +175,17 @@ public sealed class AuthEndpointTests(ShopFixture fixture)
         Assert.Equal(HttpStatusCode.OK, (await SendAsync(client, HttpMethod.Post, "/products/search", new { }, member.AccessToken)).StatusCode);
         Assert.Equal(HttpStatusCode.OK, (await SendAsync(client, HttpMethod.Post, "/products/batch-get", new { ids = new[] { product.GetProperty("id").GetGuid() } }, member.AccessToken)).StatusCode);
 
+        // Kural kapalı başlar: kapsamını bildirmeyen, yazan uçlar da (entity'ye bağlı olmayan aksiyonlar) personel ister.
+        // Bunlardan biri bütün ürünlerin fiyatını değiştirir.
+        var discount = new { namePrefix = name, percent = 10 };
+        Assert.Equal(HttpStatusCode.Forbidden, (await SendAsync(client, HttpMethod.Post, "/apply-discount", discount, member.AccessToken)).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await SendAsync(client, HttpMethod.Post, "/clear-maintenance-notice", new { }, member.AccessToken)).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await SendAsync(client, HttpMethod.Post, "/apply-discount", discount, staff.AccessToken)).StatusCode);
+
+        // Okuma olduğunu adres değil ucun kendisi söyler: adı "search" ile biten bir yazma okuma sayılmaz.
+        Assert.Equal(HttpStatusCode.Forbidden, (await SendAsync(client, HttpMethod.Put, "/feature-flags/search", new { enabled = true }, member.AccessToken)).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await SendAsync(client, HttpMethod.Post, "/leave-allowances/search/adjust", new { delta = 1 }, member.AccessToken)).StatusCode);
+
         // Bir kiracıya veya bir kullanıcıya ait kaynaklar kuralın dışındadır: herkes kendisininkini yazar.
         Assert.Equal(HttpStatusCode.Created, (await SendAsync(client, HttpMethod.Post, "/orders", new { customerName = "Ada" }, member.AccessToken)).StatusCode);
         Assert.Equal(HttpStatusCode.Created, (await SendAsync(client, HttpMethod.Post, "/me/baskets", new { note = "Mine" }, member.AccessToken)).StatusCode);

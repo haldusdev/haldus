@@ -123,6 +123,8 @@ app.MapDiagnostics();
 
 // Entity'ye bağlı olmayan işlemler: iş mantığı ShippingQuoteHandler ve ApplyDiscountHandler sınıflarında.
 app.MapQuery<ShippingQuoteRequest, ShippingQuote>();
+// Ürünlerin fiyatını değiştirir. Kapsamını bildirmeyen her yazma ucu gibi yalnızca personele açıktır (SharedWrites);
+// herkese açık olması gereken bir aksiyon kendi yetki kuralını bildirirdi (.RequireAuthorization()).
 app.MapAction<ApplyDiscountRequest, ApplyDiscountResult>();
 
 app.Run();

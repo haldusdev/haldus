@@ -1900,6 +1900,7 @@ internal sealed partial class EndpointEmitter
         _map.Append($$"""
                     group.MapPost("/search", SearchAsync)
                         .WithName("Search{{_plural}}")
+                        .WithMetadata(global::Haldus.HaldusReadOnly.Instance)
                         .ProducesProblem(400);
 
 
@@ -4464,6 +4465,7 @@ internal sealed partial class EndpointEmitter
             _map.Append($$"""
                         group.MapPost("/preview", PreviewAsync)
                             .WithName("Preview{{_entity}}")
+                            .WithMetadata(global::Haldus.HaldusReadOnly.Instance)
                             .AddEndpointFilter<global::Haldus.HaldusValidationFilter<Create{{_entity}}Request>>()
                             .ProducesValidationProblem(){{(Parent is null ? string.Empty : "\n            .ProducesProblem(404)")}}{{(_resource.OwnerGuard is null && NaturalKey is null ? string.Empty : "\n            .ProducesProblem(409)")}};
 
@@ -4488,6 +4490,7 @@ internal sealed partial class EndpointEmitter
             _map.Append($$"""
                         group.MapPost("{{_keyRoute}}/preview", PreviewUpdateAsync)
                             .WithName("Preview{{_entity}}Update")
+                            .WithMetadata(global::Haldus.HaldusReadOnly.Instance)
                             .AddEndpointFilter<global::Haldus.HaldusValidationFilter<Update{{_entity}}Request>>()
                             .ProducesValidationProblem()
                             .ProducesProblem(404){{(_resource.Workflow?.EditableIn is null && _resource.OwnerGuard is null && NaturalKey is null ? string.Empty : "\n            .ProducesProblem(409)")}};

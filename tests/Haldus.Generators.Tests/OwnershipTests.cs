@@ -114,6 +114,26 @@ public sealed class OwnershipTests
         Assert.Contains(Scope(tenant: false, owner: false), run.Sources.Single(source => source.Key.Contains("ProductTag") && source.Key.Contains("Endpoints")).Value);
     }
     [Fact]
+    public void ReadsThatArePosted_AreMarkedSoThatRulesNeedNotGuessFromTheAddress()
+    {
+        var run = Run("""
+            app.MapCrud<Product>().Searchable(product => product.Name).Batch().Previewable();
+            """).AssertCompiles();
+
+        var endpoints = run.Sources["Shop.Product.Endpoints.g.cs"];
+
+        // Arama, toplu okuma ve önizleme gövde taşıdığı için POST'tur ama yazmaz; uç bunu kendisi söyler.
+        foreach (var name in new[] { "SearchProducts", "BatchGetProducts", "PreviewProduct", "PreviewProductUpdate" })
+        {
+            Assert.Contains(
+                $".WithName(\"{name}\")\n            .WithMetadata(global::Haldus.HaldusReadOnly.Instance)",
+                endpoints.Replace("\r\n", "\n"));
+        }
+
+        // Yazan toplu uçlar ve tekil yazmalar işaretlenmez.
+        Assert.Equal(4, endpoints.Split("HaldusReadOnly.Instance").Length - 1);
+    }
+    [Fact]
     public void Owned_AddsAnOwnerThatIsNeitherRequestedNorReturned()
     {
         var run = Run("app.MapCrud<Cart>().OwnedByCurrentUser();").AssertCompiles();

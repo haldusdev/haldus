@@ -59,6 +59,7 @@ internal sealed partial class EndpointEmitter
         _map.Append($$"""
                     group.MapPost("/batch-get", BatchGetAsync)
                         .WithName("BatchGet{{_plural}}")
+                        .WithMetadata(global::Haldus.HaldusReadOnly.Instance)
                         .AddEndpointFilter<global::Haldus.HaldusValidationFilter<{{request}}>>()
                         .ProducesValidationProblem();
 

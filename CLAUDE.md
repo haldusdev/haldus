@@ -566,10 +566,14 @@ Yapılmayanlar ve nedenleri:
       hesaplardır (liste boşken ortak kaynakları kimse yazamaz). Doğrulama şartı ilk yazımda yoktu: adres kullanıcının
       yazdığı bir metin olduğu için, personel adresiyle ilk kaydolan kişi rolü alırdı (otomatik incelemede çıktı). Bir kiracıya veya kullanıcıya ait kaynaklar kuralın dışındadır. Hangi kaynağın ortak
       olduğu elle sayılmaz: üretilen uçların taşıdığı `HaldusResourceScope` metadatasından okunur, böylece sonradan
-      eklenen ortak bir kaynak kendiliğinden korunur. Gövde taşıdığı için `POST` ile yapılan okumalar (`/search`,
-      `/batch-get`, `/preview`) yazma sayılmaz. Kendi yetki kuralını bildiren kaynağa
-      (`app.MapCrud<Review>().RequireAuthorization()`) varsayılan kural uygulanmaz. İlk yazımda rol yoktu ve kayıt
-      olan herkes ortak kaynakları yazabiliyordu (incelemede çıktı).
+      eklenen ortak bir kaynak kendiliğinden korunur. **Kural kapalı başlar:** yazan bir uç ancak kapsamı açıkça bir
+      kiracı veya kullanıcıysa serbesttir; kapsamını bildirmeyen uçlar (entity'ye bağlı olmayan `MapAction`, elle
+      yazılmış uçlar) ortak sayılır ve personel ister. Okuma, güvenli HTTP metotları ve üreticinin `HaldusReadOnly` ile
+      işaretlediği `POST` uçlarıdır (arama, toplu okuma, önizleme); adresin sonuna bakılmaz. Kendi yetki kuralını
+      bildiren uca (`.RequireAuthorization()`) varsayılan kural uygulanmaz. İlk yazımda rol yoktu ve kayıt olan
+      herkes ortak kaynakları yazabiliyordu (incelemede çıktı); ikinci yazımda kural metadata yokken açık kalıyordu
+      (bütün ürünlerin fiyatını değiştiren `/apply-discount` her hesaba açıktı) ve okumayı adresin sonundan tanıyordu
+      (ikisi de otomatik incelemede çıktı).
     - Bilinen sınırlar: rol tektir ve yapılandırmadan gelir (rol yönetimi uçları yoktur); rol token'a yazıldığı için
       listeden çıkarılan hesap, erişim token'ı yenilenene kadar personel kalır. Kimlik sağlayıcı (OpenID Connect)
       desteği yoktur (JWT doğrulaması ayrı bir paket ister); iki adımlı doğrulama, e-posta değiştirme ve hesap silme
@@ -795,7 +799,10 @@ Yapılmayanlar ve nedenleri:
   birininkidir; kullanıcıya bağlı bağ her zaman kullanıcıya aittir. **Kayıtların kime ait olduğunu değiştiren yeni bir
   bildirim bu iki özelliğe yansıtılmalıdır;** yoksa uygulamanın yetki kuralı o kaynağı yanlış sınıflar. Sınırlar:
   token ile erişilen (`TokenOnly`) kaynak "ortak" görünür (uçları zaten oturumsuzdur); `MapAction` / `MapQuery` gibi
-  entity'ye bağlı olmayan uçlar metadata taşımaz.
+  entity'ye bağlı olmayan uçlar metadata taşımaz (bir yetki kuralı onları kapsamı bilinmeyen, yani en kısıtlı sınıfta
+  saymalıdır). Gövde taşıdığı için `POST` olan ama yazmayan uçlar ayrıca `HaldusReadOnly` ile işaretlenir (`/search`,
+  `/batch-get`, `/preview`, `/{id}/preview`). **Yazmayan yeni bir `POST` ucu üretilirse o da işaretlenmelidir; yazan bir
+  uç asla işaretlenmemelidir.**
 - **Sahiplik.** `Traits.Owned` (`IOwned`, `OwnerId`); `/me` dışında kalma `Traits.OwnedPlainRoute` ile tutulur.
   Görünürlük modeldeki `HaldusFilters.Owner` filtresidir ve kullanıcıyı kiracı filtresiyle aynı yoldan okur
   (`HaldusScope.UserId(context)`); bu yüzden uçlarda sahiplikle ilgili tek satır yoktur ve kaynağa dokunan her

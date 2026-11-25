@@ -53,6 +53,7 @@ public static partial class ContactEndpoints
 
         group.MapPost("/batch-get", BatchGetAsync)
             .WithName("BatchGetContacts")
+            .WithMetadata(global::Haldus.HaldusReadOnly.Instance)
             .AddEndpointFilter<global::Haldus.HaldusValidationFilter<global::Haldus.BatchIdsRequest<global::System.Guid>>>()
             .ProducesValidationProblem();
 

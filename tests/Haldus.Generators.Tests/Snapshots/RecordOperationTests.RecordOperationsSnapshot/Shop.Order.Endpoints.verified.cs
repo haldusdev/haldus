@@ -47,11 +47,13 @@ public static partial class OrderEndpoints
 
         group.MapPost("/preview", PreviewAsync)
             .WithName("PreviewOrder")
+            .WithMetadata(global::Haldus.HaldusReadOnly.Instance)
             .AddEndpointFilter<global::Haldus.HaldusValidationFilter<CreateOrderRequest>>()
             .ProducesValidationProblem();
 
         group.MapPost("/{id:guid}/preview", PreviewUpdateAsync)
             .WithName("PreviewOrderUpdate")
+            .WithMetadata(global::Haldus.HaldusReadOnly.Instance)
             .AddEndpointFilter<global::Haldus.HaldusValidationFilter<UpdateOrderRequest>>()
             .ProducesValidationProblem()
             .ProducesProblem(404);

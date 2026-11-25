@@ -843,13 +843,18 @@ kaynakları tek tek saymadan buna göre yazabilir; sonradan eklenen bir kaynak k
 
 ```csharp
 // Örnek mağazanın kuralı: kimseye ait olmayan kaynakları yalnızca personel yazar.
-var scope = httpContext.GetEndpoint()?.Metadata.GetMetadata<HaldusResourceScope>();
+var endpoint = httpContext.GetEndpoint();
+var reads = HttpMethods.IsGet(httpContext.Request.Method) || endpoint?.Metadata.GetMetadata<HaldusReadOnly>() is not null;
+var scoped = endpoint?.Metadata.GetMetadata<HaldusResourceScope>() is { IsShared: false };
 
-if (scope is { IsShared: true } && !HttpMethods.IsGet(httpContext.Request.Method) && !user.IsInRole("staff"))
+if (!reads && !scoped && !user.IsInRole("staff"))
 {
-    // 403
+    // 403: kapsamı bilinmeyen uç da ortak sayılır (kural kapalı başlar)
 }
 ```
+
+Gövde taşıdığı için `POST` olan ama yazmayan uçlar (arama, toplu okuma, önizleme) `HaldusReadOnly` ile işaretlidir;
+okumayı adresin sonundan tanımak güvenilir değildir.
 
 `TenantScoped`, kaynak `MultiTenant` ise veya öyle bir kaynağın altındaysa (`Under`) doğrudur; `OwnerScoped`, kaynak
 `OwnedByCurrentUser` ise veya öyle bir kaynağın altındaysa. İkisi de yanlışsa kayıtlar ortaktır (`IsShared`). Çalışan
