@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>Tracker</RootNamespace>
+    <EmitCompilerGeneratedFiles>true</EmitCompilerGeneratedFiles>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" PrivateAssets="all" />
+  </ItemGroup>
+
+  <!--
+    Depo içinde paket yerine projelere başvurulur. Kendi uygulamanızda bunların yerine tek bir satır yazarsınız:
+    <PackageReference Include="Haldus.AspNetCore" Version="0.1.0-preview.1" />
+  -->
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Haldus.AspNetCore\Haldus.AspNetCore.csproj" />
+    <ProjectReference Include="..\..\src\Haldus.Generators\Haldus.Generators.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+  </ItemGroup>
+
+</Project>

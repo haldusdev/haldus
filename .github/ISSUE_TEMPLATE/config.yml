@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Güvenlik açığı
+    url: https://github.com/haldusdev/haldus/security/advisories/new
+    about: Güvenlik açıklarını herkese açık bir issue olarak değil, buradan özel olarak bildirin.
+  - name: Belgeler
+    url: https://github.com/haldusdev/haldus/tree/main/docs
+    about: Kurulum, eğitim, rehberler ve sık sorulan sorular.

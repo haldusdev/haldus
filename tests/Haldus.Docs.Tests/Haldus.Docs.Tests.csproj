@@ -1,0 +1,37 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <OutputType>Exe</OutputType>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit.v3" />
+    <PackageReference Include="xunit.runner.visualstudio" PrivateAssets="all" />
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" />
+    <!-- Belgelerdeki örnekler bir uygulamanın yazacağı paketleri kullanır; derlenebilmeleri için burada bulunurlar. -->
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" />
+    <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" />
+    <PackageReference Include="Testcontainers.PostgreSql" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Haldus.Generators\Haldus.Generators.csproj" />
+    <ProjectReference Include="..\..\src\Haldus.AspNetCore\Haldus.AspNetCore.csproj" />
+    <ProjectReference Include="..\..\src\Haldus.Jobs.InMemory\Haldus.Jobs.InMemory.csproj" />
+    <ProjectReference Include="..\..\src\Haldus.Jobs.PostgreSql\Haldus.Jobs.PostgreSql.csproj" />
+    <ProjectReference Include="..\..\src\Haldus.Jobs.Hangfire\Haldus.Jobs.Hangfire.csproj" />
+    <ProjectReference Include="..\..\src\Haldus.Storage.S3\Haldus.Storage.S3.csproj" />
+    <ProjectReference Include="..\..\src\Haldus.Events.Sqs\Haldus.Events.Sqs.csproj" />
+    <ProjectReference Include="..\..\src\Haldus.Events.RabbitMq\Haldus.Events.RabbitMq.csproj" />
+    <ProjectReference Include="..\..\src\Haldus.Events.Kafka\Haldus.Events.Kafka.csproj" />
+  </ItemGroup>
+
+</Project>

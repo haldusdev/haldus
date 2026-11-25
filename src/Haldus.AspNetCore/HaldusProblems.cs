@@ -123,8 +123,6 @@ public static class HaldusProblems
         return FieldProblem(messages, field, messages.Format(HaldusMessageKeys.HierarchyCycle));
     }
 
-    /// <summary>Doğal anahtarı aynı olan başka bir kayıt var.</summary>
-    /// <param name="field">Doğal anahtar alanının adı.</param>
     /// <summary>Kimliği istemcinin verdiği kaynakta (<c>KeyStrategy.Client</c>) kimlik gönderilmedi veya boş.</summary>
     public static ProblemHttpResult KeyRequired(IHaldusMessages messages, string field)
     {
@@ -137,6 +135,8 @@ public static class HaldusProblems
         });
     }
 
+    /// <summary>Doğal anahtarı aynı olan başka bir kayıt var.</summary>
+    /// <param name="field">Doğal anahtar alanının adı.</param>
     public static ProblemHttpResult Duplicate(IHaldusMessages messages, string resourceName, string field, object? value)
     {
         ArgumentNullException.ThrowIfNull(messages);

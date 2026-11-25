@@ -5,6 +5,7 @@
     <Project Path="samples/Haldus.Sample.Modular/Haldus.Sample.Modular.Sales/Haldus.Sample.Modular.Sales.csproj" />
     <Project Path="samples/Haldus.Sample.Modular/Haldus.Sample.Modular.Support/Haldus.Sample.Modular.Support.csproj" />
     <Project Path="samples/Haldus.Sample.Shop/Haldus.Sample.Shop.csproj" />
+    <Project Path="samples/Haldus.Sample.Tracker/Haldus.Sample.Tracker.csproj" />
   </Folder>
   <Folder Name="/src/">
     <Project Path="src/Haldus.Abstractions/Haldus.Abstractions.csproj" />
@@ -20,6 +21,7 @@
     <Project Path="src/Haldus.Storage.S3/Haldus.Storage.S3.csproj" />
   </Folder>
   <Folder Name="/tests/">
+    <Project Path="tests/Haldus.Docs.Tests/Haldus.Docs.Tests.csproj" />
     <Project Path="tests/Haldus.Generators.Tests/Haldus.Generators.Tests.csproj" />
     <Project Path="tests/Haldus.IntegrationTests/Haldus.IntegrationTests.csproj" />
   </Folder>

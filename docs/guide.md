@@ -18,6 +18,7 @@ coding agents; if you are an agent, read [Rules](#rules) and [Common mistakes](#
 The source generator ships inside `Haldus.AspNetCore`; there is no separate generator package. A class library that
 contains `Map*` calls (a module) references the same package.
 
+<!-- example: setup -->
 ```csharp
 using System.ComponentModel.DataAnnotations;
 using Haldus;
@@ -109,6 +110,7 @@ Each entity has exactly one archetype. It decides which operations exist.
 
 ## Relationships
 
+<!-- fragment -->
 ```csharp
 app.MapCrud<Category>().Hierarchical();
 app.MapCrud<Product>().References<Category>(required: false);
@@ -141,6 +143,7 @@ query that touches it.
 
 ## State
 
+<!-- fragment -->
 ```csharp
 var orders = app.MapCrud<Order>()
     .Workflow<OrderStatus>(initial: OrderStatus.Draft)
@@ -180,13 +183,14 @@ Handler classes are discovered and registered in DI automatically; a missing han
 | Job | `IJobHandler<TJob> { Task HandleAsync(TJob job, JobContext context, CancellationToken ct); }`, or a lambda passed to `MapJob`. |
 | List filter | `IFilter<TEntity> { IQueryable<TEntity> Apply(IQueryable<TEntity> query); }`; see [Reading](#reading). |
 
-To reject a transition or action, throw `TransitionRejectedException(message)`: the response is 422 and nothing is
-saved. To fail a job with a message for the client, throw `JobFailedException(message)`. Lambdas receive no injected
+To reject a transition or an entity action, throw `TransitionRejectedException(message)`: the response is 422 and nothing
+is saved. Free actions and queries (`app.MapAction`, `app.MapQuery`) do not translate it; return your own result instead. To fail a job with a message for the client, throw `JobFailedException(message)`. Lambdas receive no injected
 services; use the overload that takes `IServiceProvider`. Logic may add or remove embedded rows; Haldus assigns their
 ids and order.
 
 ## Details
 
+<!-- fragment -->
 ```csharp
 var orders = app.MapCrud<Order>();
 
@@ -322,6 +326,7 @@ order, to every registered `IHaldusEventPublisher`. The payload is the record in
 
 ## Rollups
 
+<!-- fragment -->
 ```csharp
 app.MapCrud<Bill>().Sums<BillPayment>(payment => payment.Amount, into: "PaidAmount");
 app.MapAppendOnly<BillPayment>().References<Bill>();
@@ -341,6 +346,7 @@ parent's `Compute()` runs. Tenant-scoped children cannot be rolled up into a glo
 
 ## Balances
 
+<!-- example: balance -->
 ```csharp
 app.MapBalance<Inventory>().MultiTenant().Buckets("available", "reserved").Holds(from: "available", to: "reserved").Idempotent();
 public partial class Inventory;   // Key and one decimal field per bucket are generated
@@ -353,6 +359,7 @@ a balance with `PUT` or from your own code: the ledger would miss it.
 
 ## Jobs
 
+<!-- example: jobs -->
 ```csharp
 builder.Services.AddHaldusPostgreSqlJobs<AppDbContext>();   // or AddHaldusInMemoryJobs(), AddHaldusHangfireJobs()
 app.MapJob<ReportExport>().MultiTenant();
@@ -375,6 +382,7 @@ atomically and needs `.Batch()` on the target.
 Features can live in separate class libraries, each with its own `Map*` calls and entities. Modules referenced by the
 host are found automatically.
 
+<!-- fragment -->
 ```csharp
 builder.Services.AddHaldus<AppDbContext>();            // shared context for modules without their own
 builder.Services.AddHaldusModule<CatalogDbContext>();  // a module with its own context and schema
@@ -402,8 +410,9 @@ The entity is mapped by more than one `Map*` call. Keep one.
 
 ### HALDUS003
 
-Unsupported key type for the archetype. Use `Guid`, `int` or `long` for `Id`, or remove the property and let Haldus
-generate it.
+Unsupported key type for the archetype. `Id` (`MapCrud`, `MapReadOnly`, `MapAppendOnly`, `MapFile`) may be `Guid`, `int`
+or `long`; a job's `Id` must be `Guid`; `Key` of `MapStore` may also be `string`; `Code` of `MapLookup` and `Key` of
+`MapBalance` must be `string`. Or remove the property and let Haldus generate it.
 
 ### HALDUS004
 
@@ -429,7 +438,9 @@ A `MapQuery` request type needs a public parameterless constructor and settable 
 
 ### HALDUS009
 
-A relationship points to a type that is not mapped. Add a `Map*` call for the target.
+A declaration points to a type that is not mapped: a parent (`Under`), a base type (`SubtypeOf`), a derivation or rollup
+source, or a detail owner. Add a `Map*` call for the target in the same project. `References<T>()` may point to a
+compiled entity of another module and reports this only when the type is unknown altogether.
 
 ### HALDUS010
 

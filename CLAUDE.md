@@ -14,6 +14,8 @@ EF Core yapılandırması üretilir.
 - Test çalıştırıcısı Microsoft.Testing.Platform'dur (`global.json`); xUnit v3, .NET 10 SDK'da VSTest ile çalışmaz.
 - Paketleme: `dotnet pack -c Release -o artifacts/packages` (`src` altındaki on kütüphane; klasör `.gitignore`'dadır).
   Ayrıntısı aşağıda, "Paketleme".
+- Belgelerin örnekleri: `dotnet test --project tests/Haldus.Docs.Tests`; yalnızca birkaç sayfa için
+  `HALDUS_DOCS_ONLY=docs/guides/jobs.md,...`. Ayrıntısı aşağıda, "Belgeler".
 - Örnek uygulamanın `openapi.json` dosyası build sırasında yeniden üretilir.
 - Örnek mağazanın istemcisi (`samples/Haldus.Sample.Shop.Client`): `pnpm install`, `pnpm generate:api`,
   `pnpm typecheck`. **Örnek mağazada bir uç veya DTO değiştiğinde (üretilen kod değiştiğinde de) backend derlendikten
@@ -62,6 +64,9 @@ EF Core yapılandırması üretilir.
   yürütücüye ulaştıran altyapı paketleri. Çekirdek yalnızca `IHaldusJobDispatcher` arayüzünü bilir.
 - `tests/Haldus.Generators.Tests`: generator çıktısı testleri.
 - `tests/Haldus.IntegrationTests`: örnek uygulamaya karşı gerçek PostgreSQL testleri.
+- `tests/Haldus.Docs.Tests`: belgelerdeki C# örneklerini generator'dan geçirerek derler; bildirim dizininin eksiksiz,
+  bağlantıların geçerli olduğunu denetler.
+- `docs/`: kullanıcı belgeleri (aşağıda, "Belgeler").
 - `samples/Haldus.Sample.Shop`: örnek uygulama ve modelin sınandığı yer.
 - `samples/Haldus.Sample.Shop.Client`: örnek mağazanın `openapi.json` dosyasından orval ile üretilen TypeScript
   istemcisi (tipler + TanStack Query hook'ları, `fetch`). Uygulama değildir; şemanın tüketilebildiğini kanıtlar.
@@ -69,6 +74,8 @@ EF Core yapılandırması üretilir.
   ve `login-01`, Tailwind). Ürünler, kategoriler ve siparişlerin iş akışı; kendi orval istemcisi `src/api` altındadır.
 - `samples/Haldus.Sample.Shop.Mobile`: örnek mağazanın mobil uygulaması (Expo, Expo Router, React Native Reusables,
   NativeWind). Ürünler, favoriler ve kullanıcının sepeti; kendi orval istemcisi `api` altındadır.
+- `samples/Haldus.Sample.Tracker`: belgelerdeki eğitimin bitmiş uygulaması (proje ve iş takibi); EF Core migration'ları
+  taşıyan tek örnektir. Eğitimdeki istek ve yanıtlar bu uygulamadan alındı; uygulama değişirse eğitim de güncellenir.
 - `samples/Haldus.Sample.Modular`: modüler yapının sınandığı küçük uygulama. `Catalog` ve `Sales` kendi
   bağlamına sahip modüllerdir; `Support` modülü ve `Host` ortak bağlamı kullanır.
 - `tools/Haldus.LoadTest`: çalışan örnek mağazayı HTTP üzerinden yük altında ölçen konsol aracı (bağımlılığı yok).
@@ -431,6 +438,28 @@ Bilinenler:
   yanlış commit'i gösterir.
 - Çözüm paketlenirken iki web projesi için "paketleme devre dışı" uyarısı yazılır; zararsızdır.
 
+## Belgeler
+
+Kullanıcının isteği (2026-11-25): projenin tamamı, açık kaynak bir projedeki gibi, örnekleriyle belgelensin.
+
+- `docs/` Türkçedir (projenin belge dili); `docs/guide.md` İngilizce kalır (ajanlar için; "Kılavuz" bölümü).
+  Düzen: `getting-started` (kurulum, eğitim), `concepts`, `guides` (özellik alanı başına bir sayfa), `reference`
+  (bildirim dizini, yapılandırma, HTTP sözleşmesi, tanılar, paketler), `faq.md`, `samples.md`; giriş `docs/README.md`.
+  Kökte `README.md` (kısa tanıtım), `CONTRIBUTING.md` (geliştirme ve belge yazma kuralları), `CHANGELOG.md`,
+  `SECURITY.md`; `.github` altında issue ve pull request şablonları.
+- **Örnekler derlenir.** Her `csharp` bloğunun önünde `<!-- example: ad -->` (birden çok ad boşlukla), 
+  `<!-- example: ad, error: HALDUS004 -->` veya `<!-- fragment -->` vardır; işaretsiz blok testin hatasıdır. Kurallar
+  ve örtük `using`'ler `CONTRIBUTING.md` içinde "Belgeler" altında. Örnek, generator hiçbir şey üretmezse başarısız
+  sayılır.
+- **Herkese açık yeni bir bildirim `docs/reference/declarations.md` dizinine yazılmadan eklenemez** (`DeclarationIndexTests`;
+  altyapı paketlerindeki kayıt metotları da denetlenir). Bağlantılar ve başlık bağlantıları (`#...`) da testle
+  denetlenir; GitHub'ın bağlantı adı kuralı testte yeniden yazıldı. **Bağlantı verilen bir başlık büyük "İ" ile
+  başlamamalıdır:** GitHub onu `i̇` (iki karakter) yapar ve bağlantı tutmaz.
+- Bir bildirimin davranışı değişince ilgili rehber sayfası, `docs/guide.md` ve gerekiyorsa eğitim aynı değişiklikte
+  güncellenir. Testler adların ve örneklerin derlendiğini denetler, anlatımın doğruluğunu denetlemez.
+- `http` / `json` blokları derlenmez; gerçek çıktılardan (eğitim) veya üretilen koddan ve entegrasyon testlerinden
+  yazılır.
+- Lisans dosyası yoktur ve belgelerde "henüz seçilmedi" diye geçer; kullanıcı seçene kadar uydurulmaz.
 ## Kılavuz (AI bilinebilirliği)
 
 Haldus hiçbir modelin eğitim verisinde yoktur; onu kullanan bir projede çalışan ajan ne okursa onu bilir. Bunun için

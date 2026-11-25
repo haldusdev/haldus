@@ -15,6 +15,7 @@ contain only the application's own fields.
 
 ## Optional
 
-- [README](https://raw.githubusercontent.com/haldusdev/haldus/main/README.md): a longer narrative with more examples (in Turkish).
+- [User documentation](https://github.com/haldusdev/haldus/tree/main/docs): tutorial, concepts, a guide per feature area and reference pages, with compiled examples (in Turkish). Index: docs/README.md.
+- [Tutorial sample](https://github.com/haldusdev/haldus/tree/main/samples/Haldus.Sample.Tracker): the small application the tutorial builds, with EF Core migrations.
 - [Sample shop](https://github.com/haldusdev/haldus/tree/main/samples/Haldus.Sample.Shop): a single-project application that uses most declarations.
 - [Modular sample](https://github.com/haldusdev/haldus/tree/main/samples/Haldus.Sample.Modular): modules as class libraries, shared and per-module contexts.

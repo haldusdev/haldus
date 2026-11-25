@@ -66,7 +66,8 @@ public sealed class ResourceBuilder<TEntity>(RouteGroupBuilder group, IEndpointR
     /// Kaydın, başka bir kaydın (oyuncunun) bir rolü olduğunu bildirir (kişinin müşteri ya da çalışan olması):
     /// oyuncuya zorunlu, değişmeyen bir referans üretilir ve bir oyuncunun bu rolden en çok bir kaydı olur (ikincisi
     /// 409). Rol, oyuncunun kimliğiyle de okunur: <c>GET /customers/by-person-id/{personId}</c>. Oyuncu silinince rolü
-    /// de silinir.
+    /// de silinir; kiracıya ait bir rol genel bir oyuncuya bağlıysa varsayılan <see cref="OnDelete.Restrict"/> olur
+    /// (zincirleme silme kiracı sınırını aşmaz).
     /// </summary>
     public ResourceBuilder<TEntity> RoleOf<TPlayer>(OnDelete onDelete = OnDelete.Cascade)
         where TPlayer : class => this;
