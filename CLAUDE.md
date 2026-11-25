@@ -593,10 +593,16 @@ Yapılmayanlar ve nedenleri:
         personelin posta kutusunu bir kez okuyabilen biri aynı adresle bir parola hesabı açıp kodla doğrular ve role,
         sağlayıcının denetimlerinin (iki adımlı doğrulama, hesabın kapatılması) dışında kalan kalıcı bir parolayla
         ulaşırdı (süzülmüş indeksin incelemesinde çıktı). Kural yalnızca şu an güvenilen sağlayıcıların hesaplarına
-        bakar (`ShopAuthOptions.TrustedIssuers`; hesabın `ExternalIssuer`'ı, sağlayıcının adresiyle küçük harfe
-        çevrilip sondaki eğik çizgi sayılmadan karşılaştırılır): güveni sonradan kapatılmış bir sağlayıcının eskiden
-        yazdığı adres, adresin sahibini rolünden etmez. **Parola hesabına rol veren yeni bir yol
-        `IsStaffAsync`'ten geçmelidir; `ShopAuthOptions.IsStaff` tek başına yetmez.**
+        bakar (`ShopAuthOptions.TrustedIssuers`): güveni sonradan kapatılmış bir sağlayıcının eskiden yazdığı adres,
+        adresin sahibini rolünden etmez. Hesaplar sağlayıcının adıyla (token'daki `iss`; hesabın `ExternalIssuer`'ı)
+        tanınır ve ad, ayardaki değerle (`Issuer`, verilmezse `Authority`) küçük harfe çevrilip sondaki eğik çizgi
+        sayılmadan, veritabanında değil kodda karşılaştırılır (`ExternalSignIn.NormalizeIssuer`; veritabanının
+        `lower()`'ı yerele göre değişir). **Adreslerine güvenilen bir sağlayıcının `iss` değeri ayardakiyle
+        eşleşmiyorsa giriş reddedilir** (`ResolveAsync`; günlük iki değeri de söyler): ASP.NET Core `iss`'i keşif
+        belgesindeki değerle doğrular, `Authority` ile değil, ve ikisi farklıysa kural bu hesapları göremez, sessizce
+        işlemezdi (kuralı sağlayıcıyla sınırlayan ilk yazımda öyleydi; incelemede çıktı). Öyle bir kurulumda
+        `Shop:Auth:Jwt:Issuer` / `Shop:Auth:Oidc:Issuer` token'daki değere eşitlenir. **Parola hesabına rol veren yeni
+        bir yol `IsStaffAsync`'ten geçmelidir; `ShopAuthOptions.IsStaff` tek başına yetmez.**
         Kuralın koruması, sağlayıcının hesabı adresi taşımaya başladıktan sonra başlar; ondan önce (personel
         sağlayıcıyla hiç girmediyse ya da token'ı adresi taşımıyorsa) parola hesabında rolün dayanağı yine adrese
         gönderilen koddur. Bunu da kapatmak isteyen `Shop:Auth:StaffThroughProviderOnly` ayarını açar (varsayılan
@@ -605,8 +611,9 @@ Yapılmayanlar ve nedenleri:
         çevrilip birebir karşılaştırılır (gevşek karşılaştırma `σ` / `ς` gibi çiftlerde başka bir posta kutusunu eşit
         sayardı). Bilinen etkiler: rol token'a yazıldığı için parola hesabı, erişim token'ı yenilenene kadar (ömrü
         bir saattir; `AddBearerToken` varsayılanı) rolünü korur; güvenilen sağlayıcı bir adresi başka bir kimliğe de
-        doğrulanmış olarak verirse o kimlik de rolü alır (güvenin anlamı budur); `iss` değerini sağlayıcının
-        adresinden farklı yazan (çok kiracılı, şablonlu) bir sağlayıcıda kural işlemez. Süzülmüş indeks, `Shop:CreateDatabase` ile daha
+        doğrulanmış olarak verirse o kimlik de rolü alır (güvenin anlamı budur); `iss` değeri kiracıya göre değişen
+        (çok kiracılı, şablonlu) bir sağlayıcı, adreslerine güvenilerek kullanılamaz (tek bir `Issuer` değeri
+        yazılabilir). Süzülmüş indeks, `Shop:CreateDatabase` ile daha
         önce oluşturulmuş bir veritabanında yoktur (örnekte migration yok): o veritabanında adresi paylaşan bir
         sağlayıcı hesabı yazılamaz (500); veritabanı yeniden oluşturulur.
         Hesap açılırken yalnızca bir çakışma karşılanır (aynı kimliğin eşzamanlı ilk isteği); başka bir hata
@@ -698,7 +705,9 @@ Yapılmayanlar ve nedenleri:
           bozulan erişim token'ının sağlayıcıdan yenilenmesi, çıkış, sağlayıcı açıkken parola ile kayıt. İncelemelerin
           düzeltmelerinden (`0d7eade`) sonra tur yinelendi: giriş, personel adresiyle ürün oluşturma, "her yerden
           çık"tan sonra eski token'ın 401 alması ve panelin token'ı Keycloak'tan yenileyip sürmesi, çıkış, parola ile
-          kayıt. (Keycloak'ın erişim token'ı `iat` taşır; türü `JWT`'dir.)
+          kayıt. (Keycloak'ın erişim token'ı `iat` taşır; türü `JWT`'dir.) Adres kuralı değiştikten (`3e0767c`) sonra
+          bir tur daha: sağlayıcıyla giren personel ürün oluşturdu; aynı adresle açılıp kodla doğrulanan parola hesabı
+          oluşturamadı (403 pencerede göründü).
           Mobilde emülatörde (Expo Go, Keycloak ve backend `adb reverse` ile) görülenler: giriş ekranında düğmenin
           çıkması ve dokununca sistem tarayıcısının açılması. **Giriş tamamlanamadı:** emülatördeki Chrome ilk
           açılış ekranında kaldı ve devam etmek Google'ın hizmet şartlarını kabul etmek demekti; bu, kullanıcı adına

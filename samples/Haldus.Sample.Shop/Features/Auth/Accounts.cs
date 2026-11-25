@@ -150,9 +150,10 @@ public sealed class ShopAuthOptions
     public bool StaffThroughProviderOnly { get; set; }
 
     /// <summary>
-    /// "Adres doğrulandı" beyanına şu an güvenilen sağlayıcıların adresleri (küçük harf, sondaki eğik çizgiyle ve
-    /// onsuz). Ayardan okunmaz; sağlayıcı ayarlarından hesaplanır. Böyle bir sağlayıcının hesabı bir adresi doğrulanmış
-    /// olarak taşıyorsa o adresin yetkilisi sağlayıcıdır: aynı adresli parola hesabı personel rolü almaz.
+    /// "Adres doğrulandı" beyanına şu an güvenilen sağlayıcıların adları (token'larındaki <c>iss</c>;
+    /// <see cref="ExternalSignIn.NormalizeIssuer"/> ile düzeltilmiş). Ayardan okunmaz; sağlayıcı ayarlarından
+    /// hesaplanır. Böyle bir sağlayıcının hesabı bir adresi doğrulanmış olarak taşıyorsa o adresin yetkilisi
+    /// sağlayıcıdır: aynı adresli parola hesabı personel rolü almaz.
     /// </summary>
     public IReadOnlyList<string> TrustedIssuers { get; internal set; } = [];
 

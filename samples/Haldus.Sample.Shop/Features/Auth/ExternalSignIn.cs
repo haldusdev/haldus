@@ -38,6 +38,9 @@ public sealed class ShopJwtOptions
     /// <inheritdoc cref="ShopOidcOptions.TrustEmailVerified"/>
     public bool TrustEmailVerified { get; set; }
 
+    /// <inheritdoc cref="ShopOidcOptions.Issuer"/>
+    public string? Issuer { get; set; }
+
     public bool Enabled => !string.IsNullOrWhiteSpace(Authority);
 }
 
@@ -66,6 +69,15 @@ public sealed class ShopOidcOptions
     /// hesabı adressiz (yer tutucu bir adresle) ve doğrulanmamış olarak açılır.
     /// </summary>
     public bool TrustEmailVerified { get; set; }
+
+    /// <summary>
+    /// Sağlayıcının token'larına yazdığı <c>iss</c> değeri; verilmezse <see cref="Authority"/> ile aynı sayılır (OpenID
+    /// Connect keşfi ikisinin aynı olmasını ister). Yalnızca <see cref="TrustEmailVerified"/> açıkken önemlidir:
+    /// "bu adresin yetkilisi sağlayıcıdır" kuralı hesapları bu değerle tanır. Sağlayıcı başka bir değer yazıyorsa
+    /// (dışarıya başka bir adla görünen bir kurulum) giriş reddedilir ve günlük iki değeri de söyler; o zaman bu ayar
+    /// token'daki değere eşitlenir.
+    /// </summary>
+    public string? Issuer { get; set; }
 
     /// <summary>
     /// Çerezle açılan oturumun ömrü (dakika). Sağlayıcıdaki oturum kapandığında backend'e haber gelmez; çerez en geç bu
@@ -308,6 +320,16 @@ public static partial class ExternalSignIn
         var options = http.RequestServices.GetRequiredService<IOptions<ShopAuthOptions>>().Value;
         var cancellationToken = http.RequestAborted;
 
+        // Adreslerine güvenilen sağlayıcının hesapları `iss` değeriyle tanınır (parola hesabına rol verilirken "bu
+        // adresi güvenilen bir sağlayıcının hesabı taşıyor mu" diye sorulur). Token'daki değer ayardakiyle
+        // eşleşmiyorsa o kural bu hesapları göremezdi ve sessizce işlemezdi; giriş bu yüzden reddedilir ve
+        // uyumsuzluk kurulurken, ilk girişte fark edilir.
+        if (trustEmail && !options.TrustedIssuers.Contains(NormalizeIssuer(issuer)))
+        {
+            LogUnknownIssuer(Logger(http), issuer, string.Join(", ", options.TrustedIssuers));
+            return null;
+        }
+
         long? issuedAt = null;
 
         if (!openSession)
@@ -527,6 +549,9 @@ public static partial class ExternalSignIn
         && first.Port == second.Port
         && string.Equals(first.AbsolutePath.TrimEnd('/'), second.AbsolutePath.TrimEnd('/'), StringComparison.OrdinalIgnoreCase);
 
+    /// <summary>Sağlayıcının adı (<c>iss</c>), yazılışındaki önemsiz farklar (büyük-küçük harf, sondaki eğik çizgi) atılarak.</summary>
+    internal static string NormalizeIssuer(string issuer) => issuer.Trim().TrimEnd('/').ToLowerInvariant();
+
     private static bool SameName(string? left, string? right) =>
         !string.IsNullOrWhiteSpace(left)
         && !string.IsNullOrWhiteSpace(right)
@@ -540,6 +565,11 @@ public static partial class ExternalSignIn
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "An access token of the identity provider was rejected: it does not say when it was issued (iat), or says a time further ahead than the accepted clock skew.")]
     private static partial void LogNoIssuedAt(ILogger logger);
+
+    // Değer, sağlayıcının doğrulanmış token'ından gelir ve keşif belgesindeki adla aynıdır (yoksa token buraya
+    // ulaşmazdı); isteği yapanın serbest metni değildir.
+    [LoggerMessage(Level = LogLevel.Error, Message = "A sign-in through the identity provider was rejected: its tokens say iss '{Issuer}', which is not the issuer configured for a provider with TrustEmailVerified ({Configured}). Set Shop:Auth:Jwt:Issuer / Shop:Auth:Oidc:Issuer to the value in the tokens.")]
+    private static partial void LogUnknownIssuer(ILogger logger, string issuer, string configured);
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "An account of the identity provider was opened without a verified address while Shop:Auth:RequireVerifiedEmail is on (the token carried none); it can do nothing until a token carries email and email_verified.")]
     private static partial void LogUnverifiable(ILogger logger);

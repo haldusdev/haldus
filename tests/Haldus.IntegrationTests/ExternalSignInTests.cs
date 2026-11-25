@@ -517,6 +517,61 @@ public sealed class ExternalSignInTests(ShopFixture fixture)
     }
 
     [Fact]
+    public async Task ProviderThatNamesItselfDifferently_IsRefusedUntilItsNameIsConfigured()
+    {
+        // Sağlayıcı dışarıya başka bir adla görünüyor: token'larına yazdığı `iss`, keşif belgesinin okunduğu adres
+        // değil (ASP.NET Core bunu kabul eder; `iss` keşif belgesindeki değerle doğrulanır).
+        using var provider = new FakeProvider { Name = "https://SSO.idp.test/realms/Internal/" };
+        var staff = NewEmail();
+        var logs = new CapturedLogs();
+
+        // Adreslerine güvenilen sağlayıcının hesapları o adla tanınır ("bu adresin yetkilisi sağlayıcıdır" kuralı).
+        // Ad ayardakiyle eşleşmiyorsa kural bu hesapları göremez ve sessizce işlemezdi: giriş reddedilir, günlük
+        // nedenini ve iki değeri de söyler.
+        await using (var mismatched = CreateFactory(
+                provider,
+                ("Shop:Auth:Staff:0", staff),
+                ("Shop:Auth:Oidc:Authority", FakeProvider.Issuer),
+                ("Shop:Auth:Oidc:ClientId", FakeProvider.ServerClient),
+                ("Shop:Auth:Oidc:ClientSecret", FakeProvider.ServerSecret))
+            .WithWebHostBuilder(builder => builder.ConfigureTestServices(services => services.AddSingleton<ILoggerProvider>(logs))))
+        {
+            using var refused = mismatched.CreateClient();
+            Assert.Equal(HttpStatusCode.Unauthorized, (await SendAsync(refused, HttpMethod.Get, "/auth/me", token: provider.AccessToken(NewSubject(), staff, emailVerified: true))).StatusCode);
+
+            // Günlük token'daki adı da ayardaki adı da söyler.
+            Assert.Single(logs.Errors("ExternalSignIn"), message => message.Contains(provider.Name, StringComparison.Ordinal) && message.Contains("(https://idp.test)", StringComparison.Ordinal));
+
+            // Yönlendirmeli giriş de aynı kuraldan geçer: oturum açılmaz.
+            using var browser = mismatched.CreateClient(new WebApplicationFactoryClientOptions { BaseAddress = new Uri("https://localhost"), AllowAutoRedirect = false, HandleCookies = true });
+            Assert.Equal(HttpStatusCode.BadRequest, (await ServerSignInAsync(browser, provider, NewSubject(), staff)).StatusCode);
+            Assert.Equal(HttpStatusCode.Unauthorized, (await SendAsync(browser, HttpMethod.Get, "/auth/me")).StatusCode);
+            Assert.Equal(2, logs.Errors("ExternalSignIn").Count(message => message.Contains(provider.Name, StringComparison.Ordinal)));
+        }
+
+        // Ad ayarlanınca (yazılışındaki büyük-küçük harf ve sondaki eğik çizgi farkı sayılmaz) giriş çalışır...
+        await using var factory = CreateFactory(provider, ("Shop:Auth:Staff:0", staff), ("Shop:Auth:Jwt:Issuer", "https://sso.IDP.test/realms/internal"));
+        using var client = factory.CreateClient();
+        var token = provider.AccessToken(NewSubject(), staff, emailVerified: true);
+        Assert.True((await ReadAsync<AccountInfo>(await SendAsync(client, HttpMethod.Get, "/auth/me", token: token))).IsStaff);
+
+        // ...ve kural bu sağlayıcının hesabını görür: aynı adresle açılıp doğrulanan parola hesabı rol almaz.
+        var registered = await ReadAsync<AccessTokenResponse>(await SendAsync(client, HttpMethod.Post, "/auth/register", new { email = staff, password = Password }));
+        var verified = await ReadAsync<AccessTokenResponse>(await SendAsync(
+            client, HttpMethod.Post, "/auth/email/verify", new { code = fixture.Mail.CodeFor(staff, AccountCodePurpose.EmailVerification) }, registered.AccessToken));
+        var account = await ReadAsync<AccountInfo>(await SendAsync(client, HttpMethod.Get, "/auth/me", token: verified.AccessToken));
+        Assert.Equal((true, false), (account.EmailVerified, account.IsStaff));
+        Assert.Equal(
+            HttpStatusCode.Forbidden,
+            (await SendAsync(client, HttpMethod.Post, "/products", new { name = $"Kettle {Guid.NewGuid():N}", price = 10 }, verified.AccessToken)).StatusCode);
+
+        // Adresine güvenilmeyen sağlayıcıda ad önemli değildir: giriş, ayar olmadan da çalışır.
+        await using var untrusting = CreateFactory(provider, ("Shop:Auth:Jwt:TrustEmailVerified", "false"));
+        using var plain = untrusting.CreateClient();
+        Assert.Equal(HttpStatusCode.OK, (await SendAsync(plain, HttpMethod.Get, "/auth/me", token: provider.AccessToken(NewSubject()))).StatusCode);
+    }
+
+    [Fact]
     public async Task StaffThroughProviderOnly_KeepsTheRoleFromEveryPasswordAccount()
     {
         using var provider = new FakeProvider();
@@ -930,8 +985,12 @@ public sealed class ExternalSignInTests(ShopFixture fixture)
     {
         private readonly ConcurrentQueue<(string Category, LogLevel Level, string Message)> _entries = new();
 
-        public IEnumerable<string> Warnings(string category) =>
-            _entries.Where(entry => entry.Level == LogLevel.Warning && entry.Category.EndsWith(category, StringComparison.Ordinal)).Select(entry => entry.Message);
+        public IEnumerable<string> Warnings(string category) => Messages(category, LogLevel.Warning);
+
+        public IEnumerable<string> Errors(string category) => Messages(category, LogLevel.Error);
+
+        private IEnumerable<string> Messages(string category, LogLevel level) =>
+            _entries.Where(entry => entry.Level == level && entry.Category.EndsWith(category, StringComparison.Ordinal)).Select(entry => entry.Message);
 
         public ILogger CreateLogger(string categoryName) => new Sink(categoryName, _entries);
 
@@ -962,6 +1021,9 @@ public sealed class ExternalSignInTests(ShopFixture fixture)
         private const string KeyId = "test-key-1";
 
         private readonly RSA _key = RSA.Create(2048);
+
+        /// <summary>Sağlayıcının kendine verdiği ad: keşif belgesindeki <c>issuer</c> ve token'lardaki <c>iss</c>.</summary>
+        public string Name { get; init; } = Issuer;
         private readonly Dictionary<string, (string Nonce, string Challenge, string Subject, string Email)> _codes = [];
 
         public string AccessToken(
@@ -975,7 +1037,7 @@ public sealed class ExternalSignInTests(ShopFixture fixture)
             TimeSpan? issuedIn = null,
             bool iat = true,
             bool nbf = true) =>
-            Sign(subject, email, emailVerified, audience ?? ApiAudience, issuer ?? Issuer, expiresIn ?? TimeSpan.FromMinutes(20), key ?? _key, nonce: null, issuedIn ?? TimeSpan.Zero, iat, nbf);
+            Sign(subject, email, emailVerified, audience ?? ApiAudience, issuer ?? Name, expiresIn ?? TimeSpan.FromMinutes(20), key ?? _key, nonce: null, issuedIn ?? TimeSpan.Zero, iat, nbf);
 
         /// <summary>Kullanıcının sağlayıcıda giriş yaptığını ve backend'e döneceği kodu aldığını varsayar.</summary>
         public string Authorize(string nonce, string challenge, string subject, string email)
@@ -1004,7 +1066,7 @@ public sealed class ExternalSignInTests(ShopFixture fixture)
                 case "/.well-known/openid-configuration":
                     return Json(new
                     {
-                        issuer = Issuer,
+                        issuer = Name,
                         authorization_endpoint = $"{Issuer}/authorize",
                         token_endpoint = $"{Issuer}/token",
                         jwks_uri = $"{Issuer}/jwks",
@@ -1049,7 +1111,7 @@ public sealed class ExternalSignInTests(ShopFixture fixture)
                         token_type = "Bearer",
                         access_token = Convert.ToHexStringLower(RandomNumberGenerator.GetBytes(16)),
                         expires_in = 600,
-                        id_token = Sign(granted.Subject, granted.Email, emailVerified: true, ServerClient, Issuer, TimeSpan.FromMinutes(10), _key, granted.Nonce, TimeSpan.Zero, iat: true, nbf: true),
+                        id_token = Sign(granted.Subject, granted.Email, emailVerified: true, ServerClient, Name, TimeSpan.FromMinutes(10), _key, granted.Nonce, TimeSpan.Zero, iat: true, nbf: true),
                     });
 
                 default:

@@ -59,18 +59,14 @@ public static partial class AuthEndpoints
         services.AddSingleton(jwt);
         services.AddSingleton(oidc);
 
-        // Sağlayıcının hesabı, token'ındaki `iss` ile saklanır; o değer sağlayıcının adresidir.
+        // Sağlayıcının hesabı, token'ındaki `iss` ile saklanır. O değer sağlayıcının adresidir; başka yazılıyorsa
+        // `Issuer` ayarıyla söylenir (eşleşmeyen bir değerle gelen giriş reddedilir, ExternalSignIn.ResolveAsync).
         string?[] trusted =
         [
-            jwt.Enabled && jwt.TrustEmailVerified ? jwt.Authority : null,
-            oidc.Enabled && oidc.TrustEmailVerified ? oidc.Authority : null,
+            jwt.Enabled && jwt.TrustEmailVerified ? (string.IsNullOrWhiteSpace(jwt.Issuer) ? jwt.Authority : jwt.Issuer) : null,
+            oidc.Enabled && oidc.TrustEmailVerified ? (string.IsNullOrWhiteSpace(oidc.Issuer) ? oidc.Authority : oidc.Issuer) : null,
         ];
-        var issuers = trusted
-            .OfType<string>()
-            .Select(authority => authority.Trim().TrimEnd('/').ToLowerInvariant())
-            .SelectMany(authority => new[] { authority, authority + "/" })
-            .Distinct()
-            .ToArray();
+        var issuers = trusted.OfType<string>().Select(ExternalSignIn.NormalizeIssuer).Distinct().ToArray();
         services.PostConfigure<ShopAuthOptions>(options => options.TrustedIssuers = issuers);
 
         if (configuration.GetValue<bool>("Shop:Auth:StaffThroughProviderOnly") && issuers.Length == 0)
@@ -1099,13 +1095,21 @@ public static partial class AuthEndpoints
         // eskiden yazdığı adres, adresin sahibini rolünden etmez.
         var trusted = options.TrustedIssuers;
 
-        return trusted.Count == 0
-            || !await db.Set<ShopAccount>().AnyAsync(
-                other => other.ExternalIssuer != null
-                    && other.Email == account.Email
-                    && other.EmailVerifiedAt != null
-                    && trusted.Contains(other.ExternalIssuer.ToLower()),
-                cancellationToken);
+        if (trusted.Count == 0)
+        {
+            return true;
+        }
+
+        // Sağlayıcının adı veritabanında değil burada karşılaştırılır: küçük harfe çevirme veritabanının yereline
+        // göre değişir (Türkçe yerelde `I` → `ı`) ve ayardaki değerle eşleşmeyebilirdi. Bir adresi taşıyan sağlayıcı
+        // hesabı bir-iki tanedir.
+        var holders = await db.Set<ShopAccount>()
+            .Where(other => other.ExternalIssuer != null && other.Email == account.Email && other.EmailVerifiedAt != null)
+            .Select(other => other.ExternalIssuer!)
+            .Distinct()
+            .ToListAsync(cancellationToken);
+
+        return !holders.Any(issuer => trusted.Contains(ExternalSignIn.NormalizeIssuer(issuer)));
     }
 
     /// <summary>

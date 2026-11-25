@@ -241,4 +241,6 @@ Bu seçimler kullanıcıya sorulmadan, önerilen seçenekle verildi (deponun `CL
   Keycloak'ın giriş sayfasına götürdü (PKCE, `S256`), dönüşte istenen sayfa sağlayıcı oturumuyla açıldı, sağlayıcının
   doğruladığı personel adresiyle ürün oluşturuldu, "her yerden çık"tan sonra eski erişim token'ı 401 aldı ve panel
   token'ı Keycloak'tan yenileyip devam etti, hesap menüsünde parola değiştirme görünmedi, çıkış oturumu sildi ve
-  sağlayıcı açıkken parola ile kayıt çalıştı.
+  sağlayıcı açıkken parola ile kayıt çalıştı. Adres kuralı değiştikten sonraki turda: sağlayıcıyla giren personelin
+  adresiyle ayrıca bir parola hesabı açılabildi ve kodla doğrulandı, ama ürün oluşturamadı ("Only staff can change
+  this resource."); sağlayıcının hesabı aynı adresle ürün oluşturmaya devam etti.
