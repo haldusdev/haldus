@@ -727,7 +727,9 @@ Yapılmayanlar ve nedenleri:
           aldı, uygulama token'ı Keycloak'tan bir kez yeniledi ve üçü de 200 ile yinelendi; çıkıştan sonra yeniden
           başlatınca oturum geri gelmedi. **Tarayıcıdaki adım cihazda yapılmadı:** emülatördeki Chrome ilk açılış
           ekranındadır ve devam etmek Google'ın hizmet şartlarını kabul etmek demektir (kullanıcı adına yapılmaz;
-          kurulu iki sistem imajı da Play Store imajıdır). Onun yerine uygulamanın hazırladığı yetkilendirme adresi
+          kurulu iki sistem imajı da Play Store imajıdır ve cihazda `https` bağlantısı açabilen tek uygulama da tek
+          Custom Tabs sağlayıcısı da Chrome'dur: `cmd package query-activities` / `query-services` ile bakıldı).
+          Onun yerine uygulamanın hazırladığı yetkilendirme adresi
           cihaz günlüğünden okundu (geçici, commit'lenmeyen bir `console.log`), Keycloak'ın giriş formu o adresle
           bilgisayardan dolduruldu ve Keycloak'ın döndürdüğü bağlantı `adb shell am start` ile uygulamaya iletildi.
           Yani cihazda sınanmayan tek şey, Keycloak'ın sayfasının Chrome'da çizilmesi ve Chrome'un `exp://`
