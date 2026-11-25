@@ -10,6 +10,7 @@
     <Project Path="src/Haldus.Abstractions/Haldus.Abstractions.csproj" />
     <Project Path="src/Haldus.AspNetCore/Haldus.AspNetCore.csproj" />
     <Project Path="src/Haldus.EntityFrameworkCore/Haldus.EntityFrameworkCore.csproj" />
+    <Project Path="src/Haldus.Events.Sqs/Haldus.Events.Sqs.csproj" />
     <Project Path="src/Haldus.Generators/Haldus.Generators.csproj" />
     <Project Path="src/Haldus.Jobs.Hangfire/Haldus.Jobs.Hangfire.csproj" />
     <Project Path="src/Haldus.Jobs.InMemory/Haldus.Jobs.InMemory.csproj" />

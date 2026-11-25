@@ -25,6 +25,7 @@
     <ProjectReference Include="..\..\src\Haldus.Jobs.InMemory\Haldus.Jobs.InMemory.csproj" />
     <ProjectReference Include="..\..\src\Haldus.Jobs.Hangfire\Haldus.Jobs.Hangfire.csproj" />
     <ProjectReference Include="..\..\src\Haldus.Storage.S3\Haldus.Storage.S3.csproj" />
+    <ProjectReference Include="..\..\src\Haldus.Events.Sqs\Haldus.Events.Sqs.csproj" />
   </ItemGroup>
 
 </Project>
