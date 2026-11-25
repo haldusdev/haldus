@@ -26,6 +26,36 @@ const metadata = {
 };
 const link = { clientId: 'shop-mobile', tokenEndpoint: 'https://id.test/connect/token' };
 
+describe('the address of the provider', () => {
+  it('refuses plain http outside the development addresses', async () => {
+    respondWith(() => json(200, metadata));
+
+    await assert.rejects(
+      prepareProviderSignIn({ ...provider, authority: 'http://id.test/realms/shop' }),
+      ProviderSignInError
+    );
+    assert.equal(calls.length, 0);
+  });
+
+  it('accepts plain http for the device itself and the emulator host', async () => {
+    for (const authority of [
+      'http://localhost:8080/realms/shop',
+      'http://10.0.2.2:8080/realms/shop',
+    ]) {
+      respondWith(() => json(200, { ...metadata, issuer: authority }));
+
+      const prompt = await prepareProviderSignIn({ ...provider, authority });
+      assert.equal(prompt.tokenEndpoint, metadata.token_endpoint);
+    }
+  });
+
+  it('refuses a discovery document that belongs to another issuer', async () => {
+    respondWith(() => json(200, { ...metadata, issuer: 'https://evil.test/realms/shop' }));
+
+    await assert.rejects(prepareProviderSignIn(provider), ProviderSignInError);
+  });
+});
+
 function unreachable(): Response {
   throw new TypeError('Network request failed');
 }

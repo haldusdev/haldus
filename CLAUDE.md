@@ -553,8 +553,10 @@ Yapılmayanlar ve nedenleri:
       - `Shop:Auth:Oidc` (`Authority`, `ClientId`, `ClientSecret`): backend'in kendisi tarayıcıyı sağlayıcıya
         yönlendirir (`GET /auth/oidc/sign-in?returnUrl=`) ve çerezle oturum açar
         (`Microsoft.AspNetCore.Authentication.OpenIdConnect`). Çerez kendiliğinden gönderildiği için, çerezle kimliği
-        doğrulanan ve yazan her istek `X-Shop-Request` başlığını taşımalıdır (CSRF); dönüş adresi yalnızca
-        uygulamanın içindeki bir yol olabilir. Bu uçlar yalnızca ayar verildiyse eşlenir ve şemaya girmez.
+        doğrulanan ve yazan her istek `X-Shop-Request` başlığını taşımalıdır (CSRF; giriş istemeyen uçlarda da:
+        çıkış da oturumu değiştirir); dönüş adresi yalnızca uygulamanın içindeki bir yol olabilir. Bozuk veya sahte bir
+        dönüş isteği 400 alır. Bu uçlar yalnızca ayar verildiyse eşlenir ve şemaya girmez. Bir vekilin arkasında
+        istek şeması da vekilden okunur (`X-Forwarded-Proto`; `Shop:KnownProxies`).
         Çerez kendi başına geçerli değildir: girişte sunucuda bir oturum (`ShopSession`) açılır ve çerez ona bağlanır
         (`sid`); her istekte oturumun açık olduğu sorulur ve kimlik hesaptan yeniden kurulur (rol ve doğrulama
         bilgisi çerezin sekiz saatlik ömrü boyunca donmaz). `POST /auth/oidc/sign-out` ve `/auth/logout-all` oturumu
@@ -567,12 +569,21 @@ Yapılmayanlar ve nedenleri:
         aynıdır. Her istekte bir sorgudur. **Var olan bir hesaba adres üzerinden bağlanılmaz** (aynı adresi taşıyan bir
         dış kimlik, parolayla açılmış hesabı ele geçirmemelidir): adres yalnızca sağlayıcı onu doğruladıysa
         (`email_verified`) ve başka hesapta değilse alınır; değilse hesap, kimseye ait olamayacak bir adresle
-        (`…@external.invalid`) ve doğrulanmamış olarak açılır.
+        (`…@external.invalid`) ve doğrulanmamış olarak açılır. Yer tutucu adres rastgeledir (kimlikten türetilseydi,
+        kişinin sağlayıcıdaki kimliğini bilen biri o adresle önceden kayıt olup hesabının açılmasını engelleyebilirdi).
+      - **Sağlayıcı hesabının parolası yoktur ve parola uçlarından bir parola da edinemez.** Giriş, "parolamı
+        unuttum" ve sıfırlama uçları öyle bir hesabı hiç yokmuş gibi yanıtlar (`PasswordAccounts`); parola değiştirme,
+        e-posta doğrulama ve kodu yeniden gönderme 409 döner (`ManagedByProvider`). İlk yazımda sıfırlama ucu hesaba
+        parola koyabiliyordu: adresin posta kutusunu bir kez okuyabilen biri kalıcı bir parola ve bizim token'larımızı
+        alır, sağlayıcının denetimlerini (iki adımlı doğrulama, hesabın kapatılması) aşardı (bağımsız incelemede
+        çıktı). **Hesabı e-postayla bulan yeni bir parola ucu `PasswordAccounts` üzerinden okumalıdır.**
       - **Sağlayıcının `email_verified` beyanına varsayılan olarak güvenilmez** (`TrustEmailVerified`, iki bölümde
         ayrı ayrı; varsayılan kapalı). Kapalıyken dış kimliğin hesabı her zaman adressiz ve doğrulanmamış açılır;
         personel rolü alamaz. Herkesin hesap açabildiği veya adresi doğrulamadan beyan eden bir sağlayıcıda bu beyan,
         personel adresini yazan herkese rol verirdi (ilk yazımda beyana her zaman güveniliyordu; otomatik incelemede
-        çıktı). Ayar yalnızca adresleri gerçekten doğrulayan, kuruluşun kendi sağlayıcısı için açılır.
+        çıktı). Ayar yalnızca adresleri gerçekten doğrulayan, kuruluşun kendi sağlayıcısı için açılır. Güven her istekte
+        yeniden uygulanır: ayar sonradan kapatılırsa, daha önce doğrulanmış yazılmış hesap da rolünü kaybeder. İki
+        bölüm aynı sağlayıcıyı gösteriyorsa ayar ikisinde aynı olmalıdır; değilse uygulama açılmaz.
       - İstemciler neyin sunulduğunu `GET /auth/config` ucundan okur (gizli bir şey taşımaz).
       - Oturum denetimi (`sid`) yalnızca kendi token'larımız içindir; sağlayıcının token'ının ömrünü ve iptalini
         sağlayıcı yönetir. `RequireVerifiedEmail` her yoldan giriş için geçerlidir.
@@ -584,7 +595,10 @@ Yapılmayanlar ve nedenleri:
         Keycloak'ın kendi giriş sayfasından geçen yönlendirmeli giriş (ASP.NET Core burada PAR da kullanır). Başka
         sağlayıcılara (Entra ID, Auth0...) karşı sınanmadı. Sınırlar: tek sağlayıcı; sağlayıcıdaki adres sonradan değişirse hesaba
         yansımaz; sağlayıcıdan çıkış (tek oturum kapatma) yoktur; dış hesabın parolası yoktur ve parola uçları onu
-        kabul etmez; erişim token'ında `email` / `email_verified` yoksa hesap adressiz açılır.
+        kabul etmez; erişim token'ında `email` / `email_verified` yoksa hesap adressiz açılır; çerez, sağlayıcıdaki
+        oturum kapansa da sekiz saate kadar geçerli kalır (sağlayıcının ön kanal çıkışı desteklenmez) ve sağlayıcının
+        JWT'si `/auth/logout-all` sonrasında da süresi dolana kadar geçer; token'ın türü sabitlenmez, bu yüzden
+        `Audience` istemcinin kimliğiyle aynı olmamalıdır (yoksa kimlik token'ı da erişim token'ı sayılırdı).
       - **İstemciler** (kullanıcının onayladığı paketlerle; panelde `oidc-client-ts`, mobilde `expo-auth-session`).
         İkisi de sağlayıcıyı `/auth/config` yanıtından öğrenir ve Authorization Code + PKCE akışını kendisi yapar;
         backend'e sağlayıcının erişim token'ını sunar ve hesabı `/auth/me` ile sorar. Oturum kaydı türünü taşır
@@ -592,6 +606,8 @@ Yapılmayanlar ve nedenleri:
         sağlayıcının token ucundan, yenileme token'ı ile yenilenir ve parola oturumuyla **aynı** yenileme
         hattından geçer (`api-fetch`: tek yenileme, sekmeler arası kilit, başka hesabın oturumuna yazmama, yalnızca
         kesin rette çıkış; sağlayıcı için kesin ret RFC 6749'un ret kodlarıdır, ağ hatası ve 5xx oturumu korur).
+        Sağlayıcı yenilediği halde backend yeni token'ı da reddederse sağlayıcı oturumu kapatılır (yoksa her istek
+        sağlayıcıda bir yenileme token'ı harcardı; incelemede çıktı).
         Çıkış yalnızca yereldir. Parola değiştirme ve e-posta doğrulama sağlayıcı hesabında gizlenir.
         - Panel: dönüş `/login/callback` rotasındadır. Token'lar yalnızca panelin kendi oturum kaydında durur;
           kitaplığın kullanıcı deposu bellektedir ve her işlemden sonra boşaltılır (tek kaynak: sekmeler arası
@@ -599,12 +615,16 @@ Yapılmayanlar ve nedenleri:
           zamanlayıcıyla ve iframe ile yenilemesi kapalıdır (`src/lib/provider.ts`).
         - Mobil: dönüş adresi `haldus-shop://sign-in`'dir (Expo Go'da `exp://…/--/sign-in`, web'de `/sign-in`);
           sağlayıcının token ucu oturumla birlikte saklanır (`lib/provider.ts`, `lib/provider-sign-in.ts`).
+          Sağlayıcının adresi HTTPS olmalıdır (düz HTTP yalnızca `localhost` ve emülatörün `10.0.2.2` adresinde) ve
+          keşif belgesinin `issuer` alanı istenen adresle aynı olmalıdır.
         - Sınananlar: iki projede birim testleri ve sahte bir sağlayıcıya karşı etkileşim testleri (mobilde web
           hedefinde, açılır pencere dahil). Panel ayrıca gerçek backend ve kapsayıcıdaki Keycloak ile tarayıcıda elle
           denendi: Keycloak'ın giriş sayfasından giriş, doğrulanmış personel adresiyle ortak kaynağa yazma, imzası
           bozulan erişim token'ının sağlayıcıdan yenilenmesi, çıkış, sağlayıcı açıkken parola ile kayıt.
-          **Mobilde sağlayıcıyla giriş cihazda veya emülatörde denenmedi** (Expo Go OAuth için uygun değildir;
-          bir geliştirme derlemesi gerekir).
+          Mobilde emülatörde (Expo Go, Keycloak ve backend `adb reverse` ile) görülenler: giriş ekranında düğmenin
+          çıkması ve dokununca sistem tarayıcısının açılması. **Giriş tamamlanamadı:** emülatördeki Chrome ilk
+          açılış ekranında kaldı ve devam etmek Google'ın hizmet şartlarını kabul etmek demekti; bu, kullanıcı adına
+          yapılmadı. Kullanıcı Chrome'u bir kez açıp o ekranı geçerse deneme yinelenebilir.
         - Sınırlar: sağlayıcının oturumu kapatılmaz ve token'ı iptal edilmez (çıkış yereldir); kimlik token'ı
           (`id_token`) kullanılmaz; yalnızca kapsam gönderilir (`audience` / `resource` parametresi isteyen
           sağlayıcılar yapılandırılamaz); panelde `serverSignIn` için düğme yoktur; panel paketi `oidc-client-ts`'i
@@ -1430,15 +1450,17 @@ Yapılmayanlar ve nedenleri:
     göre bağlanır); varsayılan exchange'de anahtar hedef kuyruğun adı olmalıdır. Özellikler: `message-id` (olayın
     kimliği), `type`, başlıklarda `resource` ve `record-id`. Bağlantının kendiliğinden kurtarılması kapalıdır: hatadan
     sonra kanal ve bağlantı atılır, bir sonraki olay yenisini kurar. Exchange, kuyruk ve bağları Haldus oluşturmaz.
-    Testler gerçek bir aracıya karşıdır (`HALDUS_TEST_RABBITMQ_IMAGE`). Sınırlar: TLS yolu sınanmadı; aynı kaydın
-    olaylarının sırası tek tüketicili bir kuyrukta korunur, tüketiciler arasında korunmaz.
+    Testler gerçek bir aracıya karşıdır (`HALDUS_TEST_RABBITMQ_IMAGE`), TLS dinleyicisi dahil: güvenilen sertifikayla
+    gönderim geçer, güvenilmeyen sertifika varsayılan olarak reddedilir. Sınır: aynı kaydın olaylarının sırası tek
+    tüketicili bir kuyrukta korunur, tüketiciler arasında korunmaz.
   - **Kafka** (`Haldus.Events.Kafka`, `AddHaldusKafkaPublisher`; `Confluent.Kafka`). Anahtar `{kaynak}:{kayıt}`'tır:
     bir kaydın olayları aynı bölüme düşer ve sıralı kalır (bölümleme Java istemcisiyle aynıdır, `Murmur2Random`).
     `acks=all`, idempotent üretici, olay başına bekleme (`LingerMs = 0`). Başlıklar `event-id`, `event-type`,
     `resource`. Güvenlik ayarları (SASL, TLS) `ConfigureProducer` ile istemcinin kendi ayarlarından verilir.
     İstemcinin günlüğü uygulamanın günlüğüne yönlendirilir. Konuyu Haldus oluşturmaz. Testler tek düğümlü gerçek bir
     kümeye karşıdır (`HALDUS_TEST_KAFKA_IMAGE`; düğüm kendi adresini bildirdiği için bağlantı noktası kapsayıcıdan
-    önce seçilir). Sınırlar: SASL ve TLS yolları sınanmadı; paket yerel bir kütüphane (`librdkafka`) taşır.
+    önce seçilir). SASL/PLAIN ve TLS dinleyicileri de sınanır (yanlış parola ve güvenilmeyen sertifika reddedilir).
+    Sınırlar: SCRAM ve karşılıklı TLS sınanmadı; paket yerel bir kütüphane (`librdkafka`) taşır.
 - **Webhook yayıncısı.** `AddHaldusWebhookPublisher` (`HaldusWebhooks.cs`) olayları yapılandırılmış adreslere imzalı
   HTTP isteğiyle teslim eden bir `IHaldusEventPublisher`'dır. İmza Standard Webhooks düzenindedir: `Webhook-Id`
   (olayın kimliği), `Webhook-Timestamp`, `Webhook-Signature: v1,{base64(HMAC-SHA256(anahtar, "id.zaman.gövde"))}`;

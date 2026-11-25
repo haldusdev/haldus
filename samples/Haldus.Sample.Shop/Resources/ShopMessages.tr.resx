@@ -60,6 +60,9 @@
   <data name="RequestHeaderRequired" xml:space="preserve">
     <value>Bu istek X-Shop-Request başlığını taşımalıdır.</value>
   </data>
+  <data name="ManagedByProvider" xml:space="preserve">
+    <value>Bu hesap bir kimlik sağlayıcı tarafından yönetiliyor.</value>
+  </data>
   <data name="StaffOnly" xml:space="preserve">
     <value>Bu kaynağı yalnızca personel değiştirebilir.</value>
   </data>

@@ -96,7 +96,9 @@ var knownProxies = app.Configuration.GetSection("Shop:KnownProxies").Get<string[
 
 if (knownProxies.Length > 0)
 {
-    var forwarded = new ForwardedHeadersOptions { ForwardedHeaders = ForwardedHeaders.XForwardedFor };
+    // Şema da vekilden okunur: TLS'i vekil sonlandırıyorsa, yönlendirmeli girişin dönüş adresi ve çerezin "Secure"
+    // işareti isteğin gerçekte HTTPS ile geldiğine bağlıdır.
+    var forwarded = new ForwardedHeadersOptions { ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto };
 
     foreach (var proxy in knownProxies)
     {

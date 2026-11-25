@@ -185,7 +185,7 @@ describe("apiFetch renewal of a provider session", () => {
     )
   })
 
-  it("does not renew a second time when the repeated request is rejected too", async () => {
+  it("signs out when the backend rejects the renewed token too", async () => {
     respondWith(() => json(401, expired))
 
     await assert.rejects(apiFetch("/orders", {}), (error) => {
@@ -195,8 +195,10 @@ describe("apiFetch renewal of a provider session", () => {
 
     assert.equal(provider.renewals.length, 1)
     assert.equal(callsTo("/orders").length, 2)
-    // Yenileme başarılıydı; reddedilen istek oturumu kapatmaz.
-    assert.deepEqual(getSession(), renewedSession)
+    // Sağlayıcı yeniliyor ama backend kabul etmiyor: oturum açık kalsaydı her istek bir yenileme token'ı harcardı.
+    // Yenileme ikinci kez denenmez (yukarıda) ve oturum kapanır.
+    assert.equal(getSession(), null)
+    assert.equal(storage.getItem(STORAGE_KEY), null)
   })
 
   it("renews on demand", async () => {

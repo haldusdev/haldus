@@ -90,6 +90,12 @@ public static class ExternalSignIn
 
     public static void AddExternalSignIn(this AuthenticationBuilder builder, ShopJwtOptions jwt, ShopOidcOptions oidc, bool development)
     {
+        // Hesabın adresi ilk gelişte yazılır; aynı sağlayıcıya iki yoldan farklı güvenilseydi, kullanıcı ilk girişini
+        // güvenilen yoldan yaparak ötekinin kuralını aşardı.
+        Require(
+            !jwt.Enabled || !oidc.Enabled || !SameAuthority(jwt.Authority!, oidc.Authority!) || jwt.TrustEmailVerified == oidc.TrustEmailVerified,
+            "Shop:Auth:Jwt and Shop:Auth:Oidc point at the same provider; TrustEmailVerified must be the same in both.");
+
         if (jwt.Enabled)
         {
             Require(!string.IsNullOrWhiteSpace(jwt.Audience), "Shop:Auth:Jwt:Audience is required when Shop:Auth:Jwt:Authority is set.");
@@ -185,6 +191,13 @@ public static class ExternalSignIn
 
                 options.Events = new OpenIdConnectEvents
                 {
+                    // Sağlayıcının reddi, bozuk veya sahte bir dönüş isteği: işlenmeyen bir hata (500) değil, 400.
+                    OnRemoteFailure = context =>
+                    {
+                        context.Response.StatusCode = StatusCodes.Status400BadRequest;
+                        context.HandleResponse();
+                        return Task.CompletedTask;
+                    },
                     OnTokenValidated = async context =>
                     {
                         if (await ResolveAsync(context.HttpContext, context.Principal, CookieScheme, oidc.TrustEmailVerified, openSession: true) is { } principal)
@@ -259,7 +272,7 @@ public static class ExternalSignIn
             account = new ShopAccount
             {
                 Id = Guid.CreateVersion7(),
-                Email = usable ? email! : Placeholder(issuer, subject),
+                Email = usable ? email! : Placeholder(),
                 TenantId = Guid.CreateVersion7(),
                 CreatedAt = now,
                 EmailVerifiedAt = usable ? now : null,
@@ -275,13 +288,21 @@ public static class ExternalSignIn
             }
             catch (DbUpdateException)
             {
-                // Aynı kişinin aynı anda gelen iki ilk isteğinden ikincisi (ya da adres bu arada alındı): hesap yeniden okunur.
+                // Aynı kişinin aynı anda gelen iki ilk isteğinden ikincisi: hesap yeniden okunur.
                 db.Entry(account).State = EntityState.Detached;
-                account = await FindAsync(db, issuer, subject, cancellationToken);
+                var existing = await FindAsync(db, issuer, subject, cancellationToken);
 
-                if (account is null)
+                if (existing is null)
                 {
-                    return null;
+                    // Çakışan adresti (kontrol ile yazma arasında başkası aldı): kimlik, adressiz olarak yine açılır.
+                    account.Email = Placeholder();
+                    account.EmailVerifiedAt = null;
+                    db.Add(account);
+                    await db.SaveChangesAsync(cancellationToken);
+                }
+                else
+                {
+                    account = existing;
                 }
             }
         }
@@ -298,7 +319,7 @@ public static class ExternalSignIn
             sessionId = session.Id;
         }
 
-        return Principal(account, options, scheme, sessionId);
+        return Principal(account, options, scheme, sessionId, trustEmail);
     }
 
     /// <summary>Çerezdeki kimliği oturumuyla sınar ve hesaptan yeniden kurar; oturum kapandıysa veya hesap yoksa null.</summary>
@@ -319,18 +340,27 @@ public static class ExternalSignIn
 
         return accountId is not null
             && await db.Set<ShopAccount>().AsNoTracking().FirstOrDefaultAsync(candidate => candidate.Id == accountId, http.RequestAborted) is { } account
-                ? Principal(account, http.RequestServices.GetRequiredService<IOptions<ShopAuthOptions>>().Value, CookieScheme, sessionId)
+                ? Principal(
+                    account,
+                    http.RequestServices.GetRequiredService<IOptions<ShopAuthOptions>>().Value,
+                    CookieScheme,
+                    sessionId,
+                    http.RequestServices.GetRequiredService<ShopOidcOptions>().TrustEmailVerified)
                 : null;
     }
 
-    private static ClaimsPrincipal Principal(ShopAccount account, ShopAuthOptions options, string scheme, Guid? sessionId)
+    private static ClaimsPrincipal Principal(ShopAccount account, ShopAuthOptions options, string scheme, Guid? sessionId, bool trustEmail)
     {
+        // Adres, sağlayıcıya güvenildiği sürece doğrulanmış sayılır: güven sonradan kapatılırsa, daha önce doğrulanmış
+        // yazılmış bir hesap da rolünü kaybeder.
+        var verified = trustEmail && account.EmailVerifiedAt is not null;
+
         var identity = new ClaimsIdentity(
             [
                 new Claim(ClaimTypes.NameIdentifier, account.Id.ToString()),
                 new Claim(ClaimTypes.Email, account.Email),
                 new Claim("tenant_id", account.TenantId.ToString()),
-                new Claim(AuthEndpoints.VerifiedClaim, account.EmailVerifiedAt is null ? "false" : "true"),
+                new Claim(AuthEndpoints.VerifiedClaim, verified ? "true" : "false"),
             ],
             scheme);
 
@@ -339,7 +369,7 @@ public static class ExternalSignIn
             identity.AddClaim(new Claim(AuthEndpoints.SessionClaim, id.ToString()));
         }
 
-        if (options.IsStaff(account))
+        if (verified && options.IsStaff(account))
         {
             identity.AddClaim(new Claim(ClaimTypes.Role, SharedWrites.StaffRole));
         }
@@ -354,8 +384,13 @@ public static class ExternalSignIn
 
     // Hesabın adresi benzersiz ve dolu olmalıdır; doğrulanmış bir adresi olmayan dış kimlik, kimseye ait olamayacak
     // (ve e-posta gönderilemeyecek) bir adres alır.
-    private static string Placeholder(string issuer, string subject) =>
-        Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes($"{issuer}\n{subject}")))[..32] + "@external.invalid";
+    // Rastgeledir: kimlikten türetilseydi, bir kişinin sağlayıcıdaki kimliğini bilen biri o adresle önceden kayıt
+    // olup kişinin hesabının açılmasını engelleyebilirdi.
+    private static string Placeholder() =>
+        Convert.ToHexStringLower(RandomNumberGenerator.GetBytes(16)) + "@external.invalid";
+
+    private static bool SameAuthority(string left, string right) =>
+        string.Equals(left.TrimEnd('/'), right.TrimEnd('/'), StringComparison.OrdinalIgnoreCase);
 
     private static void RequireAuthority(string section, string authority, bool requireHttps, bool development)
     {

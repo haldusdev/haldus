@@ -11,7 +11,12 @@ type Result =
   | { type: 'cancel' | 'dismiss' | 'locked' }
   | { type: 'success' | 'error'; params: Record<string, string>; error?: { code: string } | null };
 
-type Discovery = { authorizationEndpoint?: string; tokenEndpoint?: string };
+type Discovery = {
+  authorizationEndpoint?: string;
+  tokenEndpoint?: string;
+  // Gerçek kütüphane belgenin tamamını da taşır.
+  discoveryDocument?: Record<string, string | undefined>;
+};
 
 type RequestConfig = { clientId: string; redirectUri: string; scopes?: string[] };
 
@@ -81,6 +86,7 @@ export async function fetchDiscoveryAsync(issuer: string): Promise<Discovery> {
   return {
     authorizationEndpoint: document.authorization_endpoint,
     tokenEndpoint: document.token_endpoint,
+    discoveryDocument: document,
   };
 }
 

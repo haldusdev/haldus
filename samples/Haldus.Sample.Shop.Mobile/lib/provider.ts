@@ -60,6 +60,20 @@ export function providerRedirectUri(): string {
   return AuthSession.makeRedirectUri({ native: 'haldus-shop://sign-in', path: 'sign-in' });
 }
 
+/** Adres HTTPS mi, ya da yalnızca cihazın kendisine (veya emülatörün bilgisayarına) giden bir geliştirme adresi mi? */
+function isTrustworthy(address: string): boolean {
+  const match = /^(https?):\/\/(\[[^\]]+\]|[^/:?#]+)/i.exec(address);
+
+  if (!match) {
+    return false;
+  }
+
+  return (
+    match[1].toLowerCase() === 'https' ||
+    ['localhost', '127.0.0.1', '10.0.2.2', '[::1]'].includes(match[2].toLowerCase())
+  );
+}
+
 function scopesOf(provider: ExternalProviderConfig): string[] {
   return provider.scopes.split(/\s+/).filter((scope) => scope.length > 0);
 }
@@ -75,6 +89,12 @@ export async function prepareProviderSignIn(
   // Adres sonundaki eğik çizgiyle de yazılabilir; keşif adresi çift eğik çizgi taşımamalıdır.
   const issuer = provider.authority.replace(/\/+$/, '');
 
+  // Sağlayıcının adresi backend'den gelir ve kullanıcı parolasını oradaki sayfaya yazar. Şifresiz bir bağlantıda
+  // araya giren biri sayfayı da token ucunu da değiştirebilir; düz HTTP yalnızca geliştirme adreslerinde kabul edilir.
+  if (!isTrustworthy(issuer)) {
+    throw new ProviderSignInError('the provider address is not https');
+  }
+
   let discovery: AuthSession.DiscoveryDocument;
   try {
     discovery = await AuthSession.fetchDiscoveryAsync(issuer);
@@ -83,6 +103,12 @@ export async function prepareProviderSignIn(
   }
 
   const { authorizationEndpoint, tokenEndpoint } = discovery;
+
+  // Keşif belgesi, istendiği adresin belgesi olmalıdır (OpenID Connect Discovery 4.3).
+  const declared: unknown = discovery.discoveryDocument?.issuer;
+  if (typeof declared !== 'string' || declared.replace(/\/+$/, '') !== issuer) {
+    throw new ProviderSignInError('the discovery document belongs to another issuer');
+  }
 
   // Keşif isteği yanıtın durumuna bakmaz; bir hata sayfasının JSON gövdesi de buraya kadar gelir.
   if (!authorizationEndpoint || !tokenEndpoint) {

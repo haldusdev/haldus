@@ -1,8 +1,11 @@
 using System.Net.Http.Json;
+using System.Net;
 using System.Security.Cryptography;
+using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using System.Text.Json;
 using DotNet.Testcontainers.Builders;
+using DotNet.Testcontainers.Configurations;
 using DotNet.Testcontainers.Containers;
 using Haldus.Sample.Shop;
 using Haldus.Sample.Shop.Features.Engagement;
@@ -181,6 +184,44 @@ public sealed class RabbitMqPublisherTests(ShopFixture fixture, RabbitMqFixture 
     }
 
     [Fact]
+    public async Task Tls_EncryptsTheConnectionAndChecksTheCertificateOfTheBroker()
+    {
+        var queue = await rabbit.DeclareQueueAsync();
+
+        // Aracının sertifikası testin ürettiği, kendinden imzalı bir sertifikadır; uygulama ona açıkça güvenir.
+        await using var trusted = rabbit.CreatePublisher(options =>
+        {
+            rabbit.ConfigureTls(options, trustCertificate: true);
+            options.RoutingKey = queue;
+        });
+
+        await trusted.PublishAsync(Event(1, "over-tls"), CancellationToken);
+        Assert.Single(await rabbit.WaitForAsync(queue, "over-tls", count: 1));
+
+        // Güvenilmeyen sertifika varsayılan olarak reddedilir: sertifika denetimi kendiliğinden açıktır.
+        await using var untrusted = rabbit.CreatePublisher(options =>
+        {
+            rabbit.ConfigureTls(options, trustCertificate: false);
+            options.RoutingKey = queue;
+        });
+
+        await Assert.ThrowsAsync<BrokerUnreachableException>(() => untrusted.PublishAsync(Event(2, "over-tls"), CancellationToken));
+
+        // TLS bekleyen bağlantı noktasına düz bağlantı da kurulamaz.
+        await using var plain = rabbit.CreatePublisher(options =>
+        {
+            rabbit.ConfigureTls(options, trustCertificate: true);
+            options.UseTls = false;
+            options.RoutingKey = queue;
+            options.Timeout = TimeSpan.FromSeconds(5);
+        });
+
+        var failure = await Assert.ThrowsAnyAsync<Exception>(() => plain.PublishAsync(Event(3, "over-tls"), CancellationToken));
+        Assert.IsNotAssignableFrom<OperationCanceledException>(failure);
+        Assert.Single(await rabbit.WaitForAsync(queue, "over-tls", count: 1));
+    }
+
+    [Fact]
     public void Options_AreValidatedWhenThePublisherIsFirstCreated()
     {
         var invalid = new Action<HaldusRabbitMqOptions>[]
@@ -286,13 +327,36 @@ public sealed class RabbitMqFixture : IAsyncLifetime
 
     private readonly IContainer _container;
     private readonly Dictionary<string, List<Received>> _received = [];
+    private readonly string _thumbprint;
     private IConnection? _connection;
     private IChannel? _channel;
 
     public RabbitMqFixture()
     {
+        // Aracının TLS dinleyicisi için, yalnızca bu çalıştırmada yaşayan kendinden imzalı bir sertifika.
+        using var key = RSA.Create(2048);
+        var request = new CertificateRequest("CN=localhost", key, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
+        var names = new SubjectAlternativeNameBuilder();
+        names.AddDnsName("localhost");
+        names.AddIpAddress(IPAddress.Loopback);
+        request.CertificateExtensions.Add(names.Build());
+        using var certificate = request.CreateSelfSigned(DateTimeOffset.UtcNow.AddDays(-1), DateTimeOffset.UtcNow.AddDays(7));
+        _thumbprint = certificate.GetCertHashString(HashAlgorithmName.SHA256);
+
+        const string tls = """
+            listeners.ssl.default = 5671
+            ssl_options.certfile = /etc/rabbitmq/certs/server.pem
+            ssl_options.keyfile = /etc/rabbitmq/certs/server.key
+            ssl_options.verify = verify_none
+            ssl_options.fail_if_no_peer_cert = false
+            """;
+
         _container = new ContainerBuilder(Image)
             .WithPortBinding(5672, assignRandomHostPort: true)
+            .WithPortBinding(5671, assignRandomHostPort: true)
+            .WithResourceMapping(Encoding.ASCII.GetBytes(certificate.ExportCertificatePem()), FilePath.Of("/etc/rabbitmq/certs/server.pem"))
+            .WithResourceMapping(Encoding.ASCII.GetBytes(key.ExportPkcs8PrivateKeyPem()), FilePath.Of("/etc/rabbitmq/certs/server.key"))
+            .WithResourceMapping(Encoding.ASCII.GetBytes(tls.ReplaceLineEndings("\n")), FilePath.Of("/etc/rabbitmq/conf.d/20-tls.conf"))
             .WithEnvironment("RABBITMQ_DEFAULT_USER", UserName)
             .WithEnvironment("RABBITMQ_DEFAULT_PASS", Password)
             .WithWaitStrategy(Wait.ForUnixContainer().UntilMessageIsLogged("Server startup complete"))
@@ -313,6 +377,20 @@ public sealed class RabbitMqFixture : IAsyncLifetime
         options.Port = _container.GetMappedPublicPort(5672);
         options.UserName = UserName;
         options.Password = Password;
+    }
+
+    /// <summary>TLS dinleyicisine bağlanır; istenirse testin sertifikasına (yalnızca ona) güvenir.</summary>
+    public void ConfigureTls(HaldusRabbitMqOptions options, bool trustCertificate)
+    {
+        Configure(options);
+        options.Port = _container.GetMappedPublicPort(5671);
+        options.UseTls = true;
+
+        if (trustCertificate)
+        {
+            options.ConfigureConnection = factory => factory.Ssl.CertificateValidationCallback =
+                (_, presented, _, _) => presented is not null && new X509Certificate2(presented).GetCertHashString(HashAlgorithmName.SHA256) == _thumbprint;
+        }
     }
 
     /// <summary>Uygulamanın kuracağı gibi, ayarlardan kurulan bir yayıncı.</summary>

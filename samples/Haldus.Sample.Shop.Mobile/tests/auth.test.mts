@@ -104,6 +104,7 @@ describe('auth', () => {
     function world(call: Call): Response {
       if (call.url.endsWith('/.well-known/openid-configuration')) {
         return json(200, {
+          issuer: 'https://id.test/realms/shop',
           authorization_endpoint: 'https://id.test/connect/authorize',
           token_endpoint: TOKEN_ENDPOINT,
         });

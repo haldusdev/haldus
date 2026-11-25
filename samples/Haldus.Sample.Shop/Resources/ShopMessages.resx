@@ -60,6 +60,9 @@
   <data name="RequestHeaderRequired" xml:space="preserve">
     <value>This request must carry the X-Shop-Request header.</value>
   </data>
+  <data name="ManagedByProvider" xml:space="preserve">
+    <value>This account is managed by an identity provider.</value>
+  </data>
   <data name="StaffOnly" xml:space="preserve">
     <value>Only staff can change this resource.</value>
   </data>

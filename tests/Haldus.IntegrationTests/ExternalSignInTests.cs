@@ -158,11 +158,71 @@ public sealed class ExternalSignInTests(ShopFixture fixture)
         Assert.Equal(local.Id, (await ReadAsync<AccountInfo>(await SendAsync(client, HttpMethod.Get, "/auth/me", token: session.AccessToken))).Id);
         Assert.Equal(HttpStatusCode.OK, (await SendAsync(client, HttpMethod.Post, "/auth/refresh", new { refreshToken = session.RefreshToken })).StatusCode);
 
-        // Dış hesabın parolası yoktur: parolayla girilemez ve parola değiştirme ucu onu kabul etmez.
+        // Dış hesabın parolası yoktur: parolayla girilemez.
         Assert.Equal(HttpStatusCode.Unauthorized, (await SendAsync(client, HttpMethod.Post, "/auth/login", new { email = external.Email, password = Password })).StatusCode);
+    }
+
+    [Fact]
+    public async Task PasswordEndpoints_NeverGiveAnExternalAccountAPassword()
+    {
+        using var provider = new FakeProvider();
+        await using var factory = CreateFactory(provider);
+        using var client = factory.CreateClient();
+        var email = NewEmail();
+        var token = provider.AccessToken(NewSubject(), email, emailVerified: true);
+
+        // Sağlayıcının doğruladığı gerçek bir adresi olan dış hesap.
+        var account = await ReadAsync<AccountInfo>(await SendAsync(client, HttpMethod.Get, "/auth/me", token: token));
+        Assert.Equal((email, true), (account.Email, account.EmailVerified));
+
+        // "Parolamı unuttum" bu hesabı, hiç yokmuş gibi yanıtlar ve kod göndermez: adresin posta kutusunu bir kez
+        // okuyabilen biri hesaba kalıcı bir parola koyup sağlayıcının denetimlerini aşamaz.
+        Assert.Equal(HttpStatusCode.Accepted, (await SendAsync(client, HttpMethod.Post, "/auth/password/forgot", new { email })).StatusCode);
+        await Task.Delay(500, CancellationToken);
+        Assert.Equal(0, fixture.Mail.CountFor(email, AccountCodePurpose.PasswordReset));
         Assert.Equal(
             HttpStatusCode.BadRequest,
-            (await SendAsync(client, HttpMethod.Post, "/auth/password/change", new { currentPassword = "", newPassword = Password }, provider.AccessToken(intruder))).StatusCode);
+            (await SendAsync(client, HttpMethod.Post, "/auth/password/reset", new { email, code = "ABCDEFGH", newPassword = Password })).StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await SendAsync(client, HttpMethod.Post, "/auth/login", new { email, password = Password })).StatusCode);
+
+        // Oturumu açıkken de parola koyamaz ve bizim token'larımızı veren doğrulama ucunu kullanamaz.
+        foreach (var (url, body) in new (string, object?)[]
+        {
+            ("/auth/password/change", new { currentPassword = "anything at all", newPassword = Password }),
+            ("/auth/email/verify", new { code = "ABCDEFGH" }),
+            ("/auth/email/resend", null),
+        })
+        {
+            Assert.Equal(HttpStatusCode.Conflict, (await SendAsync(client, HttpMethod.Post, url, body, token)).StatusCode);
+        }
+
+        Assert.Equal(0, fixture.Mail.CountFor(email, AccountCodePurpose.EmailVerification));
+    }
+
+    [Fact]
+    public async Task TrustTurnedOffLater_TakesTheRoleAwayFromAccountsOpenedWhileItWasOn()
+    {
+        var staff = NewEmail();
+        var subject = NewSubject();
+        var product = new { name = $"Kettle {Guid.NewGuid():N}", price = 10 };
+
+        using (var provider = new FakeProvider())
+        {
+            await using var trusting = CreateFactory(provider, ("Shop:Auth:Staff:0", staff));
+            using var client = trusting.CreateClient();
+            Assert.Equal(
+                HttpStatusCode.Created,
+                (await SendAsync(client, HttpMethod.Post, "/products", product, provider.AccessToken(subject, staff, emailVerified: true))).StatusCode);
+        }
+
+        // Aynı sağlayıcı, aynı kişi; ama adresi doğruladığına artık güvenilmiyor.
+        using var later = new FakeProvider();
+        await using var factory = CreateFactory(later, ("Shop:Auth:Staff:0", staff), ("Shop:Auth:Jwt:TrustEmailVerified", "false"));
+        using var cautious = factory.CreateClient();
+
+        Assert.Equal(
+            HttpStatusCode.Forbidden,
+            (await SendAsync(cautious, HttpMethod.Post, "/products", product with { name = $"Kettle {Guid.NewGuid():N}" }, later.AccessToken(subject, staff, emailVerified: true))).StatusCode);
     }
 
     [Fact]
@@ -192,6 +252,12 @@ public sealed class ExternalSignInTests(ShopFixture fixture)
             [("Shop:Auth:Jwt:Authority", "http://idp.test"), ("Shop:Auth:Jwt:Audience", "shop-api")],
             [("Shop:Auth:Jwt:Authority", "idp.test"), ("Shop:Auth:Jwt:Audience", "shop-api")],
             [("Shop:Auth:Oidc:Authority", "https://idp.test"), ("Shop:Auth:Oidc:ClientId", "shop-server")],
+
+            // Aynı sağlayıcıya iki yoldan farklı güvenilemez.
+            [
+                ("Shop:Auth:Jwt:Authority", "https://idp.test"), ("Shop:Auth:Jwt:Audience", "shop-api"), ("Shop:Auth:Jwt:TrustEmailVerified", "true"),
+                ("Shop:Auth:Oidc:Authority", "https://idp.test/"), ("Shop:Auth:Oidc:ClientId", "shop-server"), ("Shop:Auth:Oidc:ClientSecret", "secret"),
+            ],
         };
 
         foreach (var settings in invalid)
@@ -253,9 +319,45 @@ public sealed class ExternalSignInTests(ShopFixture fixture)
         Assert.Equal(HttpStatusCode.NoContent, (await SendAsync(browser, HttpMethod.Post, "/auth/logout-all", ownRequest: true)).StatusCode);
         Assert.Equal(HttpStatusCode.Unauthorized, (await SendAsync(browser, HttpMethod.Get, "/auth/me")).StatusCode);
 
-        // 5. Çıkış ucu çerezi siler ve oturumu kapatır; yeniden giriş yeni bir oturum açar.
-        Assert.True((await SendAsync(browser, HttpMethod.Post, "/auth/oidc/sign-out")).IsSuccessStatusCode);
+        // 5. Çıkış ucu çerezi siler ve oturumu kapatır.
+        Assert.True((await SendAsync(browser, HttpMethod.Post, "/auth/oidc/sign-out", ownRequest: true)).IsSuccessStatusCode);
         Assert.Equal(HttpStatusCode.Unauthorized, (await SendAsync(browser, HttpMethod.Get, "/auth/me")).StatusCode);
+    }
+
+    [Fact]
+    public async Task ServerSignIn_ProtectsSignOutAndAnswersABrokenCallbackWithoutFailing()
+    {
+        using var provider = new FakeProvider();
+        await using var factory = CreateFactory(
+            provider,
+            ("Shop:Auth:Oidc:Authority", FakeProvider.Issuer),
+            ("Shop:Auth:Oidc:ClientId", FakeProvider.ServerClient),
+            ("Shop:Auth:Oidc:ClientSecret", FakeProvider.ServerSecret));
+
+        using var browser = factory.CreateClient(new WebApplicationFactoryClientOptions
+        {
+            BaseAddress = new Uri("https://localhost"),
+            AllowAutoRedirect = false,
+            HandleCookies = true,
+        });
+
+        // Sahte veya bozuk bir dönüş isteği işlenmeyen bir hata (500) değil, 400'dür.
+        using (var junk = new FormUrlEncodedContent(new Dictionary<string, string> { ["code"] = "nothing", ["state"] = "not-a-state" }))
+        {
+            Assert.Equal(HttpStatusCode.BadRequest, (await browser.PostAsync("/auth/oidc/callback", junk, CancellationToken)).StatusCode);
+        }
+
+        var challenge = await SendAsync(browser, HttpMethod.Get, "/auth/oidc/sign-in");
+        var query = HttpUtility.ParseQueryString(challenge.Headers.Location!.Query);
+        var code = provider.Authorize(query["nonce"]!, query["code_challenge"]!, NewSubject(), NewEmail());
+        using var callback = new FormUrlEncodedContent(new Dictionary<string, string> { ["code"] = code, ["state"] = query["state"]! });
+        Assert.Equal(HttpStatusCode.Redirect, (await browser.PostAsync("/auth/oidc/callback", callback, CancellationToken)).StatusCode);
+
+        // Çıkış da oturumu değiştirir: çerezle gelen istek, başka bir sitenin ekleyemeyeceği başlığı taşımadan
+        // (giriş istemeyen bu uçlarda da) oturumu kapatamaz.
+        Assert.Equal(HttpStatusCode.Forbidden, (await SendAsync(browser, HttpMethod.Post, "/auth/oidc/sign-out")).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await SendAsync(browser, HttpMethod.Post, "/auth/logout")).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await SendAsync(browser, HttpMethod.Get, "/auth/me")).StatusCode);
     }
 
     [Fact]

@@ -177,7 +177,7 @@ describe('apiFetch renewal of a provider session', () => {
     assert.deepEqual(result.data, { path: 'http://shop.test/slow' });
   });
 
-  it('does not renew a second time when the backend rejects the new token too', async () => {
+  it('signs out when the backend rejects the renewed token too', async () => {
     respondWith((call) => (toProvider(call) ? json(200, granted) : json(401, unauthorized)));
 
     await assert.rejects(apiFetch('/me/baskets', {}), (error) => {
@@ -187,8 +187,10 @@ describe('apiFetch renewal of a provider session', () => {
 
     assert.equal(calls.filter(toProvider).length, 1);
     assert.equal(callsTo('/me/baskets').length, 2);
-    // Yenileme başarılıydı; backend'in reddi oturumu kapatmaz (parola oturumundaki kuralın aynısı).
-    assert.deepEqual(getSession(), providerSession(renewed));
+    // Sağlayıcı yeniliyor ama backend kabul etmiyor: oturum açık kalsaydı her istek bir yenileme token'ı harcardı.
+    // Yenileme ikinci kez denenmez (yukarıda) ve oturum kapanır.
+    assert.equal(getSession(), null);
+    assert.equal(items.size, 0);
   });
 
   describe('a definite rejection', () => {

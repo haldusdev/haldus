@@ -341,8 +341,8 @@ public static partial class AuthEndpoints
 
             // Çerez kendiliğinden gönderilir; yazan bir isteğin bu uygulamanın kendi kodundan geldiğini, başka bir
             // sitenin ekleyemeyeceği başlık gösterir. Token taşıyan isteklerde gerek yoktur: token kendiliğinden gitmez.
-            if (!open
-                && context.User.Identity.AuthenticationType == ExternalSignIn.CookieScheme
+            // Giriş istemeyen uçlar da (çıkış gibi) kapsamdadır: çerezin oturumunu onlar da değiştirir.
+            if (context.User.Identity.AuthenticationType == ExternalSignIn.CookieScheme
                 && !HttpMethods.IsGet(context.Request.Method)
                 && !HttpMethods.IsHead(context.Request.Method)
                 && !HttpMethods.IsOptions(context.Request.Method)
@@ -438,7 +438,7 @@ public static partial class AuthEndpoints
     {
         var email = Normalize(request.Email);
         var now = HaldusTime.UtcNow(time);
-        var account = await db.Set<ShopAccount>().AsNoTracking().FirstOrDefaultAsync(candidate => candidate.Email == email, cancellationToken);
+        var account = await PasswordAccounts(db).FirstOrDefaultAsync(candidate => candidate.Email == email, cancellationToken);
 
         // Hesap yoksa da aynı iş yapılır (bir güncelleme ve bir parola doğrulaması); yanıtın içeriği aynıdır ve süresi
         // belirgin biçimde ayrışmaz. Kilitli hesapta doğru parola da kabul edilmez.
@@ -601,7 +601,7 @@ public static partial class AuthEndpoints
     {
         var email = Normalize(request.Email);
 
-        if (await db.Set<ShopAccount>().AsNoTracking().FirstOrDefaultAsync(candidate => candidate.Email == email, cancellationToken) is { } account)
+        if (await PasswordAccounts(db).FirstOrDefaultAsync(candidate => candidate.Email == email, cancellationToken) is { } account)
         {
             // E-posta yanıt beklemeden gönderilir: posta sunucusunun süresi yanıta yansısaydı, kayıtlı adres yanıtın
             // gecikmesinden anlaşılırdı.
@@ -627,7 +627,7 @@ public static partial class AuthEndpoints
     {
         var email = Normalize(request.Email);
         var now = HaldusTime.UtcNow(time);
-        var account = await db.Set<ShopAccount>().AsNoTracking().FirstOrDefaultAsync(candidate => candidate.Email == email, cancellationToken);
+        var account = await PasswordAccounts(db).FirstOrDefaultAsync(candidate => candidate.Email == email, cancellationToken);
 
         // Hesap yoksa da bir kod doğrulaması yapılır (ConsumeCodeAsync); yanıtın süresi adresin kayıtlı olduğunu söylemez.
         if (!await ConsumeCodeAsync(db, account, AccountCodePurpose.PasswordReset, request.Code, now, cancellationToken) || account is null)
@@ -664,6 +664,11 @@ public static partial class AuthEndpoints
         if (await FindAccountAsync(user, db, cancellationToken) is not { } account)
         {
             return Results.Problem(statusCode: StatusCodes.Status401Unauthorized);
+        }
+
+        if (account.ExternalIssuer is not null)
+        {
+            return ManagedByProvider(messages);
         }
 
         // Geçerli parolayı sormak da bir parola denemesidir ve girişle aynı sayaca yazılır; yoksa ele geçirilmiş bir
@@ -705,8 +710,18 @@ public static partial class AuthEndpoints
         IStringLocalizer<ShopMessages> messages,
         CancellationToken cancellationToken)
     {
-        if (await FindAccountAsync(user, db, cancellationToken) is not { } account
-            || !Guid.TryParse(user.FindFirstValue(SessionClaim), out var sessionId))
+        if (await FindAccountAsync(user, db, cancellationToken) is not { } account)
+        {
+            return Results.Problem(statusCode: StatusCodes.Status401Unauthorized);
+        }
+
+        // Sağlayıcı hesabının adresini sağlayıcı doğrular; bu uç ona bizim token'larımızı da vermemelidir.
+        if (account.ExternalIssuer is not null)
+        {
+            return ManagedByProvider(messages);
+        }
+
+        if (!Guid.TryParse(user.FindFirstValue(SessionClaim), out var sessionId))
         {
             return Results.Problem(statusCode: StatusCodes.Status401Unauthorized);
         }
@@ -744,12 +759,18 @@ public static partial class AuthEndpoints
         TimeProvider time,
         IAccountMailer mailer,
         IOptions<ShopAuthOptions> options,
+        IStringLocalizer<ShopMessages> messages,
         ILoggerFactory loggers,
         CancellationToken cancellationToken)
     {
         if (await FindAccountAsync(user, db, cancellationToken) is not { } account)
         {
             return Results.Problem(statusCode: StatusCodes.Status401Unauthorized);
+        }
+
+        if (account.ExternalIssuer is not null)
+        {
+            return ManagedByProvider(messages);
         }
 
         if (account.EmailVerifiedAt is null)
@@ -982,6 +1003,18 @@ public static partial class AuthEndpoints
 
         return Results.SignIn(new ClaimsPrincipal(identity), authenticationScheme: BearerTokenDefaults.AuthenticationScheme);
     }
+
+    /// <summary>
+    /// Parolası olan hesaplar. Bir kimlik sağlayıcıyla açılmış hesabın parolası yoktur ve parola uçlarından (giriş,
+    /// unutma, sıfırlama) bir parola da edinemez: edinseydi, adresinin posta kutusunu bir kez okuyabilen biri hesaba
+    /// kalıcı bir parola koyar ve sağlayıcının denetimlerini (iki adımlı doğrulama, hesabın kapatılması) aşardı. Bu
+    /// uçlar öyle bir hesabı, hiç yokmuş gibi yanıtlar.
+    /// </summary>
+    private static IQueryable<ShopAccount> PasswordAccounts(AppDbContext db) =>
+        db.Set<ShopAccount>().AsNoTracking().Where(account => account.ExternalIssuer == null);
+
+    private static IResult ManagedByProvider(IStringLocalizer<ShopMessages> messages) =>
+        Results.Problem(detail: messages["ManagedByProvider"], statusCode: StatusCodes.Status409Conflict);
 
     private static IResult EmailTaken(IStringLocalizer<ShopMessages> messages) =>
         Results.Problem(detail: messages["EmailTaken"], statusCode: StatusCodes.Status409Conflict);

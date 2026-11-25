@@ -587,7 +587,8 @@ RabbitMQ'da mesaj kalıcıdır ve aracı onaylayana kadar teslim edilmiş sayıl
 olay da teslim edilmemiş sayılır ve kutuda kalır (bağı unutulmuş bir kuyruk olayları sessizce kaybettirmez).
 Kafka'da mesajın anahtarı kayıttır (`ticket:{id}`): bir kaydın olayları aynı bölüme düşer ve sırayla tüketilir;
 mesaj eşlenik kopyaların hepsi yazana kadar (`acks=all`) teslim edilmiş sayılmaz. Exchange'i, kuyrukları ve konuyu
-uygulama oluşturur. İkisi de kapsayıcıda çalışan gerçek bir aracıya karşı sınandı; TLS ve SASL yolları sınanmadı.
+uygulama oluşturur. İkisi de kapsayıcıda çalışan gerçek bir aracıya karşı sınandı; RabbitMQ'da TLS, Kafka'da
+SASL/PLAIN ve TLS dinleyicileri dahil.
 
 Olayları başka bir sisteme HTTP ile taşımak için de hazır bir yayıncı vardır:
 
@@ -918,7 +919,8 @@ serisinde haftanın günleri ve saat dilimi, şifreli alan, onay zinciri, kullan
 yayın, ULID ve istemcinin verdiği kimlik, bakiyeye karşı tutma, multipart yükleme ve süreli indirme bağlantısı), örnek
 mağaza gerçek kimlik doğrulamaya geçirildi ve kilide dayanan özellikler yük altında ölçüldü. Yapılmayanlar aynı
 belgededir; başlıcaları: mobil uygulama iOS'ta çalıştırılmadı (Android'de emülatörde denendi), mobil uygulamanın
-otomatik ekran testleri yalnızca web hedefinde çalışır, mobil uygulamada kimlik sağlayıcıyla giriş cihazda denenmedi.
+otomatik ekran testleri yalnızca web hedefinde çalışır, mobil uygulamada kimlik sağlayıcıyla giriş cihazda
+tamamlanamadı (emülatörde tarayıcının açıldığı görüldü).
 S3 uyumlu dosya deposu ile SQS, RabbitMQ ve Kafka olay yayıncıları resmi istemci paketleriyle, ayrı paketler olarak
 yazıldı; webhook yayıncısı çekirdektedir. Örnek mağazaya kimlik sağlayıcıyla giriş (OpenID Connect) backend'de, panelde
 ve mobil uygulamada eklendi; backend ve panel kapsayıcıda çalışan Keycloak'a karşı denendi.

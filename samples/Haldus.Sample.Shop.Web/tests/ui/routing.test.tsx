@@ -104,6 +104,7 @@ describe("routing", () => {
 
     for (const from of [
       "//evil.example",
+      "/\\evil.example",
       "https://evil.example",
       "orders",
       7,

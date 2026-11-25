@@ -50,7 +50,8 @@ export const apiFetch = <T>(url: string, options: RequestInit): Promise<T> =>
 async function request<T>(
   url: string,
   options: RequestInit,
-  mayRenew: boolean
+  mayRenew: boolean,
+  renewed = false
 ): Promise<T> {
   const headers = new Headers(options.headers)
   headers.set("Accept-Language", i18n.language)
@@ -79,7 +80,20 @@ async function request<T>(
     usesSession &&
     (await renew(session))
   ) {
-    return request<T>(url, options, false)
+    return request<T>(url, options, false, true)
+  }
+
+  // Sağlayıcı token'ı yeniledi ama backend yenisini de kabul etmiyor (hesap açılamıyor, audience değişti, sağlayıcıyla
+  // giriş kapatıldı). Oturum kapatılmazsa her istek sağlayıcıda bir yenileme token'ı harcar ve arayüz "giriş yapılmış"
+  // görünmeye devam eder. Parola oturumunda bu durum oluşmaz: token'ı veren de kabul eden de backend'dir.
+  if (
+    response.status === 401 &&
+    renewed &&
+    session?.kind === "provider" &&
+    usesSession &&
+    getSession()?.accessToken === session.accessToken
+  ) {
+    signOut()
   }
 
   const text = [204, 205, 304].includes(response.status)

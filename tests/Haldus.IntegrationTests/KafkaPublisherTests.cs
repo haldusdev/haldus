@@ -1,11 +1,14 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Net.Sockets;
+using System.Security.Cryptography;
+using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using System.Text.Json;
 using Confluent.Kafka;
 using Confluent.Kafka.Admin;
 using DotNet.Testcontainers.Builders;
+using DotNet.Testcontainers.Configurations;
 using DotNet.Testcontainers.Containers;
 using Haldus.Sample.Shop;
 using Haldus.Sample.Shop.Features.Engagement;
@@ -116,6 +119,82 @@ public sealed class KafkaPublisherTests(ShopFixture fixture, KafkaFixture kafka)
         // Ulaşılamayan küme, sürecin kapanması sanılacak bir iptal değil, bir hatadır.
         var failure = await Assert.ThrowsAnyAsync<Exception>(() => unreachable.PublishAsync(Event(2, "record-1"), CancellationToken));
         Assert.IsNotAssignableFrom<OperationCanceledException>(failure);
+    }
+
+    [Fact]
+    public async Task Sasl_AuthenticatesWithUserNameAndPassword()
+    {
+        var topic = await kafka.CreateTopicAsync();
+
+        // Güvenlik ayarları istemcinin kendi ayarlarından verilir (ConfigureProducer).
+        using var publisher = kafka.CreatePublisher(options =>
+        {
+            kafka.Configure(options, topic);
+            options.BootstrapServers = kafka.SaslBootstrapServers;
+            options.ConfigureProducer = config =>
+            {
+                config.SecurityProtocol = SecurityProtocol.SaslPlaintext;
+                config.SaslMechanism = SaslMechanism.Plain;
+                config.SaslUsername = kafka.UserName;
+                config.SaslPassword = kafka.Password;
+            };
+        });
+
+        await publisher.PublishAsync(Event(1, "authenticated"), CancellationToken);
+        Assert.Single(await kafka.WaitForAsync(topic, "ticket:authenticated", count: 1));
+
+        // Yanlış parola: olay teslim edilmiş sayılmaz.
+        using var denied = kafka.CreatePublisher(options =>
+        {
+            kafka.Configure(options, topic);
+            options.BootstrapServers = kafka.SaslBootstrapServers;
+            options.Timeout = TimeSpan.FromSeconds(5);
+            options.ConfigureProducer = config =>
+            {
+                config.SecurityProtocol = SecurityProtocol.SaslPlaintext;
+                config.SaslMechanism = SaslMechanism.Plain;
+                config.SaslUsername = kafka.UserName;
+                config.SaslPassword = "not-the-password";
+            };
+        });
+
+        var failure = await Assert.ThrowsAnyAsync<Exception>(() => denied.PublishAsync(Event(2, "authenticated"), CancellationToken));
+        Assert.IsNotAssignableFrom<OperationCanceledException>(failure);
+        Assert.DoesNotContain("not-the-password", failure.ToString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Tls_EncryptsTheConnectionAndChecksTheCertificateOfTheBroker()
+    {
+        var topic = await kafka.CreateTopicAsync();
+
+        // Aracının sertifikası testin ürettiği, kendinden imzalı bir sertifikadır; uygulama ona açıkça güvenir.
+        using var trusted = kafka.CreatePublisher(options =>
+        {
+            kafka.Configure(options, topic);
+            options.BootstrapServers = kafka.TlsBootstrapServers;
+            options.ConfigureProducer = config =>
+            {
+                config.SecurityProtocol = SecurityProtocol.Ssl;
+                config.SslCaPem = kafka.CertificatePem;
+            };
+        });
+
+        await trusted.PublishAsync(Event(1, "over-tls"), CancellationToken);
+        Assert.Single(await kafka.WaitForAsync(topic, "ticket:over-tls", count: 1));
+
+        // Güvenilmeyen sertifika reddedilir: sertifika denetimi kendiliğinden açıktır.
+        using var untrusted = kafka.CreatePublisher(options =>
+        {
+            kafka.Configure(options, topic);
+            options.BootstrapServers = kafka.TlsBootstrapServers;
+            options.Timeout = TimeSpan.FromSeconds(5);
+            options.ConfigureProducer = config => config.SecurityProtocol = SecurityProtocol.Ssl;
+        });
+
+        var failure = await Assert.ThrowsAnyAsync<Exception>(() => untrusted.PublishAsync(Event(2, "over-tls"), CancellationToken));
+        Assert.IsNotAssignableFrom<OperationCanceledException>(failure);
+        Assert.Single(await kafka.WaitForAsync(topic, "ticket:over-tls", count: 1));
     }
 
     [Fact]
@@ -232,16 +311,41 @@ public sealed class KafkaFixture : IAsyncLifetime
 
     private readonly IContainer _container;
     private readonly int _port = FreePort();
+    private readonly int _saslPort = FreePort();
+    private readonly int _tlsPort = FreePort();
 
     public KafkaFixture()
     {
+        // TLS dinleyicisi için, yalnızca bu çalıştırmada yaşayan kendinden imzalı bir sertifika.
+        using var key = RSA.Create(2048);
+        var request = new CertificateRequest("CN=localhost", key, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
+        var names = new SubjectAlternativeNameBuilder();
+        names.AddDnsName("localhost");
+        names.AddIpAddress(IPAddress.Loopback);
+        request.CertificateExtensions.Add(names.Build());
+        request.CertificateExtensions.Add(new X509BasicConstraintsExtension(certificateAuthority: true, hasPathLengthConstraint: false, 0, critical: true));
+        using var certificate = request.CreateSelfSigned(DateTimeOffset.UtcNow.AddDays(-1), DateTimeOffset.UtcNow.AddDays(7));
+        CertificatePem = certificate.ExportCertificatePem();
+
+        // Üç dinleyici: düz (testin kendi okuması için), kullanıcı adı + parola isteyen (SASL/PLAIN) ve TLS.
         _container = new ContainerBuilder(Image)
             .WithPortBinding(_port, 9094)
+            .WithPortBinding(_saslPort, 9095)
+            .WithPortBinding(_tlsPort, 9096)
+            .WithResourceMapping(Encoding.ASCII.GetBytes(key.ExportPkcs8PrivateKeyPem() + "\n" + CertificatePem + "\n"), FilePath.Of("/certs/server.pem"))
             .WithEnvironment("KAFKA_NODE_ID", "1")
             .WithEnvironment("KAFKA_PROCESS_ROLES", "broker,controller")
-            .WithEnvironment("KAFKA_LISTENERS", "PLAINTEXT://:9092,CONTROLLER://:9093,HOST://:9094")
-            .WithEnvironment("KAFKA_ADVERTISED_LISTENERS", $"PLAINTEXT://localhost:9092,HOST://127.0.0.1:{_port}")
-            .WithEnvironment("KAFKA_LISTENER_SECURITY_PROTOCOL_MAP", "CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,HOST:PLAINTEXT")
+            .WithEnvironment("KAFKA_LISTENERS", "PLAINTEXT://:9092,CONTROLLER://:9093,HOST://:9094,AUTH://:9095,SECURE://:9096")
+            .WithEnvironment(
+                "KAFKA_ADVERTISED_LISTENERS",
+                $"PLAINTEXT://localhost:9092,HOST://127.0.0.1:{_port},AUTH://127.0.0.1:{_saslPort},SECURE://127.0.0.1:{_tlsPort}")
+            .WithEnvironment("KAFKA_LISTENER_SECURITY_PROTOCOL_MAP", "CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,HOST:PLAINTEXT,AUTH:SASL_PLAINTEXT,SECURE:SSL")
+            .WithEnvironment("KAFKA_SASL_ENABLED_MECHANISMS", "PLAIN")
+            .WithEnvironment(
+                "KAFKA_LISTENER_NAME_AUTH_PLAIN_SASL_JAAS_CONFIG",
+                $"org.apache.kafka.common.security.plain.PlainLoginModule required user_{UserName}=\"{Password}\";")
+            .WithEnvironment("KAFKA_SSL_KEYSTORE_TYPE", "PEM")
+            .WithEnvironment("KAFKA_SSL_KEYSTORE_LOCATION", "/certs/server.pem")
             .WithEnvironment("KAFKA_CONTROLLER_LISTENER_NAMES", "CONTROLLER")
             .WithEnvironment("KAFKA_INTER_BROKER_LISTENER_NAME", "PLAINTEXT")
             .WithEnvironment("KAFKA_CONTROLLER_QUORUM_VOTERS", "1@localhost:9093")
@@ -259,6 +363,17 @@ public sealed class KafkaFixture : IAsyncLifetime
     private static CancellationToken CancellationToken => TestContext.Current.CancellationToken;
 
     private string BootstrapServers => $"127.0.0.1:{_port}";
+
+    public string SaslBootstrapServers => $"127.0.0.1:{_saslPort}";
+
+    public string TlsBootstrapServers => $"127.0.0.1:{_tlsPort}";
+
+    public string UserName { get; } = "haldus" + Convert.ToHexStringLower(RandomNumberGenerator.GetBytes(4));
+
+    public string Password { get; } = Convert.ToHexStringLower(RandomNumberGenerator.GetBytes(16));
+
+    /// <summary>Aracının sertifikası; istemci ona güven kökü olarak güvenir.</summary>
+    public string CertificatePem { get; }
 
     public void Configure(HaldusKafkaOptions options, string topic)
     {
