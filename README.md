@@ -877,7 +877,7 @@ adreslerine güvenilen sağlayıcının token'larındaki `iss`, `Authority`'den 
 açılmadıkça dış kimlik adressiz açılır ve personel rolü alamaz. Sağlayıcıyla açılmış hesap parola edinemez. Çerezle
 açılan oturum sunucudaki bir oturuma bağlıdır ve iptal edilebilir (ömrü `SessionMinutes`); "her yerden çık",
 sağlayıcının o ana kadar verdiği erişim token'larını da geçersiz kılar (sağlayıcıdaki oturumu kapatmaz: yenileme token'ı tutan cihaz yeni bir token alıp geri gelir). Kurallar testin içinde kurulan bir sağlayıcıyla, gerçek bir sağlayıcıyla birlikte çalışma ise
-kapsayıcıda çalışan Keycloak'a karşı sınanır. Giriş yapılmadan hiçbir kaynağa ulaşılmaz; açık kalması gereken uçlar (misafir sepeti, token ile
+kapsayıcıda çalışan Keycloak'a (kullanıcı girişi) ve Ory Hydra'ya (makine istemcisinin JWT'si) karşı sınanır. Giriş yapılmadan hiçbir kaynağa ulaşılmaz; açık kalması gereken uçlar (misafir sepeti, token ile
 erişilen kayıtlar) bunu `AllowAnonymous` ile kendileri söyler. Kimseye ait olmayan, ortak kaynakları (ürünler,
 kategoriler) herkes okur ama yalnızca personel yazar (`Shop:Auth:Staff`); kural, kaynakları tek tek saymak yerine
 Haldus'un uçlara yazdığı kapsam metadatasını okur (aşağıda). Yenileme token'ı bir kez kullanılır; eskisi yeniden

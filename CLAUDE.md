@@ -648,8 +648,12 @@ Yapılmayanlar ve nedenleri:
         Microsoft'un doğrulayıcılarından geçer. Gerçek bir sağlayıcıyla birlikte çalışma, kapsayıcıda çalışan
         Keycloak'a karşı sınanır (`KeycloakSignInTests`; imaj özetiyle sabit, `HALDUS_TEST_KEYCLOAK_IMAGE`):
         sağlayıcının verdiği ve yenilediği erişim token'ının kabulü, başka bir API için verilmiş token'ın reddi ve
-        Keycloak'ın kendi giriş sayfasından geçen yönlendirmeli giriş (ASP.NET Core burada PAR da kullanır). Başka
-        sağlayıcılara (Entra ID, Auth0...) karşı sınanmadı. Sınırlar: tek sağlayıcı; sağlayıcıdaki adres sonradan değişirse hesaba
+        Keycloak'ın kendi giriş sayfasından geçen yönlendirmeli giriş (ASP.NET Core burada PAR da kullanır). JWT
+        kabulü ikinci bir gerçek sağlayıcıya, kapsayıcıdaki Ory Hydra'ya karşı da sınanır (`HydraSignInTests`;
+        `HALDUS_TEST_HYDRA_IMAGE`): bir makine istemcisinin (client credentials) token'ı hesaba ve kiracıya çevrilir,
+        başka bir API'yi adlandıran veya hiçbirini adlandırmayan token reddedilir, "her yerden çık" token'ın `iat`
+        alanıyla çalışır. Hydra kendi adını açılışta bilmelidir; bağlantı noktası bu yüzden kapsayıcıdan önce seçilir.
+        Barındırılan sağlayıcılara (Entra ID, Auth0...) karşı sınanmadı: hesap ister. Sınırlar: tek sağlayıcı; sağlayıcıdaki adres sonradan değişirse hesaba
         yansımaz; sağlayıcıdan çıkış (tek oturum kapatma) yoktur; dış hesabın parolası yoktur ve parola uçları onu
         kabul etmez; erişim token'ında `email` / `email_verified` yoksa hesap adressiz açılır (sonradan gelirse yazılır).
       - Çıkış ve token'ın türü (incelemede sınır olarak not edilmiş, sonra düzeltilmiştir):
