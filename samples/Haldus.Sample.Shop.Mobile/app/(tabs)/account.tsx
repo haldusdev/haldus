@@ -33,13 +33,16 @@ export default function AccountScreen() {
   const { colorScheme, setColorScheme } = useColorScheme();
   const queryClient = useQueryClient();
   const session = useSession();
+  // Parola ve e-posta doğrulama parola hesabına aittir; sağlayıcıyla girilen hesapta ikisini de sağlayıcı yönetir ve
+  // backend bu uçları ona açmaz.
+  const ownsPassword = session?.kind === 'password';
 
   return (
     <ScrollView
       className="flex-1 bg-background"
       contentContainerClassName="p-4"
       keyboardShouldPersistTaps="handled">
-      <VerifyEmail />
+      {ownsPassword ? <VerifyEmail /> : null}
       <Row label={t('account.user')} value={session?.email ?? ''} />
       <Separator />
       <Row label={t('account.tenant')} value={session?.tenantId ?? ''} />
@@ -87,8 +90,12 @@ export default function AccountScreen() {
       </View>
       <Separator />
 
-      <ChangePassword />
-      <Separator />
+      {ownsPassword ? (
+        <>
+          <ChangePassword />
+          <Separator />
+        </>
+      ) : null}
 
       <Button
         variant="destructive"

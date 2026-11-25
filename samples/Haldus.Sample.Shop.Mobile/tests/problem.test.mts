@@ -1,7 +1,28 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import { fieldErrors, problemMessage, problemStatus } from '@/lib/problem';
+import { fieldErrors, problemDetail, problemMessage, problemStatus } from '@/lib/problem';
+
+describe('problemDetail', () => {
+  it('reads the detail the backend wrote', () => {
+    assert.equal(
+      problemDetail({ title: 'Forbidden', detail: 'Not allowed here.' }),
+      'Not allowed here.'
+    );
+  });
+
+  it('does not fall back to the untranslated title', () => {
+    assert.equal(problemDetail({ status: 401, title: 'Unauthorized' }), undefined);
+    assert.equal(problemDetail({ title: 'Unauthorized', detail: '' }), undefined);
+    assert.equal(problemDetail({ detail: 7 }), undefined);
+  });
+
+  it('is undefined for anything that is not a problem', () => {
+    assert.equal(problemDetail(new Error('The identity provider sign-in failed')), undefined);
+    assert.equal(problemDetail('detail'), undefined);
+    assert.equal(problemDetail(null), undefined);
+  });
+});
 
 describe('problemStatus', () => {
   it('reads the status of a problem', () => {

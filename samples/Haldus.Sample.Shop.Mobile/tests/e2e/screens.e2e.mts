@@ -49,12 +49,18 @@ scene('a long list loads the next page when the end is reached', async ({ shop, 
   await signIn();
   await page.see(text('Item 01'));
 
-  // Listenin sonuna kaydırılır.
-  await page.evaluate(`(() => {
+  // Listenin sonuna kaydırılır. Liste satırlarını parça parça çizer; ilk satır göründüğünde henüz ekrandan
+  // taşmıyor olabilir, bu yüzden kaydırılabilir olması beklenir.
+  await page.waitFor(
+    `(() => {
     let node = __probe.text("Item 01");
     while (node && node.scrollHeight <= node.clientHeight + 1) node = node.parentElement;
+    if (!node) return false;
     node.scrollTop = node.scrollHeight;
-  })()`);
+    return true;
+  })()`,
+    'the product list to become scrollable'
+  );
 
   await page.see(text('Item 25'));
   // Liste yeniden okunabildiği için son isteğe değil, ikinci sayfanın istenmiş olmasına bakılır.

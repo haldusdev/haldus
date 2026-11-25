@@ -6,9 +6,11 @@ import { Stack } from 'expo-router';
 import { ThemeProvider } from 'expo-router/react-navigation';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
+import * as WebBrowser from 'expo-web-browser';
 import { useColorScheme } from 'nativewind';
 import * as React from 'react';
 import { useTranslation } from 'react-i18next';
+import { Platform } from 'react-native';
 
 import { restoreLanguage } from '@/i18n';
 import '@/lib/auth';
@@ -20,6 +22,19 @@ export {
   // Yerleşim bileşeninde fırlatılan hataları yakalar.
   ErrorBoundary,
 } from 'expo-router';
+
+// Web'de kimlik sağlayıcı bir açılır pencerede açılır ve giriş bitince o pencere uygulamanın adresine döner: uygulama
+// orada da yüklenir. Bu çağrı dönüş adresini asıl pencereye iletir; asıl pencere açılır pencereyi kapatır ve girişi
+// tamamlar. Cihazda bir şey yapmaz.
+const completion = WebBrowser.maybeCompleteAuthSession();
+
+// Açılır pencerede ekran çizilmez ve istek gönderilmez. Pencereyi açan yoksa bu asıl penceredir: yarıda kalmış bir
+// girişin tarayıcıda bıraktığı iz, uygulamayı boş bir ekranda bırakmamalıdır.
+const inSignInPopup =
+  Platform.OS === 'web' &&
+  completion.type === 'success' &&
+  typeof window !== 'undefined' &&
+  window.opener != null;
 
 // Saklanan oturum ve dil okunana kadar açılış ekranı kalır; böylece giriş ekranı bir an görünüp kaybolmaz.
 void SplashScreen.preventAutoHideAsync();
@@ -62,7 +77,7 @@ export default function RootLayout() {
     });
   }, []);
 
-  if (!ready) {
+  if (!ready || inSignInPopup) {
     return null;
   }
 

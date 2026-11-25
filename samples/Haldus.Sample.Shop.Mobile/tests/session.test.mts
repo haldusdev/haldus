@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { beforeEach, describe, it } from 'node:test';
 
 import { items } from './stubs/expo-secure-store.ts';
-import { KEYS, session, stored } from './support/fixtures.ts';
+import { KEYS, providerSession, session, stored } from './support/fixtures.ts';
 
 import {
   getSession,
@@ -258,5 +258,190 @@ describe('session on a device', () => {
       assert.equal(seen.count, 1);
       seen.unsubscribe();
     });
+  });
+});
+
+// Oturumun türü hesap kaydında durur. Parola oturumunun kaydı tür taşımaz; böylece tür bilgisinden önce yazılmış
+// kayıtlar da, bu sürümün yazdıkları da aynı biçimdedir.
+describe('session kinds', () => {
+  const account = { accountId: 'account-1', email: 'ada@example.com', tenantId: 'tenant-1' };
+  const link = { clientId: 'shop-mobile', tokenEndpoint: 'https://id.test/connect/token' };
+
+  beforeEach(async () => {
+    await signOut();
+    items.clear();
+  });
+
+  it('reads a session stored before the kind existed as a password session', async () => {
+    store([
+      [KEYS.accessToken, 'access-1'],
+      [KEYS.refreshToken, 'refresh-1'],
+      [KEYS.account, JSON.stringify({ ...account, emailVerified: true })],
+    ]);
+
+    await restoreSession();
+
+    assert.deepEqual(getSession(), session({ emailVerified: true }));
+    assert.equal(getSession()?.kind, 'password');
+  });
+
+  it('writes a password session in the format used before the kind existed', async () => {
+    await signIn(session());
+
+    assert.deepEqual(Object.keys(JSON.parse(items.get(KEYS.account) ?? '{}')), [
+      'accountId',
+      'email',
+      'tenantId',
+      'emailVerified',
+    ]);
+  });
+
+  it('reads an explicit password kind', async () => {
+    store([
+      [KEYS.accessToken, 'access-1'],
+      [KEYS.refreshToken, 'refresh-1'],
+      [KEYS.account, JSON.stringify({ ...account, kind: 'password' })],
+    ]);
+
+    await restoreSession();
+
+    assert.deepEqual(getSession(), session());
+  });
+
+  it('stores a provider session with its kind and what its renewal needs', async () => {
+    await signIn(providerSession());
+
+    assert.deepEqual([...items.keys()].sort(), Object.values(KEYS).sort());
+    assert.equal(items.get(KEYS.accessToken), 'idp-access-1');
+    assert.equal(items.get(KEYS.refreshToken), 'idp-refresh-1');
+    assert.deepEqual(JSON.parse(items.get(KEYS.account) ?? 'null'), {
+      ...account,
+      emailVerified: true,
+      kind: 'provider',
+      provider: link,
+    });
+  });
+
+  it('restores the provider session it stored', async () => {
+    await signIn(providerSession());
+    const kept = [...items];
+    await signOut();
+    store(kept);
+
+    await restoreSession();
+
+    assert.deepEqual(getSession(), providerSession());
+  });
+
+  it('stores a provider session without a refresh token under two keys', async () => {
+    const signedIn = providerSession({ refreshToken: null });
+
+    await signIn(signedIn);
+
+    assert.deepEqual([...items].sort(), stored(signedIn).sort());
+    assert.equal(items.has(KEYS.refreshToken), false);
+  });
+
+  it('restores a provider session without a refresh token', async () => {
+    store(stored(providerSession({ refreshToken: null })));
+
+    await restoreSession();
+
+    assert.deepEqual(getSession(), providerSession({ refreshToken: null }));
+  });
+
+  it('removes the refresh token of the previous session when the new one has none', async () => {
+    await signIn(session());
+
+    await signIn(providerSession({ refreshToken: null }));
+    await restoreSession();
+
+    assert.equal(items.has(KEYS.refreshToken), false);
+    assert.equal(getSession()?.refreshToken, null);
+  });
+
+  it('replaces a provider session with a password session completely', async () => {
+    await signIn(providerSession());
+
+    await signIn(session());
+    await restoreSession();
+
+    assert.deepEqual(getSession(), session());
+    assert.deepEqual([...items].sort(), stored(session()).sort());
+  });
+
+  it('renewTokens keeps the kind and the provider of the session', async () => {
+    await signIn(providerSession());
+    const entry = items.get(KEYS.account);
+
+    await renewTokens('idp-access-2', 'idp-refresh-2');
+
+    assert.deepEqual(
+      getSession(),
+      providerSession({ accessToken: 'idp-access-2', refreshToken: 'idp-refresh-2' })
+    );
+    assert.equal(items.get(KEYS.account), entry);
+    assert.equal(items.get(KEYS.accessToken), 'idp-access-2');
+    assert.equal(items.get(KEYS.refreshToken), 'idp-refresh-2');
+  });
+
+  it('signOut removes every key of a provider session', async () => {
+    await signIn(providerSession());
+
+    await signOut();
+
+    assert.equal(getSession(), null);
+    assert.equal(items.size, 0);
+  });
+
+  it('finds no password session without a refresh token', async () => {
+    // Yenileme token'ının yokluğu yalnızca sağlayıcı oturumunda geçerlidir.
+    store(stored(session()).filter(([key]) => key !== KEYS.refreshToken));
+
+    await restoreSession();
+
+    assert.equal(getSession(), null);
+  });
+
+  const unusable: [string, unknown][] = [
+    ['a kind this version does not know', { ...account, kind: 'passkey' }],
+    ['a kind that is not text', { ...account, kind: 1 }],
+    ['a provider kind without its provider', { ...account, kind: 'provider' }],
+    [
+      'a provider without a token endpoint',
+      { ...account, kind: 'provider', provider: { clientId: 'shop-mobile' } },
+    ],
+    [
+      'a provider without a client',
+      { ...account, kind: 'provider', provider: { ...link, clientId: '' } },
+    ],
+    ['a provider that is not an object', { ...account, kind: 'provider', provider: 'id.test' }],
+  ];
+
+  for (const [name, entry] of unusable) {
+    it(`finds no session when the account entry carries ${name}`, async () => {
+      // Tanınmayan bir kayıt parola oturumu sayılmaz; yoksa token'ları backend'in yenileme ucuna gönderilirdi.
+      store([
+        [KEYS.accessToken, 'access-1'],
+        [KEYS.refreshToken, 'refresh-1'],
+        [KEYS.account, JSON.stringify(entry)],
+      ]);
+
+      await restoreSession();
+
+      assert.equal(getSession(), null);
+    });
+  }
+
+  it('ignores provider details on a password session', async () => {
+    store([
+      [KEYS.accessToken, 'access-1'],
+      [KEYS.refreshToken, 'refresh-1'],
+      [KEYS.account, JSON.stringify({ ...account, kind: 'password', provider: link })],
+    ]);
+
+    await restoreSession();
+
+    assert.deepEqual(getSession(), session());
   });
 });

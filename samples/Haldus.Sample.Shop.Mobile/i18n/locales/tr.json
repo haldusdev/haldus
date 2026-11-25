@@ -41,7 +41,13 @@
     "backToSignIn": "Girişe dön",
     "newCode": "Yeni kod gönder",
     "codeSent": "Adres kayıtlıysa kod yola çıktı. Kod kısa bir süre geçerlidir.",
-    "passwordReset": "Parolanız sıfırlandı. Yeni parolanızla giriş yapın."
+    "passwordReset": "Parolanız sıfırlandı. Yeni parolanızla giriş yapın.",
+    "or": "veya",
+    "provider": "Kimlik sağlayıcıyla giriş yap",
+    "providerDescription": "Kuruluşunuzun kimlik sağlayıcısıyla giriş yapın.",
+    "providerCancelled": "Giriş iptal edildi.",
+    "providerFailed": "Kimlik sağlayıcıyla giriş başarısız oldu. Lütfen yeniden deneyin.",
+    "providerUnavailable": "Kimlik sağlayıcıya şu anda ulaşılamıyor. Lütfen yeniden deneyin."
   },
   "products": {
     "searchPlaceholder": "Ürün ara",

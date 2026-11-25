@@ -46,6 +46,14 @@ export type Scene = {
   page: Page;
   /** Hesabın oturumunu depoya yazar ve verilen ekranı açar; giriş ekranından geçmeden başlamak için. */
   signIn: (email?: string, options?: { verified?: boolean; path?: string }) => Promise<void>;
+  /**
+   * Kimlik sağlayıcıyla açılmış bir oturumu depoya yazar ve verilen ekranı açar. Backend'in bir sağlayıcı sunduğu
+   * varsayılır (`shop.offerProvider()`); `refreshToken: false` sağlayıcının yenileme token'ı vermediği durumdur.
+   */
+  signInAtProvider: (
+    email?: string,
+    options?: { refreshToken?: boolean; verified?: boolean; path?: string }
+  ) => Promise<void>;
   /** Çevirideki `{{ad}}` yer tutucularını doldurur. */
   fill: (template: string, values: Record<string, string | number>) => string;
 };
@@ -83,6 +91,8 @@ export function scene(name: string, body: (scene: Scene, t: TestContext) => Prom
             await page.goto(`${shop.origin}/sign-in`);
             await page.setStorage(KEYS.accessToken, tokens.accessToken);
             await page.setStorage(KEYS.refreshToken, tokens.refreshToken);
+            // Kayıt tür taşımaz: sağlayıcı girişinden önceki sürümün yazdığı biçimdir. Parola oturumuyla başlayan
+            // her senaryo, böyle saklanmış bir oturumun hâlâ okunduğunu da gösterir.
             await page.setStorage(
               KEYS.account,
               JSON.stringify({
@@ -90,6 +100,36 @@ export function scene(name: string, body: (scene: Scene, t: TestContext) => Prom
                 email: account.email,
                 tenantId: account.tenantId,
                 emailVerified: account.emailVerified,
+              })
+            );
+            await page.goto(`${shop.origin}${options.path ?? '/'}`);
+          },
+          signInAtProvider: async (email = 'ada@example.com', options = {}) => {
+            const provider = shop.provider ?? shop.offerProvider();
+            const account =
+              shop.accounts.find((candidate) => candidate.email === email) ??
+              shop.addAccount(email, null, { emailVerified: options.verified ?? true });
+            const tokens = shop.issueAtProvider(account, options.refreshToken ?? true);
+
+            await page.goto(`${shop.origin}/sign-in`);
+            await page.setStorage(KEYS.accessToken, tokens.access_token);
+
+            if (tokens.refresh_token) {
+              await page.setStorage(KEYS.refreshToken, tokens.refresh_token);
+            }
+
+            await page.setStorage(
+              KEYS.account,
+              JSON.stringify({
+                accountId: account.id,
+                email: account.email,
+                tenantId: account.tenantId,
+                emailVerified: account.emailVerified,
+                kind: 'provider',
+                provider: {
+                  clientId: provider.clientId,
+                  tokenEndpoint: `${shop.authority}/token`,
+                },
               })
             );
             await page.goto(`${shop.origin}${options.path ?? '/'}`);

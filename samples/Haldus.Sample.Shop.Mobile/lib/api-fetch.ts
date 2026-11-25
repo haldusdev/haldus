@@ -1,6 +1,7 @@
 import { Platform } from 'react-native';
 
 import i18n from '@/i18n';
+import { ProviderRejectionError, renewProviderTokens } from '@/lib/provider';
 import { getSession, renewTokens, restoreSession, signOut } from '@/lib/session';
 import type { Session } from '@/lib/session';
 
@@ -15,8 +16,9 @@ const CREDENTIAL_ROUTES = ['/auth/login', '/auth/register', '/auth/refresh'];
 type Tokens = { accessToken: string; refreshToken: string };
 
 /**
- * Yenileme isteğini yapan işlev. Üretilen istemci bu dosyayı içe aktardığı için burada doğrudan çağrılamaz
- * (döngüsel bağımlılık olurdu); `lib/auth.ts` onu açılışta buraya verir.
+ * Parola oturumunun yenileme isteğini yapan işlev. Üretilen istemci bu dosyayı içe aktardığı için burada doğrudan
+ * çağrılamaz (döngüsel bağımlılık olurdu); `lib/auth.ts` onu açılışta buraya verir. Sağlayıcı oturumu backend'den
+ * değil sağlayıcının token ucundan yenilenir (`lib/provider.ts`); onun böyle bir bağımlılığı yoktur.
  */
 type Refresher = (refreshToken: string) => Promise<Tokens>;
 
@@ -76,7 +78,8 @@ async function request<T>(url: string, options: RequestInit, mayRenew: boolean):
 
 /**
  * Aynı anda 401 alan istekler tek bir yenilemeyi bekler. Yenileme token'ı bir kez kullanılır: backend eskisini
- * (kısa bir toleransın dışında) yeniden görürse oturumu çalınmış sayıp kapatır.
+ * (kısa bir toleransın dışında) yeniden görürse oturumu çalınmış sayıp kapatır. Sağlayıcılar da yenileme token'ını
+ * çoğunlukla her kullanımda değiştirir; tek yenileme kuralı iki oturum türü için de aynıdır.
  */
 function renew(sent: Session): Promise<boolean> {
   const current = getSession();
@@ -101,18 +104,50 @@ function renew(sent: Session): Promise<boolean> {
 /** Oturumu şimdi yeniler (ör. hesabın bilgisi değiştiğinde); süregelen bir yenileme varsa onu bekler. */
 export function renewSession(): Promise<boolean> {
   const session = getSession();
-  return session ? renew(session) : Promise.resolve(false);
+
+  // Yenileme token'ı olmayan sağlayıcı oturumu yenilenemez. İstek üzerine yenileme onu kapatmaz; onu yalnızca
+  // backend'in erişim token'ını reddetmesi bitirir.
+  return session && session.refreshToken !== null ? renew(session) : Promise.resolve(false);
 }
+
 async function refresh(sent: Session): Promise<boolean> {
-  if (!refresher) {
+  // Yanıt beklenirken oturum değişebilir (çıkış, başka hesapla giriş); sonuç yalnızca hâlâ aynı oturuma uygulanır.
+  const unchanged = () => {
+    const current = getSession();
+
+    return (
+      current !== null &&
+      current.accountId === sent.accountId &&
+      current.accessToken === sent.accessToken &&
+      current.refreshToken === sent.refreshToken
+    );
+  };
+
+  if (sent.refreshToken === null) {
+    // Sağlayıcı yenileme token'ı vermedi: yenilenecek bir şey yoktur ve erişim token'ı reddedilince oturum biter.
+    // Tarayıcıda başka bir sekme bu arada yeniden giriş yapmış olabilir; onun oturumu kapatılmaz.
+    if (Platform.OS === 'web') {
+      await restoreSession();
+    }
+
+    if (unchanged()) {
+      await signOut();
+    }
+
     return false;
   }
 
-  // Yanıt beklenirken oturum değişebilir (çıkış, başka hesapla giriş); sonuç yalnızca hâlâ aynı oturuma uygulanır.
-  const unchanged = () => getSession()?.refreshToken === sent.refreshToken;
-
   try {
-    const tokens = await refresher(sent.refreshToken);
+    const pending =
+      sent.kind === 'provider'
+        ? renewProviderTokens(sent.provider, sent.refreshToken)
+        : refresher?.(sent.refreshToken);
+
+    if (!pending) {
+      return false;
+    }
+
+    const tokens = await pending;
 
     // Tarayıcıda başka bir sekmenin yazdığı değişiklik, olayı henüz gelmemiş olsa da görülsün diye depo yeniden okunur.
     if (Platform.OS === 'web') {
@@ -133,10 +168,19 @@ async function refresh(sent: Session): Promise<boolean> {
       return adoptRenewal(sent);
     }
 
-    // Oturumu yalnızca backend'in reddi bitirir (400 / 401). Ağ hatasında, sunucu hatasında veya bir vekilin hata
-    // sayfasında (5xx) oturum korunur ve istek hatasıyla döner; yoksa geçici bir arıza herkesi oturumdan atardı.
-    if (isRejection(error) && unchanged()) {
-      await signOut();
+    // Oturumu yalnızca kesin bir ret bitirir: backend'in 400 / 401 yanıtı ya da sağlayıcının ret kodu. Ağ hatasında,
+    // sunucu hatasında veya bir vekilin hata sayfasında (5xx) oturum korunur ve istek hatasıyla döner; yoksa geçici
+    // bir arıza herkesi oturumdan atardı.
+    if (isRejection(error)) {
+      // Sağlayıcının 409'a karşılık gelen bir yanıtı yoktur: tarayıcıda öteki sekme aynı yenileme token'ını az önce
+      // kullandıysa bu sekmeninki reddedilir. Öteki sekmenin yazdığı token'lar varsa oturum onlarla sürer.
+      if (sent.kind === 'provider' && Platform.OS === 'web' && (await adoptRenewal(sent))) {
+        return true;
+      }
+
+      if (unchanged()) {
+        await signOut();
+      }
     }
 
     return false;
@@ -169,10 +213,11 @@ async function adoptRenewal(sent: Session): Promise<boolean> {
 
 function isRejection(error: unknown): boolean {
   return (
-    typeof error === 'object' &&
-    error !== null &&
-    'status' in error &&
-    (error.status === 400 || error.status === 401)
+    error instanceof ProviderRejectionError ||
+    (typeof error === 'object' &&
+      error !== null &&
+      'status' in error &&
+      (error.status === 400 || error.status === 401))
   );
 }
 function parse(text: string): unknown {

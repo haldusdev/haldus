@@ -41,7 +41,13 @@
     "backToSignIn": "Back to sign in",
     "newCode": "Send a new code",
     "codeSent": "If the address is registered, a code is on its way. It is valid for a short time.",
-    "passwordReset": "Your password has been reset. Sign in with the new password."
+    "passwordReset": "Your password has been reset. Sign in with the new password.",
+    "or": "or",
+    "provider": "Sign in with identity provider",
+    "providerDescription": "Sign in with the identity provider of your organization.",
+    "providerCancelled": "Sign-in was cancelled.",
+    "providerFailed": "Sign-in with the identity provider failed. Please try again.",
+    "providerUnavailable": "The identity provider cannot be reached right now. Please try again."
   },
   "products": {
     "searchPlaceholder": "Search products",

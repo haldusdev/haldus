@@ -5,8 +5,10 @@ import {
   refreshSession,
   verifyEmail,
 } from '@/api/auth/auth';
-import type { AccessTokenResponse } from '@/api/model';
+import type { AccessTokenResponse, ExternalProviderConfig } from '@/api/model';
 import { renewSession, setSessionRefresher } from '@/lib/api-fetch';
+import { ProviderSignInError, promptProviderSignIn, redeemProviderCode } from '@/lib/provider';
+import type { ProviderPrompt } from '@/lib/provider';
 import { Platform } from 'react-native';
 
 import {
@@ -18,7 +20,7 @@ import {
   signOut,
 } from '@/lib/session';
 
-// Süresi dolan erişim token'ı bu istekle yenilenir (api-fetch.ts).
+// Parola oturumunun süresi dolan erişim token'ı bu istekle yenilenir (api-fetch.ts).
 setSessionRefresher(async (refreshToken) => {
   const renewed = await refreshSession({ refreshToken });
   return renewed.data;
@@ -31,6 +33,7 @@ export async function openSession(tokens: AccessTokenResponse): Promise<void> {
   });
 
   await signIn({
+    kind: 'password',
     accessToken: tokens.accessToken,
     refreshToken: tokens.refreshToken,
     accountId: account.data.id,
@@ -38,6 +41,47 @@ export async function openSession(tokens: AccessTokenResponse): Promise<void> {
     tenantId: account.data.tenantId,
     emailVerified: account.data.emailVerified,
   });
+}
+
+/**
+ * Kimlik sağlayıcıyla giriş (yetkilendirme kodu + PKCE): sağlayıcının sayfası açılır, dönen kod token'lara çevrilir
+ * ve sağlayıcının erişim token'ı ile backend'e hesabın kim olduğu sorulur. Backend bu giriş için kendi token'ını
+ * vermez; oturumun token'ları sağlayıcınınkilerdir. Kullanıcı vazgeçerse `cancelled` döner ve oturum açılmaz.
+ *
+ * Bir dokunuşun içinden çağrılmalıdır: web'de sağlayıcı açılır pencerede açılır.
+ */
+export async function signInWithProvider(
+  provider: ExternalProviderConfig,
+  prompt: ProviderPrompt
+): Promise<'signedIn' | 'cancelled'> {
+  const result = await promptProviderSignIn(prompt);
+
+  if (result.type !== 'success' && result.type !== 'error') {
+    return 'cancelled';
+  }
+
+  // Sağlayıcının hatası (`error=access_denied`...) ve başka bir isteğe ait dönüş (durum değeri uymuyor) buradadır.
+  if (result.type === 'error' || !result.params.code) {
+    throw new ProviderSignInError(result.error?.code ?? 'the response carries no code');
+  }
+
+  const tokens = await redeemProviderCode(provider, prompt, result.params.code);
+  const account = await getCurrentAccount({
+    headers: { Authorization: `Bearer ${tokens.accessToken}` },
+  });
+
+  await signIn({
+    kind: 'provider',
+    accessToken: tokens.accessToken,
+    refreshToken: tokens.refreshToken,
+    provider: tokens.link,
+    accountId: account.data.id,
+    email: account.data.email,
+    tenantId: account.data.tenantId,
+    emailVerified: account.data.emailVerified,
+  });
+
+  return 'signedIn';
 }
 
 /**
@@ -70,18 +114,22 @@ export async function confirmEmail(code: string): Promise<void> {
   // doğrulanmıştı. Güncel bilgi oturum yenilenerek alınır; yenileme, 401 sonrası yenilemeyle aynı sıradan geçer.
   const session = (await renewSession()) ? getSession() : null;
 
-  if (session && session.accountId === before.accountId) {
+  // E-posta doğrulama parola hesaplarına özgüdür (backend sağlayıcı hesabına bu ucu açmaz).
+  if (session?.kind === 'password' && session.accountId === before.accountId) {
     await markEmailVerified(session.accessToken, session.refreshToken);
   }
 }
 /**
  * Oturumu kapatır. Backend oturumu iptal eder (token'lar artık kabul edilmez); istek başarısız olsa da token'lar
  * cihazdan silinir, çünkü kullanıcı çıkmak istemiştir.
+ *
+ * Sağlayıcı oturumunun backend'de karşılığı yoktur; yalnızca cihazdaki token'lar silinir. Sağlayıcıdaki oturum
+ * (`end_session_endpoint`) kapatılmaz ve token'lar orada iptal edilmez: süreleri dolana kadar geçerli kalırlar.
  */
 export async function closeSession(): Promise<void> {
   const session = getSession();
 
-  if (session) {
+  if (session?.kind === 'password') {
     try {
       // Yenileme token'ı da gönderilir: erişim token'ı artık geçmiyorsa (süresi dolmuş, yenilenemiyor) oturumu
       // sunucuda o tanıtır ve kapatır.

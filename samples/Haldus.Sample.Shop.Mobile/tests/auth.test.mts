@@ -1,13 +1,21 @@
 import assert from 'node:assert/strict';
 import { beforeEach, describe, it } from 'node:test';
 
+import { answerPrompt, prompts } from './stubs/expo-auth-session.ts';
 import { items } from './stubs/expo-secure-store.ts';
 import { calls, callsTo, empty, json, respondWith } from './support/fetch.ts';
 import type { Call } from './support/fetch.ts';
-import { session, stored, unauthorized } from './support/fixtures.ts';
+import { providerSession, session, stored, unauthorized } from './support/fixtures.ts';
 
 // Üretilen istemci taklit edilmez; istekleri `fetch` taklidine kadar gerçek yoldan gider.
-import { changeOwnPassword, closeSession, confirmEmail, openSession } from '@/lib/auth';
+import {
+  changeOwnPassword,
+  closeSession,
+  confirmEmail,
+  openSession,
+  signInWithProvider,
+} from '@/lib/auth';
+import { prepareProviderSignIn, ProviderSignInError } from '@/lib/provider';
 import { getSession, signIn, signOut } from '@/lib/session';
 
 const account = {
@@ -83,7 +91,215 @@ describe('auth', () => {
     });
   });
 
+  describe('signInWithProvider', () => {
+    const provider = {
+      authority: 'https://id.test/realms/shop',
+      clientId: 'shop-mobile',
+      scopes: 'openid email offline_access',
+    };
+    const TOKEN_ENDPOINT = 'https://id.test/connect/token';
+    const granted = { access_token: 'idp-access-1', refresh_token: 'idp-refresh-1' };
+
+    /** Sağlayıcı (keşif ve token ucu) ile backend'in hesap ucu. */
+    function world(call: Call): Response {
+      if (call.url.endsWith('/.well-known/openid-configuration')) {
+        return json(200, {
+          authorization_endpoint: 'https://id.test/connect/authorize',
+          token_endpoint: TOKEN_ENDPOINT,
+        });
+      }
+
+      return call.url === TOKEN_ENDPOINT ? json(200, granted) : json(200, account);
+    }
+
+    /** Girişi hazırlar; sonraki istekler `respond` ile yanıtlanır ve kayıt hazırlıktan sonra başlar. */
+    async function prepared(respond: (call: Call) => Response = world) {
+      respondWith(world);
+      const prompt = await prepareProviderSignIn(provider);
+      respondWith(respond);
+      return prompt;
+    }
+
+    function returning(params: Record<string, string>) {
+      answerPrompt({ type: 'success', params });
+    }
+
+    it('exchanges the returned code and asks the backend who the account is', async () => {
+      const prompt = await prepared();
+      returning({ code: 'code-1', state: prompt.request.state });
+
+      assert.equal(await signInWithProvider(provider, prompt), 'signedIn');
+
+      assert.equal(prompts.length, 1);
+      assert.deepEqual(
+        calls.map((call) => [call.method, call.url, bearer(call)]),
+        [
+          ['POST', TOKEN_ENDPOINT, null],
+          // Backend'e sağlayıcının erişim token'ı gider; backend bu giriş için kendi token'ını vermez.
+          ['GET', 'http://shop.test/auth/me', 'Bearer idp-access-1'],
+        ]
+      );
+      assert.deepEqual(calls[0].body, {
+        grant_type: 'authorization_code',
+        client_id: 'shop-mobile',
+        code: 'code-1',
+        code_verifier: prompt.request.codeVerifier,
+        redirect_uri: 'haldus-shop://sign-in',
+      });
+    });
+
+    it('stores a provider session with what its renewal needs', async () => {
+      const prompt = await prepared();
+      returning({ code: 'code-1', state: prompt.request.state });
+
+      await signInWithProvider(provider, prompt);
+
+      const expected = providerSession();
+      assert.deepEqual(getSession(), expected);
+      assert.deepEqual([...items].sort(), stored(expected).sort());
+    });
+
+    it('opens a session without a refresh token when the provider issues none', async () => {
+      const prompt = await prepared((call) =>
+        call.url === TOKEN_ENDPOINT ? json(200, { access_token: 'idp-access-1' }) : world(call)
+      );
+      returning({ code: 'code-1', state: prompt.request.state });
+
+      await signInWithProvider(provider, prompt);
+
+      const expected = providerSession({ refreshToken: null });
+      assert.deepEqual(getSession(), expected);
+      assert.deepEqual([...items].sort(), stored(expected).sort());
+    });
+
+    it('never calls the sign-in endpoints of the backend', async () => {
+      const prompt = await prepared();
+      returning({ code: 'code-1', state: prompt.request.state });
+
+      await signInWithProvider(provider, prompt);
+
+      for (const route of ['/auth/login', '/auth/register', '/auth/refresh']) {
+        assert.equal(callsTo(route).length, 0);
+      }
+    });
+
+    it('replaces the session of another account', async () => {
+      await signIn(session({ accountId: 'account-0', accessToken: 'old-access' }));
+      const prompt = await prepared();
+      returning({ code: 'code-1', state: prompt.request.state });
+
+      await signInWithProvider(provider, prompt);
+
+      // Hesap, eski oturumun token'ı ile değil sağlayıcınınkiyle sorulur.
+      assert.equal(bearer(calls[1]), 'Bearer idp-access-1');
+      assert.deepEqual(getSession(), providerSession());
+    });
+
+    for (const type of ['cancel', 'dismiss'] as const) {
+      it(`reports a ${type} of the provider page as cancelled and sends nothing`, async () => {
+        const prompt = await prepared();
+        answerPrompt({ type });
+
+        assert.equal(await signInWithProvider(provider, prompt), 'cancelled');
+
+        assert.equal(calls.length, 0);
+        assert.equal(getSession(), null);
+        assert.equal(items.size, 0);
+      });
+    }
+
+    it('keeps the current session when the sign-in is cancelled', async () => {
+      await signIn(session());
+      const prompt = await prepared();
+      answerPrompt({ type: 'cancel' });
+
+      await signInWithProvider(provider, prompt);
+
+      assert.deepEqual(getSession(), session());
+    });
+
+    it('fails when the provider returns an error instead of a code', async () => {
+      const prompt = await prepared();
+      answerPrompt({
+        type: 'error',
+        params: { error: 'access_denied', state: prompt.request.state },
+        error: { code: 'access_denied' },
+      });
+
+      await assert.rejects(signInWithProvider(provider, prompt), ProviderSignInError);
+
+      assert.equal(calls.length, 0);
+      assert.equal(getSession(), null);
+    });
+
+    it('fails without exchanging when the answer belongs to another request', async () => {
+      // Kütüphane durum değeri uymayan dönüşü, kod taşısa da, hata olarak bildirir.
+      const prompt = await prepared();
+      answerPrompt({
+        type: 'error',
+        params: { code: 'code-of-someone-else', state: 'another-state' },
+        error: { code: 'state_mismatch' },
+      });
+
+      await assert.rejects(signInWithProvider(provider, prompt), ProviderSignInError);
+
+      assert.equal(calls.length, 0);
+      assert.equal(getSession(), null);
+    });
+
+    it('fails when the provider returns neither a code nor an error', async () => {
+      const prompt = await prepared();
+      returning({ state: prompt.request.state });
+
+      await assert.rejects(signInWithProvider(provider, prompt), ProviderSignInError);
+
+      assert.equal(calls.length, 0);
+    });
+
+    it('opens no session when the provider rejects the code', async () => {
+      const prompt = await prepared((call) =>
+        call.url === TOKEN_ENDPOINT ? json(400, { error: 'invalid_grant' }) : world(call)
+      );
+      returning({ code: 'code-1', state: prompt.request.state });
+
+      await assert.rejects(signInWithProvider(provider, prompt), ProviderSignInError);
+
+      assert.equal(callsTo('/auth/me').length, 0);
+      assert.equal(getSession(), null);
+      assert.equal(items.size, 0);
+    });
+
+    it('opens no session when the backend does not accept the token of the provider', async () => {
+      const prompt = await prepared((call) =>
+        call.url === TOKEN_ENDPOINT ? json(200, granted) : json(401, unauthorized)
+      );
+      returning({ code: 'code-1', state: prompt.request.state });
+
+      await assert.rejects(signInWithProvider(provider, prompt), (error) => {
+        // Backend'in yanıtı olduğu gibi fırlatılır; ekran, varsa gerekçesini gösterir.
+        assert.deepEqual(error, unauthorized);
+        return true;
+      });
+
+      assert.equal(getSession(), null);
+      assert.equal(items.size, 0);
+      // Reddedilen sağlayıcı token'ı için yenileme denenmez.
+      assert.equal(calls.filter((call) => call.url === TOKEN_ENDPOINT).length, 1);
+    });
+  });
+
   describe('closeSession', () => {
+    it('signs out of a provider session without calling the backend or the provider', async () => {
+      // Backend sağlayıcı girişi için oturum tutmaz; sağlayıcının oturumu da kapatılmaz (bilinen sınır).
+      await signIn(providerSession());
+
+      await closeSession();
+
+      assert.equal(calls.length, 0);
+      assert.equal(getSession(), null);
+      assert.equal(items.size, 0);
+    });
+
     it('revokes the session at the backend and signs out', async () => {
       await signIn(session());
       respondWith(() => empty(204));

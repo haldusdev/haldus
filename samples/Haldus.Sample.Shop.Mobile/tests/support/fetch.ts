@@ -64,12 +64,24 @@ export function settle(): Promise<void> {
   return new Promise((resolve) => setImmediate(resolve));
 }
 
+/** Gövde backend'e JSON, kimlik sağlayıcının token ucuna form olarak gider; ikisi de nesne olarak kaydedilir. */
+function read(body: unknown, headers: Headers): unknown {
+  if (typeof body !== 'string') {
+    return undefined;
+  }
+
+  return headers.get('Content-Type')?.includes('application/x-www-form-urlencoded')
+    ? Object.fromEntries(new URLSearchParams(body))
+    : JSON.parse(body);
+}
+
 globalThis.fetch = async (input, init) => {
+  const headers = new Headers(init?.headers);
   const call: Call = {
     url: String(input),
     method: init?.method ?? 'GET',
-    headers: new Headers(init?.headers),
-    body: typeof init?.body === 'string' ? JSON.parse(init.body) : undefined,
+    headers,
+    body: read(init?.body, headers),
   };
 
   calls.push(call);

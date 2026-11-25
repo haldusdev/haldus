@@ -11,6 +11,13 @@ export function problemStatus(error: unknown): number | undefined {
   return isRecord(error) && typeof error.status === 'number' ? error.status : undefined;
 }
 
+/** Backend'in isteğin dilinde yazdığı açıklama. Başlık (`title`) sayılmaz: çevrilmez ve durumun adından ibarettir. */
+export function problemDetail(error: unknown): string | undefined {
+  return isRecord(error) && typeof error.detail === 'string' && error.detail.length > 0
+    ? error.detail
+    : undefined;
+}
+
 /** Kullanıcıya gösterilecek metin: backend'in (isteğin dilinde yazdığı) açıklaması, yoksa verilen yedek. */
 export function problemMessage(error: unknown, fallback: string): string {
   if (isRecord(error)) {
