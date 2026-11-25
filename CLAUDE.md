@@ -431,6 +431,29 @@ Bilinenler:
   yanlış commit'i gösterir.
 - Çözüm paketlenirken iki web projesi için "paketleme devre dışı" uyarısı yazılır; zararsızdır.
 
+## Kılavuz (AI bilinebilirliği)
+
+Haldus hiçbir modelin eğitim verisinde yoktur; onu kullanan bir projede çalışan ajan ne okursa onu bilir. Bunun için
+(kullanıcının isteği, 2026-11-25):
+
+- `docs/guide.md`: bütün `Map*` ve zincir metotlarının, iş mantığı sözleşmelerinin, tanıların ve sık yapılan hataların
+  tek dosyalık başvurusu. **İngilizcedir (kullanıcı kararı; soruldu ve yanıtlandı)**; projenin "belgeler Türkçe" kuralının
+  bilerek yapılmış istisnasıdır. README Türkçe kalır.
+- `llms.txt` (kökte; llmstxt.org düzeni): kılavuza işaret eden kısa dizin.
+- Kılavuz `Haldus.AspNetCore` paketinin içinde de gelir (`docs/guide.md`); sonunda, tüketen projenin `AGENTS.md` /
+  `CLAUDE.md` dosyasına yapıştırılacak bir parça vardır.
+- Her analyzer tanısı kılavuzdaki kendi başlığına bağlanır (`helpLinkUri`; `HaldusDiagnostics.Guide`). Mesajların
+  kendisi denetlendi: İngilizce, neyin yanlış olduğunu ve çoğunda nasıl yazılacağını örnekle söylüyor; değiştirilmedi.
+- **Herkese açık yeni bir `Map*` metodu, zincir metodu, `AddHaldus*` / `UseHaldus` metodu veya tanı kılavuza yazılmadan
+  eklenemez:** `GuideTests` adlarını yansımayla bulur ve kılavuzda arar. Test anlatımın doğruluğunu sınamaz; bir
+  bildirimin davranışı değişince kılavuzdaki satırı da elle güncellenir. Öteki paketlerdeki kayıt metotları
+  (`AddHaldusS3Storage`...) test projesinin başvurmadığı derlemelerdedir ve denetlenmez.
+- Kılavuzdaki imzalar README'den değil koddan (builder'ların imzaları, sözleşme arayüzleri, enum üyeleri) yazıldı.
+  Davranış anlatımları README ile bu dosyaya dayanır; her satırı ayrıca çalıştırılarak doğrulanmadı.
+
+Yapılmayanlar: Context7'ye (veya başka bir dizine) kayıt, paketlerin yayınlanması, belge sitesi, `dotnet new` şablonu,
+İngilizce README. Bunlar kullanıcının kararıdır.
+
 ## Aşamalar
 
 Üç plan da bitti: ilk sürümün on aşaması (3. aşamaya `.Searchable()`, 8. aşamaya fiziksel temizlik de eklendi),

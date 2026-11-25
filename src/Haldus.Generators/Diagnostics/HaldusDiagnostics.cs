@@ -6,13 +6,17 @@ internal static class HaldusDiagnostics
 {
     private const string Category = "Haldus";
 
+    // Her tanı, kılavuzda kendi başlığına bağlanır; derleme çıktısını okuyan (insan veya ajan) çözümü orada bulur.
+    private const string Guide = "https://github.com/haldusdev/haldus/blob/main/docs/guide.md#";
+
     public static readonly DiagnosticDescriptor EntityMustBePartialClass = new(
         "HALDUS001",
         "Entity must be a partial class",
         "'{0}' must be declared as a top-level partial class so Haldus can generate its other half",
         Category,
         DiagnosticSeverity.Error,
-        isEnabledByDefault: true);
+        isEnabledByDefault: true,
+        helpLinkUri: Guide + "haldus001");
 
     public static readonly DiagnosticDescriptor EntityMappedMoreThanOnce = new(
         "HALDUS002",
@@ -20,7 +24,8 @@ internal static class HaldusDiagnostics
         "'{0}' is already mapped by another Map call; an entity can be declared only once",
         Category,
         DiagnosticSeverity.Error,
-        isEnabledByDefault: true);
+        isEnabledByDefault: true,
+        helpLinkUri: Guide + "haldus002");
 
     public static readonly DiagnosticDescriptor UnsupportedIdType = new(
         "HALDUS003",
@@ -28,7 +33,8 @@ internal static class HaldusDiagnostics
         "'{0}' has type '{1}'; supported key types for this archetype are {2}",
         Category,
         DiagnosticSeverity.Error,
-        isEnabledByDefault: true);
+        isEnabledByDefault: true,
+        helpLinkUri: Guide + "haldus003");
 
     public static readonly DiagnosticDescriptor InvalidCombination = new(
         "HALDUS007",
@@ -36,7 +42,8 @@ internal static class HaldusDiagnostics
         "{0}",
         Category,
         DiagnosticSeverity.Error,
-        isEnabledByDefault: true);
+        isEnabledByDefault: true,
+        helpLinkUri: Guide + "haldus007");
 
     public static readonly DiagnosticDescriptor DeclarationDetachedFromMapCall = new(
         "HALDUS004",
@@ -44,7 +51,8 @@ internal static class HaldusDiagnostics
         "'{0}' must be chained directly onto the Map call; Haldus reads the chain at compile time and cannot see calls made on a variable",
         Category,
         DiagnosticSeverity.Error,
-        isEnabledByDefault: true);
+        isEnabledByDefault: true,
+        helpLinkUri: Guide + "haldus004");
 
     public static readonly DiagnosticDescriptor FieldCannotBeSearched = new(
         "HALDUS005",
@@ -52,7 +60,8 @@ internal static class HaldusDiagnostics
         "'{0}' cannot be searched: write it as 'item => item.Property', where the property is the Id, a scalar property or a trait field of '{1}'",
         Category,
         DiagnosticSeverity.Error,
-        isEnabledByDefault: true);
+        isEnabledByDefault: true,
+        helpLinkUri: Guide + "haldus005");
 
     public static readonly DiagnosticDescriptor SearchableNeedsFields = new(
         "HALDUS006",
@@ -60,7 +69,8 @@ internal static class HaldusDiagnostics
         "List the fields of '{0}' that may be searched and sorted, for example Searchable(item => item.Name); nothing is searchable by default",
         Category,
         DiagnosticSeverity.Error,
-        isEnabledByDefault: true);
+        isEnabledByDefault: true,
+        helpLinkUri: Guide + "haldus006");
 
     public static readonly DiagnosticDescriptor QueryRequestNeedsParameterlessConstructor = new(
         "HALDUS008",
@@ -68,7 +78,8 @@ internal static class HaldusDiagnostics
         "'{0}' must have a public parameterless constructor and settable properties so Haldus can fill it from the query string",
         Category,
         DiagnosticSeverity.Error,
-        isEnabledByDefault: true);
+        isEnabledByDefault: true,
+        helpLinkUri: Guide + "haldus008");
 
     public static readonly DiagnosticDescriptor ReferenceTargetUnknown = new(
         "HALDUS009",
@@ -76,7 +87,8 @@ internal static class HaldusDiagnostics
         "'{0}', which '{1}' refers to, is neither mapped with a Map call nor a declared entity type; a parent must be a mapped resource",
         Category,
         DiagnosticSeverity.Error,
-        isEnabledByDefault: true);
+        isEnabledByDefault: true,
+        helpLinkUri: Guide + "haldus009");
 
     public static readonly DiagnosticDescriptor InvalidDeclaration = new(
         "HALDUS010",
@@ -84,7 +96,8 @@ internal static class HaldusDiagnostics
         "{0}",
         Category,
         DiagnosticSeverity.Error,
-        isEnabledByDefault: true);
+        isEnabledByDefault: true,
+        helpLinkUri: Guide + "haldus010");
 
     public static DiagnosticDescriptor Get(string id) => id switch
     {

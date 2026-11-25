@@ -1,0 +1,20 @@
+# Haldus
+
+> Haldus is a .NET 10 framework that generates repetitive backend code at compile time. A call such as
+> `app.MapCrud<Product>().MultiTenant()` plus a `partial class` produces the entity, the request/response DTOs, the
+> Minimal API endpoints and the EF Core configuration. It runs on ASP.NET Core, EF Core and PostgreSQL.
+
+Haldus is consumed as the NuGet package `Haldus.AspNetCore`, which carries the source generator. Every resource is
+declared by one `Map*` call (the archetype) followed by a chain of relationships, an optional state machine and traits.
+The chain is read at compile time, so it must be written statically. Entities are top-level partial classes that
+contain only the application's own fields.
+
+## Docs
+
+- [Guide](https://raw.githubusercontent.com/haldusdev/haldus/main/docs/guide.md): the complete reference in one file: setup, rules, every `Map*` and chain method with the endpoints it generates, the contracts for business logic, diagnostics (`HALDUS001`–`HALDUS010`), common mistakes and a snippet for the `AGENTS.md` of an application built on Haldus.
+
+## Optional
+
+- [README](https://raw.githubusercontent.com/haldusdev/haldus/main/README.md): a longer narrative with more examples (in Turkish).
+- [Sample shop](https://github.com/haldusdev/haldus/tree/main/samples/Haldus.Sample.Shop): a single-project application that uses most declarations.
+- [Modular sample](https://github.com/haldusdev/haldus/tree/main/samples/Haldus.Sample.Modular): modules as class libraries, shared and per-module contexts.

@@ -24,4 +24,9 @@
     <None Include="..\Haldus.Generators\bin\$(Configuration)\netstandard2.0\Haldus.Generators.dll" Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false" />
   </ItemGroup>
 
+  <!-- Kılavuz paketle birlikte gelir: tüketen projedeki bir ajan, kurulu sürümün kılavuzunu ağa çıkmadan okur. -->
+  <ItemGroup>
+    <None Include="..\..\docs\guide.md" Pack="true" PackagePath="docs" Visible="false" />
+  </ItemGroup>
+
 </Project>

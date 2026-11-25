@@ -39,6 +39,10 @@ eşlenen entity'lerin `DbSet` özelliklerini öteki yarısına ekler:
 public partial class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(options);
 ```
 
+Bütün `Map*` ve zincir metotlarının tek dosyalık, yoğun başvurusu [docs/guide.md](docs/guide.md) dosyasındadır
+(İngilizce). Kodlama ajanları için yazılmıştır ve `Haldus.AspNetCore` paketinin içinde de gelir; sonunda, Haldus kullanan
+bir projenin `AGENTS.md` / `CLAUDE.md` dosyasına yapıştırılacak kısa bir parça vardır. [llms.txt](llms.txt) ona işaret eder.
+
 Paketler henüz bir NuGet kaynağında yayınlanmadı: depodan üretilir ve yerel bir klasörden tüketilir (aşağıda,
 [Geliştirme](#geliştirme)). Sürüm bir ön sürümdür; API değişebilir.
 
