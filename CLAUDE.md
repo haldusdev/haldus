@@ -708,11 +708,24 @@ Yapılmayanlar ve nedenleri:
           kayıt. (Keycloak'ın erişim token'ı `iat` taşır; türü `JWT`'dir.) Adres kuralı değiştikten (`3e0767c`) sonra
           bir tur daha: sağlayıcıyla giren personel ürün oluşturdu; aynı adresle açılıp kodla doğrulanan parola hesabı
           oluşturamadı (403 pencerede göründü).
-          Mobilde emülatörde (Expo Go, Keycloak ve backend `adb reverse` ile) görülenler: giriş ekranında düğmenin
-          çıkması ve dokununca sistem tarayıcısının açılması. **Giriş tamamlanamadı:** emülatördeki Chrome ilk
-          açılış ekranında kaldı ve devam etmek Google'ın hizmet şartlarını kabul etmek demekti; bu, kullanıcı adına
-          yapılmadı. Öteki sanal cihazda (`Fix1_API_36_1`) da Chrome aynı ekrandadır ve Expo Go kurulu değildir
-          (kurmak indirme ister). İki engel de kullanıcının kararıdır; deneme o ekran geçilmiş bir cihazda yinelenebilir.
+          Mobilde giriş Android emülatöründe (Android 17, Expo Go 56; Metro, backend ve Keycloak `adb reverse` ile)
+          gerçek backend ve Keycloak'a karşı tamamlandı (`af0ce80`): düğme sistem tarayıcısını açtı; sağlayıcının
+          dönüş bağlantısı (`exp://127.0.0.1:8081/--/sign-in?code=…&state=…`) uygulamaya ulaşınca uygulama kodu PKCE
+          doğrulayıcısıyla Keycloak'ın token ucunda token'a çevirdi, hesabı `/auth/me` ile sordu ve ürünler ekranını
+          açtı; hesap ekranı sağlayıcının adresini gösterdi ve parola / e-posta doğrulama bölümlerini göstermedi;
+          uygulama kapatılıp açılınca oturum güvenli depodan geri geldi; erişim token'ının süresi dolunca üç istek 401
+          aldı, uygulama token'ı Keycloak'tan bir kez yeniledi ve üçü de 200 ile yinelendi; çıkıştan sonra yeniden
+          başlatınca oturum geri gelmedi. **Tarayıcıdaki adım cihazda yapılmadı:** emülatördeki Chrome ilk açılış
+          ekranındadır ve devam etmek Google'ın hizmet şartlarını kabul etmek demektir (kullanıcı adına yapılmaz;
+          kurulu iki sistem imajı da Play Store imajıdır). Onun yerine uygulamanın hazırladığı yetkilendirme adresi
+          cihaz günlüğünden okundu (geçici, commit'lenmeyen bir `console.log`), Keycloak'ın giriş formu o adresle
+          bilgisayardan dolduruldu ve Keycloak'ın döndürdüğü bağlantı `adb shell am start` ile uygulamaya iletildi.
+          Yani cihazda sınanmayan tek şey, Keycloak'ın sayfasının Chrome'da çizilmesi ve Chrome'un `exp://`
+          bağlantısını uygulamaya kendisinin vermesidir. İki tuzak: `expo start --localhost` Metro'yu yalnızca IPv6
+          döngü adresinde dinletir ve `adb reverse` ona ulaşamaz (Expo Go "Failed to download remote update" der);
+          `REACT_NATIVE_PACKAGER_HOSTNAME=127.0.0.1` ile başlatılır. Emülatörde kullanıcının başka bir projesinin
+          uygulaması da kuruludur ve öne gelebilir; ona dokunulmaz, Expo Go bileşen adıyla açılır
+          (`-n host.exp.exponent/.LauncherActivity`).
         - Sınırlar: sağlayıcının oturumu kapatılmaz ve token'ı iptal edilmez (çıkış yereldir); kimlik token'ı
           (`id_token`) kullanılmaz; yalnızca kapsam gönderilir (`audience` / `resource` parametresi isteyen
           sağlayıcılar yapılandırılamaz); panelde `serverSignIn` için düğme yoktur; panel paketi `oidc-client-ts`'i

@@ -206,12 +206,25 @@ giriş. Bu turda parola sıfırlama ve uygulamayı kapatıp açma yinelenmedi.
 **iOS'ta çalıştırılmadı** (geliştirildiği makine Windows); gerçek bir Android cihazda da denenmedi. Klavyenin alanı
 örtmesi, güvenli alanlar ve koyu tema Android'de ayrıca gözle denetlenmedi.
 
-**Kimlik sağlayıcıyla giriş yalnızca testlerle ve yalnızca web hedefinde doğrulandı.** Ekran testleri girişin
-tamamını (açılır pencere, kodun çevrilmesi, oturumun saklanması, sağlayıcıdan yenileme, reddedilen yenileme) sahte
-mağazanın içindeki bir sağlayıcı taklidine karşı sürer. Gerçek bir sağlayıcıya (Keycloak, Entra ID, Auth0…) ve
-gerçek backend'e karşı denenmedi; cihazda ve emülatörde de denenmedi: sistem tarayıcısının açılması, uygulamanın
-şemasına dönüş, Android'de Expo Router'ın dönüş bağlantısını ayrıca açması ve büyük bir token'ın güvenli depoya
-sığması gözle görülmedi.
+**Kimlik sağlayıcıyla giriş** iki yoldan doğrulandı. Ekran testleri girişin tamamını (açılır pencere, kodun
+çevrilmesi, oturumun saklanması, sağlayıcıdan yenileme, reddedilen yenileme) web hedefinde, sahte mağazanın içindeki
+bir sağlayıcı taklidine karşı sürer. Ayrıca Android emülatöründe (Android 17, Expo Go 56), gerçek backend'e ve
+kapsayıcıda çalışan Keycloak'a karşı elle denendi:
+
+- Düğme sistem tarayıcısını açtı; sağlayıcının dönüş bağlantısı (`exp://…/--/sign-in?code=…&state=…`) uygulamaya
+  ulaşınca uygulama kodu Keycloak'ın token ucunda token'a çevirdi, hesabı backend'e sordu ve ürünler ekranını açtı.
+- Hesap ekranı sağlayıcının adresini gösterdi; parola değiştirme ve e-posta doğrulama bölümleri görünmedi.
+- Uygulama tümüyle kapatılıp açılınca oturum güvenli depodan geri geldi (Keycloak'ın erişim ve yenileme token'ları
+  depoya sığdı).
+- Erişim token'ının süresi dolunca istekler 401 aldı, uygulama token'ı Keycloak'tan bir kez yeniledi ve istekler
+  yinelendi.
+- Çıkıştan sonra uygulama yeniden başlatılınca oturum geri gelmedi.
+
+Bu turda tarayıcıdaki adım cihazda yapılmadı: emülatördeki Chrome ilk açılış ekranındaydı. Keycloak'ın giriş formu,
+uygulamanın hazırladığı yetkilendirme adresiyle bilgisayardan dolduruldu ve Keycloak'ın döndürdüğü bağlantı uygulamaya
+`adb` ile iletildi. Cihazda görülmeyen, sağlayıcının sayfasının Chrome'da çizilmesi ve Chrome'un dönüş bağlantısını
+uygulamaya kendisinin vermesidir. Başka sağlayıcılarla (Entra ID, Auth0…), development build ile (`haldus-shop://`
+şeması) ve iOS'ta denenmedi.
 
 ## Bu örnek için verilen kararlar
 
