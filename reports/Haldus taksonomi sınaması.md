@@ -64,7 +64,7 @@ durum modeli" kuralı da açılmadı: ek durum eksenleri asıl durumun yanında,
   eşlemeye en yakın biçimde ve yalnızca yazılmış özelliklerle bildirir, generator'dan geçirir ve üretilen kodun
   hatasız derlendiğini doğrular. Aşağıdaki tablo o dosyadaki verinin aynısıdır; sayılar bir testle bağlıdır.
 - **Çalışma:** Derleme, uçların doğru davrandığını göstermez. Tablodaki özelliklerin her biri örnek uygulamalarda
-  gerçek PostgreSQL'e karşı sınanıyor (bugün 391 entegrasyon testi); ama her satırın kendi birleşimi değil.
+  gerçek PostgreSQL'e karşı sınanıyor (bugün 405 entegrasyon testi); ama her satırın kendi birleşimi değil.
   Örnek mağazada bulunmayan birleşimler (ör. iade, abonelik, rezervasyon satırlarının tam hali) yalnızca derleme
   düzeyinde doğrulandı.
 - **Hüküm:** "Temiz" ile "kısmi" arasındaki ayrım benim yorumumdur: önerilen eşlemede adı geçen bir özellik
@@ -237,7 +237,11 @@ durum modeli" kuralı da açılmadı: ek durum eksenleri asıl durumun yanında,
   başkasının yanlış kodlar göndererek bir hesabın parola sıfırlamasını engellemesine izin veriyordu; yenileme
   token'ının bir kez kullanılması ise yanıtı yolda kaybolan istemcinin veya aynı anda yenileyen ikinci sekmenin
   oturumunu kapatıyordu. İlki kodu uzatıp (sekiz karakter, 40 bit) deneme sınırını kaldırarak, ikincisi kısa bir
-  toleransla kapatıldı. Kalan ve bilinen eksik: örnekte rol yoktur; kayıt olan her hesap ortak kaynakları yazabilir.
+  toleransla kapatıldı. O tolerans da yeniden incelendi: pencere içinde eskimiş token'a yeni kimlik bilgisi veriyordu;
+  artık oturumu kapatmıyor ama token da vermiyor. Aynı incelemenin gösterdiği son eksik de kapatıldı: örnekte rol
+  yoktu ve kayıt olan her hesap ortak kaynakları yazabiliyordu. Bunun için üretilen uçlar artık kaynağın kapsamını
+  metadata olarak taşıyor (`HaldusResourceScope`) ve örnek, ortak kaynakların yazılmasını personele bırakıyor; kural
+  kaynakları tek tek saymadığı için sonradan eklenen kaynakları da kapsıyor.
 - **Güvenlik incelemeleri üçüncü planda da aynı türden bulgular verdi.** Dört aşamadan sonra düzeltme gerekti:
   kullanıcılara ait kayıtların ortak bir kayıtta örtük toplanması (22), hassas alanın değişiklik kümesinde saklanıp
   geri gösterilmesi ve ölçütsüz sayılabilecek toplu silme (27), rolün zincirleme silmesinin kiracı sınırını aşması
@@ -264,13 +268,13 @@ sınırları ayrıca [README](../README.md) ve `CLAUDE.md` dosyalarında, özell
 | Hassas alanın maskelenerek gösterilmesi (son dört karakter) | — | Şifreli saklama sonradan yazıldı (`Encrypted`); şifreli alan hiçbir yanıtta gösterilmez |
 | Çok düzeyli kalıtım ve tek tablo dışındaki eşlemeler | — | `SubtypeOf` tek düzeydir ve tek tablo (TPH) kullanır |
 | Devam ettirilebilir yükleme, nesne deposuna doğrudan (ön imzalı) yükleme | 32, 49 | Multipart yükleme, süreli indirme bağlantısı (`SignedLinks`) ve S3 uyumlu depo (`Haldus.Storage.S3`; imzayı kendisi üretir, paket taşımaz) sonradan yazıldı. Depo MinIO'ya karşı sınandı, gerçek AWS S3'e karşı sınanmadı |
-| Mesaj kuyruğu istemcisi | — | İmzalı HTTP ile teslim eden webhook yayıncısı sonradan yazıldı (`AddHaldusWebhookPublisher`); kuyruk istemcisi yeni bağımlılık gerektirir ve `IHaldusEventPublisher` uygulanarak eklenir |
+| SQS dışındaki mesaj kuyrukları (RabbitMQ, Kafka…) | — | İmzalı HTTP ile teslim eden webhook yayıncısı (`AddHaldusWebhookPublisher`) ve Amazon SQS yayıncısı (`Haldus.Events.Sqs`; imzayı kendisi üretir) sonradan yazıldı. SQS yalnızca bir öykünücüye karşı sınandı. Öteki kuyruklar istemci paketi (yeni bağımlılık) ister ve `IHaldusEventPublisher` uygulanarak eklenir |
 | Zamanlanmış yayından kaldırma | 27 | Zamanlanmış yayın sonradan yazıldı (`ScheduledPublishing`); yayın, zamanından en çok bir bakım aralığı sonra gerçekleşir |
 | "İş tanımı + çalıştırmalar" modeli (AIP-152) | — | İş kaydı zaten bir çalıştırmadır; yeniden çalıştırma yeni bir iş kaydıdır |
 | İstemcinin verdiği metin kimlik (slug) | — | ULID ve istemcinin verdiği `Guid` kimlik sonradan yazıldı; anlamlı metin anahtar için `NaturalKey` veya `MapStore` vardır |
 | "Uzatma kancaları" | — | Araştırmanın ilk sürüm listesinde adı geçiyor, tanımı yok |
-| Kimlik sağlayıcılı (OpenID Connect) örnek; iki adımlı doğrulama; örnekte roller | — | Gerçek kimlik doğrulama sonradan yazıldı: parola ile giriş, sunucuda oturum ve çıkış, kodla parola sıfırlama ve e-posta doğrulama, hesap kilidi, hız sınırı; iki arayüz de bunları kullanır. Kimlik sağlayıcının token'ını doğrulamak ayrı bir paket (yeni bağımlılık) ister |
-| Arayüzler için otomatik test | — | Test çerçevesinin kurulumu izin sistemi tarafından reddedildi (yeni bağımlılık ve test altyapısı kullanıcının onayını ister); arayüzler tip denetimi, derleme ve elle (tarayıcı, Android emülatörü) doğrulandı |
+| Kimlik sağlayıcılı (OpenID Connect) örnek; iki adımlı doğrulama; rol yönetimi | — | Gerçek kimlik doğrulama sonradan yazıldı: parola ile giriş, sunucuda oturum ve çıkış, kodla parola sıfırlama ve e-posta doğrulama, hesap kilidi, hız sınırı; iki arayüz de bunları kullanır. Kimlik sağlayıcının token'ını doğrulamak ayrı bir paket (yeni bağımlılık) ister |
+| Arayüz bileşenlerinin otomatik testi | — | İstemcilerin oturum ve istek mantığı paket eklenmeden, Node'un yerleşik test çalıştırıcısıyla sınanıyor (panel 106, mobil 111 test; iki gerçek hata buldular). Bileşenleri çizen testler bir DOM kütüphanesi ister; o kurulum izin sistemi tarafından reddedildi. Ekranlar tip denetimi, derleme ve elle (tarayıcı, Android emülatörü) doğrulandı |
 
 ## Yük altında ölçüm
 

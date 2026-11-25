@@ -25,6 +25,9 @@ EF Core yapılandırması üretilir.
   `pnpm typecheck`. Backend'in adresi `EXPO_PUBLIC_API_URL` ile verilir. Tarayıcıda çalıştırılırken backend'e kaynak
   izni gerekir (`Shop:CorsOrigins`). pnpm burada düz `node_modules` kurar (`pnpm-workspace.yaml`: `nodeLinker: hoisted`);
   Metro, sembolik bağlı düzende dolaylı bağımlılıkları (`react-native-css-interop`) çözemiyor.
+- Örnek arayüzlerin testleri: `pnpm test` (panelde ve mobilde). Yalnızca oturum ve istek mantığını (`lib`) sınar;
+  Node'un yerleşik test çalıştırıcısıyla çalışır, paket taşımaz. `@/` takma adını ve çalışamayan modülleri
+  (`@/i18n`, `react-native`, `expo-secure-store`) `tests/register.mjs` çözer. Bileşen testleri yoktur.
 - Örnek uygulamada üretilen kod `samples/Haldus.Sample.Shop/obj/Generated` altında incelenebilir.
 - Yük ölçümü: `dotnet run -c Release --project tools/Haldus.LoadTest` (çalışan bir örnek mağaza ister; backend
   `Shop:DemoIdentity=true` ile ve Release kipinde başlatılır; ayrıntısı aracın README'sinde). Sonuçlar makineye bağlıdır;
@@ -37,6 +40,8 @@ EF Core yapılandırması üretilir.
 - `src/Haldus.EntityFrameworkCore`: model kayıt defteri, interceptor'lar, sorgu filtreleri.
 - `src/Haldus.AspNetCore`: `AddHaldus`, `Map*` giriş noktaları, validasyon, hata yanıtları, `.resx`.
 - `src/Haldus.Storage.S3`: S3 uyumlu nesne deposu (`IHaldusFileStorage`); AWS SigV4 imzası elle yazıldı, paket taşımaz.
+- `src/Haldus.Events.Sqs`: olayları Amazon SQS'e taşıyan yayıncı (`IHaldusEventPublisher`); imzalayıcıyı S3 paketinden
+  kaynak dosyası olarak bağlar (paketler birbirine başvurmaz), paket taşımaz.
 - `src/Haldus.Jobs.InMemory`, `src/Haldus.Jobs.PostgreSql`, `src/Haldus.Jobs.Hangfire`: `MapJob` işlerini
   yürütücüye ulaştıran altyapı paketleri. Çekirdek yalnızca `IHaldusJobDispatcher` arayüzünü bilir.
 - `tests/Haldus.Generators.Tests`: generator çıktısı testleri.
@@ -470,10 +475,14 @@ aşaması değildir ve kararları yine sorulmadan verildi:
 
 Yapılmayanlar ve nedenleri:
 
-- Arayüzler için otomatik test: test çerçevesinin kurulumu (`pnpm add -D vitest …`) izin sistemi tarafından
-  reddedildi; genel kural da test altyapısının kendiliğinden kurulmamasını söylüyor. Kullanıcı isterse kurulur.
-- Yeni bağımlılık gerektirenler: mesaj kuyruğu istemcisi (ör. RabbitMQ), kimlik sağlayıcı için JWT doğrulaması
-  (`Microsoft.AspNetCore.Authentication.JwtBearer`). Aynı gerekçeyle eklenmediler; onay gerekir.
+- Arayüz bileşenlerinin testi: test çerçevesinin kurulumu (`pnpm add -D vitest …`) izin sistemi tarafından
+  reddedildi. Bunun yerine istemcilerin oturum ve istek mantığı, paket eklemeden, Node'un yerleşik test
+  çalıştırıcısıyla sınandı (panelde 106, mobilde 111 test). Bu testler iki gerçek hata buldu ve ikisi de düzeltildi:
+  yenileme isteğindeki her HTTP hatası (5xx dahil) oturumu kapatıyordu; yenilenen token'lar o sırada değişmiş başka
+  bir hesabın oturumuna yazılabiliyordu. Bileşenleri çizen testler hâlâ yoktur (DOM kütüphanesi ister).
+- Yeni bağımlılık gerektirenler: kimlik sağlayıcı için JWT doğrulaması
+  (`Microsoft.AspNetCore.Authentication.JwtBearer`) ve SQS dışındaki kuyrukların istemcileri (RabbitMQ, Kafka…).
+  Eklenmediler; onay gerekir. Amazon SQS için bağımlılıksız bir yayıncı yazıldı (`Haldus.Events.Sqs`).
 - iOS: Windows'ta iOS simülatörü çalışmaz; uygulama iOS'ta denenmedi.
 - Raporun "Bilinen sınırlar" tablosunda kalan satırlar bilerek dar bırakılanlardır.
 ## Açık kararlar
@@ -520,9 +529,12 @@ Yapılmayanlar ve nedenleri:
       token'ı da yenileme token'ı da hemen reddedilir. Bedeli, token'lı her istekte bir birincil anahtar sorgusudur.
     - Yenileme token'ı bir kez kullanılır (`RefreshVersion`; token'daki `rv` claim'i, tek bir koşullu `UPDATE` ile
       ilerler). Eskimiş bir yenileme token'ı yeniden sunulursa oturum çalınmış sayılır ve kapatılır; yenilemeden
-      hemen sonra (`RefreshGraceSeconds`, 30 sn) bir önceki token da kabul edilir ki yanıtı yolda kaybolan istemci
-      veya aynı anda yenileyen ikinci sekme oturumunu kaybetmesin (toleranssız ilk hali ikinci incelemede çıktı).
-      Web paneli ayrıca yenilemeyi sekmeler arasında sıraya sokar (Web Locks) ve oturumu `storage` olayıyla eşitler.
+      hemen sonra (`RefreshGraceSeconds`, 30 sn) bir önceki token'ı sunan istek oturumu kapatmaz, ama yeni token da
+      alamaz: aynı anda yenileyen ikinci sekme oturumu düşürmez, eskimiş bir token ise hiçbir zaman geçerli bir oturuma
+      çevrilmez. (Toleranssız ilk hali ikinci incelemede, toleransta yeni token veren ikinci hali otomatik incelemede
+      çıktı.) Web paneli yenilemeyi sekmeler arasında sıraya sokar (Web Locks), oturumu `storage` olayıyla eşitler ve
+      yenileme reddedilince önce başka bir sekmenin yenileyip yenilemediğine bakar. Yanıtı yolda kaybolan istemci
+      yeniden giriş yapar.
     - Parola sıfırlama ve e-posta doğrulama, e-postayla gönderilen kodladır (bağlantı değil: mobilde derin bağlantı,
       web'de adreste token gerekmez). Kod sekiz karakterdir (Crockford base32, 40 bit); özeti saklanır, 15 dakika
       yaşar ve bir kez kullanılır; yazılışı normalleştirilir (küçük harf, tire, O/0, I/L/1). **Hesap başına deneme
@@ -548,13 +560,22 @@ Yapılmayanlar ve nedenleri:
     - İstemciler token'ı `Authorization` başlığında taşır, 401'de bir kez yeniler (eşzamanlı istekler tek yenilemeyi
       bekler) ve giriş/kayıt/yenileme uçlarına token eklemez. Web'de token'lar `localStorage` içindedir (XSS'e açık;
       örnek için kabul edilmiş ödünleşim), mobilde güvenli depoda, her biri ayrı anahtarda.
-    - Bilinen sınırlar: **örnekte rol yoktur**: kayıt herkese açıktır ve giriş yapan her hesap kiracıya ait olmayan
-      (ortak) kaynakları da yazar (ürünler, kategoriler, özellik bayrakları). Gerçek bir uygulama bu kaynakların
-      builder'ına bir yetki kuralı ekler (`app.MapCrud<Product>().RequireAuthorization("staff")`; builder kuralları
-      uçlarına taşır) veya kaydı kapatır. Kimlik sağlayıcı (OpenID Connect) desteği yoktur (JWT doğrulaması ayrı bir
-      paket ister); iki adımlı doğrulama, e-posta değiştirme ve hesap silme yoktur; hesap kilidi bir hesabın başkası
-      tarafından kilitlenmesine izin verir (parola sıfırlama kilidi açar); iptal edilmiş oturum ve kullanılmış kod
-      kayıtları kendiliğinden temizlenmez; süreç kapanırken yolda olan sıfırlama e-postası gitmez. Token'lar Data Protection anahtarlarına bağlıdır; anahtarların kalıcılığı ve
+    - **Ortak kaynakları yalnızca personel yazar** (`SharedWrites`; varsayılan yetki kuralının parçası). Kayıt herkese
+      açıktır; kimseye ait olmayan kaynakları (ürünler, kategoriler, özellik bayrakları…) herkes okur, ama yazmak
+      `staff` rolü ister. Personel, `Shop:Auth:Staff` ayarında e-postası sayılan **ve e-postasını doğrulamış**
+      hesaplardır (liste boşken ortak kaynakları kimse yazamaz). Doğrulama şartı ilk yazımda yoktu: adres kullanıcının
+      yazdığı bir metin olduğu için, personel adresiyle ilk kaydolan kişi rolü alırdı (otomatik incelemede çıktı). Bir kiracıya veya kullanıcıya ait kaynaklar kuralın dışındadır. Hangi kaynağın ortak
+      olduğu elle sayılmaz: üretilen uçların taşıdığı `HaldusResourceScope` metadatasından okunur, böylece sonradan
+      eklenen ortak bir kaynak kendiliğinden korunur. Gövde taşıdığı için `POST` ile yapılan okumalar (`/search`,
+      `/batch-get`, `/preview`) yazma sayılmaz. Kendi yetki kuralını bildiren kaynağa
+      (`app.MapCrud<Review>().RequireAuthorization()`) varsayılan kural uygulanmaz. İlk yazımda rol yoktu ve kayıt
+      olan herkes ortak kaynakları yazabiliyordu (incelemede çıktı).
+    - Bilinen sınırlar: rol tektir ve yapılandırmadan gelir (rol yönetimi uçları yoktur); rol token'a yazıldığı için
+      listeden çıkarılan hesap, erişim token'ı yenilenene kadar personel kalır. Kimlik sağlayıcı (OpenID Connect)
+      desteği yoktur (JWT doğrulaması ayrı bir paket ister); iki adımlı doğrulama, e-posta değiştirme ve hesap silme
+      yoktur; hesap kilidi bir hesabın başkası tarafından kilitlenmesine izin verir (parola sıfırlama kilidi açar);
+      iptal edilmiş oturum ve kullanılmış kod kayıtları kendiliğinden temizlenmez; süreç kapanırken yolda olan
+      sıfırlama e-postası gitmez. Token'lar Data Protection anahtarlarına bağlıdır; anahtarların kalıcılığı ve
       paylaşımı uygulamanın işidir.
   - Arayüzün dili `Accept-Language` ile backend'e de gider; backend'in mesajları o dilde döner.
   - Mobil uygulamada (aynı gerekçeyle, **ayrıca onaylanmadı**): yönlendirme genel kurallardaki Expo Router'dır; i18n
@@ -764,6 +785,17 @@ Yapılmayanlar ve nedenleri:
   üretilen modül `HaldusMaintenanceRegistry.RegisterExpiring<T>()` ile kaydeder. Bakım bir isteğe ait
   olmadığı için burada parametresiz `IgnoreQueryFilters()` bilerek kullanılır; üretilen uç kodunda yasak
   olmaya devam eder. Aynı yöntem testlerden ve yönetim komutlarından doğrudan çağrılabilir.
+- **Kapsam metadatası.** Üretilen her uç grubu, kaynağın kayıtlarının kime ait olduğunu metadata olarak taşır
+  (`HaldusResourceScope(tenantScoped, ownerScoped)`; `EndpointEmitter`, `AssociationEmitter`, `UserLinkEmitter`).
+  Uygulama yetki kurallarını buna göre yazar; örnek mağazanın "ortak kaynakları yalnızca personel yazar" kuralı
+  buna dayanır. Kapsam kaynağın kendisinden (`MultiTenant`, `Owned`) veya ebeveyninden gelir: bağlayıcı ebeveynin
+  kapsamını referansla birlikte taşır (`ResolvedReference.TargetTenantScoped` / `TargetOwnerScoped`; `Under`, kısa
+  adresli ebeveyn ve `AttachedTo` hedefleri için), `ResourceModel.TenantScoped` / `OwnerScoped` ondan hesaplanır.
+  Takılabilir kaynağın uçları hedef başına üretildiği için kapsamı da hedef başınadır. Bağın kapsamı uçlarından
+  birininkidir; kullanıcıya bağlı bağ her zaman kullanıcıya aittir. **Kayıtların kime ait olduğunu değiştiren yeni bir
+  bildirim bu iki özelliğe yansıtılmalıdır;** yoksa uygulamanın yetki kuralı o kaynağı yanlış sınıflar. Sınırlar:
+  token ile erişilen (`TokenOnly`) kaynak "ortak" görünür (uçları zaten oturumsuzdur); `MapAction` / `MapQuery` gibi
+  entity'ye bağlı olmayan uçlar metadata taşımaz.
 - **Sahiplik.** `Traits.Owned` (`IOwned`, `OwnerId`); `/me` dışında kalma `Traits.OwnedPlainRoute` ile tutulur.
   Görünürlük modeldeki `HaldusFilters.Owner` filtresidir ve kullanıcıyı kiracı filtresiyle aynı yoldan okur
   (`HaldusScope.UserId(context)`); bu yüzden uçlarda sahiplikle ilgili tek satır yoktur ve kaynağa dokunan her
@@ -1238,6 +1270,21 @@ Yapılmayanlar ve nedenleri:
   (`HALDUS_TEST_MINIO_IMAGE` ile değiştirilir; kayıt defteri o özeti kaldırırsa testler imajı çekemez). Sınırlar: gerçek AWS S3'e karşı denenmedi; geçici kimlik bilgisi (oturum token'ı, rol) yoktur;
   kovayı Haldus oluşturmaz; içerik kayıtla aynı transaction'da değildir (kayıt kaydedilemezse nesne sahipsiz kalabilir);
   indirmede `Range` desteklenmez; nesne deposuna doğrudan (ön imzalı) yükleme ve devam ettirilebilir yükleme yoktur.
+- **SQS yayıncısı.** `Haldus.Events.Sqs` (`AddHaldusSqsPublisher`). Her olay bir `SendMessage` isteğidir (AWS JSON
+  protokolü: `POST /`, `X-Amz-Target: AmazonSQS.SendMessage`); gövde, webhook yayıncısının gönderdiği olayla aynıdır;
+  öznitelikler `EventId`, `EventType`, `Resource`. FIFO kuyrukta grup kimliği `{kaynak}:{kayıt}`, yineleme kimliği
+  `{kaynak}:{kayıt}:{olay}`'dır (olay kimliği yalnızca veritabanı başına benzersizdir; ayrı bağlamlı iki modül aynı
+  kuyruğa yazarsa çakışırdı); 128 karakteri veya yazdırılabilir ASCII'yi aşan kimliklerin SHA-256'sı kullanılır.
+  İmzalayıcı S3 paketindeki `S3Signer`'dır: servis adı parametre oldu, S3 dışında gövde özeti başlığı yazılmaz ve yol
+  iki kez kodlanır; dosya bu projeye `Compile Include` ile bağlanır. S3 davranışı değişmedi (AWS belge vektörleri ve
+  MinIO testleri aynen geçer); S3 dışı yol AWS SigV4 test takımının dört vektörüyle sınanır. Hata, kuyruğun adını,
+  durumu ve AWS hata kodunu taşır (yanıtın metni ve sır yazılmaz); 2xx olup `MessageId` taşımayan yanıt da hatadır.
+  Ayarlar yayıncının kurucusunda doğrulanır: geçersiz ayar arka plan servisini düşürür ve uygulama açılmaz.
+  Testler ElasticMQ'yu özetiyle sabitlenmiş imajdan başlatır (`HALDUS_TEST_ELASTICMQ_IMAGE` ile değiştirilir).
+  **Öykünücü imzayı doğrulamaz; gerçek AWS SQS'e karşı sınanmadı.** Sınırlar: uygulama başına tek kuyruk; toplu
+  gönderim yok (olay başına bir istek, dağıtıcının kilidi altında); mesaj boyutu denetlenmez (sınırı aşan olay on
+  denemeden sonra bırakılır ve bu sırada arkasındakileri bekletir); geçici kimlik bilgisi yok; FIFO yineleme penceresi
+  beş dakikadır, kutunun yeniden deneme aralığı da beş dakikaya çıkabildiği için geç bir yeniden deneme yinelenebilir.
 - **Webhook yayıncısı.** `AddHaldusWebhookPublisher` (`HaldusWebhooks.cs`) olayları yapılandırılmış adreslere imzalı
   HTTP isteğiyle teslim eden bir `IHaldusEventPublisher`'dır. İmza Standard Webhooks düzenindedir: `Webhook-Id`
   (olayın kimliği), `Webhook-Timestamp`, `Webhook-Signature: v1,{base64(HMAC-SHA256(anahtar, "id.zaman.gövde"))}`;

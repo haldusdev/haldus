@@ -540,8 +540,27 @@ public sealed class QueuePublisher(IQueue queue) : IHaldusEventPublisher
 }
 ```
 
-Olayları başka bir sisteme HTTP ile taşımak için hazır bir yayıncı vardır; mesaj kuyruğu gibi başka taşıyıcılar için
-yukarıdaki gibi bir sınıf yazılır (Haldus kuyruk istemcisi taşımaz):
+Olayları bir Amazon SQS kuyruğuna (veya SQS uyumlu bir servise) taşımak için ayrı bir paket vardır
+(`Haldus.Events.Sqs`; AWS imzasını kendisi üretir, başka paket taşımaz):
+
+```csharp
+builder.Services.AddHaldusSqsPublisher(options =>
+{
+    options.Region = "eu-central-1";
+    options.QueueUrl = new Uri("https://sqs.eu-central-1.amazonaws.com/123456789012/shop-events.fifo");
+    options.AccessKey = builder.Configuration["Sqs:AccessKey"]!;
+    options.SecretKey = builder.Configuration["Sqs:SecretKey"]!;
+    options.EventTypes.Add("ticket.*");   // boş bırakılırsa bütün olaylar
+});
+```
+
+Her olay bir mesajdır; gövdesi olayın kendisi, öznitelikleri olayın kimliği, türü ve kaynağıdır. FIFO kuyrukta
+(`.fifo`) aynı kaydın olayları sıralı kalır (grup kimliği kaynak + kayıt kimliğidir) ve yeniden teslim edilen olay
+kuyrukta yinelenmez (SQS'in beş dakikalık yineleme penceresi içinde). Standart kuyruk sırayı korumaz ve yineleneni
+ayıklamaz; tüketici olayın kimliğine bakmalıdır. Bir SQS öykünücüsüne (ElasticMQ) karşı sınandı; gerçek AWS'ye karşı
+sınanmadı. Başka kuyruklar (RabbitMQ, Kafka…) için istemci paketi gerekir ve yukarıdaki gibi bir sınıf yazılır.
+
+Olayları başka bir sisteme HTTP ile taşımak için de hazır bir yayıncı vardır:
 
 ```csharp
 builder.Services.AddHaldusWebhookPublisher(options =>
@@ -808,12 +827,33 @@ yerleşik taşıyıcı token şeması, sunucuda tutulan oturumlar (çıkış ve 
 e-postayla gönderilen kodla parola sıfırlama ve e-posta doğrulama, hesap kilidi ve adres başına hız sınırı; ayrı bir
 kimlik sağlayıcı veya paket yoktur. Haldus bunun yalnızca sonucunu görür: kullanıcıyı ve kiracıyı token'daki
 claim'lerden okur. Giriş yapılmadan hiçbir kaynağa ulaşılmaz; açık kalması gereken uçlar (misafir sepeti, token ile
-erişilen kayıtlar) bunu `AllowAnonymous` ile kendileri söyler. Yenileme token'ı bir kez kullanılır; eskisi yeniden
+erişilen kayıtlar) bunu `AllowAnonymous` ile kendileri söyler. Kimseye ait olmayan, ortak kaynakları (ürünler,
+kategoriler) herkes okur ama yalnızca personel yazar (`Shop:Auth:Staff`); kural, kaynakları tek tek saymak yerine
+Haldus'un uçlara yazdığı kapsam metadatasını okur (aşağıda). Yenileme token'ı bir kez kullanılır; eskisi yeniden
 sunulursa oturum kapatılır. İki arayüz de token'ı `Authorization` başlığında taşır ve süresi dolunca yeniler. Reddedilen bir
 token sunan istek, vardığı kaynak ne olursa olsun 401 alır (`UseSessionValidation`); bu olmadan aynı istek
 kullanıcıya ait kaynakta 401, kiracıya ait kaynakta 403, herkese açık kaynakta 200 alırdı ve istemci oturumunu
 yenilemesi gerektiğini anlayamazdı. Entegrasyon testleri kimliği başlıklardan okuyan eski yolu kullanmaya devam eder
 (`Shop:DemoIdentity`; varsayılan olarak kapalıdır).
+
+### Uçların kapsamı
+
+Üretilen her uç, kaynağının kayıtlarının kime ait olduğunu metadata olarak taşır. Uygulama yetki kurallarını
+kaynakları tek tek saymadan buna göre yazabilir; sonradan eklenen bir kaynak kendiliğinden doğru sınıfa düşer:
+
+```csharp
+// Örnek mağazanın kuralı: kimseye ait olmayan kaynakları yalnızca personel yazar.
+var scope = httpContext.GetEndpoint()?.Metadata.GetMetadata<HaldusResourceScope>();
+
+if (scope is { IsShared: true } && !HttpMethods.IsGet(httpContext.Request.Method) && !user.IsInRole("staff"))
+{
+    // 403
+}
+```
+
+`TenantScoped`, kaynak `MultiTenant` ise veya öyle bir kaynağın altındaysa (`Under`) doğrudur; `OwnerScoped`, kaynak
+`OwnedByCurrentUser` ise veya öyle bir kaynağın altındaysa. İkisi de yanlışsa kayıtlar ortaktır (`IsShared`). Çalışan
+hali örnek mağazadadır (`Features/Auth/SharedWrites.cs`).
 
 ## Durum
 
@@ -827,8 +867,8 @@ serisinde haftanın günleri ve saat dilimi, şifreli alan, onay zinciri, kullan
 yayın, ULID ve istemcinin verdiği kimlik, bakiyeye karşı tutma, multipart yükleme ve süreli indirme bağlantısı), örnek
 mağaza gerçek kimlik doğrulamaya geçirildi ve kilide dayanan özellikler yük altında ölçüldü. Yapılmayanlar aynı
 belgededir; başlıcaları: mobil uygulama iOS'ta çalıştırılmadı (Android'de emülatörde denendi), arayüzlerin otomatik
-testi yok, mesaj kuyruğu istemcisi ve kimlik sağlayıcı (OpenID Connect) desteği yok (yeni bağımlılık gerektirirler).
-S3 uyumlu dosya deposu ve webhook olay yayıncısı bağımlılık eklenmeden yazıldı.
+bileşen testi yok (oturum ve istek mantığı sınanıyor), kimlik sağlayıcı (OpenID Connect) desteği yok (yeni bağımlılık
+gerektirir). S3 uyumlu dosya deposu, webhook ve SQS olay yayıncıları bağımlılık eklenmeden yazıldı.
 
 Tasarım kararları için [CLAUDE.md](CLAUDE.md), kararların dayandığı araştırma için [reports](reports/)
 klasörüne bakın. İki örnek backend var: tek projeli [mağaza](samples/Haldus.Sample.Shop) ve
