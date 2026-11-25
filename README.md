@@ -452,7 +452,24 @@ kaynağın kurallarını alır.
 
 Dosya içerikleri varsayılan olarak veritabanında saklanır (ek altyapı gerekmez, içerik ve kayıt birlikte kalıcı
 olur). `builder.Services.AddHaldusFileSystemStorage(path)` içerikleri bir klasöre taşır; başka bir depo
-`IHaldusFileStorage` uygulanarak eklenir. İndirilen içerik her zaman ek olarak (`attachment`) ve `nosniff` ile
+`IHaldusFileStorage` uygulanarak eklenir. S3 uyumlu bir nesne deposu (AWS S3, MinIO) için ayrı paket vardır
+(`Haldus.Storage.S3`; AWS imzasını kendisi üretir, başka paket taşımaz):
+
+```csharp
+builder.Services.AddHaldusS3Storage(options =>
+{
+    options.ServiceUrl = new Uri("https://s3.eu-central-1.amazonaws.com");   // MinIO için kendi adresi
+    options.Region = "eu-central-1";
+    options.Bucket = "uploads";
+    options.AccessKey = builder.Configuration["S3:AccessKey"]!;
+    options.SecretKey = builder.Configuration["S3:SecretKey"]!;
+});
+```
+
+İçerik belleğe bütün olarak alınmaz: uzunluğu bilinen içerik tek istekle akıtılır, bilinmeyen içerik parça parça
+(çok parçalı yükleme) gönderilir. Kovayı uygulama oluşturur; yarıda kalan çok parçalı yüklemeler için kovaya bir
+yaşam döngüsü kuralı konması önerilir. MinIO'ya karşı sınandı, gerçek AWS S3'e karşı sınanmadı. İndirilen içerik her
+zaman ek olarak (`attachment`) ve `nosniff` ile
 gönderilir: tür yükleyenin beyanıdır ve içerik tarayıcıda sayfanın içinde açılmamalıdır.
 
 ## Özel alanlar ve aktarma
@@ -522,6 +539,28 @@ public sealed class QueuePublisher(IQueue queue) : IHaldusEventPublisher
         queue.SendAsync(published.Type, published.Data, cancellationToken);
 }
 ```
+
+Olayları başka bir sisteme HTTP ile taşımak için hazır bir yayıncı vardır; mesaj kuyruğu gibi başka taşıyıcılar için
+yukarıdaki gibi bir sınıf yazılır (Haldus kuyruk istemcisi taşımaz):
+
+```csharp
+builder.Services.AddHaldusWebhookPublisher(options =>
+    options.Endpoints.Add(new HaldusWebhookEndpoint(
+        new Uri("https://example.com/hooks/haldus"),
+        builder.Configuration["Webhooks:Secret"]!,
+        "ticket.*")));   // boş bırakılırsa bütün olaylar
+
+// Alıcı tarafında: imza, paylaşılan anahtarla doğrulanır.
+var valid = HaldusWebhookSignature.Verify(
+    secret,
+    request.Headers["Webhook-Id"]!, request.Headers["Webhook-Timestamp"]!, body,
+    request.Headers["Webhook-Signature"]!, DateTimeOffset.UtcNow, tolerance: TimeSpan.FromMinutes(5));
+```
+
+İstek imzalıdır (HMAC-SHA256; Standard Webhooks düzeni), yönlendirme izlenmez ve adres `https` olmalıdır. Adres 2xx
+dışında yanıt verirse olay yeniden denenir; alıcı yinelenen olayı `Webhook-Id` başlığından tanır. Adresler
+uygulamanın yapılandırmasından gelmelidir: kullanıcıların tanımladığı adreslere istek göndermek ayrıca korunmalıdır
+(SSRF).
 
 Kayıt değiştikçe olay yazılır: `ticket.created`, `ticket.updated`, `ticket.deleted` ve her geçiş için ayrıca
 `ticket.close` gibi, geçişin adıyla. Olay, kaydın o andaki halini kaynağın yanıt biçiminde taşır; yanıtta olmayan
@@ -761,14 +800,17 @@ kullandığı kaynaklar için üretir:
 | [Mobil uygulama](samples/Haldus.Sample.Shop.Mobile) | Expo, Expo Router, React Native Reusables, NativeWind | Sayfa sayfa yüklenen ürün listesi, favoriler (`/me/favorites`), kullanıcının sepeti (`/me/baskets`) |
 
 İkisi de doğrulamayı backend'e bırakır (alan hataları yanıttan okunur) ve arayüzün dilini `Accept-Language` ile
-backend'e taşır; backend'in mesajları o dilde döner. Mobil uygulama Expo'nun web hedefinde doğrulandı; Android ve
-iOS'ta çalıştırılmadı.
+backend'e taşır; backend'in mesajları o dilde döner. Mobil uygulama Expo'nun web hedefinde ve Android'de (emülatör)
+doğrulandı; iOS'ta çalıştırılmadı.
 
-Kimlik doğrulama gerçektir ama küçüktür: örnek mağaza e-posta ve parola ile giriş yapar (`/auth/register`,
-`/auth/login`, `/auth/refresh`, `/auth/me`) ve ASP.NET Core'un yerleşik taşıyıcı token şemasını kullanır; ayrı bir
+Kimlik doğrulama örnek mağazanın kendisindedir (`Features/Auth`): e-posta ve parola ile giriş, ASP.NET Core'un
+yerleşik taşıyıcı token şeması, sunucuda tutulan oturumlar (çıkış ve parola değişimi token'ları hemen geçersiz kılar),
+e-postayla gönderilen kodla parola sıfırlama ve e-posta doğrulama, hesap kilidi ve adres başına hız sınırı; ayrı bir
 kimlik sağlayıcı veya paket yoktur. Haldus bunun yalnızca sonucunu görür: kullanıcıyı ve kiracıyı token'daki
-claim'lerden okur. İki arayüz de token'ı `Authorization` başlığında taşır ve süresi dolunca yeniler. Reddedilen bir
-token sunan istek, vardığı kaynak ne olursa olsun 401 alır (`UseRejectedTokenChallenge`); bu olmadan aynı istek
+claim'lerden okur. Giriş yapılmadan hiçbir kaynağa ulaşılmaz; açık kalması gereken uçlar (misafir sepeti, token ile
+erişilen kayıtlar) bunu `AllowAnonymous` ile kendileri söyler. Yenileme token'ı bir kez kullanılır; eskisi yeniden
+sunulursa oturum kapatılır. İki arayüz de token'ı `Authorization` başlığında taşır ve süresi dolunca yeniler. Reddedilen bir
+token sunan istek, vardığı kaynak ne olursa olsun 401 alır (`UseSessionValidation`); bu olmadan aynı istek
 kullanıcıya ait kaynakta 401, kiracıya ait kaynakta 403, herkese açık kaynakta 200 alırdı ve istemci oturumunu
 yenilemesi gerektiğini anlayamazdı. Entegrasyon testleri kimliği başlıklardan okuyan eski yolu kullanmaya devam eder
 (`Shop:DemoIdentity`; varsayılan olarak kapalıdır).
@@ -784,8 +826,9 @@ Planlardan sonra, o belgenin "Bilinen sınırlar" tablosundan yeni bağımlılı
 serisinde haftanın günleri ve saat dilimi, şifreli alan, onay zinciri, kullanıcı başına okundu bilgisi, zamanlanmış
 yayın, ULID ve istemcinin verdiği kimlik, bakiyeye karşı tutma, multipart yükleme ve süreli indirme bağlantısı), örnek
 mağaza gerçek kimlik doğrulamaya geçirildi ve kilide dayanan özellikler yük altında ölçüldü. Yapılmayanlar aynı
-belgededir; başlıcaları: mobil uygulama Android ve iOS'ta çalıştırılmadı, arayüzlerin otomatik testi yok, nesne deposu
-ve mesaj kuyruğu paketleri yok (yeni bağımlılık gerektirirler).
+belgededir; başlıcaları: mobil uygulama iOS'ta çalıştırılmadı (Android'de emülatörde denendi), arayüzlerin otomatik
+testi yok, mesaj kuyruğu istemcisi ve kimlik sağlayıcı (OpenID Connect) desteği yok (yeni bağımlılık gerektirirler).
+S3 uyumlu dosya deposu ve webhook olay yayıncısı bağımlılık eklenmeden yazıldı.
 
 Tasarım kararları için [CLAUDE.md](CLAUDE.md), kararların dayandığı araştırma için [reports](reports/)
 klasörüne bakın. İki örnek backend var: tek projeli [mağaza](samples/Haldus.Sample.Shop) ve

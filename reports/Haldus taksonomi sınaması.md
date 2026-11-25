@@ -64,7 +64,7 @@ durum modeli" kuralı da açılmadı: ek durum eksenleri asıl durumun yanında,
   eşlemeye en yakın biçimde ve yalnızca yazılmış özelliklerle bildirir, generator'dan geçirir ve üretilen kodun
   hatasız derlendiğini doğrular. Aşağıdaki tablo o dosyadaki verinin aynısıdır; sayılar bir testle bağlıdır.
 - **Çalışma:** Derleme, uçların doğru davrandığını göstermez. Tablodaki özelliklerin her biri örnek uygulamalarda
-  gerçek PostgreSQL'e karşı sınanıyor (bugün 362 entegrasyon testi); ama her satırın kendi birleşimi değil.
+  gerçek PostgreSQL'e karşı sınanıyor (bugün 391 entegrasyon testi); ama her satırın kendi birleşimi değil.
   Örnek mağazada bulunmayan birleşimler (ör. iade, abonelik, rezervasyon satırlarının tam hali) yalnızca derleme
   düzeyinde doğrulandı.
 - **Hüküm:** "Temiz" ile "kısmi" arasındaki ayrım benim yorumumdur: önerilen eşlemede adı geçen bir özellik
@@ -221,6 +221,18 @@ durum modeli" kuralı da açılmadı: ek durum eksenleri asıl durumun yanında,
   tarayıcıda denenirken görüldü: reddedilen bir token sunan istek anonim sayılıyor ve kaynağa göre 401, 403 veya 200
   alıyordu; istemci oturumunu yenilemesi gerektiğini anlayamıyordu. Örnek, reddedilen token'ı her kaynakta 401 ile
   yanıtlayacak biçimde düzeltildi. Bu, uygulamanın kimlik doğrulama katmanının işidir; Haldus'a taşınmadı.
+- **Kimlik doğrulamanın eksikleri kapatılınca bağımsız bir inceleme istendi ve on bir bulgu verdi; hepsi düzeltildi.**
+  Üçü ağırdı: (1) örnekte giriş yalnızca kimlik uçlarında zorunluydu, kiracıya ait olmayan kaynaklar token'sız
+  yazılabiliyordu (artık her uç giriş ister, açık olanlar kendini işaretler); (2) e-postayla gönderilen altı haneli
+  kodun deneme hakkı yeni kod istenince yenileniyordu, kod denenerek bulunabilirdi (sayımlar artık saatlik pencereye
+  ait); (3) yanıt vermeyen bir webhook alıcısının zaman aşımı arka plan servisini ve uygulamayı durduruyordu. Sonuncusu
+  çekirdekteki bir kusurdu ve `HttpClient` kullanan her yayıncıyı etkilerdi. Ötekiler: doğrulanmış hesapta doğrulama
+  ucunun kodsuz token vermesi, yenileme token'ının yeniden kullanılabilmesi ve oturumun süresiz olması, hız sınırının
+  IPv6'da ve vekil arkasında zayıflığı, sıfırlama isteğinin süresinin adresin kayıtlı olduğunu ele vermesi, parola
+  değiştirme ucunun kilit sayacının dışında kalması, webhook hata metninin adresteki anahtarı saklayabilmesi, S3'te
+  vazgeçilemeyen yüklemenin sessiz kalması, demo kimliğinin üretimde yanlışlıkla açılabilmesi. Buradan çıkan ders
+  öncekilerle aynı değil: bunlar iki özelliğin kesişimi değil, yeni yazılmış kodun ilk halinin eksikleriydi ve hiçbirini
+  testler yakalamamıştı.
 - **Güvenlik incelemeleri üçüncü planda da aynı türden bulgular verdi.** Dört aşamadan sonra düzeltme gerekti:
   kullanıcılara ait kayıtların ortak bir kayıtta örtük toplanması (22), hassas alanın değişiklik kümesinde saklanıp
   geri gösterilmesi ve ölçütsüz sayılabilecek toplu silme (27), rolün zincirleme silmesinin kiracı sınırını aşması
@@ -246,14 +258,14 @@ sınırları ayrıca [README](../README.md) ve `CLAUDE.md` dosyalarında, özell
 | Kaydı kimlerin okuduğunun listesi ("görenler") | 45 | Kullanıcı başına okundu bilgisi sonradan yazıldı (`ReadReceipts`); her kullanıcı yalnızca kendi işaretini görür |
 | Hassas alanın maskelenerek gösterilmesi (son dört karakter) | — | Şifreli saklama sonradan yazıldı (`Encrypted`); şifreli alan hiçbir yanıtta gösterilmez |
 | Çok düzeyli kalıtım ve tek tablo dışındaki eşlemeler | — | `SubtypeOf` tek düzeydir ve tek tablo (TPH) kullanır |
-| Devam ettirilebilir yükleme, nesne deposuna doğrudan yükleme; nesne deposu paketleri | 32, 49 | Multipart yükleme ve süreli indirme bağlantısı (`SignedLinks`) sonradan yazıldı; nesne depoları yeni bağımlılık gerektirir ve `IHaldusFileStorage` uygulanarak eklenir |
-| Mesaj kuyruğu paketi | — | `PublishesEvents` olayı uygulamanın yayıncısına teslim eder; taşımak onun işidir |
+| Devam ettirilebilir yükleme, nesne deposuna doğrudan (ön imzalı) yükleme | 32, 49 | Multipart yükleme, süreli indirme bağlantısı (`SignedLinks`) ve S3 uyumlu depo (`Haldus.Storage.S3`; imzayı kendisi üretir, paket taşımaz) sonradan yazıldı. Depo MinIO'ya karşı sınandı, gerçek AWS S3'e karşı sınanmadı |
+| Mesaj kuyruğu istemcisi | — | İmzalı HTTP ile teslim eden webhook yayıncısı sonradan yazıldı (`AddHaldusWebhookPublisher`); kuyruk istemcisi yeni bağımlılık gerektirir ve `IHaldusEventPublisher` uygulanarak eklenir |
 | Zamanlanmış yayından kaldırma | 27 | Zamanlanmış yayın sonradan yazıldı (`ScheduledPublishing`); yayın, zamanından en çok bir bakım aralığı sonra gerçekleşir |
 | "İş tanımı + çalıştırmalar" modeli (AIP-152) | — | İş kaydı zaten bir çalıştırmadır; yeniden çalıştırma yeni bir iş kaydıdır |
 | İstemcinin verdiği metin kimlik (slug) | — | ULID ve istemcinin verdiği `Guid` kimlik sonradan yazıldı; anlamlı metin anahtar için `NaturalKey` veya `MapStore` vardır |
 | "Uzatma kancaları" | — | Araştırmanın ilk sürüm listesinde adı geçiyor, tanımı yok |
-| Kimlik sağlayıcılı (OpenID Connect) örnek; sunucuda çıkış, parola sıfırlama, hesap kilidi | — | Gerçek kimlik doğrulama sonradan yazıldı: örnek mağaza parola ile giriş yapar ve ASP.NET Core'un yerleşik taşıyıcı token'ını kullanır, iki arayüz de onu taşır ve yeniler. Ayrı bir kimlik sağlayıcı yeni bağımlılık ve sorulması gereken bir seçimdir |
-| Arayüzler için otomatik test | — | Frontend test framework'ü sorulması gereken bir seçimdi; arayüzler tip denetimi, derleme ve elle doğrulandı |
+| Kimlik sağlayıcılı (OpenID Connect) örnek; iki adımlı doğrulama | — | Gerçek kimlik doğrulama sonradan yazıldı: parola ile giriş, sunucuda oturum ve çıkış, kodla parola sıfırlama ve e-posta doğrulama, hesap kilidi, hız sınırı; iki arayüz de bunları kullanır. Kimlik sağlayıcının token'ını doğrulamak ayrı bir paket (yeni bağımlılık) ister |
+| Arayüzler için otomatik test | — | Test çerçevesinin kurulumu izin sistemi tarafından reddedildi (yeni bağımlılık ve test altyapısı kullanıcının onayını ister); arayüzler tip denetimi, derleme ve elle (tarayıcı, Android emülatörü) doğrulandı |
 
 ## Yük altında ölçüm
 
@@ -321,7 +333,8 @@ backend örneği.
   ölçülmedi.
 - Güvenliğin tam olduğu. Her aşamadan sonra yapılan incelemelerin bulguları düzeltildi; bu, bulunmamış bir
   birleşim hatası kalmadığını göstermez. Oran sınırlama ve onaylayanın yetkisi gibi konular uygulamaya bırakıldı.
-- Mobil uygulamanın cihazda çalıştığı. Örnek mobil uygulama yalnızca Expo'nun web hedefinde, çalışan backend'e karşı
-  denendi; Android ve iOS'ta çalıştırılmadı. Yönetim paneli tarayıcıda uçtan uca denendi, ama otomatik testi yoktur.
+- Mobil uygulamanın iOS'ta veya gerçek bir cihazda çalıştığı. Örnek mobil uygulama Expo'nun web hedefinde ve bir
+  Android emülatöründe (Android 17, Expo Go), çalışan backend'e karşı denendi; iOS'ta çalıştırılmadı. Yönetim paneli
+  tarayıcıda uçtan uca denendi. İkisinin de otomatik testi yoktur.
 - PostgreSQL dışındaki veritabanları. Numaralama, kilitler ve benzersizlik çakışmasının tanınması PostgreSQL'e
   özgüdür.

@@ -12,12 +12,14 @@ raporundadır.
 
 Araç backend'i kendisi başlatmaz. Önce örnek mağaza, boş bir PostgreSQL veritabanına karşı ve Release kipinde
 başlatılır. Araç her çalıştırmada yeni bir kiracı kullanır ve kimliği başlıklarla verir; bu yüzden backend
-`Shop:DemoIdentity=true` ile açılmalıdır (bu ayar kimliği doğrulamadan okur; yalnızca test ve ölçüm içindir).
+`Shop:DemoIdentity=true` ile açılmalıdır (bu ayar kimliği doğrulamadan okur; yalnızca test ve ölçüm içindir ve
+yalnızca geliştirme ortamında kabul edilir).
 İstek başına günlük yazmak ölçümü bozduğu için günlük düzeyi yükseltilir. PowerShell'de:
 
 ```powershell
 $env:ConnectionStrings__Default = "Host=127.0.0.1;Port=5432;Database=shop;Username=postgres;Password=<parola>"
 $env:Shop__CreateDatabase = "true"
+$env:ASPNETCORE_ENVIRONMENT = "Development"
 $env:Shop__DemoIdentity = "true"
 $env:Logging__LogLevel__Default = "Warning"
 dotnet run -c Release --project samples/Haldus.Sample.Shop --no-launch-profile --urls http://localhost:5080

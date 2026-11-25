@@ -36,6 +36,7 @@ EF Core yapılandırması üretilir.
 - `src/Haldus.Generators`: Roslyn incremental generator (netstandard2.0, Roslyn 5.0.0'a sabit).
 - `src/Haldus.EntityFrameworkCore`: model kayıt defteri, interceptor'lar, sorgu filtreleri.
 - `src/Haldus.AspNetCore`: `AddHaldus`, `Map*` giriş noktaları, validasyon, hata yanıtları, `.resx`.
+- `src/Haldus.Storage.S3`: S3 uyumlu nesne deposu (`IHaldusFileStorage`); AWS SigV4 imzası elle yazıldı, paket taşımaz.
 - `src/Haldus.Jobs.InMemory`, `src/Haldus.Jobs.PostgreSql`, `src/Haldus.Jobs.Hangfire`: `MapJob` işlerini
   yürütücüye ulaştıran altyapı paketleri. Çekirdek yalnızca `IHaldusJobDispatcher` arayüzünü bilir.
 - `tests/Haldus.Generators.Tests`: generator çıktısı testleri.
@@ -461,9 +462,20 @@ aşaması değildir ve kararları yine sorulmadan verildi:
   (32 istemcide p99 1,5 sn). `HaldusNumbering.AllocateAsync` artık önce kapsamın danışma kilidini alıyor
   (`HaldusOrdering.LockAsync`); p99 239 ms'ye indi, verim değişmedi.
 
-Yapılmayanlar ve nedenleri: arayüzler için otomatik test (genel kural: test altyapısı kendiliğinden kurulmaz), mobil
-uygulamanın cihazda denenmesi (bu makinede emülatör yok), yeni bağımlılık gerektiren paketler (nesne deposu, mesaj
-kuyruğu). Raporun "Bilinen sınırlar" tablosunda kalan satırlar bilerek dar bırakılanlardır.
+- Kimlik doğrulamanın eksikleri: sunucuda oturum ve çıkış, parola sıfırlama, e-posta doğrulama, hesap kilidi, hız sınırı.
+- S3 uyumlu dosya deposu (`src/Haldus.Storage.S3`; `AddHaldusS3Storage`) ve webhook olay yayıncısı
+  (`AddHaldusWebhookPublisher`); ikisi de yeni bağımlılık eklemeden yazıldı (aşağıda, "Generator'ın işleyişi").
+- Mobil uygulama Android'de denendi (emülatör, Android 17, Expo Go). Önceki "bu makinede emülatör yok" tespiti
+  yanlıştı: SDK ve sanal cihazlar kuruluydu, yalnızca `PATH`'te değildiler (`%LOCALAPPDATA%\Android\Sdk`).
+
+Yapılmayanlar ve nedenleri:
+
+- Arayüzler için otomatik test: test çerçevesinin kurulumu (`pnpm add -D vitest …`) izin sistemi tarafından
+  reddedildi; genel kural da test altyapısının kendiliğinden kurulmamasını söylüyor. Kullanıcı isterse kurulur.
+- Yeni bağımlılık gerektirenler: mesaj kuyruğu istemcisi (ör. RabbitMQ), kimlik sağlayıcı için JWT doğrulaması
+  (`Microsoft.AspNetCore.Authentication.JwtBearer`). Aynı gerekçeyle eklenmediler; onay gerekir.
+- iOS: Windows'ta iOS simülatörü çalışmaz; uygulama iOS'ta denenmedi.
+- Raporun "Bilinen sınırlar" tablosunda kalan satırlar bilerek dar bırakılanlardır.
 ## Açık kararlar
 
 - **Frontend ve mobil desteğinin kapsamı kapandı (31. aşama; kullanıcı sormamamı istedi, ayrıca onaylanmadı):** Haldus
@@ -491,24 +503,61 @@ kuyruğu). Raporun "Bilinen sınırlar" tablosunda kalan satırlar bilerek dar b
     özetlenir; ikisi de paylaşılan çatıdadır, paket eklenmedi. ASP.NET Core Identity ve OpenID Connect kullanılmadı.
     - Haldus'ta hiçbir şey değişmedi: kullanıcıyı ve kiracıyı zaten claim'lerden okuyordu.
     - `Shop:DemoIdentity` açıksa kimlik, doğrulanmadan, başlıklardan okunur (`X-User-Id`, `X-Tenant-Id`,
-      `X-User-Roles`). Varsayılan olarak kapalıdır; entegrasyon testleri açar (`ShopFixture`), kimlik doğrulama
-      testleri kapalı haliyle ikinci bir uygulama açar (`CreateAuthenticatedAppClient`).
-    - `UseRejectedTokenChallenge`: reddedilen bir token sunan istek her kaynakta 401 alır (`AllowAnonymous` uçlar
+      `X-User-Roles`). Varsayılan olarak kapalıdır ve **yalnızca geliştirme ortamında açılabilir**: başka ortamda
+      uygulama açılmaz. Entegrasyon testleri açar (`ShopFixture`), kimlik doğrulama testleri kapalı haliyle ikinci
+      bir uygulama açar (`CreateAuthenticatedAppClient`); yük ölçümü de bu kipi kullanır.
+    - `UseSessionValidation`: reddedilen bir token sunan istek her kaynakta 401 alır (`AllowAnonymous` uçlar
       hariç). İlk yazımda yoktu; panel tarayıcıda denenirken çıktı: geçersiz token'lı istek anonim sayılıyor,
-      kiracıya ait kaynakta 403 alıyor ve istemci oturumu yenilemiyordu.
+      kiracıya ait kaynakta 403 alıyor ve istemci oturumu yenilemiyordu. Aynı ara katman token'ın oturumunu her
+      istekte veritabanına sorar (aşağıda).
+    - **Giriş yapılmadan hiçbir uca ulaşılmaz** (`FallbackPolicy`; demo kimliği kipinde konmaz). Açık kalanlar bunu
+      kendileri söyler: giriş/kayıt/yenileme/sıfırlama uçları, Haldus'un token ile erişilen ve süreli bağlantı
+      uçları, misafir sepeti (`guests.AllowAnonymous()`), API şeması. İlk yazımda yoktu: kiracıya ait olmayan
+      kaynaklar (ürünler, kategoriler) token'sız yazılabiliyordu (bağımsız güvenlik incelemesinde çıktı). **Örnek
+      mağazaya herkese açık olması gereken yeni bir uç eklenirse `AllowAnonymous` ile işaretlenmelidir.**
+    - Oturumlar sunucudadır (`ShopSession`; token'daki `sid` claim'i) ve en çok 30 gün yaşar. Çıkış (`/auth/logout`,
+      `/auth/logout-all`), parola sıfırlama ve parola değişimi oturumu iptal eder; iptal edilen oturumun erişim
+      token'ı da yenileme token'ı da hemen reddedilir. Bedeli, token'lı her istekte bir birincil anahtar sorgusudur.
+    - Yenileme token'ı bir kez kullanılır (`RefreshVersion`; token'daki `rv` claim'i, tek bir koşullu `UPDATE` ile
+      ilerler). Eskimiş bir yenileme token'ı yeniden sunulursa oturum çalınmış sayılır ve kapatılır. Bu yüzden web
+      paneli oturumu sekmeler arasında eşitler (`storage` olayı); eşitlemeden önce eski token'ı sunan ikinci sekme
+      oturumu kapatırdı.
+    - Parola sıfırlama ve e-posta doğrulama, e-postayla gönderilen altı haneli kodladır (bağlantı değil: mobilde
+      derin bağlantı, web'de adreste token gerekmez). Kodun özeti saklanır, 15 dakika yaşar ve bir kez kullanılır.
+      **Deneme ve gönderim sayıları koda değil saatlik pencereye aittir** (hesap + amaç başına beş deneme, üç kod):
+      yeni kod istemek deneme hakkını yenilemez. İlk yazımda yeniliyordu ve altı haneli kod "kod iste, beş kez dene"
+      döngüsüyle bulunabiliyordu (incelemede çıktı). Sayımlar tek bir `UPDATE` ile, sınanmadan önce yapılır.
+      Sıfırlama e-postası yanıt beklenmeden gönderilir (süre, adresin kayıtlı olduğunu ele vermesin diye).
+      `Shop:Auth:RequireVerifiedEmail` (varsayılan kapalı) doğrulanmamış hesabı kimlik uçlarının dışında tutar.
+      Zaten doğrulanmış hesapta doğrulama ucu token vermez (204).
+    - Hesap kilidi: art arda beş başarısız parola denemesinden sonra 15 dakika (`Shop:Auth`). Deneme, parola
+      sınanmadan önce tek bir `UPDATE` ile sayılır (eşzamanlı denemeler sınırı aşamaz); kilitli hesabın yanıtı yanlış
+      paroladakiyle aynıdır. Parola değiştirirken sorulan geçerli parola da aynı sayaca yazılır. Giriş, oturumu
+      yazdıktan sonra "parola bu arada değişmedi" koşuluyla tamamlanır; değiştiyse oturum geri alınır.
+    - Parola ve kod deneyen uçlar ayrıca adres başına dakikada 30 istekle sınırlıdır (ASP.NET Core'un yerleşik hız
+      sınırlayıcısı); IPv6'da adres değil /64 bloğu sayılır. Bir vekilin arkasında vekil tanıtılmalıdır
+      (`Shop:KnownProxies`), yoksa herkes tek bir sınırı paylaşır. Kayıt, adresin alınmış olduğunu söyler (409;
+      bilinçli seçim).
+    - E-posta `IAccountMailer` ile gönderilir: `Shop:Smtp:Host` verildiyse SMTP (`System.Net.Mail`), verilmediyse
+      gönderilmez. Yalnızca geliştirme ortamında kod günlüğe yazılır (arayüzler posta sunucusu olmadan denensin
+      diye); başka ortamda kod hiçbir yere yazılmaz.
     - İstemciler token'ı `Authorization` başlığında taşır, 401'de bir kez yeniler (eşzamanlı istekler tek yenilemeyi
       bekler) ve giriş/kayıt/yenileme uçlarına token eklemez. Web'de token'lar `localStorage` içindedir (XSS'e açık;
       örnek için kabul edilmiş ödünleşim), mobilde güvenli depoda, her biri ayrı anahtarda.
-    - Bilinen sınırlar: çıkış sunucuda iptal değildir (yenileme token'ı süresi dolana kadar geçerlidir); e-posta
-      doğrulaması, parola sıfırlama, hesap kilidi ve hız sınırı yoktur. Token'lar Data Protection anahtarlarına
-      bağlıdır; anahtarların kalıcılığı ve paylaşımı (birden çok sunucu) uygulamanın işidir.
+    - Bilinen sınırlar: kimlik sağlayıcı (OpenID Connect) desteği yoktur (JWT doğrulaması ayrı bir paket ister);
+      iki adımlı doğrulama, e-posta değiştirme ve hesap silme yoktur; hesap kilidi bir hesabın başkası tarafından
+      kilitlenmesine izin verir (parola sıfırlama kilidi açar); iptal edilmiş oturum ve kullanılmış kod kayıtları
+      kendiliğinden temizlenmez. Token'lar Data Protection anahtarlarına bağlıdır; anahtarların kalıcılığı ve
+      paylaşımı uygulamanın işidir.
   - Arayüzün dili `Accept-Language` ile backend'e de gider; backend'in mesajları o dilde döner.
   - Mobil uygulamada (aynı gerekçeyle, **ayrıca onaylanmadı**): yönlendirme genel kurallardaki Expo Router'dır; i18n
     web'deki gibi i18next + react-i18next, cihazın dili `expo-localization` ile okunur; oturum ve dil seçimi
     `expo-secure-store` ile saklanır (tarayıcıda `localStorage`); form kütüphanesi ve test altyapısı yoktur.
     `expo-localization` ve `expo-secure-store` da onayı alınmamış yeni bağımlılıklardır.
-  - Mobil uygulama yalnızca Expo'nun **web** hedefinde, çalışan backend'e karşı doğrulandı (bu makinede emülatör
-    yoktu). Android ve iOS'ta çalıştırılmadı; "mobilde çalışıyor" denmeden önce bir cihazda denenmelidir.
+  - Mobil uygulama Expo'nun web hedefinde ve Android'de (emülatör, Android 17, Expo Go 56) çalışan backend'e karşı
+    doğrulandı: kayıt, alan hatası, ürünler, favori, sepet, e-posta doğrulama, uygulama yeniden başlatılınca
+    oturumun güvenli depodan geri gelmesi, çıkış, parola sıfırlama. Emülatör `adb` ile sürüldü (`uiautomator dump`
+    ile öğeler bulunup dokunuldu). iOS'ta çalıştırılmadı (Windows); gerçek bir Android cihazda da denenmedi.
   - Örnek backend üç ayar kazandı, üçü de varsayılan olarak kapalıdır: `Shop:CreateDatabase` (tabloları açılışta
     oluşturur; yalnızca arayüzleri denemek için), `Shop:CorsOrigins` (sayılan kaynaklara CORS izni) ve
     `Shop:DemoIdentity` (kimliği başlıklardan okur; testler için).
@@ -1170,6 +1219,33 @@ kuyruğu). Raporun "Bilinen sınırlar" tablosunda kalan satırlar bilerek dar b
   - Sınırlar: dosya sistemi deposunda atomik toplu silme geri alınırsa içerik geri gelmez; veritabanı deposu
     içeriği belleğe alır; `Workflow`, `Document`, `SoftDeletable`, `Cloneable`, `Publishable`, zincir işlemleri ve
     `CreatedFrom` ile birleşmez; virüs taraması, görsel işleme ve devam ettirilebilir yükleme yoktur.
+- **S3 deposu.** `Haldus.Storage.S3` (`AddHaldusS3Storage`; MinIO ve AWS S3, varsayılan yol biçimli adres). İstekler
+  `HttpClient` ile gönderilir ve `S3Signer` ile imzalanır (AWS SigV4; AWS belgelerindeki örnek vektörlerle sınanır).
+  Uzunluğu bilinen (aranabilir) içerik tek bir `PUT` ile akıtılır: HTTPS'te `UNSIGNED-PAYLOAD`, düz HTTP'de önce
+  özeti hesaplanıp imzalanır. Uzunluğu bilinmeyen içerik (`HaldusFiles` her zaman böyle verir) `PartSize` kadar
+  tamponlanır; tampona sığarsa tek `PUT`, sığmazsa çok parçalı yüklemedir ve bellekte en çok bir parça durur. Yarıda
+  kalan yükleme iptal edilir ve özgün hata aynen yeniden fırlatılır (`HaldusFiles` boyut sınırını ondan 413'e
+  çevirir). Ayarlar açılışta değil depo ilk kullanıldığında doğrulanır (build sırasındaki şema üretimi kimlik bilgisi
+  olmadan çalışsın diye). Testler MinIO'yu genel Testcontainers kapsayıcısıyla başlatır; `minio/minio` imajı artık
+  çekilemediği için `cgr.dev/chainguard/minio:latest` kullanılır (`HALDUS_TEST_MINIO_IMAGE` ile değiştirilir; sürüme
+  sabit değildir). Sınırlar: gerçek AWS S3'e karşı denenmedi; geçici kimlik bilgisi (oturum token'ı, rol) yoktur;
+  kovayı Haldus oluşturmaz; içerik kayıtla aynı transaction'da değildir (kayıt kaydedilemezse nesne sahipsiz kalabilir);
+  indirmede `Range` desteklenmez; nesne deposuna doğrudan (ön imzalı) yükleme ve devam ettirilebilir yükleme yoktur.
+- **Webhook yayıncısı.** `AddHaldusWebhookPublisher` (`HaldusWebhooks.cs`) olayları yapılandırılmış adreslere imzalı
+  HTTP isteğiyle teslim eden bir `IHaldusEventPublisher`'dır. İmza Standard Webhooks düzenindedir: `Webhook-Id`
+  (olayın kimliği), `Webhook-Timestamp`, `Webhook-Signature: v1,{base64(HMAC-SHA256(anahtar, "id.zaman.gövde"))}`;
+  alıcı `HaldusWebhookSignature.Verify` ile doğrular (sabit süreli karşılaştırma, zaman toleransı, anahtar değişimi
+  için birden çok imza). 2xx dışındaki yanıt hata sayılır ve olay kutudan yeniden denenir (en az bir kez; alıcı
+  yineleneni `Webhook-Id`'den tanır). Yönlendirme izlenmez; adres `https` olmalıdır (`AllowInsecureHttp` yerel
+  deneme içindir) ve anahtar en az 16 karakterdir (açılışta doğrulanır). **Adresler uygulamanın yapılandırmasından
+  gelir; kullanıcıların tanımladığı adreslere gönderim (örnekteki `WebhookEndpoint` kaynağı gibi) SSRF koruması ister
+  ve bu yayıncının işi değildir.** Sınırlar: birden çok adresten biri başarısız olursa yeniden denemede ötekilere de
+  yeniden gönderilir; adres başına ayrı kuyruk ve devre kesici yoktur. Anahtar `whsec_…` biçimindeyse base64
+  çözülerek kullanılır (belirtimin örnek vektörüyle sınanır). Yanıtın gövdesi okunmaz; hata metnine yalnızca
+  sunucunun adı yazılır. **Yayıncının zaman aşımı bir `OperationCanceledException`'dır:** `HaldusEvents.DeliverAsync`
+  ve dağıtıcı servis onu ancak kendi iptal belirteçleri iptal edilmişse dışarı bırakır. İlk yazımda her iptal
+  istisnası dışarı çıkıyordu ve yanıt vermeyen bir alıcı arka plan servisini, onunla birlikte uygulamayı durduruyordu
+  (incelemede çıktı; çekirdekteki bu kusur webhook'tan önce de vardı, `HttpClient` kullanan her yayıncıyı etkilerdi).
 - **Takılabilirler.** `.AttachedTo<T>()` zincirde `Attached` işaretli bir `Parent` bildirimi olarak okunur ve
   `ReferenceKind.Attachment` olarak çözülür (isteğe bağlı, istekle yazılamayan yabancı anahtar). Hedef tarafında
   yazılan `Attachable` / `Commentable` bildirimleri (`ResourceModel.ReverseAttachments`) bağlayıcının ilk adımında
