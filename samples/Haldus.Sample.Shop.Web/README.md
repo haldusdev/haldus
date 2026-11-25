@@ -145,3 +145,7 @@ Bu seçimler kullanıcıya sorulmadan, önerilen seçenekle verildi (deponun `CL
   kalmaması, giriş yönlendirmeleri, yüklenen ve boş liste durumları. Bu testler yalnızca ilk çizimi görür:
   tıklama, yazma, veri yükleme ve açılır pencerelerin içeriği sınanmaz; onlar bir DOM kütüphanesi (yeni bir
   bağımlılık) ister.
+- **Elle doğrulama:** panel, çalışan backend'e karşı tarayıcıda denendi. Güvenlik incelemelerinin düzeltmelerinden
+  sonraki son turda: e-postasını doğrulamamış personel adresi ürün oluşturamadı (backend'in Türkçe 403 mesajı
+  pencerede göründü), "Yeniden gönder" yeni bir kod üretti, küçük harf ve tireyle yazılan kod hesabı doğruladı ve
+  ardından ürün oluşturulabildi.

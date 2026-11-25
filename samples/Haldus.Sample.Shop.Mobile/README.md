@@ -107,6 +107,12 @@ içinde saklanır.
   açılınca oturumun güvenli depodan geri gelmesi, çıkış, parola sıfırlama, eski parolanın reddedilip yenisiyle giriş.
 - **Web** (Expo'nun web hedefi): yukarıdakilere ek olarak geçersiz erişim token'ının yenilenmesi ve dil değişimi.
 
+Güvenlik incelemelerinin düzeltmelerinden sonra (sekiz karakterlik kod, yalnızca personelin yazdığı ortak kaynaklar,
+yenileme toleransı) Android'deki tur yinelendi: başka bir veritabanından kalan oturumun reddedilip giriş ekranına
+dönülmesi, hesap oluşturma, panelden eklenen ürünün listede görünmesi, favori, sepet, kodun küçük harf ve tireyle
+yazılarak doğrulanması, dilin Türkçeye çevrilmesi, çıkış, yanlış parolada backend'in Türkçe mesajı, doğru parolayla
+giriş. Bu turda parola sıfırlama ve uygulamayı kapatıp açma yinelenmedi.
+
 **iOS'ta çalıştırılmadı** (geliştirildiği makine Windows); gerçek bir Android cihazda da denenmedi. Klavyenin alanı
 örtmesi, güvenli alanlar ve koyu tema Android'de ayrıca gözle denetlenmedi.
 

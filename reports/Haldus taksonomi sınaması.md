@@ -64,7 +64,7 @@ durum modeli" kuralı da açılmadı: ek durum eksenleri asıl durumun yanında,
   eşlemeye en yakın biçimde ve yalnızca yazılmış özelliklerle bildirir, generator'dan geçirir ve üretilen kodun
   hatasız derlendiğini doğrular. Aşağıdaki tablo o dosyadaki verinin aynısıdır; sayılar bir testle bağlıdır.
 - **Çalışma:** Derleme, uçların doğru davrandığını göstermez. Tablodaki özelliklerin her biri örnek uygulamalarda
-  gerçek PostgreSQL'e karşı sınanıyor (bugün 405 entegrasyon testi); ama her satırın kendi birleşimi değil.
+  gerçek PostgreSQL'e karşı sınanıyor (bugün 407 entegrasyon testi); ama her satırın kendi birleşimi değil.
   Örnek mağazada bulunmayan birleşimler (ör. iade, abonelik, rezervasyon satırlarının tam hali) yalnızca derleme
   düzeyinde doğrulandı.
 - **Hüküm:** "Temiz" ile "kısmi" arasındaki ayrım benim yorumumdur: önerilen eşlemede adı geçen bir özellik

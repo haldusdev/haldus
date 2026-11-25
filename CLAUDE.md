@@ -602,6 +602,11 @@ Yapılmayanlar ve nedenleri:
     doğrulandı: kayıt, alan hatası, ürünler, favori, sepet, e-posta doğrulama, uygulama yeniden başlatılınca
     oturumun güvenli depodan geri gelmesi, çıkış, parola sıfırlama. Emülatör `adb` ile sürüldü (`uiautomator dump`
     ile öğeler bulunup dokunuldu). iOS'ta çalıştırılmadı (Windows); gerçek bir Android cihazda da denenmedi.
+  - Güvenlik düzeltmelerinden sonra (`427e54c`) panel tarayıcıda ve mobil uygulama Android emülatöründe yeniden
+    denendi: doğrulanmamış personel adresinin ortak kaynağı yazamaması (Türkçe 403), kodun küçük harf ve tireyle
+    kabul edilmesi, doğrulamadan sonra rolün gelmesi; mobilde eski oturumun reddi, kayıt, favori, sepet, doğrulama,
+    çıkış, yanlış parolanın Türkçe mesajı, yeniden giriş. O turda mobilde parola sıfırlama ve uygulamayı kapatıp
+    açma yinelenmedi; yenileme toleransının 409 yolu elle değil yalnızca testlerle sınandı.
   - Örnek backend üç ayar kazandı, üçü de varsayılan olarak kapalıdır: `Shop:CreateDatabase` (tabloları açılışta
     oluşturur; yalnızca arayüzleri denemek için), `Shop:CorsOrigins` (sayılan kaynaklara CORS izni) ve
     `Shop:DemoIdentity` (kimliği başlıklardan okur; testler için).
