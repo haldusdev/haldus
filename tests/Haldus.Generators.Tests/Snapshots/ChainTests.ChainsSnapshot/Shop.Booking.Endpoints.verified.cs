@@ -14,7 +14,8 @@ public static partial class BookingEndpoints
     public static global::Microsoft.AspNetCore.Routing.RouteGroupBuilder Map(
         global::Microsoft.AspNetCore.Routing.IEndpointRouteBuilder endpoints)
     {
-        var group = endpoints.MapGroup("/bookings").WithTags("Bookings");
+        var group = endpoints.MapGroup("/bookings").WithTags("Bookings")
+            .WithMetadata(new global::Haldus.HaldusResourceScope(false, false));
 
         group.MapGet("/", ListAsync)
             .WithName("ListBookings");

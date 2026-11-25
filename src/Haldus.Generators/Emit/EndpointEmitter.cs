@@ -252,7 +252,8 @@ internal sealed partial class EndpointEmitter
             {{Constants(entityNamespace)}}    public static global::Microsoft.AspNetCore.Routing.RouteGroupBuilder Map(
                     global::Microsoft.AspNetCore.Routing.IEndpointRouteBuilder endpoints)
                 {
-                    var group = endpoints.MapGroup("/{{route}}").WithTags("{{(_resource.Archetype == Archetype.Singleton ? _entity : _plural)}}");
+                    var group = endpoints.MapGroup("/{{route}}").WithTags("{{(_resource.Archetype == Archetype.Singleton ? _entity : _plural)}}")
+                        .WithMetadata(new global::Haldus.HaldusResourceScope({{(_resource.TenantScoped ? "true" : "false")}}, {{(_resource.OwnerScoped ? "true" : "false")}}));
 
             {{tenantFilter}}{{_map}}        return group;
                 }

@@ -14,7 +14,8 @@ public static partial class MeetingEndpoints
     public static global::Microsoft.AspNetCore.Routing.RouteGroupBuilder Map(
         global::Microsoft.AspNetCore.Routing.IEndpointRouteBuilder endpoints)
     {
-        var group = endpoints.MapGroup("/meetings").WithTags("Meetings");
+        var group = endpoints.MapGroup("/meetings").WithTags("Meetings")
+            .WithMetadata(new global::Haldus.HaldusResourceScope(false, false));
 
         group.MapGet("/", ListAsync)
             .WithName("ListMeetings");

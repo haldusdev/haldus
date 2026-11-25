@@ -14,7 +14,8 @@ public static partial class SupplierTermsEndpoints
     public static global::Microsoft.AspNetCore.Routing.RouteGroupBuilder Map(
         global::Microsoft.AspNetCore.Routing.IEndpointRouteBuilder endpoints)
     {
-        var group = endpoints.MapGroup("/suppliers/{supplierId:guid}/supplier-terms").WithTags("SupplierTerms");
+        var group = endpoints.MapGroup("/suppliers/{supplierId:guid}/supplier-terms").WithTags("SupplierTerms")
+            .WithMetadata(new global::Haldus.HaldusResourceScope(false, false));
 
         group.MapGet("/", GetAsync)
             .WithName("GetSupplierTerms");

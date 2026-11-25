@@ -14,7 +14,8 @@ public static partial class CustomerEndpoints
     public static global::Microsoft.AspNetCore.Routing.RouteGroupBuilder Map(
         global::Microsoft.AspNetCore.Routing.IEndpointRouteBuilder endpoints)
     {
-        var group = endpoints.MapGroup("/customers").WithTags("Customers");
+        var group = endpoints.MapGroup("/customers").WithTags("Customers")
+            .WithMetadata(new global::Haldus.HaldusResourceScope(true, false));
 
         group.AddEndpointFilter<global::Haldus.HaldusTenantRequiredFilter>();
 

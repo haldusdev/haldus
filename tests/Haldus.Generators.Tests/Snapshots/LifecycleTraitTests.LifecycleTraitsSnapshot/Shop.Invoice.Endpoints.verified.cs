@@ -16,7 +16,8 @@ public static partial class InvoiceEndpoints
     public static global::Microsoft.AspNetCore.Routing.RouteGroupBuilder Map(
         global::Microsoft.AspNetCore.Routing.IEndpointRouteBuilder endpoints)
     {
-        var group = endpoints.MapGroup("/invoices").WithTags("Invoices");
+        var group = endpoints.MapGroup("/invoices").WithTags("Invoices")
+            .WithMetadata(new global::Haldus.HaldusResourceScope(true, false));
 
         group.AddEndpointFilter<global::Haldus.HaldusTenantRequiredFilter>();
 

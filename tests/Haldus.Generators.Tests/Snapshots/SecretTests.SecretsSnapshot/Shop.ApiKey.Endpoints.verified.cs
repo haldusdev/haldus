@@ -14,7 +14,8 @@ public static partial class ApiKeyEndpoints
     public static global::Microsoft.AspNetCore.Routing.RouteGroupBuilder Map(
         global::Microsoft.AspNetCore.Routing.IEndpointRouteBuilder endpoints)
     {
-        var group = endpoints.MapGroup("/api-keys").WithTags("ApiKeys");
+        var group = endpoints.MapGroup("/api-keys").WithTags("ApiKeys")
+            .WithMetadata(new global::Haldus.HaldusResourceScope(false, false));
 
         group.MapGet("/", ListAsync)
             .WithName("ListApiKeys");

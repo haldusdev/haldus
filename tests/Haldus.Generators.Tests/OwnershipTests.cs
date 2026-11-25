@@ -83,6 +83,37 @@ public sealed class OwnershipTests
             """);
 
     [Fact]
+    public void Endpoints_CarryTheScopeOfTheirResourceAsMetadata()
+    {
+        var run = Run("""
+            app.MapCrud<Product>();
+            app.MapCrud<Tag>();
+            app.MapCrud<Order>().MultiTenant();
+            app.MapCrud<Note>().Under<Order>();
+            app.MapCrud<Currency>().Under<Product>();
+            app.MapCrud<Cart>().OwnedByCurrentUser();
+            app.MapCrud<CartLine>().Under<Cart>();
+            app.MapCrud<Draft>().MultiTenant().OwnedByCurrentUser();
+            app.MapAssociation<Product, Tag>();
+            app.MapAssociation<Favorite, Product>().ForCurrentUser();
+            """).AssertCompiles();
+
+        // Uygulama yetki kurallarını bu metadataya göre yazabilir (ör. ortak kaynakları yalnızca personel yazar).
+        // Kapsam kaynağın kendisinden veya ebeveyninden gelir: (kiracıya ait, kullanıcıya ait).
+        static string Scope(bool tenant, bool owner) =>
+            $"new global::Haldus.HaldusResourceScope({(tenant ? "true" : "false")}, {(owner ? "true" : "false")})";
+
+        Assert.Contains(Scope(tenant: false, owner: false), run.Sources["Shop.Product.Endpoints.g.cs"]);
+        Assert.Contains(Scope(tenant: true, owner: false), run.Sources["Shop.Order.Endpoints.g.cs"]);
+        Assert.Contains(Scope(tenant: true, owner: false), run.Sources["Shop.Note.Endpoints.g.cs"]);
+        Assert.Contains(Scope(tenant: false, owner: false), run.Sources["Shop.Currency.Endpoints.g.cs"]);
+        Assert.Contains(Scope(tenant: false, owner: true), run.Sources["Shop.Cart.Endpoints.g.cs"]);
+        Assert.Contains(Scope(tenant: false, owner: true), run.Sources["Shop.CartLine.Endpoints.g.cs"]);
+        Assert.Contains(Scope(tenant: true, owner: true), run.Sources["Shop.Draft.Endpoints.g.cs"]);
+        Assert.Contains(Scope(tenant: false, owner: true), run.Sources["Shop.Favorite.Endpoints.g.cs"]);
+        Assert.Contains(Scope(tenant: false, owner: false), run.Sources.Single(source => source.Key.Contains("ProductTag") && source.Key.Contains("Endpoints")).Value);
+    }
+    [Fact]
     public void Owned_AddsAnOwnerThatIsNeitherRequestedNorReturned()
     {
         var run = Run("app.MapCrud<Cart>().OwnedByCurrentUser();").AssertCompiles();

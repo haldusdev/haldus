@@ -14,7 +14,8 @@ public static partial class NoteEndpoints
     public static global::Microsoft.AspNetCore.Routing.RouteGroupBuilder Map(
         global::Microsoft.AspNetCore.Routing.IEndpointRouteBuilder endpoints)
     {
-        var group = endpoints.MapGroup("/notes").WithTags("Notes");
+        var group = endpoints.MapGroup("/notes").WithTags("Notes")
+            .WithMetadata(new global::Haldus.HaldusResourceScope(false, false));
 
         group.MapGet("/", ListAsync)
             .WithName("ListNotes");

@@ -14,7 +14,8 @@ public static partial class StockMovementEndpoints
     public static global::Microsoft.AspNetCore.Routing.RouteGroupBuilder Map(
         global::Microsoft.AspNetCore.Routing.IEndpointRouteBuilder endpoints)
     {
-        var group = endpoints.MapGroup("/stock-movements").WithTags("StockMovements");
+        var group = endpoints.MapGroup("/stock-movements").WithTags("StockMovements")
+            .WithMetadata(new global::Haldus.HaldusResourceScope(false, false));
 
         group.MapGet("/", ListAsync)
             .WithName("ListStockMovements");

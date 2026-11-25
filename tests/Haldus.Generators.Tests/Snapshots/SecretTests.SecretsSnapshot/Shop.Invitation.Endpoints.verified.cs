@@ -14,7 +14,8 @@ public static partial class InvitationEndpoints
     public static global::Microsoft.AspNetCore.Routing.RouteGroupBuilder Map(
         global::Microsoft.AspNetCore.Routing.IEndpointRouteBuilder endpoints)
     {
-        var group = endpoints.MapGroup("/invitations").WithTags("Invitations");
+        var group = endpoints.MapGroup("/invitations").WithTags("Invitations")
+            .WithMetadata(new global::Haldus.HaldusResourceScope(true, false));
 
         group.AddEndpointFilter<global::Haldus.HaldusTenantRequiredFilter>();
 

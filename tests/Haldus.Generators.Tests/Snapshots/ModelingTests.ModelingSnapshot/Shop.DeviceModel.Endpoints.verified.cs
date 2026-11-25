@@ -14,7 +14,8 @@ public static partial class DeviceModelEndpoints
     public static global::Microsoft.AspNetCore.Routing.RouteGroupBuilder Map(
         global::Microsoft.AspNetCore.Routing.IEndpointRouteBuilder endpoints)
     {
-        var group = endpoints.MapGroup("/device-models").WithTags("DeviceModels");
+        var group = endpoints.MapGroup("/device-models").WithTags("DeviceModels")
+            .WithMetadata(new global::Haldus.HaldusResourceScope(false, false));
 
         group.MapGet("/", ListAsync)
             .WithName("ListDeviceModels");

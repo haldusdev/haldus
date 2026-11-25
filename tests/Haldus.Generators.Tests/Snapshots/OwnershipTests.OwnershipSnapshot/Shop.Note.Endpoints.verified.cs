@@ -14,7 +14,8 @@ public static partial class NoteEndpoints
     public static global::Microsoft.AspNetCore.Routing.RouteGroupBuilder Map(
         global::Microsoft.AspNetCore.Routing.IEndpointRouteBuilder endpoints)
     {
-        var group = endpoints.MapGroup("/products/{productId:guid}/notes").WithTags("Notes");
+        var group = endpoints.MapGroup("/products/{productId:guid}/notes").WithTags("Notes")
+            .WithMetadata(new global::Haldus.HaldusResourceScope(false, true));
 
         group.AddEndpointFilter<global::Haldus.HaldusUserRequiredFilter>();
 

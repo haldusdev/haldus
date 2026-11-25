@@ -14,7 +14,8 @@ public static partial class CartEndpoints
     public static global::Microsoft.AspNetCore.Routing.RouteGroupBuilder Map(
         global::Microsoft.AspNetCore.Routing.IEndpointRouteBuilder endpoints)
     {
-        var group = endpoints.MapGroup("/me/carts").WithTags("Carts");
+        var group = endpoints.MapGroup("/me/carts").WithTags("Carts")
+            .WithMetadata(new global::Haldus.HaldusResourceScope(true, true));
 
         group.AddEndpointFilter<global::Haldus.HaldusTenantRequiredFilter>();
 

@@ -14,7 +14,8 @@ public static partial class FavoriteEndpoints
     public static global::Microsoft.AspNetCore.Routing.RouteGroupBuilder Map(
         global::Microsoft.AspNetCore.Routing.IEndpointRouteBuilder endpoints)
     {
-        var group = endpoints.MapGroup("/me/favorites").WithTags("Favorites");
+        var group = endpoints.MapGroup("/me/favorites").WithTags("Favorites")
+            .WithMetadata(new global::Haldus.HaldusResourceScope(false, true));
 
         group.AddEndpointFilter<global::Haldus.HaldusUserRequiredFilter>();
 

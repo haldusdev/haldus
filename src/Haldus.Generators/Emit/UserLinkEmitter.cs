@@ -57,7 +57,8 @@ internal static class UserLinkEmitter
                 public static global::Microsoft.AspNetCore.Routing.RouteGroupBuilder Map(
                     global::Microsoft.AspNetCore.Routing.IEndpointRouteBuilder endpoints)
                 {
-                    var group = endpoints.MapGroup("/{{link.Route}}").WithTags("{{link.CollectionName}}");
+                    var group = endpoints.MapGroup("/{{link.Route}}").WithTags("{{link.CollectionName}}")
+                        .WithMetadata(new global::Haldus.HaldusResourceScope({{(link.Right.TenantScoped ? "true" : "false")}}, true));
 
             {{tenantFilter}}        group.AddEndpointFilter<global::Haldus.HaldusUserRequiredFilter>();
 

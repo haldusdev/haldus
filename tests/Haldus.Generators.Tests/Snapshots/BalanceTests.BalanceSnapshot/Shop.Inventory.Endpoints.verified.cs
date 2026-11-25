@@ -14,7 +14,8 @@ public static partial class InventoryEndpoints
     public static global::Microsoft.AspNetCore.Routing.RouteGroupBuilder Map(
         global::Microsoft.AspNetCore.Routing.IEndpointRouteBuilder endpoints)
     {
-        var group = endpoints.MapGroup("/inventories").WithTags("Inventories");
+        var group = endpoints.MapGroup("/inventories").WithTags("Inventories")
+            .WithMetadata(new global::Haldus.HaldusResourceScope(false, false));
 
         group.MapGet("/", ListAsync)
             .WithName("ListInventories");

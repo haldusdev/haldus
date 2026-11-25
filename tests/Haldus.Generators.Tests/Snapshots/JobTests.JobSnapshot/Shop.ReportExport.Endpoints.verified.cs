@@ -14,7 +14,8 @@ public static partial class ReportExportEndpoints
     public static global::Microsoft.AspNetCore.Routing.RouteGroupBuilder Map(
         global::Microsoft.AspNetCore.Routing.IEndpointRouteBuilder endpoints)
     {
-        var group = endpoints.MapGroup("/report-exports").WithTags("ReportExports");
+        var group = endpoints.MapGroup("/report-exports").WithTags("ReportExports")
+            .WithMetadata(new global::Haldus.HaldusResourceScope(true, false));
 
         group.AddEndpointFilter<global::Haldus.HaldusTenantRequiredFilter>();
 

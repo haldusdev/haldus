@@ -14,7 +14,8 @@ public static partial class ProductExportEndpoints
     public static global::Microsoft.AspNetCore.Routing.RouteGroupBuilder Map(
         global::Microsoft.AspNetCore.Routing.IEndpointRouteBuilder endpoints)
     {
-        var group = endpoints.MapGroup("/product-exports").WithTags("ProductExports");
+        var group = endpoints.MapGroup("/product-exports").WithTags("ProductExports")
+            .WithMetadata(new global::Haldus.HaldusResourceScope(false, false));
 
         group.MapGet("/", ListAsync)
             .WithName("ListProductExports");

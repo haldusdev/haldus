@@ -14,7 +14,8 @@ public static partial class PreferenceEndpoints
     public static global::Microsoft.AspNetCore.Routing.RouteGroupBuilder Map(
         global::Microsoft.AspNetCore.Routing.IEndpointRouteBuilder endpoints)
     {
-        var group = endpoints.MapGroup("/preferences").WithTags("Preferences");
+        var group = endpoints.MapGroup("/preferences").WithTags("Preferences")
+            .WithMetadata(new global::Haldus.HaldusResourceScope(true, false));
 
         group.AddEndpointFilter<global::Haldus.HaldusTenantRequiredFilter>();
 

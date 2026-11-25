@@ -14,7 +14,8 @@ public static partial class BillPaymentEndpoints
     public static global::Microsoft.AspNetCore.Routing.RouteGroupBuilder Map(
         global::Microsoft.AspNetCore.Routing.IEndpointRouteBuilder endpoints)
     {
-        var group = endpoints.MapGroup("/bill-payments").WithTags("BillPayments");
+        var group = endpoints.MapGroup("/bill-payments").WithTags("BillPayments")
+            .WithMetadata(new global::Haldus.HaldusResourceScope(false, false));
 
         group.MapGet("/", ListAsync)
             .WithName("ListBillPayments");

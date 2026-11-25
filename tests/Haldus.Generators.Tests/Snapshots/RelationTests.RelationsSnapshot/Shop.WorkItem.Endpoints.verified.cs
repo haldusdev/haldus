@@ -14,7 +14,8 @@ public static partial class WorkItemEndpoints
     public static global::Microsoft.AspNetCore.Routing.RouteGroupBuilder Map(
         global::Microsoft.AspNetCore.Routing.IEndpointRouteBuilder endpoints)
     {
-        var group = endpoints.MapGroup("/projects/{projectId:guid}/work-items").WithTags("WorkItems");
+        var group = endpoints.MapGroup("/projects/{projectId:guid}/work-items").WithTags("WorkItems")
+            .WithMetadata(new global::Haldus.HaldusResourceScope(true, false));
 
         group.MapGet("/", ListAsync)
             .WithName("ListWorkItems");

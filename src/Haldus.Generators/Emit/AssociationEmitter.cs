@@ -393,7 +393,8 @@ internal static class AssociationEmitter
                 public static global::Microsoft.AspNetCore.Routing.RouteGroupBuilder Map(
                     global::Microsoft.AspNetCore.Routing.IEndpointRouteBuilder endpoints)
                 {
-                    var group = endpoints.MapGroup(string.Empty).WithTags("{{lefts}}");
+                    var group = endpoints.MapGroup(string.Empty).WithTags("{{lefts}}")
+                        .WithMetadata(new global::Haldus.HaldusResourceScope({{(association.TenantScoped ? "true" : "false")}}, {{(association.OwnerScoped ? "true" : "false")}}));
 
                     group.MapGet("{{leftRoute}}/{{Naming.ToKebabCase(rights)}}", List{{rights}}Async)
                         .WithName("List{{left.EntityName}}{{rights}}");

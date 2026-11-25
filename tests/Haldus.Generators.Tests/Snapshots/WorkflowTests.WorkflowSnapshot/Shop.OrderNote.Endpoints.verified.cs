@@ -14,7 +14,8 @@ public static partial class OrderNoteEndpoints
     public static global::Microsoft.AspNetCore.Routing.RouteGroupBuilder Map(
         global::Microsoft.AspNetCore.Routing.IEndpointRouteBuilder endpoints)
     {
-        var group = endpoints.MapGroup("/{orderId:guid}/order-notes").WithTags("OrderNotes");
+        var group = endpoints.MapGroup("/{orderId:guid}/order-notes").WithTags("OrderNotes")
+            .WithMetadata(new global::Haldus.HaldusResourceScope(false, false));
 
         group.MapGet("/", ListAsync)
             .WithName("ListOrderNotes");

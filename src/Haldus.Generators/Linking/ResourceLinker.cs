@@ -41,9 +41,25 @@ internal static class ResourceLinker
 
             foreach (var declaration in resource.ReferenceDeclarations)
             {
-                if (Resolve(resource, declaration, resources, byType, properties, Fail) is not { } reference)
+                if (Resolve(resource, declaration, resources, byType, properties, Fail) is not { } resolved)
                 {
                     continue;
+                }
+
+                // Ebeveynin kapsamı kaynağın kapsamıdır; uçların metadatasına yazılabilsin diye referansla birlikte taşınır.
+                var reference = resolved;
+
+                if (resolved.Kind is ReferenceKind.Parent or ReferenceKind.Attachment || resolved.IsShallowParent)
+                {
+                    var scopeTarget = FindTarget(declaration, resources, byType);
+
+                    reference = resolved with
+                    {
+                        TargetTenantScoped = scopeTarget is null
+                            ? declaration is { IsExternal: true, TargetTenantScoped: true }
+                            : IsTenantScoped(scopeTarget, resources, byType),
+                        TargetOwnerScoped = scopeTarget is not null && IsOwnerScoped(scopeTarget, resources, byType),
+                    };
                 }
 
                 var existing = references.FirstOrDefault(candidate => candidate.PropertyName == reference.PropertyName);
@@ -963,6 +979,8 @@ internal static class ResourceLinker
                     LinkDeclared = declaration.LinkDeclared,
                     Workflow = declaration.Workflow,
                     StatusDeclared = declaration.StatusDeclared,
+                    TenantScoped = leftScoped || rightScoped,
+                    OwnerScoped = IsOwnerScoped(left, resources, byType) || IsOwnerScoped(right, resources, byType),
                 });
             }
         }

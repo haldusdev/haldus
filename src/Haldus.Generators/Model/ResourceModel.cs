@@ -142,6 +142,19 @@ internal sealed record ResourceModel(
     /// <summary>Kaynak bir aktarma işiyse (<c>Exports</c> / <c>Imports</c>) aktardığı kaynak; değilse <c>null</c>.</summary>
     public TransferModel? Transfer { get; init; }
 
+    /// <summary>
+    /// Kaynağın kayıtları bir kiracıya mı ait: kendisi <c>MultiTenant</c>'tır veya öyle bir ebeveynin altındadır.
+    /// Uçların metadatasına yazılır; ebeveynin kapsamı bağlayıcıda çözülür.
+    /// </summary>
+    public bool TenantScoped =>
+        Has(Traits.MultiTenant) || References.Any(reference => reference.Kind == ReferenceKind.Parent && reference.TargetTenantScoped)
+        || References.Any(reference => reference.IsShallowParent && reference.TargetTenantScoped);
+
+    /// <summary>Kaynağın kayıtları tek bir kullanıcıya mı ait: kendisi sahiplidir veya sahipli bir ebeveynin altındadır.</summary>
+    public bool OwnerScoped =>
+        Has(Traits.Owned) || References.Any(reference => reference.Kind == ReferenceKind.Parent && reference.TargetOwnerScoped)
+        || References.Any(reference => reference.IsShallowParent && reference.TargetOwnerScoped);
+
     /// <summary>Bir dışa aktarma işi bu kaynağın kayıtlarını okuyor mu; okuyorsa kayıtları veren metot üretilir.</summary>
     public bool IsExported { get; init; }
 
@@ -644,6 +657,12 @@ internal sealed record ResolvedReference(
     /// isteğinde verilir, sonradan değişmez ve kaydın görünürlüğü ile silinmesi ebeveyni izler.
     /// </summary>
     public bool IsShallowParent { get; init; }
+
+    /// <summary>Ebeveyn (veya takılınan hedef) bir kiracıya mı ait; kaynağın kapsamı ondan gelir.</summary>
+    public bool TargetTenantScoped { get; init; }
+
+    /// <summary>Ebeveyn (veya takılınan hedef) tek bir kullanıcıya mı ait.</summary>
+    public bool TargetOwnerScoped { get; init; }
 }
 
 /// <summary>Zincirsiz bir <c>MapAssociation&lt;TLeft, TRight&gt;()</c> çağrısı; uçları henüz çözülmemiştir.</summary>
@@ -722,6 +741,12 @@ internal sealed record AssociationModel(
     public bool HasPayload => Payload.Length > 0;
 
     public bool LinkDeclared { get; init; }
+
+    /// <summary>Uçlardan biri bir kiracıya aitse bağlar da öyledir (uçların metadatasına yazılır).</summary>
+    public bool TenantScoped { get; init; }
+
+    /// <summary>Uçlardan biri tek bir kullanıcıya aitse bağlar da öyledir.</summary>
+    public bool OwnerScoped { get; init; }
 
     /// <summary>Bağın durum makinesi; yoksa <c>null</c>.</summary>
     public WorkflowModel? Workflow { get; init; }

@@ -14,7 +14,8 @@ public static partial class CategoryEndpoints
     public static global::Microsoft.AspNetCore.Routing.RouteGroupBuilder Map(
         global::Microsoft.AspNetCore.Routing.IEndpointRouteBuilder endpoints)
     {
-        var group = endpoints.MapGroup("/categories").WithTags("Categories");
+        var group = endpoints.MapGroup("/categories").WithTags("Categories")
+            .WithMetadata(new global::Haldus.HaldusResourceScope(false, false));
 
         group.MapGet("/", ListAsync)
             .WithName("ListCategories");

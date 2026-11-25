@@ -14,7 +14,8 @@ public static partial class StockLevelEndpoints
     public static global::Microsoft.AspNetCore.Routing.RouteGroupBuilder Map(
         global::Microsoft.AspNetCore.Routing.IEndpointRouteBuilder endpoints)
     {
-        var group = endpoints.MapGroup("/stock-levels").WithTags("StockLevels");
+        var group = endpoints.MapGroup("/stock-levels").WithTags("StockLevels")
+            .WithMetadata(new global::Haldus.HaldusResourceScope(false, false));
 
         group.MapGet("/", ListAsync)
             .WithName("ListStockLevels");

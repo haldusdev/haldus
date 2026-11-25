@@ -14,7 +14,8 @@ public static partial class ProductTagEndpoints
     public static global::Microsoft.AspNetCore.Routing.RouteGroupBuilder Map(
         global::Microsoft.AspNetCore.Routing.IEndpointRouteBuilder endpoints)
     {
-        var group = endpoints.MapGroup(string.Empty).WithTags("Products");
+        var group = endpoints.MapGroup(string.Empty).WithTags("Products")
+            .WithMetadata(new global::Haldus.HaldusResourceScope(true, false));
 
         group.MapGet("/products/{productId:guid}/tags", ListTagsAsync)
             .WithName("ListProductTags");

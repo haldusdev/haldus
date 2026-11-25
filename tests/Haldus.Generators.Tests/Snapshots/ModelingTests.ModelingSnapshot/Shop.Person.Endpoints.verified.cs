@@ -14,7 +14,8 @@ public static partial class PersonEndpoints
     public static global::Microsoft.AspNetCore.Routing.RouteGroupBuilder Map(
         global::Microsoft.AspNetCore.Routing.IEndpointRouteBuilder endpoints)
     {
-        var group = endpoints.MapGroup("/persons").WithTags("Persons");
+        var group = endpoints.MapGroup("/persons").WithTags("Persons")
+            .WithMetadata(new global::Haldus.HaldusResourceScope(false, false));
 
         group.MapGet("/", ListAsync)
             .WithName("ListPersons");

@@ -18,7 +18,8 @@ public static partial class AttachmentOnOrderEndpoints
     public static global::Microsoft.AspNetCore.Routing.RouteGroupBuilder Map(
         global::Microsoft.AspNetCore.Routing.IEndpointRouteBuilder endpoints)
     {
-        var group = endpoints.MapGroup("/orders/{orderId:guid}/attachments").WithTags("Attachments");
+        var group = endpoints.MapGroup("/orders/{orderId:guid}/attachments").WithTags("Attachments")
+            .WithMetadata(new global::Haldus.HaldusResourceScope(false, false));
 
         group.MapGet("/", ListAsync)
             .WithName("OrderListAttachments");

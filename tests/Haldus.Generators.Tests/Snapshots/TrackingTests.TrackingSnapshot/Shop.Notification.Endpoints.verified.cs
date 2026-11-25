@@ -14,7 +14,8 @@ public static partial class NotificationEndpoints
     public static global::Microsoft.AspNetCore.Routing.RouteGroupBuilder Map(
         global::Microsoft.AspNetCore.Routing.IEndpointRouteBuilder endpoints)
     {
-        var group = endpoints.MapGroup("/me/notifications").WithTags("Notifications");
+        var group = endpoints.MapGroup("/me/notifications").WithTags("Notifications")
+            .WithMetadata(new global::Haldus.HaldusResourceScope(false, true));
 
         group.AddEndpointFilter<global::Haldus.HaldusUserRequiredFilter>();
 
