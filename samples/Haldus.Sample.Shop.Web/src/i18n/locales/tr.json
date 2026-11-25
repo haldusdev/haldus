@@ -96,7 +96,17 @@
     "backToSignIn": "Girişe dön",
     "newCode": "Yeni kod gönder",
     "codeSent": "Adres kayıtlıysa kod yola çıktı. Kod kısa bir süre geçerlidir.",
-    "passwordReset": "Parolanız sıfırlandı. Yeni parolanızla giriş yapın."
+    "passwordReset": "Parolanız sıfırlandı. Yeni parolanızla giriş yapın.",
+    "providerOr": "veya",
+    "providerSignIn": "Kimlik sağlayıcınızla giriş yapın",
+    "providerRedirecting": "Yönlendiriliyor…",
+    "providerUnavailable": "Kimlik sağlayıcıya ulaşılamadı. Lütfen yeniden deneyin.",
+    "callbackTitle": "Giriş yapılıyor",
+    "callbackPending": "Kimlik sağlayıcınızla giriş tamamlanıyor…",
+    "callbackFailedTitle": "Giriş yapılamadı",
+    "callbackDenied": "Kimlik sağlayıcı girişinizi onaylamadı.",
+    "callbackNotAccepted": "Mağaza, kimlik sağlayıcıdan gelen girişi kabul etmedi.",
+    "callbackFailed": "Giriş tamamlanamadı. Lütfen giriş ekranından yeniden başlayın."
   },
   "products": {
     "title": "Ürünler",

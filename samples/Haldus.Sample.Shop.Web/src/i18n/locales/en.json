@@ -96,7 +96,17 @@
     "backToSignIn": "Back to sign in",
     "newCode": "Send a new code",
     "codeSent": "If the address is registered, a code is on its way. It is valid for a short time.",
-    "passwordReset": "Your password has been reset. Sign in with the new password."
+    "passwordReset": "Your password has been reset. Sign in with the new password.",
+    "providerOr": "or",
+    "providerSignIn": "Sign in with your identity provider",
+    "providerRedirecting": "Redirecting…",
+    "providerUnavailable": "The identity provider could not be reached. Please try again.",
+    "callbackTitle": "Signing you in",
+    "callbackPending": "Completing the sign-in with your identity provider…",
+    "callbackFailedTitle": "Sign-in failed",
+    "callbackDenied": "The identity provider did not sign you in.",
+    "callbackNotAccepted": "The shop did not accept the sign-in from the identity provider.",
+    "callbackFailed": "The sign-in could not be completed. Please start again from the sign-in screen."
   },
   "products": {
     "title": "Products",

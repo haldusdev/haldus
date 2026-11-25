@@ -3,7 +3,14 @@ import { useMutation } from "@tanstack/react-query"
 import { useTranslation } from "react-i18next"
 import { cn } from "cn"
 
-import { forgotPassword, login, register, resetPassword } from "@/api/auth/auth"
+import {
+  forgotPassword,
+  login,
+  register,
+  resetPassword,
+  useGetAuthConfig,
+} from "@/api/auth/auth"
+import type { ExternalProviderConfig } from "@/api/model"
 import { Button } from "@/components/ui/button"
 import {
   Card,
@@ -18,10 +25,13 @@ import {
   FieldError,
   FieldGroup,
   FieldLabel,
+  FieldSeparator,
 } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { openSession } from "@/lib/auth"
 import { fieldErrors, problemMessage, toFieldErrors } from "@/lib/problem"
+import { startProviderSignIn } from "@/lib/provider"
+import { HOME_PATH } from "@/lib/return-path"
 
 type Mode = "signIn" | "register" | "forgot" | "reset"
 
@@ -57,11 +67,18 @@ const notices = {
  * Giriş, kayıt ve parola sıfırlama formu (shadcn login-01). Doğrulama backend'dedir: alan hataları yanıttaki
  * `HttpValidationProblemDetails.errors` içinden, öteki hatalar (yanlış parola, alınmış e-posta, çok fazla deneme)
  * `detail` alanından okunur.
+ *
+ * Backend bir kimlik sağlayıcı tanıtıyorsa (`GET /auth/config`) onunla giriş düğmesi de gösterilir. Yapılandırma
+ * yüklenirken veya yüklenemezse form olduğu gibi çalışır; yalnızca o düğme görünmez.
  */
 export function LoginForm({
   className,
+  returnTo = HOME_PATH,
   ...props
-}: React.ComponentProps<"div">) {
+}: React.ComponentProps<"div"> & {
+  /** Girişten sonra açılacak sayfa; kimlik sağlayıcıya gidip dönerken onunla birlikte taşınır. */
+  returnTo?: string
+}) {
   const { t } = useTranslation()
   const [mode, setMode] = useState<Mode>("signIn")
   const [notice, setNotice] = useState<keyof typeof notices>()
@@ -103,10 +120,25 @@ export function LoginForm({
     },
   })
 
+  const config = useGetAuthConfig({ query: { staleTime: 5 * 60_000 } })
+  const provider = config.data?.data.provider ?? null
+
+  // Yönlendirme sayfadan ayrılır; söz yalnızca sağlayıcıya ulaşılamazsa (hata) ya da kullanıcı tarayıcının geri
+  // düğmesiyle bu sayfaya dönerse (başarı) sonuçlanır ve düğme yeniden kullanılabilir olur.
+  const redirect = useMutation({
+    mutationFn: (target: ExternalProviderConfig) =>
+      startProviderSignIn(target, returnTo),
+  })
+
   const errors = fieldErrors(submission.error)
   const hasFieldErrors = Object.keys(errors).length > 0
   const text = copy[mode]
   const withPassword = mode === "signIn" || mode === "register"
+  const alert = redirect.error
+    ? t("login.providerUnavailable")
+    : submission.error && !hasFieldErrors
+      ? problemMessage(submission.error, t("common.unexpectedError"))
+      : undefined
 
   function show(next: Mode, message?: keyof typeof notices) {
     setMode(next)
@@ -114,12 +146,20 @@ export function LoginForm({
     setCode("")
     setNewPassword("")
     submission.reset()
+    redirect.reset()
   }
 
   function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
     setNotice(undefined)
+    redirect.reset()
     submission.mutate(mode)
+  }
+
+  function signInWithProvider(target: ExternalProviderConfig) {
+    setNotice(undefined)
+    submission.reset()
+    redirect.mutate(target)
   }
 
   return (
@@ -132,18 +172,15 @@ export function LoginForm({
         <CardContent>
           <form onSubmit={submit} noValidate>
             <FieldGroup>
-              {submission.error && !hasFieldErrors ? (
+              {alert ? (
                 <p
                   role="alert"
                   className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive"
                 >
-                  {problemMessage(
-                    submission.error,
-                    t("common.unexpectedError")
-                  )}
+                  {alert}
                 </p>
               ) : null}
-              {notice && !submission.error ? (
+              {notice && !alert && !submission.error ? (
                 <p
                   role="status"
                   className="rounded-md border bg-muted p-3 text-sm"
@@ -300,6 +337,25 @@ export function LoginForm({
                   </div>
                 ) : null}
               </Field>
+              {provider && withPassword ? (
+                <>
+                  <FieldSeparator className="*:data-[slot=field-separator-content]:bg-card">
+                    {t("login.providerOr")}
+                  </FieldSeparator>
+                  <Field>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      disabled={redirect.isPending}
+                      onClick={() => signInWithProvider(provider)}
+                    >
+                      {redirect.isPending
+                        ? t("login.providerRedirecting")
+                        : t("login.providerSignIn")}
+                    </Button>
+                  </Field>
+                </>
+              ) : null}
             </FieldGroup>
           </form>
         </CardContent>

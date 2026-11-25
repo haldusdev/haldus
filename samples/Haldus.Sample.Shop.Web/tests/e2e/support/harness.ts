@@ -91,7 +91,8 @@ export function scene(
             const tokens = shop.issue(account)
             const target = options.page ?? page
 
-            // Depo kaynağa bağlıdır; önce o kaynaktan bir sayfa açılır.
+            // Depo kaynağa bağlıdır; önce o kaynaktan bir sayfa açılır. Oturum, tür alanı (`kind`) eklenmeden önceki
+            // biçimiyle yazılır: bu senaryolar panelin eski kayıtları parola oturumu olarak okuduğunu da sınar.
             await target.goto(`${shop.origin}/login`)
             await target.setStorage(
               SESSION_KEY,

@@ -2,7 +2,7 @@ import assert from "node:assert/strict"
 import { beforeEach, describe, it } from "node:test"
 
 import { dispatchStorage, storage } from "./support/browser.ts"
-import { session, STORAGE_KEY } from "./support/fixtures.ts"
+import { providerSession, session, STORAGE_KEY } from "./support/fixtures.ts"
 
 // Modül yüklenirken depoyu okur; yüklenmeden önce yazılan oturum bu yüzden burada hazırlanır.
 const initial = session({ accessToken: "stored-access", emailVerified: true })
@@ -246,6 +246,142 @@ describe("session", () => {
       reloadSession()
 
       assert.deepEqual(getSession(), session())
+    })
+
+    describe("kind", () => {
+      /** Tür alanı eklenmeden önceki sürümün depoya yazdığı biçim. */
+      function legacy() {
+        const { kind, ...rest } = session({ emailVerified: true })
+
+        assert.equal(kind, "password")
+        return rest
+      }
+
+      it("records that a session was opened with a password", () => {
+        signIn(session())
+
+        assert.equal(getSession()?.kind, "password")
+        assert.deepEqual(stored(), session())
+      })
+
+      it("round-trips a provider session with its provider", () => {
+        const expected = providerSession()
+
+        signIn(expected)
+        assert.deepEqual(stored(), expected)
+
+        // Başka bir sekme depodan böyle okur.
+        storage.setItem(STORAGE_KEY, JSON.stringify(stored()))
+        reloadSession()
+
+        assert.deepEqual(getSession(), expected)
+        assert.equal(getSession()?.kind, "provider")
+      })
+
+      it("reads a session stored before kinds existed as a password session", () => {
+        storage.setItem(STORAGE_KEY, JSON.stringify(legacy()))
+
+        reloadSession()
+
+        assert.deepEqual(getSession(), session({ emailVerified: true }))
+      })
+
+      it("writes the kind the next time such a session is stored", () => {
+        storage.setItem(STORAGE_KEY, JSON.stringify(legacy()))
+        reloadSession()
+
+        renewTokens("access-2", "refresh-2")
+
+        assert.deepEqual(
+          stored(),
+          session({
+            accessToken: "access-2",
+            refreshToken: "refresh-2",
+            emailVerified: true,
+          })
+        )
+      })
+
+      it("renewTokens keeps the kind and the provider of a provider session", () => {
+        signIn(providerSession())
+
+        renewTokens("idp-access-2", "idp-refresh-2")
+
+        const expected = providerSession({
+          accessToken: "idp-access-2",
+          refreshToken: "idp-refresh-2",
+        })
+        assert.deepEqual(getSession(), expected)
+        assert.deepEqual(stored(), expected)
+      })
+
+      it("accepts a provider session without a refresh token", () => {
+        const expected = providerSession({ refreshToken: "" })
+        storage.setItem(STORAGE_KEY, JSON.stringify(expected))
+
+        reloadSession()
+
+        assert.deepEqual(getSession(), expected)
+      })
+
+      it("does not store what is not part of the session", () => {
+        signIn({ ...providerSession(), idToken: "secret" } as ReturnType<
+          typeof providerSession
+        >)
+
+        assert.deepEqual(stored(), providerSession())
+      })
+
+      it("stays quiet when an equal session is stored with its fields in another order", () => {
+        signIn(providerSession())
+        const seen = watch()
+        const reversed = Object.fromEntries(
+          Object.entries(providerSession()).reverse()
+        )
+        storage.setItem(STORAGE_KEY, JSON.stringify(reversed))
+
+        reloadSession()
+
+        assert.deepEqual(getSession(), providerSession())
+        assert.equal(seen.count, 0)
+        seen.unsubscribe()
+      })
+
+      const unusable: [string, unknown][] = [
+        [
+          "a password session without a refresh token",
+          session({ refreshToken: "" }),
+        ],
+        [
+          "a provider session without its authority",
+          { ...providerSession(), authority: undefined },
+        ],
+        [
+          "a provider session without its client",
+          { ...providerSession(), clientId: "" },
+        ],
+        [
+          "a provider session whose refresh token is not text",
+          { ...providerSession(), refreshToken: null },
+        ],
+        [
+          "a provider session without an access token",
+          { ...providerSession(), accessToken: "" },
+        ],
+        ["a session of an unknown kind", { ...session(), kind: "passkey" }],
+        ["a session whose kind is not text", { ...session(), kind: 1 }],
+      ]
+
+      for (const [name, value] of unusable) {
+        it(`ignores stored ${name}`, () => {
+          signIn(session())
+          storage.setItem(STORAGE_KEY, JSON.stringify(value))
+
+          reloadSession()
+
+          assert.equal(getSession(), null)
+        })
+      }
     })
   })
 })

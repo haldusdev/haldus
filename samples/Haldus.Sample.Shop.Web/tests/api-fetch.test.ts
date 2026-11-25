@@ -64,7 +64,12 @@ describe("apiFetch", () => {
       assert.equal(calls[0].headers.has("Authorization"), false)
     })
 
-    for (const route of ["/auth/login", "/auth/register", "/auth/refresh"]) {
+    for (const route of [
+      "/auth/login",
+      "/auth/register",
+      "/auth/refresh",
+      "/auth/config",
+    ]) {
       it(`does not attach the access token to ${route}`, async () => {
         signIn(session())
 

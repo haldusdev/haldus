@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 import { after, before, beforeEach, describe, it } from "node:test"
 
-import { session } from "../support/fixtures.ts"
+import { providerSession, session } from "../support/fixtures.ts"
 import {
   accessibilityProblems,
   accessibleName,
@@ -37,6 +37,13 @@ describe("VerifyEmailBanner", () => {
 
   it("renders nothing when the e-mail is already verified", () => {
     signIn(session({ emailVerified: true }))
+
+    assert.equal(render(<VerifyEmailBanner />).html, "")
+  })
+
+  // Kod ve doğrulama uçları parola hesapları içindir; sağlayıcıyla açılan hesaba şerit gösterilmez.
+  it("renders nothing for a provider session, even an unverified one", () => {
+    signIn(providerSession({ emailVerified: false }))
 
     assert.equal(render(<VerifyEmailBanner />).html, "")
   })

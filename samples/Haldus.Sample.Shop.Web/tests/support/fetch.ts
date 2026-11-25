@@ -5,6 +5,10 @@ export type Call = {
   method: string
   headers: Headers
   body: unknown
+  /** Form olarak gönderilen gövdenin alanları (kimlik sağlayıcının token ucuna giden istekler). */
+  form: Record<string, string> | undefined
+  /** İsteği yapanın vazgeçme işareti (zaman aşımı). */
+  signal: AbortSignal | undefined
 }
 
 type Handler = (call: Call) => Response | Promise<Response>
@@ -74,6 +78,11 @@ globalThis.fetch = async (input, init) => {
     method: init?.method ?? "GET",
     headers: new Headers(init?.headers),
     body: typeof init?.body === "string" ? JSON.parse(init.body) : undefined,
+    form:
+      init?.body instanceof URLSearchParams
+        ? Object.fromEntries(init.body)
+        : undefined,
+    signal: init?.signal ?? undefined,
   }
 
   calls.push(call)

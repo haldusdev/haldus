@@ -4,6 +4,9 @@
 // Taklit backend'in yerine geçmez; panelin bir tıklamadan sonra hangi isteği gönderdiğini ve gelen yanıtı nasıl
 // gösterdiğini sınamak içindir. Yanıtların biçimi orval'ın ürettiği tiplerle yazılır: şema değişirse bu dosya
 // tip denetiminden geçmez (`pnpm typecheck`).
+//
+// Aynı sunucu, istenirse, bir kimlik sağlayıcı gibi de davranır (`/idp`; identity-provider.ts): panelin sağlayıcıyla
+// giriş akışı gerçek yönlendirmelerle, başka bir sunucu açmadan sınanır.
 import { readFile } from "node:fs/promises"
 import {
   createServer,
@@ -17,6 +20,7 @@ import path from "node:path"
 import type {
   AccessTokenResponse,
   AccountInfo,
+  AuthConfig,
   CategoryResponse,
   HttpValidationProblemDetails,
   OrderResponse,
@@ -24,6 +28,13 @@ import type {
   ProblemDetails,
   ProductResponse,
 } from "@/api/model"
+
+import {
+  CLIENT_ID,
+  IdentityProvider,
+  PROVIDER_PATH,
+  SCOPES,
+} from "./identity-provider.ts"
 
 const dist = path.resolve(import.meta.dirname, "../../../dist")
 
@@ -138,6 +149,16 @@ export class Shop {
   /** Yolu buna uyan istekler sunucu hatası (500) alır. */
   failing: RegExp | undefined
 
+  /** `GET /auth/config` yanıtı; varsayılanı yalnızca parola girişidir. */
+  config: AuthConfig = {
+    passwordSignIn: true,
+    provider: null,
+    serverSignIn: false,
+  }
+
+  /** Sahte kimlik sağlayıcı; `offerProvider` çağrılmadıkça panel ondan habersizdir. */
+  readonly idp = new IdentityProvider()
+
   private readonly access = new Map<string, string>()
   private readonly refresh = new Map<string, string>()
   private readonly versions = new Map<string, number>()
@@ -215,15 +236,36 @@ export class Shop {
     return order
   }
 
-  /** Verilmiş bütün erişim token'larını geçersiz kılar: sonraki istek 401 alır ve panel oturumu yeniler. */
+  /**
+   * Backend'i kimlik sağlayıcıyla girişe açar. Sağlayıcıda giriş yapan kullanıcı verilen hesaptır; hesap verilmezse
+   * sağlayıcının tanıttığı kullanıcıyı mağaza tanımaz ve token'ını reddeder.
+   */
+  offerProvider(account?: AccountInfo) {
+    this.config = {
+      ...this.config,
+      provider: {
+        authority: this.idp.authority,
+        clientId: CLIENT_ID,
+        scopes: SCOPES,
+      },
+    }
+    this.idp.subject = account?.id ?? "nobody"
+  }
+
+  /**
+   * Verilmiş bütün erişim token'larını (sağlayıcınınkiler dahil) geçersiz kılar: sonraki istek 401 alır ve panel
+   * oturumu yeniler.
+   */
   expireAccessTokens() {
     this.access.clear()
+    this.idp.expireAccessTokens()
   }
 
   /** Bütün oturumları kapatır: yenileme de reddedilir. */
   revokeSessions() {
-    this.access.clear()
+    this.expireAccessTokens()
     this.refresh.clear()
+    this.idp.revokeRefreshTokens()
   }
 
   /** Yola ve metoda uyan istekler, geliş sırasıyla. */
@@ -258,6 +300,7 @@ export class Shop {
 
     const { port } = this.server.address() as AddressInfo
     this.origin = `http://127.0.0.1:${port}`
+    this.idp.origin = this.origin
   }
 
   async stop(): Promise<void> {
@@ -268,7 +311,9 @@ export class Shop {
   private async serve(request: IncomingMessage, response: ServerResponse) {
     const url = new URL(request.url ?? "/", "http://localhost")
 
-    if (!url.pathname.startsWith("/api/")) {
+    const provider = url.pathname.startsWith(`${PROVIDER_PATH}/`)
+
+    if (!provider && !url.pathname.startsWith("/api/")) {
       await this.file(url.pathname, response)
       return
     }
@@ -279,6 +324,26 @@ export class Shop {
     }
 
     const raw = Buffer.concat(chunks).toString("utf8")
+
+    if (provider) {
+      const reply = this.idp.handle({
+        method: request.method ?? "GET",
+        path: url.pathname.slice(PROVIDER_PATH.length),
+        query: url.searchParams,
+        headers: request.headers,
+        form: new URLSearchParams(raw),
+      })
+
+      // OAuth yanıtları, hatalar dahil, düz JSON'dur; token'lar önbelleğe alınmaz.
+      response.writeHead(reply.status, {
+        "content-type": "application/json",
+        "cache-control": "no-store",
+        ...reply.headers,
+      })
+      response.end(reply.body === undefined ? "" : JSON.stringify(reply.body))
+      return
+    }
+
     const call: Call = {
       method: request.method ?? "GET",
       path: url.pathname.slice(4),
@@ -350,8 +415,10 @@ export class Shop {
   }
 
   private authenticate(call: Call): Account {
-    const header = call.headers.authorization ?? ""
-    const id = this.access.get(header.replace(/^Bearer /, ""))
+    const token = (call.headers.authorization ?? "").replace(/^Bearer /, "")
+    // Backend kendi token'ını da sağlayıcının token'ını da kabul eder; ikincisinde hesap, sağlayıcının tanıttığı
+    // kullanıcıdan bulunur.
+    const id = this.access.get(token) ?? this.idp.subjectOf(token)
     const account = this.accounts.find((candidate) => candidate.id === id)
 
     if (!account) {
@@ -407,6 +474,9 @@ export class Shop {
     const known = this.accounts.find((account) => account.email === email)
 
     switch (`${call.method} ${call.path}`) {
+      case "GET /auth/config":
+        return { status: 200, body: this.config }
+
       case "POST /auth/login":
         return known && known.password === body.password
           ? { status: 200, body: this.issue(known) }

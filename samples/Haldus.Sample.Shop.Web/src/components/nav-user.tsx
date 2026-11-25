@@ -122,20 +122,25 @@ export function NavUser() {
               ))}
             </DropdownMenuRadioGroup>
             <DropdownMenuSeparator />
-            <DropdownMenuItem onSelect={() => setChangingPassword(true)}>
-              <KeyRoundIcon aria-hidden="true" />
-              {t("nav.changePassword")}
-            </DropdownMenuItem>
+            {/* Kimlik sağlayıcıyla açılan hesabın parolası sağlayıcıdadır; burada değiştirilemez. */}
+            {session.kind === "password" ? (
+              <DropdownMenuItem onSelect={() => setChangingPassword(true)}>
+                <KeyRoundIcon aria-hidden="true" />
+                {t("nav.changePassword")}
+              </DropdownMenuItem>
+            ) : null}
             <DropdownMenuItem onSelect={() => void closeSession()}>
               <LogOutIcon aria-hidden="true" />
               {t("nav.signOut")}
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
-        <ChangePasswordDialog
-          open={changingPassword}
-          onOpenChange={setChangingPassword}
-        />
+        {session.kind === "password" ? (
+          <ChangePasswordDialog
+            open={changingPassword}
+            onOpenChange={setChangingPassword}
+          />
+        ) : null}
       </SidebarMenuItem>
     </SidebarMenu>
   )

@@ -14,6 +14,9 @@ import { useSession } from "@/lib/session"
 /**
  * E-postası doğrulanmamış hesaba gösterilen şerit: kayıt sırasında gönderilen kod burada girilir. Doğrulama yeni
  * token'lar döndürür (token'daki "doğrulandı" bilgisi değişir); oturum onlarla güncellenir.
+ *
+ * Kimlik sağlayıcıyla açılan oturumda gösterilmez: kod ve doğrulama uçları parola hesapları içindir. O hesabın
+ * adresinin doğrulanmış sayılıp sayılmayacağına backend, sağlayıcıya ne kadar güvendiğine göre karar verir.
  */
 export function VerifyEmailBanner() {
   const { t } = useTranslation()
@@ -32,7 +35,7 @@ export function VerifyEmailBanner() {
       toast.error(problemMessage(error, t("common.unexpectedError"))),
   })
 
-  if (!session || session.emailVerified) {
+  if (!session || session.kind !== "password" || session.emailVerified) {
     return null
   }
 

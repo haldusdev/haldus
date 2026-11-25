@@ -9,9 +9,11 @@ import { Button } from "@/components/ui/button"
 import { Toaster } from "@/components/ui/sonner"
 import { TooltipProvider } from "@/components/ui/tooltip"
 import { problemStatus } from "@/lib/problem"
+import { CALLBACK_PATH } from "@/lib/provider"
 import { getSession, subscribeSession } from "@/lib/session"
 import { CategoriesPage } from "@/pages/categories"
 import { LoginPage } from "@/pages/login"
+import { LoginCallbackPage } from "@/pages/login-callback"
 import { OrderDetailPage } from "@/pages/order-detail"
 import { OrdersPage } from "@/pages/orders"
 import { ProductsPage } from "@/pages/products"
@@ -41,6 +43,7 @@ subscribeSession(() => {
     queryClient.clear()
   }
 })
+
 function NotFoundPage() {
   const { t } = useTranslation()
 
@@ -64,6 +67,7 @@ export function App() {
         <BrowserRouter>
           <Routes>
             <Route path="/login" element={<LoginPage />} />
+            <Route path={CALLBACK_PATH} element={<LoginCallbackPage />} />
             <Route element={<DashboardLayout />}>
               <Route index element={<Navigate to="/products" replace />} />
               <Route path="products" element={<ProductsPage />} />

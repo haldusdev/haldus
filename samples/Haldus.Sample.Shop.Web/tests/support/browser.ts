@@ -58,8 +58,14 @@ export function dispatchStorage(key: string | null) {
   storageListeners.forEach((listener) => listener({ key }))
 }
 
+/** Panelin sunulduğu adres; kimlik sağlayıcıya verilen dönüş adresi bundan kurulur. */
+export const ORIGIN = "https://panel.example"
+export const tabStorage = new MemoryStorage()
+
 define("localStorage", storage)
 define("window", {
+  location: { origin: ORIGIN },
+  sessionStorage: tabStorage,
   addEventListener(type: string, listener: StorageListener) {
     if (type === "storage") {
       storageListeners.push(listener)
