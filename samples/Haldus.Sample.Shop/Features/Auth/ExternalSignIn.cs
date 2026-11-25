@@ -337,17 +337,18 @@ public static partial class ExternalSignIn
         }
 
         // Adresin doğrulandığını söyleyen sağlayıcıdır; ona ancak açıkça güvenildiyse inanılır (TrustEmailVerified).
-        // Adres yalnızca sağlayıcı onu doğruladıysa ve başka bir hesapta değilse alınır. Var olan bir hesaba adres
-        // üzerinden bağlanılmaz: aynı adresi taşıdığını söyleyen bir dış kimlik, parolayla açılmış hesabı ele
-        // geçirmemelidir. Öyle bir kimlik kendi ayrı hesabını (ve kiracısını) alır.
+        // Adres yalnızca sağlayıcı onu doğruladıysa alınır. Var olan bir hesaba adres üzerinden bağlanılmaz: aynı
+        // adresi taşıyan bir dış kimlik, parolayla açılmış hesabı ele geçirmez; kendi ayrı hesabını (ve kiracısını)
+        // alır. Adres o parola hesabında da durmaya devam eder (benzersizlik yalnızca parola hesapları arasındadır):
+        // adresi önceden bir parola hesabıyla tutmak, sahibinin sağlayıcıyla gelince onu almasını engellemez.
         var email = account is null || account.EmailVerifiedAt is null ? VerifiedAddress(external, trustEmail) : null;
-        var usable = email is not null && !await db.Set<ShopAccount>().AnyAsync(candidate => candidate.Email == email, cancellationToken);
+        var usable = email is not null;
 
         if (account is not null && usable)
         {
-            // Hesap ilk gelişinde adresini alamamış olabilir (erişim token'ı adresi taşımıyordu, sağlayıcı onu henüz
-            // doğrulamamıştı ya da adres o sırada başkasındaydı). Doğrulanmış adres sonradan gelirse yazılır; yoksa
-            // hesap, adresini bizim kod akışımızla da doğrulayamadığı için sonsuza kadar doğrulanmamış kalırdı.
+            // Hesap ilk gelişinde adresini alamamış olabilir (erişim token'ı adresi taşımıyordu ya da sağlayıcı onu
+            // henüz doğrulamamıştı). Doğrulanmış adres sonradan gelirse yazılır; yoksa hesap, adresini bizim kod
+            // akışımızla da doğrulayamadığı için sonsuza kadar doğrulanmamış kalırdı.
             db.Attach(account);
             account.Email = email!;
             account.EmailVerifiedAt = HaldusTime.UtcNow(http.RequestServices.GetRequiredService<TimeProvider>());
@@ -355,18 +356,10 @@ public static partial class ExternalSignIn
             try
             {
                 await db.SaveChangesAsync(cancellationToken);
-                db.Entry(account).State = EntityState.Detached;
             }
-            catch (DbUpdateException exception) when (HaldusDb.IsUniqueViolation(exception, AuthModel.EmailIndex))
+            finally
             {
-                // Adresi bu arada başkası aldı: hesap olduğu gibi kalır.
                 db.Entry(account).State = EntityState.Detached;
-                account = await FindAsync(db, issuer, subject, cancellationToken);
-
-                if (account is null)
-                {
-                    return null;
-                }
             }
         }
 
@@ -392,36 +385,14 @@ public static partial class ExternalSignIn
             {
                 await db.SaveChangesAsync(cancellationToken);
             }
-            catch (DbUpdateException exception)
-                when (HaldusDb.IsUniqueViolation(exception, AuthModel.ExternalIndex) || HaldusDb.IsUniqueViolation(exception, AuthModel.EmailIndex))
+            catch (DbUpdateException exception) when (HaldusDb.IsUniqueViolation(exception, AuthModel.ExternalIndex))
             {
-                // Yalnızca iki çakışma karşılanır; başka bir hata (geçici bir arıza) yutulmaz ve hesabı adressiz
-                // bırakmaz: istek hata verir, bir sonraki istek yeniden dener.
-                // Aynı kişinin aynı anda gelen iki ilk isteğinden ikincisi: hesap yeniden okunur.
+                // Aynı kişinin aynı anda gelen iki ilk isteğinden ikincisi: hesap yeniden okunur. Yalnızca bu
+                // çakışma karşılanır; başka bir hata (geçici bir arıza) yutulmaz: istek hata verir, bir sonraki
+                // istek yeniden dener.
                 db.Entry(account).State = EntityState.Detached;
-                var existing = await FindAsync(db, issuer, subject, cancellationToken);
 
-                if (existing is null)
-                {
-                    // Çakışan adresti (kontrol ile yazma arasında başkası aldı): kimlik, adressiz olarak yine açılır.
-                    account.Email = Placeholder();
-                    account.EmailVerifiedAt = null;
-                    db.Add(account);
-
-                    try
-                    {
-                        await db.SaveChangesAsync(cancellationToken);
-                        existing = account;
-                    }
-                    catch (DbUpdateException retry) when (HaldusDb.IsUniqueViolation(retry, AuthModel.ExternalIndex))
-                    {
-                        // Aynı anda yeniden deneyen öteki istek hesabı açtı.
-                        db.Entry(account).State = EntityState.Detached;
-                        existing = await FindAsync(db, issuer, subject, cancellationToken);
-                    }
-                }
-
-                if (existing is null)
+                if (await FindAsync(db, issuer, subject, cancellationToken) is not { } existing)
                 {
                     return null;
                 }
@@ -432,8 +403,8 @@ public static partial class ExternalSignIn
             if (ReferenceEquals(account, opened) && account.EmailVerifiedAt is null && trustEmail && options.RequireVerifiedEmail)
             {
                 // Açılış denetimi bunu göremez: sağlayıcıya güveniliyor, ama token doğrulanmış bir adres taşımıyor
-                // (erişim token'ları çoğu zaman taşımaz) ya da adres başka bir hesapta. Hesap, adres gelene kadar
-                // kimlik uçlarının dışında hiçbir şey yapamaz. Yalnızca hesabı gerçekten bu istek açtıysa yazılır.
+                // (erişim token'ları çoğu zaman taşımaz). Hesap, adres gelene kadar kimlik uçlarının dışında hiçbir
+                // şey yapamaz. Yalnızca hesabı gerçekten bu istek açtıysa yazılır.
                 LogUnverifiable(Logger(http));
             }
         }
@@ -519,7 +490,7 @@ public static partial class ExternalSignIn
             candidate => candidate.ExternalIssuer == issuer && candidate.ExternalSubject == subject,
             cancellationToken);
 
-    // Hesabın adresi benzersiz ve dolu olmalıdır; doğrulanmış bir adresi olmayan dış kimlik, kimseye ait olamayacak
+    // Hesabın adresi dolu olmalıdır; doğrulanmış bir adresi olmayan dış kimlik, kimseye ait olamayacak
     // (ve e-posta gönderilemeyecek) bir adres alır.
     // Rastgeledir: kimlikten türetilseydi, bir kişinin sağlayıcıdaki kimliğini bilen biri o adresle önceden kayıt
     // olup kişinin hesabının açılmasını engelleyebilirdi.
@@ -570,7 +541,7 @@ public static partial class ExternalSignIn
     [LoggerMessage(Level = LogLevel.Warning, Message = "An access token of the identity provider was rejected: it does not say when it was issued (iat), or says a time further ahead than the accepted clock skew.")]
     private static partial void LogNoIssuedAt(ILogger logger);
 
-    [LoggerMessage(Level = LogLevel.Warning, Message = "An account of the identity provider was opened without a verified address while Shop:Auth:RequireVerifiedEmail is on (the token carried none, or the address belongs to another account); it can do nothing until a token carries a verified address that is free.")]
+    [LoggerMessage(Level = LogLevel.Warning, Message = "An account of the identity provider was opened without a verified address while Shop:Auth:RequireVerifiedEmail is on (the token carried none); it can do nothing until a token carries email and email_verified.")]
     private static partial void LogUnverifiable(ILogger logger);
 
     private static void RequireAuthority(string section, string authority, bool requireHttps, bool development)

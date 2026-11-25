@@ -139,7 +139,8 @@ yoktur. Kimlik sağlayıcıyla girişin sınırları:
   `passwordSignIn` ve `serverSignIn` alanları panelde kullanılmaz: parola formu her zaman gösterilir, backend'in çerezli
   sunucu tarafı girişi için düğme yoktur.
 - Sağlayıcı oturumunun e-postası panelden doğrulanamaz; hesabın doğrulanmış (ve personel) sayılması backend'in
-  sağlayıcıya güvenme ayarına bağlıdır.
+  sağlayıcıya güvenme ayarına bağlıdır. Güvenilen sağlayıcının doğrulanmış olarak taşıdığı bir adres için yetkili
+  sağlayıcıdır: aynı adresle açılmış bir parola hesabı, adresini kodla doğrulasa da personel sayılmaz.
 - Sağlayıcının yenileme isteği kilit altında yapılır; Web Locks'un olmadığı (güvenli olmayan) bir bağlamda, yenileme
   token'ını döndüren bir sağlayıcıda iki sekme aynı anda yenilerse biri reddedilebilir. Reddedilen sekme ötekinin
   yazdığı token'ları alır, ama sağlayıcı yeniden kullanımı hırsızlık sayıp bütün token ailesini iptal ediyorsa oturum

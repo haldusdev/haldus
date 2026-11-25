@@ -59,6 +59,26 @@ public static partial class AuthEndpoints
         services.AddSingleton(jwt);
         services.AddSingleton(oidc);
 
+        // Sağlayıcının hesabı, token'ındaki `iss` ile saklanır; o değer sağlayıcının adresidir.
+        string?[] trusted =
+        [
+            jwt.Enabled && jwt.TrustEmailVerified ? jwt.Authority : null,
+            oidc.Enabled && oidc.TrustEmailVerified ? oidc.Authority : null,
+        ];
+        var issuers = trusted
+            .OfType<string>()
+            .Select(authority => authority.Trim().TrimEnd('/').ToLowerInvariant())
+            .SelectMany(authority => new[] { authority, authority + "/" })
+            .Distinct()
+            .ToArray();
+        services.PostConfigure<ShopAuthOptions>(options => options.TrustedIssuers = issuers);
+
+        if (configuration.GetValue<bool>("Shop:Auth:StaffThroughProviderOnly") && issuers.Length == 0)
+        {
+            throw new InvalidOperationException(
+                "Shop:Auth:StaffThroughProviderOnly needs an identity provider with TrustEmailVerified; nobody could be staff otherwise.");
+        }
+
         // Doğrulanmış adres zorunluyken adresine güvenilmeyen bir sağlayıcının hesapları hiçbir şey yapamazdı
         // (adreslerini bizim kod akışımızla da doğrulayamazlar).
         if (configuration.GetValue<bool>("Shop:Auth:RequireVerifiedEmail")
@@ -419,7 +439,7 @@ public static partial class AuthEndpoints
         // Kayıt, adresin alınmış olduğunu söyler (409). Bu bilinçli bir seçimdir: aksi, kullanıcıya hiçbir şey
         // söylemeden kaydı yutmak olurdu. Adresin kayıtlı olup olmadığını gizlemesi gereken bir uygulama burada da
         // aynı yanıtı verip adrese bir e-posta göndermelidir.
-        if (await db.Set<ShopAccount>().AnyAsync(account => account.Email == email, cancellationToken))
+        if (await PasswordAccounts(db).AnyAsync(account => account.Email == email, cancellationToken))
         {
             return EmailTaken(messages);
         }
@@ -449,7 +469,7 @@ public static partial class AuthEndpoints
         }
 
         await SendCodeAsync(db, account, AccountCodePurpose.EmailVerification, now, mailer, options.Value, loggers, cancellationToken);
-        return SignIn(account, session, options.Value);
+        return await SignInAsync(db, account, session, options.Value, cancellationToken);
     }
 
     private static async Task<IResult> LoginAsync(
@@ -503,7 +523,7 @@ public static partial class AuthEndpoints
             return InvalidCredentials(messages);
         }
 
-        return SignIn(account, session, options.Value);
+        return await SignInAsync(db, account, session, options.Value, cancellationToken);
     }
 
     private static async Task<IResult> RefreshAsync(
@@ -563,7 +583,7 @@ public static partial class AuthEndpoints
         }
 
         // Claim'ler hesaptan yeniden kurulur.
-        return SignIn(account, session, refresh.Value);
+        return await SignInAsync(db, account, session, refresh.Value, cancellationToken);
     }
 
     private static async Task<IResult> LogoutAsync(
@@ -634,7 +654,7 @@ public static partial class AuthEndpoints
     private static async Task<IResult> MeAsync(ClaimsPrincipal user, AppDbContext db, IOptions<ShopAuthOptions> options, CancellationToken cancellationToken) =>
         await FindAccountAsync(user, db, cancellationToken) is { } account
             ? Results.Ok(account.ExternalIssuer is null
-                ? new AccountInfo(account.Id, account.Email, account.TenantId, account.EmailVerifiedAt is not null, options.Value.IsStaff(account))
+                ? new AccountInfo(account.Id, account.Email, account.TenantId, account.EmailVerifiedAt is not null, await IsStaffAsync(db, account, options.Value, cancellationToken))
 
                 // Dış hesabın adresine ne kadar güvenildiği ayara bağlıdır ve her istekte uygulanır; yanıt, isteğin
                 // gerçekten taşıdığı yetkiyi söyler (kayıttaki eski değeri değil).
@@ -749,7 +769,7 @@ public static partial class AuthEndpoints
         var session = NewSession(account, now, options.Value);
         db.Add(session);
         await db.SaveChangesAsync(cancellationToken);
-        return SignIn(account, session, options.Value);
+        return await SignInAsync(db, account, session, options.Value, cancellationToken);
     }
 
     private static async Task<IResult> VerifyEmailAsync(
@@ -800,7 +820,7 @@ public static partial class AuthEndpoints
         // yenileme ilerletir, yoksa doğrulamayla aynı anda gelen sıradan bir yenileme "yeniden kullanım" sayılırdı.
         // İstemcinin elindeki önceki yenileme token'ı aynı sırayı taşır; ikisinden ilk kullanılan sırayı ilerletir.
         return await Live(db.Set<ShopSession>(), now).AsNoTracking().FirstOrDefaultAsync(candidate => candidate.Id == sessionId, cancellationToken) is { } session
-            ? SignIn(account, session, options.Value)
+            ? await SignInAsync(db, account, session, options.Value, cancellationToken)
             : SessionExpired(messages);
     }
 
@@ -1032,7 +1052,7 @@ public static partial class AuthEndpoints
         new() { Id = Guid.CreateVersion7(), AccountId = account.Id, CreatedAt = now, ExpiresAt = now.AddDays(options.SessionDays) };
 
     /// <summary>Haldus kullanıcıyı ve kiracıyı bu claim'lerden okur (<c>HaldusOptions</c>).</summary>
-    private static IResult SignIn(ShopAccount account, ShopSession session, ShopAuthOptions options)
+    private static async Task<IResult> SignInAsync(AppDbContext db, ShopAccount account, ShopSession session, ShopAuthOptions options, CancellationToken cancellationToken)
     {
         var identity = new ClaimsIdentity(
             [
@@ -1047,12 +1067,45 @@ public static partial class AuthEndpoints
 
         // Rol token'a yazılır; personel listesinden çıkarılan bir hesap, erişim token'ı yenilenince rolünü kaybeder.
         // Yalnızca e-postası doğrulanmış hesaba verilir (ShopAuthOptions.IsStaff).
-        if (options.IsStaff(account))
+        if (await IsStaffAsync(db, account, options, cancellationToken))
         {
             identity.AddClaim(new Claim(ClaimTypes.Role, SharedWrites.StaffRole));
         }
 
         return Results.SignIn(new ClaimsPrincipal(identity), authenticationScheme: BearerTokenDefaults.AuthenticationScheme);
+    }
+
+    /// <summary>
+    /// Parola hesabı personel mi. Adres listede ve doğrulanmış olmalıdır; ayrıca aynı adresi, adreslerine şu an
+    /// güvenilen bir kimlik sağlayıcının hesabı doğrulanmış olarak taşımıyor olmalıdır. Taşıyorsa o adresin yetkilisi
+    /// sağlayıcıdır: adres iki tür hesapta da durabildiği için, bu kural olmasa personelin posta kutusunu bir kez
+    /// okuyabilen biri aynı adresle bir parola hesabı açıp doğrular ve role, sağlayıcının denetimlerinin (iki adımlı
+    /// doğrulama, hesabın kapatılması) dışında kalan kalıcı bir parolayla ulaşırdı. Rol her token verilişinde yeniden
+    /// sorulur: sağlayıcının hesabı adresi sonradan alırsa parola hesabı rolünü token'ı yenilenince kaybeder.
+    /// <para>
+    /// Kural, sağlayıcının hesabı adresi taşımaya başladıktan sonra korur; ondan önce (personel sağlayıcıyla hiç
+    /// girmediyse ya da token'ı adresi taşımıyorsa) parola hesabında rolün dayanağı yine adrese gönderilen koddur.
+    /// Bunu da kapatmak isteyen <see cref="ShopAuthOptions.StaffThroughProviderOnly"/> ayarını açar.
+    /// </para>
+    /// </summary>
+    private static async Task<bool> IsStaffAsync(AppDbContext db, ShopAccount account, ShopAuthOptions options, CancellationToken cancellationToken)
+    {
+        if (options.StaffThroughProviderOnly || !options.IsStaff(account))
+        {
+            return false;
+        }
+
+        // Yalnızca şu an güvenilen sağlayıcıların hesapları sayılır: güveni sonradan kapatılmış bir sağlayıcının
+        // eskiden yazdığı adres, adresin sahibini rolünden etmez.
+        var trusted = options.TrustedIssuers;
+
+        return trusted.Count == 0
+            || !await db.Set<ShopAccount>().AnyAsync(
+                other => other.ExternalIssuer != null
+                    && other.Email == account.Email
+                    && other.EmailVerifiedAt != null
+                    && trusted.Contains(other.ExternalIssuer.ToLower()),
+                cancellationToken);
     }
 
     /// <summary>

@@ -576,20 +576,44 @@ Yapılmayanlar ve nedenleri:
       - Sağlayıcının tanıttığı kişi (`iss` + `sub`) yerel bir hesaba çevrilir (`ShopAccount.ExternalIssuer` /
         `ExternalSubject`); ilk gelişinde hesap ve kiracısı oluşturulur ve çıkan claim'ler parola girişindekilerle
         aynıdır. Her istekte bir sorgudur. **Var olan bir hesaba adres üzerinden bağlanılmaz** (aynı adresi taşıyan bir
-        dış kimlik, parolayla açılmış hesabı ele geçirmemelidir): adres yalnızca sağlayıcı onu doğruladıysa
-        (`email_verified`) ve başka hesapta değilse alınır; değilse hesap, kimseye ait olamayacak bir adresle
-        (`…@external.invalid`) ve doğrulanmamış olarak açılır. Yer tutucu adres rastgeledir (kimlikten türetilseydi,
-        kişinin sağlayıcıdaki kimliğini bilen biri o adresle önceden kayıt olup hesabının açılmasını engelleyebilirdi).
-        Hesap açılırken yalnızca iki çakışma karşılanır (aynı kimliğin eşzamanlı ilk isteği; adresin bu arada
-        alınması, o zaman hesap adressiz açılır); başka bir hata yutulmaz, istek hata verir (yönlendirmeli girişte de
-        400 ile örtülmez, 500'dür) ve sonraki istek yeniden dener. Adresini ilk gelişinde alamamış hesap (erişim
-        token'ı adresi taşımıyordu, adres o sırada başkasındaydı) doğrulanmış adres sonradan gelirse onu alır; yoksa
-        sonsuza kadar doğrulanmamış kalırdı. Bir kez yazılan adres değişmez. **Bilinen sınır (bilerek):** adres başka
-        bir hesaptaysa, o hesap adresi hiç doğrulamamış bir parola hesabı olsa da, dış kimlik onu alamaz ve adressiz
-        kalır; personel adresiyle önceden parola hesabı açan biri, o kişinin sağlayıcıyla gelince rol almasını
-        engelleyebilir (kendisi rol alamaz). Doğrulanmamış hesabın adresini elinden almak, adresini henüz
-        doğrulamamış gerçek sahibini kendi verisinden ederdi; ikisinden bu seçildi (ayrıca onaylanmadı). Adresin
-        sahibi parola hesabını "parolamı unuttum" ile geri alabilir.
+        dış kimlik, parolayla açılmış hesabı ele geçirmemelidir; kendi ayrı hesabını ve kiracısını alır). Adres
+        yalnızca sağlayıcı onu doğruladıysa (`email_verified`) hesaba yazılır; değilse hesap, kimseye ait olamayacak
+        bir adresle (`…@external.invalid`) ve doğrulanmamış olarak açılır. Yer tutucu adres rastgeledir.
+        **Adres yalnızca parola hesapları arasında benzersizdir** (`UX_ShopAccounts_Email` süzülmüş bir indekstir:
+        `ExternalIssuer IS NULL`): parola uçları hesabı adresle bulur, sağlayıcının hesabı ise kimliğiyle (`iss` +
+        `sub`) bulunur ve adresi, sağlayıcının doğruladığı bir bilgidir. Aynı adres bu yüzden hem bir parola hesabında
+        hem bir sağlayıcı hesabında durabilir; ikisi ayrı hesaplardır. İlk yazımda benzersizlik bütün hesapları
+        kapsıyordu: personel adresiyle önceden (doğrulamadan) parola hesabı açan biri, adresin sahibinin sağlayıcıyla
+        gelince adresini ve rolünü almasını kalıcı olarak engelleyebiliyordu (ikinci incelemede çıktı; önce bilinen
+        sınır olarak yazılmış, sonra böyle kapatılmıştır; ayrıca onaylanmadı). **Adresle hesap arayan yeni bir kod
+        `PasswordAccounts` üzerinden okumalıdır; `Set<ShopAccount>()` üzerinden adresle arama birden çok hesap bulabilir.**
+        Adres paylaşılabildiği için rol ayrıca korunur: **adreslerine şu an güvenilen bir sağlayıcının hesabı bir
+        adresi doğrulanmış olarak taşıyorsa, aynı adresli parola hesabı personel rolü almaz**
+        (`AuthEndpoints.IsStaffAsync`; her token verilişinde ve `/auth/me`'de sorulur). Bu kural olmasa
+        personelin posta kutusunu bir kez okuyabilen biri aynı adresle bir parola hesabı açıp kodla doğrular ve role,
+        sağlayıcının denetimlerinin (iki adımlı doğrulama, hesabın kapatılması) dışında kalan kalıcı bir parolayla
+        ulaşırdı (süzülmüş indeksin incelemesinde çıktı). Kural yalnızca şu an güvenilen sağlayıcıların hesaplarına
+        bakar (`ShopAuthOptions.TrustedIssuers`; hesabın `ExternalIssuer`'ı, sağlayıcının adresiyle küçük harfe
+        çevrilip sondaki eğik çizgi sayılmadan karşılaştırılır): güveni sonradan kapatılmış bir sağlayıcının eskiden
+        yazdığı adres, adresin sahibini rolünden etmez. **Parola hesabına rol veren yeni bir yol
+        `IsStaffAsync`'ten geçmelidir; `ShopAuthOptions.IsStaff` tek başına yetmez.**
+        Kuralın koruması, sağlayıcının hesabı adresi taşımaya başladıktan sonra başlar; ondan önce (personel
+        sağlayıcıyla hiç girmediyse ya da token'ı adresi taşımıyorsa) parola hesabında rolün dayanağı yine adrese
+        gönderilen koddur. Bunu da kapatmak isteyen `Shop:Auth:StaffThroughProviderOnly` ayarını açar (varsayılan
+        kapalı; ayrıca onaylanmadı): rolü o zaman yalnızca sağlayıcının hesapları alır ve adreslerine güvenilen bir
+        sağlayıcı ayarlı değilse uygulama açılmaz. Personel listesindeki adres, hesabın adresi gibi küçük harfe
+        çevrilip birebir karşılaştırılır (gevşek karşılaştırma `σ` / `ς` gibi çiftlerde başka bir posta kutusunu eşit
+        sayardı). Bilinen etkiler: rol token'a yazıldığı için parola hesabı, erişim token'ı yenilenene kadar (ömrü
+        bir saattir; `AddBearerToken` varsayılanı) rolünü korur; güvenilen sağlayıcı bir adresi başka bir kimliğe de
+        doğrulanmış olarak verirse o kimlik de rolü alır (güvenin anlamı budur); `iss` değerini sağlayıcının
+        adresinden farklı yazan (çok kiracılı, şablonlu) bir sağlayıcıda kural işlemez. Süzülmüş indeks, `Shop:CreateDatabase` ile daha
+        önce oluşturulmuş bir veritabanında yoktur (örnekte migration yok): o veritabanında adresi paylaşan bir
+        sağlayıcı hesabı yazılamaz (500); veritabanı yeniden oluşturulur.
+        Hesap açılırken yalnızca bir çakışma karşılanır (aynı kimliğin eşzamanlı ilk isteği); başka bir hata
+        yutulmaz, istek hata verir (yönlendirmeli girişte de 400 ile örtülmez, 500'dür) ve sonraki istek yeniden
+        dener. Adresini ilk gelişinde alamamış hesap (erişim token'ı adresi taşımıyordu, sağlayıcı henüz
+        doğrulamamıştı) doğrulanmış adres sonradan gelirse onu alır; yoksa sonsuza kadar doğrulanmamış kalırdı. Bir
+        kez yazılan adres değişmez.
       - **Sağlayıcı hesabının parolası yoktur ve parola uçlarından bir parola da edinemez.** Giriş, "parolamı
         unuttum" ve sıfırlama uçları öyle bir hesabı hiç yokmuş gibi yanıtlar (`PasswordAccounts`); parola değiştirme,
         e-posta doğrulama ve kodu yeniden gönderme 409 döner (`ManagedByProvider`). İlk yazımda sıfırlama ucu hesaba
@@ -607,7 +631,8 @@ Yapılmayanlar ve nedenleri:
         karşılaştırılır); değilse uygulama açılmaz. `RequireVerifiedEmail` açıkken adresine güvenilmeyen bir sağlayıcı
         da uygulamayı açtırmaz: hesapları adreslerini hiçbir yoldan doğrulayamazdı. Açılış denetiminin göremediği
         durum: sağlayıcıya güvenilir ama token doğrulanmış bir adres taşımaz (erişim token'ları çoğu zaman taşımaz);
-        öyle bir hesap açılırken uyarı günlüğe yazılır ve hesap, adres gelene kadar kimlik uçlarının dışında kalır.
+        öyle bir hesap açılırken uyarı günlüğe yazılır (hesap başına bir kez; testi vardır) ve hesap, adres gelene
+        kadar kimlik uçlarının dışında kalır.
       - İstemciler neyin sunulduğunu `GET /auth/config` ucundan okur (gizli bir şey taşımaz).
       - Oturum denetimi (`sid`) yalnızca kendi token'larımız içindir; sağlayıcının token'ının ömrünü ve iptalini
         sağlayıcı yönetir. `RequireVerifiedEmail` her yoldan giriş için geçerlidir.

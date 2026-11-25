@@ -870,7 +870,9 @@ vardır ve ikisi de varsayılan olarak kapalıdır:
 ```
 
 Sağlayıcının tanıttığı kişi ilk gelişinde yerel bir hesaba (ve kendi kiracısına) çevrilir; var olan bir hesaba adres
-üzerinden bağlanılmaz. Sağlayıcının "adres doğrulandı" beyanına varsayılan olarak güvenilmez (`TrustEmailVerified`):
+üzerinden bağlanılmaz (adres yalnızca parola hesapları arasında benzersizdir; aynı adres bir parola hesabında ve bir
+sağlayıcı hesabında durabilir, ikisi ayrı hesaplardır; güvenilen sağlayıcının doğrulanmış olarak taşıdığı bir adres için
+parola hesabı personel rolü almaz, `Shop:Auth:StaffThroughProviderOnly` açıksa rolü yalnızca sağlayıcının hesapları alır). Sağlayıcının "adres doğrulandı" beyanına varsayılan olarak güvenilmez (`TrustEmailVerified`):
 açılmadıkça dış kimlik adressiz açılır ve personel rolü alamaz. Sağlayıcıyla açılmış hesap parola edinemez. Çerezle
 açılan oturum sunucudaki bir oturuma bağlıdır ve iptal edilebilir (ömrü `SessionMinutes`); "her yerden çık",
 sağlayıcının o ana kadar verdiği erişim token'larını da geçersiz kılar (sağlayıcıdaki oturumu kapatmaz: yenileme token'ı tutan cihaz yeni bir token alıp geri gelir). Kurallar testin içinde kurulan bir sağlayıcıyla, gerçek bir sağlayıcıyla birlikte çalışma ise

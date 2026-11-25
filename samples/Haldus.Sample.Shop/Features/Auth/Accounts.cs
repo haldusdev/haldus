@@ -11,7 +11,7 @@ public sealed class ShopAccount
 {
     public Guid Id { get; set; }
 
-    /// <summary>Küçük harfe çevrilmiş e-posta; benzersizdir.</summary>
+    /// <summary>Küçük harfe çevrilmiş e-posta; parola hesapları arasında benzersizdir (<see cref="AuthModel"/>).</summary>
     public string Email { get; set; } = "";
 
     public string PasswordHash { get; set; } = "";
@@ -142,13 +142,31 @@ public sealed class ShopAuthOptions
     public IList<string> Staff { get; } = [];
 
     /// <summary>
+    /// Açıksa personel rolünü yalnızca kimlik sağlayıcıyla gelen hesaplar alır; parola hesabı, adresi listede ve
+    /// doğrulanmış olsa da almaz. Parola hesabında rolün dayanağı adrese gönderilen koddur: personelin posta kutusunu
+    /// bir kez okuyabilen biri role kalıcı bir parolayla ulaşabilir. Sağlayıcının denetimleri (iki adımlı doğrulama,
+    /// hesabın kapatılması) isteniyorsa bu ayar açılır. Adreslerine güvenilen bir sağlayıcı ayarlanmış olmalıdır.
+    /// </summary>
+    public bool StaffThroughProviderOnly { get; set; }
+
+    /// <summary>
+    /// "Adres doğrulandı" beyanına şu an güvenilen sağlayıcıların adresleri (küçük harf, sondaki eğik çizgiyle ve
+    /// onsuz). Ayardan okunmaz; sağlayıcı ayarlarından hesaplanır. Böyle bir sağlayıcının hesabı bir adresi doğrulanmış
+    /// olarak taşıyorsa o adresin yetkilisi sağlayıcıdır: aynı adresli parola hesabı personel rolü almaz.
+    /// </summary>
+    public IReadOnlyList<string> TrustedIssuers { get; internal set; } = [];
+
+    /// <summary>
     /// Hesap personel mi. E-posta listede olsa da doğrulanana kadar rol verilmez: kayıt herkese açıktır ve adres
     /// kullanıcının yazdığı bir metindir; doğrulanmadan rol verilseydi, personel adresiyle ilk kaydolan kişi (adresin
     /// sahibi olmasa da) personel olurdu.
     /// </summary>
     public bool IsStaff(ShopAccount account) =>
         account.EmailVerifiedAt is not null
-        && Staff.Any(candidate => string.Equals(candidate?.Trim(), account.Email, StringComparison.OrdinalIgnoreCase));
+
+        // Hesabın adresi saklanırken nasıl düzeltildiyse (küçük harf) listedeki adres de öyle düzeltilir ve ikisi
+        // birebir karşılaştırılır; daha gevşek bir karşılaştırma (σ / ς gibi) başka bir posta kutusunu eşit sayardı.
+        && Staff.Any(candidate => string.Equals(candidate?.Trim().ToLowerInvariant(), account.Email, StringComparison.Ordinal));
 }
 
 public sealed record RegisterRequest
@@ -249,7 +267,16 @@ public static class AuthModel
             entity.Property(account => account.Id).ValueGeneratedNever();
             entity.Property(account => account.Email).HasMaxLength(256);
             entity.Property(account => account.PasswordHash).HasMaxLength(512);
-            entity.HasIndex(account => account.Email).IsUnique().HasDatabaseName(EmailIndex);
+
+            // Adres yalnızca parola hesapları arasında benzersizdir: giriş, kayıt ve sıfırlama hesabı adresle bulur.
+            // Sağlayıcının hesabı kimliğiyle (iss + sub) bulunur; adresi, sağlayıcının doğruladığı bir bilgidir. Aynı
+            // adres bir parola hesabında da durabilir (ikisi ayrı hesaplardır, birbirine bağlanmaz). Benzersizlik
+            // hepsini kapsasaydı, bir adresle önceden parola hesabı açan biri, o adresin sahibinin sağlayıcıyla
+            // gelince adresini (ve ona bağlı personel rolünü) almasını engelleyebilirdi.
+            entity.HasIndex(account => account.Email).IsUnique().HasFilter("\"ExternalIssuer\" IS NULL").HasDatabaseName(EmailIndex);
+
+            // Parola hesabına rol verilirken "bu adresi bir sağlayıcı hesabı taşıyor mu" diye sorulur.
+            entity.HasIndex(account => account.Email, "IX_ShopAccounts_ProviderEmail").HasFilter("\"ExternalIssuer\" IS NOT NULL");
             entity.Property(account => account.ExternalIssuer).HasMaxLength(512);
             entity.Property(account => account.ExternalSubject).HasMaxLength(256);
             entity.HasIndex(account => new { account.ExternalIssuer, account.ExternalSubject }).IsUnique().HasDatabaseName(ExternalIndex);

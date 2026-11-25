@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
@@ -12,7 +13,10 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authentication.OpenIdConnect;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Microsoft.IdentityModel.JsonWebTokens;
 using Microsoft.IdentityModel.Tokens;
 
@@ -209,14 +213,13 @@ public sealed class ExternalSignInTests(ShopFixture fixture)
         Assert.Equal((staff, true), (later.Email, later.EmailVerified));
         Assert.Equal(staff, (await ReadAsync<AccountInfo>(await SendAsync(client, HttpMethod.Get, "/auth/me", token: provider.AccessToken(subject)))).Email);
 
-        // Başkasının hesabındaki adres sonradan da alınmaz.
-        var taken = NewEmail();
-        await ReadAsync<AccessTokenResponse>(await SendAsync(client, HttpMethod.Post, "/auth/register", new { email = taken, password = Password }));
-        var intruder = NewSubject();
-        await ReadAsync<AccountInfo>(await SendAsync(client, HttpMethod.Get, "/auth/me", token: provider.AccessToken(intruder)));
-        var refused = await ReadAsync<AccountInfo>(await SendAsync(client, HttpMethod.Get, "/auth/me", token: provider.AccessToken(intruder, taken, emailVerified: true)));
-        Assert.NotEqual(taken, refused.Email);
-        Assert.False(refused.EmailVerified);
+        // Adres bir parola hesabında dursa da sonradan yazılır (benzersizlik yalnızca parola hesapları arasındadır).
+        var held = NewEmail();
+        await ReadAsync<AccessTokenResponse>(await SendAsync(client, HttpMethod.Post, "/auth/register", new { email = held, password = Password }));
+        var other = NewSubject();
+        Assert.NotEqual(held, (await ReadAsync<AccountInfo>(await SendAsync(client, HttpMethod.Get, "/auth/me", token: provider.AccessToken(other)))).Email);
+        var adopted = await ReadAsync<AccountInfo>(await SendAsync(client, HttpMethod.Get, "/auth/me", token: provider.AccessToken(other, held, emailVerified: true)));
+        Assert.Equal((held, true), (adopted.Email, adopted.EmailVerified));
     }
 
     [Fact]
@@ -238,8 +241,14 @@ public sealed class ExternalSignInTests(ShopFixture fixture)
             HttpStatusCode.Forbidden,
             (await SendAsync(client, HttpMethod.Post, "/products", new { name = $"Kettle {Guid.NewGuid():N}", price = 10 }, token)).StatusCode);
 
-        // Adres hesaba yazılmadığı için asıl sahibi onunla kayıt olabilir.
-        Assert.Equal(HttpStatusCode.OK, (await SendAsync(client, HttpMethod.Post, "/auth/register", new { email = staff, password = Password })).StatusCode);
+        // Güvenilmeyen sağlayıcının beyanı adresin asıl sahibini de etkilemez: parola ile kaydolup adresini kodla
+        // doğrulayınca rolü alır.
+        var owner = await ReadAsync<AccessTokenResponse>(await SendAsync(client, HttpMethod.Post, "/auth/register", new { email = staff, password = Password }));
+        var verified = await ReadAsync<AccessTokenResponse>(await SendAsync(
+            client, HttpMethod.Post, "/auth/email/verify", new { code = fixture.Mail.CodeFor(staff, AccountCodePurpose.EmailVerification) }, owner.AccessToken));
+        Assert.Equal(
+            HttpStatusCode.Created,
+            (await SendAsync(client, HttpMethod.Post, "/products", new { name = $"Kettle {Guid.NewGuid():N}", price = 10 }, verified.AccessToken)).StatusCode);
     }
 
     [Fact]
@@ -253,22 +262,169 @@ public sealed class ExternalSignInTests(ShopFixture fixture)
         var session = await ReadAsync<AccessTokenResponse>(await SendAsync(client, HttpMethod.Post, "/auth/register", new { email, password = Password }));
         var local = await ReadAsync<AccountInfo>(await SendAsync(client, HttpMethod.Get, "/auth/me", token: session.AccessToken));
 
-        // Sağlayıcı aynı adresi doğrulamış olsa da var olan hesaba bağlanılmaz; dış kimlik kendi ayrı hesabını alır.
-        var intruder = NewSubject();
+        // Sağlayıcı aynı adresi doğrulamış olsa da var olan hesaba bağlanılmaz: dış kimlik kendi ayrı hesabını ve
+        // kiracısını alır. Adres iki hesapta da durur (benzersizlik yalnızca parola hesapları arasındadır).
         var external = await ReadAsync<AccountInfo>(
-            await SendAsync(client, HttpMethod.Get, "/auth/me", token: provider.AccessToken(intruder, email, emailVerified: true)));
+            await SendAsync(client, HttpMethod.Get, "/auth/me", token: provider.AccessToken(NewSubject(), email, emailVerified: true)));
 
         Assert.NotEqual(local.Id, external.Id);
         Assert.NotEqual(local.TenantId, external.TenantId);
-        Assert.NotEqual(email, external.Email);
-        Assert.False(external.EmailVerified);
+        Assert.Equal((email, true), (external.Email, external.EmailVerified));
 
-        // Parola girişi ve kendi token'larımız sağlayıcı açıkken de çalışır.
-        Assert.Equal(local.Id, (await ReadAsync<AccountInfo>(await SendAsync(client, HttpMethod.Get, "/auth/me", token: session.AccessToken))).Id);
+        // Parola hesabı olduğu gibi kalır: doğrulanmış sayılmaz, kendi token'ları ve yenilemesi çalışır.
+        var same = await ReadAsync<AccountInfo>(await SendAsync(client, HttpMethod.Get, "/auth/me", token: session.AccessToken));
+        Assert.Equal((local.Id, false), (same.Id, same.EmailVerified));
         Assert.Equal(HttpStatusCode.OK, (await SendAsync(client, HttpMethod.Post, "/auth/refresh", new { refreshToken = session.RefreshToken })).StatusCode);
 
-        // Dış hesabın parolası yoktur: parolayla girilemez.
-        Assert.Equal(HttpStatusCode.Unauthorized, (await SendAsync(client, HttpMethod.Post, "/auth/login", new { email = external.Email, password = Password })).StatusCode);
+        // Adresle çalışan parola uçları yalnızca parola hesabını görür: giriş ona gider, kayıt adresi alınmış sayar,
+        // sıfırlama kodu ona gönderilir (dış hesaba parola koyulamaz).
+        var signedIn = await ReadAsync<AccessTokenResponse>(await SendAsync(client, HttpMethod.Post, "/auth/login", new { email, password = Password }));
+        Assert.Equal(local.Id, (await ReadAsync<AccountInfo>(await SendAsync(client, HttpMethod.Get, "/auth/me", token: signedIn.AccessToken))).Id);
+        Assert.Equal(HttpStatusCode.Conflict, (await SendAsync(client, HttpMethod.Post, "/auth/register", new { email, password = Password })).StatusCode);
+        Assert.Equal(HttpStatusCode.Accepted, (await SendAsync(client, HttpMethod.Post, "/auth/password/forgot", new { email })).StatusCode);
+        Assert.Equal(HttpStatusCode.NoContent, (await SendAsync(
+            client, HttpMethod.Post, "/auth/password/reset", new { email, code = await ResetCodeAsync(email), newPassword = $"{Password} again" })).StatusCode);
+        var afterReset = await ReadAsync<AccessTokenResponse>(await SendAsync(client, HttpMethod.Post, "/auth/login", new { email, password = $"{Password} again" }));
+        Assert.Equal(local.Id, (await ReadAsync<AccountInfo>(await SendAsync(client, HttpMethod.Get, "/auth/me", token: afterReset.AccessToken))).Id);
+    }
+
+    [Fact]
+    public async Task AddressHeldByAnUnverifiedPasswordAccount_DoesNotKeepItsOwnerFromTheRole()
+    {
+        using var provider = new FakeProvider();
+        var staff = NewEmail();
+        await using var factory = CreateFactory(provider, ("Shop:Auth:Staff:0", staff));
+        using var client = factory.CreateClient();
+        var product = new { name = $"Kettle {Guid.NewGuid():N}", price = 10 };
+
+        // Biri personel adresiyle önceden bir parola hesabı açar. Adresi doğrulayamadığı için rol alamaz...
+        var squatter = await ReadAsync<AccessTokenResponse>(await SendAsync(client, HttpMethod.Post, "/auth/register", new { email = staff, password = Password }));
+        Assert.Equal(HttpStatusCode.Forbidden, (await SendAsync(client, HttpMethod.Post, "/products", product, squatter.AccessToken)).StatusCode);
+
+        // ...ve adresin sahibinin, sağlayıcının doğruladığı adresle gelince rolü almasını da engelleyemez. (Adres bütün
+        // hesaplar arasında benzersizken sahibi adressiz açılıyor ve hiçbir zaman personel olamıyordu.)
+        var owner = provider.AccessToken(NewSubject(), staff, emailVerified: true);
+        var account = await ReadAsync<AccountInfo>(await SendAsync(client, HttpMethod.Get, "/auth/me", token: owner));
+        Assert.Equal((staff, true, true), (account.Email, account.EmailVerified, account.IsStaff));
+        Assert.Equal(HttpStatusCode.Created, (await SendAsync(client, HttpMethod.Post, "/products", product, owner)).StatusCode);
+
+        // Parola hesabı yine rol alamaz (token'ı yenilense de).
+        var renewed = await ReadAsync<AccessTokenResponse>(await SendAsync(client, HttpMethod.Post, "/auth/refresh", new { refreshToken = squatter.RefreshToken }));
+        Assert.False((await ReadAsync<AccountInfo>(await SendAsync(client, HttpMethod.Get, "/auth/me", token: renewed.AccessToken))).IsStaff);
+        Assert.Equal(
+            HttpStatusCode.Forbidden,
+            (await SendAsync(client, HttpMethod.Post, "/products", product with { name = $"Kettle {Guid.NewGuid():N}" }, renewed.AccessToken)).StatusCode);
+    }
+
+    [Fact]
+    public async Task StaffAddressHeldByAProviderAccount_GivesNoRoleThroughAPassword()
+    {
+        using var provider = new FakeProvider();
+        var first = NewEmail();
+        var second = NewEmail();
+        await using var factory = CreateFactory(provider, ("Shop:Auth:Staff:0", first), ("Shop:Auth:Staff:1", second));
+        using var client = factory.CreateClient();
+
+        static object Product() => new { name = $"Kettle {Guid.NewGuid():N}", price = 10 };
+
+        async Task<AccountInfo> MeAsync(string token) => await ReadAsync<AccountInfo>(await SendAsync(client, HttpMethod.Get, "/auth/me", token: token));
+
+        async Task<HttpStatusCode> WriteAsync(string token) => (await SendAsync(client, HttpMethod.Post, "/products", Product(), token)).StatusCode;
+
+        // 1. Personel sağlayıcıyla girer: adresinin yetkilisi artık sağlayıcıdır.
+        var staffToken = provider.AccessToken(NewSubject(), first, emailVerified: true);
+        var staff = await MeAsync(staffToken);
+        Assert.True(staff.IsStaff);
+
+        // Personelin posta kutusunu bir kez okuyabilen biri aynı adresle bir parola hesabı açar ve kodla doğrular.
+        // Hesap açılır (adres parola hesapları arasında boştur) ve doğrulanır, ama rol alamaz: alsaydı, role
+        // sağlayıcının denetimlerinin (iki adımlı doğrulama, hesabın kapatılması) dışında kalan bir parolayla ulaşırdı.
+        var registered = await ReadAsync<AccessTokenResponse>(await SendAsync(client, HttpMethod.Post, "/auth/register", new { email = first, password = Password }));
+        var verified = await ReadAsync<AccessTokenResponse>(await SendAsync(
+            client, HttpMethod.Post, "/auth/email/verify", new { code = fixture.Mail.CodeFor(first, AccountCodePurpose.EmailVerification) }, registered.AccessToken));
+        var account = await MeAsync(verified.AccessToken);
+        Assert.NotEqual(staff.Id, account.Id);
+        Assert.Equal((first, true, false), (account.Email, account.EmailVerified, account.IsStaff));
+        Assert.Equal(HttpStatusCode.Forbidden, await WriteAsync(verified.AccessToken));
+
+        // Yeniden giriş ve parola sıfırlama da rol getirmez; ikisi de parola hesabında kalır (sağlayıcının hesabına
+        // parolayla ulaşılamaz).
+        var again = await ReadAsync<AccessTokenResponse>(await SendAsync(client, HttpMethod.Post, "/auth/login", new { email = first, password = Password }));
+        Assert.Equal(HttpStatusCode.Forbidden, await WriteAsync(again.AccessToken));
+        Assert.Equal(HttpStatusCode.Accepted, (await SendAsync(client, HttpMethod.Post, "/auth/password/forgot", new { email = first })).StatusCode);
+        Assert.Equal(HttpStatusCode.NoContent, (await SendAsync(
+            client, HttpMethod.Post, "/auth/password/reset", new { email = first, code = await ResetCodeAsync(first), newPassword = $"{Password} again" })).StatusCode);
+        var reset = await ReadAsync<AccessTokenResponse>(await SendAsync(client, HttpMethod.Post, "/auth/login", new { email = first, password = $"{Password} again" }));
+        Assert.Equal((account.Id, false), ((await MeAsync(reset.AccessToken)).Id, (await MeAsync(reset.AccessToken)).IsStaff));
+        Assert.Equal(HttpStatusCode.Forbidden, await WriteAsync(reset.AccessToken));
+
+        // Sağlayıcının hesabı olduğu gibidir.
+        Assert.Equal(HttpStatusCode.Created, await WriteAsync(staffToken));
+
+        // 2. Sıra tersine: parola hesabı önce açılır, adresini doğrular ve personeldir.
+        var early = await ReadAsync<AccessTokenResponse>(await SendAsync(client, HttpMethod.Post, "/auth/register", new { email = second, password = Password }));
+        var earlyVerified = await ReadAsync<AccessTokenResponse>(await SendAsync(
+            client, HttpMethod.Post, "/auth/email/verify", new { code = fixture.Mail.CodeFor(second, AccountCodePurpose.EmailVerification) }, early.AccessToken));
+        Assert.Equal(HttpStatusCode.Created, await WriteAsync(earlyVerified.AccessToken));
+
+        // Sağlayıcı aynı adresi doğrulanmış olarak getirince yetki ona geçer: parola hesabı, token'ı yenilenince rolünü
+        // kaybeder (kuralın sırayla ilgisi yoktur; rol her token verilişinde yeniden sorulur).
+        Assert.True((await MeAsync(provider.AccessToken(NewSubject(), second, emailVerified: true))).IsStaff);
+        var later = await ReadAsync<AccessTokenResponse>(await SendAsync(client, HttpMethod.Post, "/auth/refresh", new { refreshToken = earlyVerified.RefreshToken }));
+        Assert.False((await MeAsync(later.AccessToken)).IsStaff);
+        Assert.Equal(HttpStatusCode.Forbidden, await WriteAsync(later.AccessToken));
+    }
+
+    [Fact]
+    public async Task AccountThatCannotBeWritten_IsAnErrorOfOursNotARejectedSignIn()
+    {
+        using var provider = new FakeProvider();
+        var accounts = new FailingAccounts();
+        await using var factory = CreateFactory(
+                provider,
+                ("Shop:Auth:Oidc:Authority", FakeProvider.Issuer),
+                ("Shop:Auth:Oidc:ClientId", FakeProvider.ServerClient),
+                ("Shop:Auth:Oidc:ClientSecret", FakeProvider.ServerSecret))
+            .WithWebHostBuilder(builder => builder.ConfigureTestServices(services =>
+                services.ConfigureDbContext<AppDbContext>(options => options.AddInterceptors(accounts))));
+        using var client = factory.CreateClient();
+        using var browser = factory.CreateClient(new WebApplicationFactoryClientOptions { BaseAddress = new Uri("https://localhost"), AllowAutoRedirect = false, HandleCookies = true });
+        var token = provider.AccessToken(NewSubject());
+        var subject = NewSubject();
+
+        // Hesap yazılamıyor (veritabanı arızası). Bu, token'ın veya girişin reddi (401 / 400) değildir: istemci
+        // oturumunu kapatmamalı, hata günlüğe düşmelidir. İşlenmeyen hata olarak sürer (500).
+        accounts.Fail = true;
+        Assert.Equal(HttpStatusCode.InternalServerError, (await SendAsync(client, HttpMethod.Get, "/auth/me", token: token)).StatusCode);
+        Assert.Equal(HttpStatusCode.InternalServerError, (await ServerSignInAsync(browser, provider, subject, NewEmail())).StatusCode);
+
+        // Arıza geçince aynı token ve aynı kişi hesabını açar: yarım kalmış bir kayıt yoktur.
+        accounts.Fail = false;
+        Assert.Equal(HttpStatusCode.OK, (await SendAsync(client, HttpMethod.Get, "/auth/me", token: token)).StatusCode);
+        Assert.Equal(HttpStatusCode.Redirect, (await ServerSignInAsync(browser, provider, subject, NewEmail())).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await SendAsync(browser, HttpMethod.Get, "/auth/me")).StatusCode);
+    }
+
+    [Fact]
+    public async Task AccountOpenedWithoutAnAddress_IsReportedWhenAVerifiedAddressIsRequired()
+    {
+        using var provider = new FakeProvider();
+        var logs = new CapturedLogs();
+        await using var factory = CreateFactory(provider, ("Shop:Auth:RequireVerifiedEmail", "true"))
+            .WithWebHostBuilder(builder => builder.ConfigureTestServices(services => services.AddSingleton<ILoggerProvider>(logs)));
+        using var client = factory.CreateClient();
+        var subject = NewSubject();
+
+        // Erişim token'ı adresi taşımıyor: hesap açılır ama kimlik uçlarının dışında hiçbir şey yapamaz. Açılış
+        // denetimi bunu göremez; işletmeci günlükteki uyarıdan öğrenir (hesap başına bir kez).
+        Assert.Equal(HttpStatusCode.OK, (await SendAsync(client, HttpMethod.Get, "/auth/me", token: provider.AccessToken(subject))).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await SendAsync(client, HttpMethod.Get, "/orders", token: provider.AccessToken(subject))).StatusCode);
+        Assert.Single(logs.Warnings("ExternalSignIn"), message => message.Contains("RequireVerifiedEmail", StringComparison.Ordinal));
+
+        // Doğrulanmış adresle gelen hesap için uyarı yazılmaz; adres sonradan gelince ilk hesap da açılır.
+        Assert.Equal(HttpStatusCode.OK, (await SendAsync(client, HttpMethod.Get, "/orders", token: provider.AccessToken(NewSubject(), NewEmail(), emailVerified: true))).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await SendAsync(client, HttpMethod.Get, "/orders", token: provider.AccessToken(subject, NewEmail(), emailVerified: true))).StatusCode);
+        Assert.Single(logs.Warnings("ExternalSignIn"), message => message.Contains("RequireVerifiedEmail", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -327,9 +483,16 @@ public sealed class ExternalSignInTests(ShopFixture fixture)
             Assert.Equal((true, true), (trusted.EmailVerified, trusted.IsStaff));
         }
 
-        // Aynı sağlayıcı, aynı kişi; ama adresi doğruladığına artık güvenilmiyor.
+        // Aynı sağlayıcı, aynı kişi; ama adresi doğruladığına artık güvenilmiyor. (Güvenilen başka bir sağlayıcı da
+        // ayarlı: aşağıdaki kural "herhangi bir sağlayıcıya güveniliyor mu"ya değil, adresi yazan sağlayıcıya bakar.)
         using var later = new FakeProvider();
-        await using var factory = CreateFactory(later, ("Shop:Auth:Staff:0", staff), ("Shop:Auth:Jwt:TrustEmailVerified", "false"));
+        await using var factory = CreateFactory(
+            later,
+            ("Shop:Auth:Staff:0", staff),
+            ("Shop:Auth:Jwt:TrustEmailVerified", "false"),
+            ("Shop:Auth:Oidc:Authority", "https://another.idp.test"),
+            ("Shop:Auth:Oidc:ClientId", "another-server"),
+            ("Shop:Auth:Oidc:ClientSecret", "another-secret"));
         using var cautious = factory.CreateClient();
 
         Assert.Equal(
@@ -340,6 +503,41 @@ public sealed class ExternalSignInTests(ShopFixture fixture)
         // yazamayacakları bir ürün için "kaydet" düğmesi göstermesin.
         var account = await ReadAsync<AccountInfo>(await SendAsync(cautious, HttpMethod.Get, "/auth/me", token: later.AccessToken(subject, staff, emailVerified: true)));
         Assert.Equal((false, false), (account.EmailVerified, account.IsStaff));
+
+        // Artık güvenilmeyen sağlayıcının eskiden yazdığı adres, adresin sahibini rolünden de etmez: parola ile kaydolup
+        // adresini kodla doğrulayan hesap personeldir. ("Adresin yetkilisi sağlayıcıdır" kuralı yalnızca şu an
+        // güvenilen sağlayıcının hesapları için işler.)
+        var owner = await ReadAsync<AccessTokenResponse>(await SendAsync(cautious, HttpMethod.Post, "/auth/register", new { email = staff, password = Password }));
+        var verified = await ReadAsync<AccessTokenResponse>(await SendAsync(
+            cautious, HttpMethod.Post, "/auth/email/verify", new { code = fixture.Mail.CodeFor(staff, AccountCodePurpose.EmailVerification) }, owner.AccessToken));
+        Assert.True((await ReadAsync<AccountInfo>(await SendAsync(cautious, HttpMethod.Get, "/auth/me", token: verified.AccessToken))).IsStaff);
+        Assert.Equal(
+            HttpStatusCode.Created,
+            (await SendAsync(cautious, HttpMethod.Post, "/products", product with { name = $"Kettle {Guid.NewGuid():N}" }, verified.AccessToken)).StatusCode);
+    }
+
+    [Fact]
+    public async Task StaffThroughProviderOnly_KeepsTheRoleFromEveryPasswordAccount()
+    {
+        using var provider = new FakeProvider();
+        var staff = NewEmail();
+        await using var factory = CreateFactory(provider, ("Shop:Auth:Staff:0", staff), ("Shop:Auth:StaffThroughProviderOnly", "true"));
+        using var client = factory.CreateClient();
+        var product = new { name = $"Kettle {Guid.NewGuid():N}", price = 10 };
+
+        // Personel sağlayıcıyla henüz hiç girmedi. Posta kutusunu bir kez okuyabilen biri adresle parola hesabı açıp
+        // doğrular; ayar açıkken bu, rol getirmez (kapalıyken getirir: parola hesabında rolün dayanağı o koddur).
+        var registered = await ReadAsync<AccessTokenResponse>(await SendAsync(client, HttpMethod.Post, "/auth/register", new { email = staff, password = Password }));
+        var verified = await ReadAsync<AccessTokenResponse>(await SendAsync(
+            client, HttpMethod.Post, "/auth/email/verify", new { code = fixture.Mail.CodeFor(staff, AccountCodePurpose.EmailVerification) }, registered.AccessToken));
+        var account = await ReadAsync<AccountInfo>(await SendAsync(client, HttpMethod.Get, "/auth/me", token: verified.AccessToken));
+        Assert.Equal((true, false), (account.EmailVerified, account.IsStaff));
+        Assert.Equal(HttpStatusCode.Forbidden, (await SendAsync(client, HttpMethod.Post, "/products", product, verified.AccessToken)).StatusCode);
+
+        // Sağlayıcıyla gelen personel rolünü alır.
+        var token = provider.AccessToken(NewSubject(), staff, emailVerified: true);
+        Assert.True((await ReadAsync<AccountInfo>(await SendAsync(client, HttpMethod.Get, "/auth/me", token: token))).IsStaff);
+        Assert.Equal(HttpStatusCode.Created, (await SendAsync(client, HttpMethod.Post, "/products", product, token)).StatusCode);
     }
 
     [Fact]
@@ -393,6 +591,10 @@ public sealed class ExternalSignInTests(ShopFixture fixture)
                 ("Shop:Auth:Oidc:Authority", "https://idp.test"), ("Shop:Auth:Oidc:ClientId", "shop-server"), ("Shop:Auth:Oidc:ClientSecret", "secret"),
                 ("Shop:Auth:Oidc:SessionMinutes", "0"),
             ],
+
+            // Personel yalnızca sağlayıcıyla gelebilecekse adreslerine güvenilen bir sağlayıcı olmalıdır.
+            [("Shop:Auth:StaffThroughProviderOnly", "true")],
+            [("Shop:Auth:Jwt:Authority", "https://idp.test"), ("Shop:Auth:Jwt:Audience", "shop-api"), ("Shop:Auth:StaffThroughProviderOnly", "true")],
 
             // Doğrulanmış adres zorunluyken adresine güvenilmeyen sağlayıcının hesapları hiçbir şey yapamazdı.
             [("Shop:Auth:Jwt:Authority", "https://idp.test"), ("Shop:Auth:Jwt:Audience", "shop-api"), ("Shop:Auth:RequireVerifiedEmail", "true")],
@@ -651,6 +853,20 @@ public sealed class ExternalSignInTests(ShopFixture fixture)
         return await browser.PostAsync("/auth/oidc/callback", callback, CancellationToken);
     }
 
+    /// <summary>Sıfırlama e-postası yanıt beklenmeden gönderilir; adrese gidene kadar beklenir.</summary>
+    private async Task<string> ResetCodeAsync(string email)
+    {
+        var deadline = DateTimeOffset.UtcNow.AddSeconds(15);
+
+        while (fixture.Mail.CountFor(email, AccountCodePurpose.PasswordReset) < 1)
+        {
+            Assert.True(DateTimeOffset.UtcNow < deadline, "The reset code was not mailed.");
+            await Task.Delay(25, CancellationToken);
+        }
+
+        return fixture.Mail.CodeFor(email, AccountCodePurpose.PasswordReset)!;
+    }
+
     private static string NewEmail() => $"user-{Guid.NewGuid():N}@example.com";
 
     private static string NewSubject() => $"subject-{Guid.NewGuid():N}";
@@ -696,6 +912,43 @@ public sealed class ExternalSignInTests(ShopFixture fixture)
             $"{(int)response.StatusCode}: {await response.Content.ReadAsStringAsync(CancellationToken)}");
 
         return (await response.Content.ReadFromJsonAsync<T>(CancellationToken))!;
+    }
+
+    /// <summary>İstenince yeni hesabın kaydedilmesini bozan araya girici (veritabanı arızası).</summary>
+    private sealed class FailingAccounts : SaveChangesInterceptor
+    {
+        public volatile bool Fail;
+
+        public override ValueTask<InterceptionResult<int>> SavingChangesAsync(DbContextEventData eventData, InterceptionResult<int> result, CancellationToken cancellationToken = default) =>
+            Fail && eventData.Context!.ChangeTracker.Entries<ShopAccount>().Any(entry => entry.State == EntityState.Added)
+                ? throw new DbUpdateException("The account could not be written (simulated outage).")
+                : base.SavingChangesAsync(eventData, result, cancellationToken);
+    }
+
+    /// <summary>Uygulamanın günlüğe yazdıklarını toplar.</summary>
+    private sealed class CapturedLogs : ILoggerProvider
+    {
+        private readonly ConcurrentQueue<(string Category, LogLevel Level, string Message)> _entries = new();
+
+        public IEnumerable<string> Warnings(string category) =>
+            _entries.Where(entry => entry.Level == LogLevel.Warning && entry.Category.EndsWith(category, StringComparison.Ordinal)).Select(entry => entry.Message);
+
+        public ILogger CreateLogger(string categoryName) => new Sink(categoryName, _entries);
+
+        public void Dispose()
+        {
+        }
+
+        private sealed class Sink(string category, ConcurrentQueue<(string Category, LogLevel Level, string Message)> entries) : ILogger
+        {
+            public IDisposable? BeginScope<TState>(TState state)
+                where TState : notnull => null;
+
+            public bool IsEnabled(LogLevel logLevel) => true;
+
+            public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter) =>
+                entries.Enqueue((category, logLevel, formatter(state, exception)));
+        }
     }
 
     /// <summary>Testin içindeki kimlik sağlayıcı: keşif belgesi, imza anahtarı ve token ucu.</summary>
