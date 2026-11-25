@@ -640,7 +640,10 @@ Yapılmayanlar ve nedenleri:
         - Çerez oturumunun ömrü ayardır (`Shop:Auth:Oidc:SessionMinutes`, varsayılan 480). Sağlayıcıdaki oturum
           kapandığında backend'e haber gelmez: sağlayıcının ön kanal çıkışı `SameSite=Lax` çerezle çalışmaz, arka
           kanal çıkışı (imzalı çıkış token'ının doğrulanması) yazılmadı. Çerez en geç bu süre sonunda biter; süre
-          kısaltılarak daraltılır. Oturumu kapanmış bir çerez sunulduğunda tarayıcıdan sildirilir.
+          kısaltılarak daraltılır. Oturumu kapanmış bir çerez sunulduğunda tarayıcıdan sildirilir (silme ada göredir:
+          aynı anda başka bir sekmede yeni bir giriş tamamlanırsa o yeni çerez de silinebilir ve yeniden girilir).
+          `Audience`'ın öteki bölümün istemci kimliğiyle karşılaştırılması iki ayrı sağlayıcıda da uygulamayı durdurur
+          (kapalı tarafa düşer; mesaj iki ayarın adını da söyler).
         - Örnekte migration yoktur: `ShopAccount`'a eklenen kolonlar (`ExternalIssuer`, `SignedOutEverywhereAt`...)
           `Shop:CreateDatabase` ile daha önce oluşturulmuş bir veritabanına eklenmez; o veritabanı yeniden oluşturulur.
       - **İstemciler** (kullanıcının onayladığı paketlerle; panelde `oidc-client-ts`, mobilde `expo-auth-session`).

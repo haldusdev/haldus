@@ -117,7 +117,7 @@ public static partial class ExternalSignIn
             // Öteki bölümün istemcisi de sayılır, adresler farklı yazılmış olsa bile: aynı sağlayıcının iki adı olabilir.
             Require(
                 !SameName(jwt.Audience, jwt.ClientId) && !(oidc.Enabled && SameName(jwt.Audience, oidc.ClientId)),
-                "Shop:Auth:Jwt:Audience must name the API, not a client: with a client id as the audience, ID tokens would be accepted as access tokens.");
+                "Shop:Auth:Jwt:Audience must name the API, not a client (it equals Shop:Auth:Jwt:ClientId or Shop:Auth:Oidc:ClientId): with a client id as the audience, ID tokens would be accepted as access tokens.");
             RequireAuthority("Shop:Auth:Jwt", jwt.Authority!, jwt.RequireHttpsMetadata, development);
 
             builder.AddJwtBearer(JwtScheme, options =>
@@ -385,15 +385,8 @@ public static partial class ExternalSignIn
                 ExternalSubject = subject,
             };
 
+            var opened = account;
             db.Add(account);
-
-            if (!usable && trustEmail && options.RequireVerifiedEmail)
-            {
-                // Açılış denetimi bunu göremez: sağlayıcıya güveniliyor, ama token doğrulanmış bir adres taşımıyor
-                // (erişim token'ları çoğu zaman taşımaz) ya da adres başka bir hesapta. Hesap, adres gelene kadar
-                // kimlik uçlarının dışında hiçbir şey yapamaz.
-                LogUnverifiable(Logger(http));
-            }
 
             try
             {
@@ -434,6 +427,14 @@ public static partial class ExternalSignIn
                 }
 
                 account = existing;
+            }
+
+            if (ReferenceEquals(account, opened) && account.EmailVerifiedAt is null && trustEmail && options.RequireVerifiedEmail)
+            {
+                // Açılış denetimi bunu göremez: sağlayıcıya güveniliyor, ama token doğrulanmış bir adres taşımıyor
+                // (erişim token'ları çoğu zaman taşımaz) ya da adres başka bir hesapta. Hesap, adres gelene kadar
+                // kimlik uçlarının dışında hiçbir şey yapamaz. Yalnızca hesabı gerçekten bu istek açtıysa yazılır.
+                LogUnverifiable(Logger(http));
             }
         }
 
@@ -569,7 +570,7 @@ public static partial class ExternalSignIn
     [LoggerMessage(Level = LogLevel.Warning, Message = "An access token of the identity provider was rejected: it does not say when it was issued (iat), or says a time further ahead than the accepted clock skew.")]
     private static partial void LogNoIssuedAt(ILogger logger);
 
-    [LoggerMessage(Level = LogLevel.Warning, Message = "An account of the identity provider was opened without a verified address while Shop:Auth:RequireVerifiedEmail is on; it can do nothing until a token carries email and email_verified.")]
+    [LoggerMessage(Level = LogLevel.Warning, Message = "An account of the identity provider was opened without a verified address while Shop:Auth:RequireVerifiedEmail is on (the token carried none, or the address belongs to another account); it can do nothing until a token carries a verified address that is free.")]
     private static partial void LogUnverifiable(ILogger logger);
 
     private static void RequireAuthority(string section, string authority, bool requireHttps, bool development)
