@@ -54,8 +54,8 @@ public sealed class ShopSession
     public int RefreshVersion { get; set; }
 
     /// <summary>
-    /// Sıranın en son ilerlediği an. Hemen ardından bir önceki token'ı sunan istek (yanıtı yolda kaybolan istemci,
-    /// aynı anda yenileyen ikinci sekme) çalınmış sayılmaz.
+    /// Sıranın en son ilerlediği an. Hemen ardından bir önceki token'ı sunan istek (aynı anda yenileyen ikinci sekme)
+    /// çalınmış sayılmaz: oturum kapatılmaz, ama o isteğe yeni token da verilmez.
     /// </summary>
     public DateTimeOffset? RotatedAt { get; set; }
 }
@@ -108,7 +108,7 @@ public sealed class ShopAuthOptions
     /// <summary>Kod gönderim sayısının sıfırlandığı aralık.</summary>
     public int CodeWindowSeconds { get; set; } = 3600;
 
-    /// <summary>Yenilemeden sonra bir önceki yenileme token'ının da kabul edildiği süre.</summary>
+    /// <summary>Yenilemeden sonra bir önceki yenileme token'ının oturumu kapatmadığı süre (yeni token yine verilmez).</summary>
     public int RefreshGraceSeconds { get; set; } = 30;
 
     /// <summary>Bir oturumun en uzun ömrü; dolunca yeniden giriş gerekir.</summary>
@@ -119,6 +119,22 @@ public sealed class ShopAuthOptions
 
     /// <summary>Açıksa e-postası doğrulanmamış hesap yalnızca kimlik uçlarını kullanabilir.</summary>
     public bool RequireVerifiedEmail { get; set; }
+
+    /// <summary>
+    /// Personel hesaplarının e-postaları. Kimseye ait olmayan, ortak kaynakları (ürünler, kategoriler…) yalnızca
+    /// personel yazar; kayıt herkese açık olduğu için bu liste boşken onları kimse yazamaz. Rol, hesap e-postasını
+    /// doğruladıktan sonra geçerli olur.
+    /// </summary>
+    public IList<string> Staff { get; } = [];
+
+    /// <summary>
+    /// Hesap personel mi. E-posta listede olsa da doğrulanana kadar rol verilmez: kayıt herkese açıktır ve adres
+    /// kullanıcının yazdığı bir metindir; doğrulanmadan rol verilseydi, personel adresiyle ilk kaydolan kişi (adresin
+    /// sahibi olmasa da) personel olurdu.
+    /// </summary>
+    public bool IsStaff(ShopAccount account) =>
+        account.EmailVerifiedAt is not null
+        && Staff.Any(candidate => string.Equals(candidate.Trim(), account.Email, StringComparison.OrdinalIgnoreCase));
 }
 
 public sealed record RegisterRequest
@@ -194,7 +210,7 @@ public sealed record VerifyEmailRequest
     public string Code { get; init; } = "";
 }
 
-public sealed record AccountInfo(Guid Id, string Email, Guid TenantId, bool EmailVerified);
+public sealed record AccountInfo(Guid Id, string Email, Guid TenantId, bool EmailVerified, bool IsStaff);
 
 /// <summary>Hesap tablolarının modeli; <see cref="AppDbContext"/> çağırır.</summary>
 public static class AuthModel

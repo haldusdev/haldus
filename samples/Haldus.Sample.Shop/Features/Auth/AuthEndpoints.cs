@@ -53,14 +53,20 @@ public static partial class AuthEndpoints
         // kayıt, token ile erişilen kayıtlar, süreli indirme bağlantıları, misafir sepeti). Bu olmadan kiracıya ait
         // olmayan kaynaklar (ürünler, kategoriler) token'sız da yazılabilirdi. Demo kimliği kendi başına bir kimlik
         // doğrulama olmadığı için o kipte bu kural konmaz.
+        // Giriş yapmış olmak yetmez: kimseye ait olmayan, ortak kaynakları yalnızca personel yazar (SharedWrites).
         var demo = configuration.GetValue<bool>("Shop:DemoIdentity");
         services.AddAuthorization(options =>
         {
             if (!demo)
             {
-                options.FallbackPolicy = new AuthorizationPolicyBuilder().RequireAuthenticatedUser().Build();
+                options.FallbackPolicy = new AuthorizationPolicyBuilder()
+                    .RequireAuthenticatedUser()
+                    .AddRequirements(new SharedWrites())
+                    .Build();
             }
         });
+        services.AddSingleton<IAuthorizationHandler, SharedWritesHandler>();
+        services.AddSingleton<IAuthorizationMiddlewareResultHandler, ForbiddenProblemHandler>();
 
         if (string.IsNullOrEmpty(configuration["Shop:Smtp:Host"]))
         {
@@ -328,7 +334,7 @@ public static partial class AuthEndpoints
         }
 
         await SendCodeAsync(db, account, AccountCodePurpose.EmailVerification, now, mailer, options.Value, loggers, cancellationToken);
-        return SignIn(account, session);
+        return SignIn(account, session, options.Value);
     }
 
     private static async Task<IResult> LoginAsync(
@@ -382,7 +388,7 @@ public static partial class AuthEndpoints
             return InvalidCredentials(messages);
         }
 
-        return SignIn(account, session);
+        return SignIn(account, session, options.Value);
     }
 
     private static async Task<IResult> RefreshAsync(
@@ -415,15 +421,21 @@ public static partial class AuthEndpoints
 
         var session = await Live(db.Set<ShopSession>(), now).AsNoTracking().FirstOrDefaultAsync(candidate => candidate.Id == sessionId, cancellationToken);
 
-        // Sıra az önce ilerlediyse bir önceki token da kabul edilir ve geçerli token'lar yeniden verilir: yanıtı yolda
-        // kaybolan istemci veya aynı anda yenileyen ikinci sekme oturumunu kaybetmez. Bundan eski bir token ise ya
-        // çalınmıştır ya da çalan kişi asıl sahibinden önce davranmıştır; hangisi olduğu bilinemez, oturum kapatılır.
-        var grace = now.AddSeconds(-refresh.Value.RefreshGraceSeconds);
-        var tolerated = !rotated && session is not null && session.RefreshVersion == version + 1 && session.RotatedAt > grace;
-
-        if (session is null || (!rotated && !tolerated))
+        if (!rotated || session is null)
         {
-            await RevokeAsync(db.Set<ShopSession>().Where(candidate => candidate.Id == sessionId), now, cancellationToken);
+            // Eskimiş bir yenileme token'ı sunuldu. Sıra az önce ilerlediyse bu büyük olasılıkla aynı anda yenileyen
+            // ikinci bir istektir (başka bir sekme): oturum kapatılmaz, ama eskimiş token'a yeni kimlik bilgisi de
+            // verilmez (verilseydi, çalınmış bir token bu pencerede geçerli bir oturuma çevrilebilirdi); istemci yeni
+            // token'ları öteki istekten alır. Bundan eski bir token ise ya çalınmıştır ya da çalan kişi asıl
+            // sahibinden önce davranmıştır; hangisi olduğu bilinemez, oturum kapatılır.
+            var grace = now.AddSeconds(-refresh.Value.RefreshGraceSeconds);
+            var justRotated = session is not null && session.RefreshVersion == version + 1 && session.RotatedAt > grace;
+
+            if (!justRotated)
+            {
+                await RevokeAsync(db.Set<ShopSession>().Where(candidate => candidate.Id == sessionId), now, cancellationToken);
+            }
+
             return SessionExpired(messages);
         }
 
@@ -433,7 +445,7 @@ public static partial class AuthEndpoints
         }
 
         // Claim'ler hesaptan yeniden kurulur.
-        return SignIn(account, session);
+        return SignIn(account, session, refresh.Value);
     }
 
     private static async Task<IResult> LogoutAsync(ClaimsPrincipal user, AppDbContext db, TimeProvider time, CancellationToken cancellationToken)
@@ -456,9 +468,9 @@ public static partial class AuthEndpoints
         return Results.NoContent();
     }
 
-    private static async Task<IResult> MeAsync(ClaimsPrincipal user, AppDbContext db, CancellationToken cancellationToken) =>
+    private static async Task<IResult> MeAsync(ClaimsPrincipal user, AppDbContext db, IOptions<ShopAuthOptions> options, CancellationToken cancellationToken) =>
         await FindAccountAsync(user, db, cancellationToken) is { } account
-            ? Results.Ok(new AccountInfo(account.Id, account.Email, account.TenantId, account.EmailVerifiedAt is not null))
+            ? Results.Ok(new AccountInfo(account.Id, account.Email, account.TenantId, account.EmailVerifiedAt is not null, options.Value.IsStaff(account)))
             : Results.Problem(statusCode: StatusCodes.Status401Unauthorized);
 
     private static async Task<IResult> ForgotPasswordAsync(
@@ -568,6 +580,7 @@ public static partial class AuthEndpoints
         ClaimsPrincipal user,
         AppDbContext db,
         TimeProvider time,
+        IOptions<ShopAuthOptions> options,
         IStringLocalizer<ShopMessages> messages,
         CancellationToken cancellationToken)
     {
@@ -601,7 +614,7 @@ public static partial class AuthEndpoints
         await RotateAsync(Live(db.Set<ShopSession>(), now).Where(candidate => candidate.Id == sessionId), now, cancellationToken);
 
         return await Live(db.Set<ShopSession>(), now).AsNoTracking().FirstOrDefaultAsync(candidate => candidate.Id == sessionId, cancellationToken) is { } session
-            ? SignIn(account, session)
+            ? SignIn(account, session, options.Value)
             : SessionExpired(messages);
     }
 
@@ -827,7 +840,7 @@ public static partial class AuthEndpoints
         new() { Id = Guid.CreateVersion7(), AccountId = account.Id, CreatedAt = now, ExpiresAt = now.AddDays(options.SessionDays) };
 
     /// <summary>Haldus kullanıcıyı ve kiracıyı bu claim'lerden okur (<c>HaldusOptions</c>).</summary>
-    private static IResult SignIn(ShopAccount account, ShopSession session)
+    private static IResult SignIn(ShopAccount account, ShopSession session, ShopAuthOptions options)
     {
         var identity = new ClaimsIdentity(
             [
@@ -839,6 +852,13 @@ public static partial class AuthEndpoints
                 new Claim(VerifiedClaim, account.EmailVerifiedAt is null ? "false" : "true"),
             ],
             BearerTokenDefaults.AuthenticationScheme);
+
+        // Rol token'a yazılır; personel listesinden çıkarılan bir hesap, erişim token'ı yenilenince rolünü kaybeder.
+        // Yalnızca e-postası doğrulanmış hesaba verilir (ShopAuthOptions.IsStaff).
+        if (options.IsStaff(account))
+        {
+            identity.AddClaim(new Claim(ClaimTypes.Role, SharedWrites.StaffRole));
+        }
 
         return Results.SignIn(new ClaimsPrincipal(identity), authenticationScheme: BearerTokenDefaults.AuthenticationScheme);
     }

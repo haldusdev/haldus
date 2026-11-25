@@ -30137,7 +30137,8 @@
           "id",
           "email",
           "tenantId",
-          "emailVerified"
+          "emailVerified",
+          "isStaff"
         ],
         "type": "object",
         "properties": {
@@ -30153,6 +30154,9 @@
             "format": "uuid"
           },
           "emailVerified": {
+            "type": "boolean"
+          },
+          "isStaff": {
             "type": "boolean"
           }
         }

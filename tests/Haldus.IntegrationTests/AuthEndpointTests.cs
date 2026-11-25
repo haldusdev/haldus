@@ -128,9 +128,59 @@ public sealed class AuthEndpointTests(ShopFixture fixture)
         withKey.Headers.Add("X-Api-Key", key.GetProperty("secret").GetString());
         Assert.Equal(HttpStatusCode.OK, (await _client.SendAsync(withKey, CancellationToken)).StatusCode);
 
-        // Giriş yapan hesap kiracıya ait olmayan kaynağı yazar.
-        var account = await RegisterAsync();
-        Assert.Equal(HttpStatusCode.Created, (await SendAsync(HttpMethod.Post, "/products", new { name = $"Signed {Guid.NewGuid():N}", price = 1 }, account.Token)).StatusCode);
+    }
+
+    [Fact]
+    public async Task SharedResources_AreReadByEveryAccountButWrittenOnlyByStaff()
+    {
+        var staffEmail = NewEmail();
+        await using var factory = fixture.CreateAuthenticatedFactory(
+            ("Shop:Auth:RequestsPerMinute", "100000"),
+            ("Shop:Auth:Staff:0", staffEmail.ToUpperInvariant()));
+        using var client = factory.CreateClient();
+
+        var unverified = await ReadAsync<AccessTokenResponse>(await SendAsync(client, HttpMethod.Post, "/auth/register", new { email = staffEmail, password = Password }));
+        var member = await ReadAsync<AccessTokenResponse>(await SendAsync(client, HttpMethod.Post, "/auth/register", new { email = NewEmail(), password = Password }));
+
+        // Personel adresiyle kaydolmak yetmez: adres kullanıcının yazdığı bir metindir ve rol ancak e-posta
+        // doğrulanınca verilir. Yoksa adresin sahibi olmayan biri ilk kaydolarak personel olurdu.
+        Assert.False((await ReadAsync<AccountInfo>(await SendAsync(client, HttpMethod.Get, "/auth/me", token: unverified.AccessToken))).IsStaff);
+        Assert.Equal(HttpStatusCode.Forbidden, (await SendAsync(client, HttpMethod.Post, "/products", new { name = "Too early", price = 1 }, unverified.AccessToken)).StatusCode);
+
+        var staff = await ReadAsync<AccessTokenResponse>(await SendAsync(
+            client, HttpMethod.Post, "/auth/email/verify", new { code = fixture.Mail.CodeFor(staffEmail, AccountCodePurpose.EmailVerification) }, unverified.AccessToken));
+
+        // Doğrulamadan önce alınmış erişim token'ı rolü taşımaz; rol doğrulamanın verdiği yeni token'dadır.
+        Assert.Equal(HttpStatusCode.Forbidden, (await SendAsync(client, HttpMethod.Post, "/products", new { name = "Stale token", price = 1 }, unverified.AccessToken)).StatusCode);
+        Assert.True((await ReadAsync<AccountInfo>(await SendAsync(client, HttpMethod.Get, "/auth/me", token: staff.AccessToken))).IsStaff);
+        Assert.False((await ReadAsync<AccountInfo>(await SendAsync(client, HttpMethod.Get, "/auth/me", token: member.AccessToken))).IsStaff);
+
+        // Kayıt herkese açıktır; kimseye ait olmayan kaynakları (ürünler) yine de yalnızca personel yazar.
+        var name = $"Shared {Guid.NewGuid():N}";
+        var denied = await SendAsync(client, HttpMethod.Post, "/products", new { name, price = 1 }, member.AccessToken);
+        Assert.Equal(HttpStatusCode.Forbidden, denied.StatusCode);
+        Assert.False(string.IsNullOrEmpty(await DetailAsync(denied)));
+
+        var created = await SendAsync(client, HttpMethod.Post, "/products", new { name, price = 1 }, staff.AccessToken);
+        Assert.Equal(HttpStatusCode.Created, created.StatusCode);
+        var product = await created.Content.ReadFromJsonAsync<System.Text.Json.JsonElement>(CancellationToken);
+        var url = $"/products/{product.GetProperty("id").GetGuid()}";
+
+        Assert.Equal(HttpStatusCode.Forbidden, (await SendAsync(client, HttpMethod.Delete, url, token: member.AccessToken)).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await SendAsync(client, HttpMethod.Post, "/products/batch-delete", new { ids = Array.Empty<Guid>() }, member.AccessToken)).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await SendAsync(client, HttpMethod.Post, "/categories", new { name = "Mine" }, member.AccessToken)).StatusCode);
+
+        // Okuma herkese açıktır; gövde taşıdığı için POST ile yapılan okumalar da.
+        Assert.Equal(HttpStatusCode.OK, (await SendAsync(client, HttpMethod.Get, url, token: member.AccessToken)).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await SendAsync(client, HttpMethod.Post, "/products/search", new { }, member.AccessToken)).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await SendAsync(client, HttpMethod.Post, "/products/batch-get", new { ids = new[] { product.GetProperty("id").GetGuid() } }, member.AccessToken)).StatusCode);
+
+        // Bir kiracıya veya bir kullanıcıya ait kaynaklar kuralın dışındadır: herkes kendisininkini yazar.
+        Assert.Equal(HttpStatusCode.Created, (await SendAsync(client, HttpMethod.Post, "/orders", new { customerName = "Ada" }, member.AccessToken)).StatusCode);
+        Assert.Equal(HttpStatusCode.Created, (await SendAsync(client, HttpMethod.Post, "/me/baskets", new { note = "Mine" }, member.AccessToken)).StatusCode);
+        Assert.Equal(HttpStatusCode.NoContent, (await SendAsync(client, HttpMethod.Put, $"/me/favorites/{product.GetProperty("id").GetGuid()}", token: member.AccessToken)).StatusCode);
+
+        Assert.Equal(HttpStatusCode.NoContent, (await SendAsync(client, HttpMethod.Delete, url, token: staff.AccessToken)).StatusCode);
     }
 
     [Fact]
@@ -144,16 +194,21 @@ public sealed class AuthEndpointTests(ShopFixture fixture)
         var first = await ReadAsync<AccessTokenResponse>(await SendAsync(client, HttpMethod.Post, "/auth/register", new { email, password = Password }));
         var second = await ReadAsync<AccessTokenResponse>(await SendAsync(client, HttpMethod.Post, "/auth/refresh", new { refreshToken = first.RefreshToken }));
 
-        // Hemen ardından bir önceki token da kabul edilir: yanıtı yolda kaybolan istemci veya aynı anda yenileyen
-        // ikinci sekme oturumunu kaybetmez. Aynı anda gelen yenilemelerin hepsi geçerli bir oturumla döner.
+        // Hemen ardından bir önceki token'ı sunan istek (aynı anda yenileyen ikinci sekme) oturumu kapatmaz, ama yeni
+        // token da alamaz: eskimiş bir token hiçbir zaman geçerli bir oturuma çevrilmez.
         var repeated = await Task.WhenAll(Enumerable.Range(0, 4).Select(_ =>
             SendAsync(client, HttpMethod.Post, "/auth/refresh", new { refreshToken = first.RefreshToken })));
-        Assert.All(repeated, response => Assert.Equal(HttpStatusCode.OK, response.StatusCode));
+        Assert.All(repeated, response => Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode));
         Assert.Equal(HttpStatusCode.OK, (await SendAsync(client, HttpMethod.Get, "/auth/me", token: second.AccessToken)).StatusCode);
+
+        // Aynı token'ı aynı anda sunan isteklerden yalnızca biri yenilenir; oturum yerinde kalır.
+        var race = await Task.WhenAll(Enumerable.Range(0, 5).Select(_ =>
+            SendAsync(client, HttpMethod.Post, "/auth/refresh", new { refreshToken = second.RefreshToken })));
+        var third = await ReadAsync<AccessTokenResponse>(Assert.Single(race, response => response.StatusCode == HttpStatusCode.OK));
+        Assert.Equal(HttpStatusCode.OK, (await SendAsync(client, HttpMethod.Get, "/auth/me", token: third.AccessToken)).StatusCode);
 
         // Tolerans kısadır. Sonrasında eskimiş bir yenileme token'ı sunulursa (çalınmış olabilir) oturumun tamamı
         // kapanır: en yeni token'lar da artık geçmez ve yeniden giriş gerekir.
-        var third = await ReadAsync<AccessTokenResponse>(await SendAsync(client, HttpMethod.Post, "/auth/refresh", new { refreshToken = second.RefreshToken }));
         await Task.Delay(TimeSpan.FromSeconds(1.3), CancellationToken);
 
         Assert.Equal(HttpStatusCode.Unauthorized, (await SendAsync(client, HttpMethod.Post, "/auth/refresh", new { refreshToken = second.RefreshToken })).StatusCode);

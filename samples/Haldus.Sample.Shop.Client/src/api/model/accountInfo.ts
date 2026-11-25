@@ -10,4 +10,5 @@ export interface AccountInfo {
   email: string;
   tenantId: string;
   emailVerified: boolean;
+  isStaff: boolean;
 }
