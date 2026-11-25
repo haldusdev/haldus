@@ -854,9 +854,22 @@ doğrulandı; iOS'ta çalıştırılmadı.
 Kimlik doğrulama örnek mağazanın kendisindedir (`Features/Auth`): e-posta ve parola ile giriş, ASP.NET Core'un
 yerleşik taşıyıcı token şeması, sunucuda tutulan oturumlar (çıkış ve parola değişimi token'ları hemen geçersiz kılar;
 parola değişimi bütün oturumları kapatıp isteği yapana yenisini açar),
-e-postayla gönderilen kodla parola sıfırlama ve e-posta doğrulama, hesap kilidi ve adres başına hız sınırı; ayrı bir
-kimlik sağlayıcı veya paket yoktur. Haldus bunun yalnızca sonucunu görür: kullanıcıyı ve kiracıyı token'daki
-claim'lerden okur. Giriş yapılmadan hiçbir kaynağa ulaşılmaz; açık kalması gereken uçlar (misafir sepeti, token ile
+e-postayla gönderilen kodla parola sıfırlama ve e-posta doğrulama, hesap kilidi ve adres başına hız sınırı. Haldus
+bunun yalnızca sonucunu görür: kullanıcıyı ve kiracıyı token'daki claim'lerden okur; claim'i hangi şemanın
+ürettiğine bakmaz. İsteyen bir kimlik sağlayıcı (OpenID Connect) ekler; örnekte iki ayrı, birbirinden bağımsız yol
+vardır ve ikisi de varsayılan olarak kapalıdır:
+
+```jsonc
+"Shop": { "Auth": {
+  // API, sağlayıcının JWT erişim token'ını kabul eder; panel ve mobil uygulama sağlayıcıyla girişi kendileri yapar.
+  "Jwt":  { "Authority": "https://idp.example", "Audience": "shop-api", "ClientId": "shop-app" },
+  // Backend tarayıcıyı sağlayıcıya yönlendirir (/auth/oidc/sign-in) ve çerezle oturum açar.
+  "Oidc": { "Authority": "https://idp.example", "ClientId": "shop-server", "ClientSecret": "…" }
+} }
+```
+
+Sağlayıcının tanıttığı kişi ilk gelişinde yerel bir hesaba (ve kendi kiracısına) çevrilir; var olan bir hesaba adres
+üzerinden bağlanılmaz. Sağlayıcı testlerde testin içinde kurulur; gerçek bir sağlayıcıya karşı sınanmadı. Giriş yapılmadan hiçbir kaynağa ulaşılmaz; açık kalması gereken uçlar (misafir sepeti, token ile
 erişilen kayıtlar) bunu `AllowAnonymous` ile kendileri söyler. Kimseye ait olmayan, ortak kaynakları (ürünler,
 kategoriler) herkes okur ama yalnızca personel yazar (`Shop:Auth:Staff`); kural, kaynakları tek tek saymak yerine
 Haldus'un uçlara yazdığı kapsam metadatasını okur (aşağıda). Yenileme token'ı bir kez kullanılır; eskisi yeniden

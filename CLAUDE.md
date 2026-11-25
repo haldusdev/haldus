@@ -493,8 +493,9 @@ aşaması değildir ve kararları yine sorulmadan verildi:
 - **OIDC / JWT (kullanıcı kararı, 2026-11-25; soruldu ve yanıtlandı).** Backend'e
   `Microsoft.AspNetCore.Authentication.JwtBearer` ve `Microsoft.AspNetCore.Authentication.OpenIdConnect` eklenir;
   OIDC girişi panele (`oidc-client-ts`) ve mobil uygulamaya (`expo-auth-session`, `expo-web-browser`, `expo-crypto`)
-  de eklenir; e-posta + parola girişi kalır ve OIDC yapılandırma verilince açılır (varsayılan kapalı). Henüz
-  yazılmadı.
+  de eklenir; e-posta + parola girişi kalır ve OIDC yapılandırma verilince açılır (varsayılan kapalı). Kullanıcı
+  ayrıca şunu söyledi: "isteyen JWT, isteyen OIDC kullanacak"; ikisi bu yüzden ayrı ayar bölümleridir ve biri
+  ötekini gerektirmez (aşağıda, "Açık kararlar": "Kimlik sağlayıcı").
 - Mobil uygulama Android'de denendi (emülatör, Android 17, Expo Go). Önceki "bu makinede emülatör yok" tespiti
   yanlıştı: SDK ve sanal cihazlar kuruluydu, yalnızca `PATH`'te değildiler (`%LOCALAPPDATA%\Android\Sdk`).
 
@@ -540,8 +541,37 @@ Yapılmayanlar ve nedenleri:
     seçildi, **ayrıca onaylanmadı**): örnek mağaza e-posta + parola ile giriş yapar ve ASP.NET Core'un yerleşik
     taşıyıcı token şemasını kullanır (`AddBearerToken`; `Features/Auth/AuthEndpoints.cs`). Hesap (`ShopAccount`) elle
     yazılmış bir tablodur, Haldus kaynağı değildir; her hesap kendi kiracısıyla doğar. Parola `PasswordHasher<T>` ile
-    özetlenir; ikisi de paylaşılan çatıdadır, paket eklenmedi. ASP.NET Core Identity ve OpenID Connect kullanılmadı.
+    özetlenir; ikisi de paylaşılan çatıdadır, paket eklenmedi. ASP.NET Core Identity kullanılmadı.
     - Haldus'ta hiçbir şey değişmedi: kullanıcıyı ve kiracıyı zaten claim'lerden okuyordu.
+    - **Kimlik sağlayıcı** (kullanıcı kararı, 2026-11-25; `Features/Auth/ExternalSignIn.cs`). Parola girişi her zaman
+      vardır; sağlayıcı iki ayrı yoldan, her biri kendi ayarıyla eklenir ve ikisi de varsayılan olarak kapalıdır:
+      - `Shop:Auth:Jwt` (`Authority`, `Audience`, `ClientId`): API, sağlayıcının JWT erişim token'ını kabul eder
+        (`Microsoft.AspNetCore.Authentication.JwtBearer`). Panel ve mobil uygulamanın sağlayıcıyla girişi buna
+        dayanır: akışı kendileri yapar (Authorization Code + PKCE) ve token'ı sunarlar. `Audience` zorunludur (başka
+        bir API için verilmiş token kabul edilmez).
+      - `Shop:Auth:Oidc` (`Authority`, `ClientId`, `ClientSecret`): backend'in kendisi tarayıcıyı sağlayıcıya
+        yönlendirir (`GET /auth/oidc/sign-in?returnUrl=`) ve çerezle oturum açar
+        (`Microsoft.AspNetCore.Authentication.OpenIdConnect`). Çerez kendiliğinden gönderildiği için, çerezle kimliği
+        doğrulanan ve yazan her istek `X-Shop-Request` başlığını taşımalıdır (CSRF); dönüş adresi yalnızca
+        uygulamanın içindeki bir yol olabilir. Bu uçlar yalnızca ayar verildiyse eşlenir ve şemaya girmez.
+      - Biri açıksa varsayılan şema, isteğe bakıp seçen bir şemadır (`ExternalSignIn.Select`): nokta ile ayrılmış üç
+        parçalı taşıyıcı token sağlayıcının JWT'sidir, öteki taşıyıcı token bizim token'ımızdır, başlık yoksa çerez.
+        İkisi de kapalıyken kimlik doğrulama eskisi gibi, yalnızca kendi şemamızla kurulur.
+      - Sağlayıcının tanıttığı kişi (`iss` + `sub`) yerel bir hesaba çevrilir (`ShopAccount.ExternalIssuer` /
+        `ExternalSubject`); ilk gelişinde hesap ve kiracısı oluşturulur ve çıkan claim'ler parola girişindekilerle
+        aynıdır. Her istekte bir sorgudur. **Var olan bir hesaba adres üzerinden bağlanılmaz** (aynı adresi taşıyan bir
+        dış kimlik, parolayla açılmış hesabı ele geçirmemelidir): adres yalnızca sağlayıcı onu doğruladıysa
+        (`email_verified`) ve başka hesapta değilse alınır; değilse hesap, kimseye ait olamayacak bir adresle
+        (`…@external.invalid`) ve doğrulanmamış olarak açılır. Personel rolü bu yüzden sağlayıcının doğruladığı adrese
+        bağlıdır; sağlayıcıya bu konuda güvenilir.
+      - İstemciler neyin sunulduğunu `GET /auth/config` ucundan okur (gizli bir şey taşımaz).
+      - Oturum denetimi (`sid`) yalnızca kendi token'larımız içindir; sağlayıcının token'ının ömrünü ve iptalini
+        sağlayıcı yönetir. `RequireVerifiedEmail` her yoldan giriş için geçerlidir.
+      - Testler sağlayıcıyı testin içinde kurar (keşif belgesi, imza anahtarı, token ucu; `BackchannelHttpHandler`);
+        token'lar gerçekten imzalanır ve Microsoft'un doğrulayıcılarından geçer. **Gerçek bir sağlayıcıya (Keycloak,
+        Entra ID...) karşı sınanmadı.** Sınırlar: tek sağlayıcı; sağlayıcıdaki adres sonradan değişirse hesaba
+        yansımaz; sağlayıcıdan çıkış (tek oturum kapatma) yoktur; dış hesabın parolası yoktur ve parola uçları onu
+        kabul etmez; erişim token'ında `email` / `email_verified` yoksa hesap adressiz açılır.
     - `Shop:DemoIdentity` açıksa kimlik, doğrulanmadan, başlıklardan okunur (`X-User-Id`, `X-Tenant-Id`,
       `X-User-Roles`). Varsayılan olarak kapalıdır ve **yalnızca geliştirme ortamında açılabilir**: başka ortamda
       uygulama açılmaz. Entegrasyon testleri açar (`ShopFixture`), kimlik doğrulama testleri kapalı haliyle ikinci
@@ -624,8 +654,7 @@ Yapılmayanlar ve nedenleri:
       (bütün ürünlerin fiyatını değiştiren `/apply-discount` her hesaba açıktı) ve okumayı adresin sonundan tanıyordu
       (ikisi de otomatik incelemede çıktı).
     - Bilinen sınırlar: rol tektir ve yapılandırmadan gelir (rol yönetimi uçları yoktur); rol token'a yazıldığı için
-      listeden çıkarılan hesap, erişim token'ı yenilenene kadar personel kalır. Kimlik sağlayıcı (OpenID Connect)
-      desteği yoktur (JWT doğrulaması ayrı bir paket ister); iki adımlı doğrulama, e-posta değiştirme ve hesap silme
+      listeden çıkarılan hesap, erişim token'ı yenilenene kadar personel kalır. İki adımlı doğrulama, e-posta değiştirme ve hesap silme
       yoktur; hesap kilidi bir hesabın başkası tarafından kilitlenmesine izin verir (parola sıfırlama kilidi açar);
       iptal edilmiş oturum ve kullanılmış kod kayıtları kendiliğinden temizlenmez; süreç kapanırken yolda olan
       sıfırlama e-postası gitmez. Token'lar Data Protection anahtarlarına bağlıdır; anahtarların kalıcılığı ve

@@ -4,6 +4,7 @@ using System.Net.Sockets;
 using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Threading.RateLimiting;
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.BearerToken;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
@@ -44,11 +45,34 @@ public static partial class AuthEndpoints
     // Hesap bulunamadığında da bir parola doğrulaması yapılır; yoksa yanıt süresi e-postanın kayıtlı olup olmadığını söylerdi.
     private static readonly string DummyHash = Hasher.HashPassword(new ShopAccount(), Guid.NewGuid().ToString());
 
-    public static IServiceCollection AddShopAuth(this IServiceCollection services, IConfiguration configuration)
+    public static IServiceCollection AddShopAuth(this IServiceCollection services, IConfiguration configuration, IHostEnvironment environment)
     {
         services.Configure<ShopAuthOptions>(configuration.GetSection("Shop:Auth"));
         services.Configure<SmtpOptions>(configuration.GetSection("Shop:Smtp"));
-        services.AddAuthentication(BearerTokenDefaults.AuthenticationScheme).AddBearerToken();
+
+        // Parola girişi her zaman vardır. Bir kimlik sağlayıcı iki ayrı yoldan, her biri kendi ayarıyla eklenir ve biri
+        // ötekini gerektirmez: sağlayıcının JWT erişim token'larının kabulü (Shop:Auth:Jwt) ve backend'in kendisinin
+        // sağlayıcıya yönlendirip çerezle oturum açması (Shop:Auth:Oidc). İkisi de verilmezse kimlik doğrulama,
+        // yalnızca kendi taşıyıcı token şemamızla, eskisi gibi kurulur.
+        var jwt = configuration.GetSection("Shop:Auth:Jwt").Get<ShopJwtOptions>() ?? new ShopJwtOptions();
+        var oidc = configuration.GetSection("Shop:Auth:Oidc").Get<ShopOidcOptions>() ?? new ShopOidcOptions();
+        services.AddSingleton(jwt);
+        services.AddSingleton(oidc);
+
+        if (jwt.Enabled || oidc.Enabled)
+        {
+            services.AddAuthentication(ExternalSignIn.SelectorScheme)
+                .AddPolicyScheme(
+                    ExternalSignIn.SelectorScheme,
+                    displayName: null,
+                    options => options.ForwardDefaultSelector = context => ExternalSignIn.Select(context, jwt.Enabled, oidc.Enabled))
+                .AddBearerToken()
+                .AddExternalSignIn(jwt, oidc, environment.IsDevelopment());
+        }
+        else
+        {
+            services.AddAuthentication(BearerTokenDefaults.AuthenticationScheme).AddBearerToken();
+        }
 
         // Giriş yapılmadan hiçbir uca ulaşılmaz; açık kalması gerekenler bunu kendileri söyler (AllowAnonymous: giriş ve
         // kayıt, token ile erişilen kayıtlar, süreli indirme bağlantıları, misafir sepeti). Bu olmadan kiracıya ait
@@ -215,6 +239,32 @@ public static partial class AuthEndpoints
             .ProducesProblem(StatusCodes.Status401Unauthorized)
             .ProducesProblem(StatusCodes.Status429TooManyRequests);
 
+        // İstemciler giriş ekranını buna göre kurar: sağlayıcıyla giriş ancak ayarlandıysa sunulur.
+        auth.MapGet("/config", (ShopJwtOptions jwt, ShopOidcOptions oidc) => new AuthConfig(
+                PasswordSignIn: true,
+                Provider: jwt.Enabled && !string.IsNullOrWhiteSpace(jwt.ClientId)
+                    ? new ExternalProviderConfig(jwt.Authority!, jwt.ClientId, jwt.Scopes)
+                    : null,
+                ServerSignIn: oidc.Enabled))
+            .WithName("GetAuthConfig")
+            .AllowAnonymous()
+            .Produces<AuthConfig>();
+
+        if (app.ServiceProvider.GetRequiredService<ShopOidcOptions>().Enabled)
+        {
+            // Backend'in kendi yönlendirmeli girişi: tarayıcı sağlayıcıya gider, dönüşte oturum çerezi yazılır.
+            // Yalnızca ayarlandıysa vardır; şemaya (openapi.json) girmez.
+            auth.MapGet("/oidc/sign-in", (string? returnUrl) => Results.Challenge(
+                    new AuthenticationProperties { RedirectUri = LocalPath(returnUrl) },
+                    [ExternalSignIn.OidcScheme]))
+                .AllowAnonymous()
+                .ExcludeFromDescription();
+
+            auth.MapPost("/oidc/sign-out", () => Results.SignOut(authenticationSchemes: [ExternalSignIn.CookieScheme]))
+                .AllowAnonymous()
+                .ExcludeFromDescription();
+        }
+
         auth.MapPost("/email/resend", ResendVerificationAsync)
             .WithName("ResendEmailVerification")
             .RequireAuthorization()
@@ -278,18 +328,42 @@ public static partial class AuthEndpoints
                     return;
                 }
 
-                if (!open
-                    && context.RequestServices.GetRequiredService<IOptions<ShopAuthOptions>>().Value.RequireVerifiedEmail
-                    && context.User.FindFirstValue(VerifiedClaim) != "true"
-                    && !context.Request.Path.StartsWithSegments("/auth"))
-                {
-                    await Results.Problem(detail: messages["EmailNotVerified"], statusCode: StatusCodes.Status403Forbidden).ExecuteAsync(context);
-                    return;
-                }
+            }
+
+            // Çerez kendiliğinden gönderilir; yazan bir isteğin bu uygulamanın kendi kodundan geldiğini, başka bir
+            // sitenin ekleyemeyeceği başlık gösterir. Token taşıyan isteklerde gerek yoktur: token kendiliğinden gitmez.
+            if (!open
+                && context.User.Identity.AuthenticationType == ExternalSignIn.CookieScheme
+                && !HttpMethods.IsGet(context.Request.Method)
+                && !HttpMethods.IsHead(context.Request.Method)
+                && !HttpMethods.IsOptions(context.Request.Method)
+                && !context.Request.Headers.ContainsKey(ExternalSignIn.RequestHeader))
+            {
+                await Results.Problem(detail: messages["RequestHeaderRequired"], statusCode: StatusCodes.Status403Forbidden).ExecuteAsync(context);
+                return;
+            }
+
+            // Hangi yoldan girilmiş olursa olsun (parola, sağlayıcı) geçerlidir.
+            if (!open
+                && context.RequestServices.GetRequiredService<IOptions<ShopAuthOptions>>().Value.RequireVerifiedEmail
+                && context.User.FindFirstValue(VerifiedClaim) != "true"
+                && !context.Request.Path.StartsWithSegments("/auth"))
+            {
+                await Results.Problem(detail: messages["EmailNotVerified"], statusCode: StatusCodes.Status403Forbidden).ExecuteAsync(context);
+                return;
             }
 
             await next(context);
         });
+
+    // Girişten sonra yalnızca bu uygulamanın içindeki bir yola dönülür; dışarıyı gösteren adres (açık yönlendirme) köke çevrilir.
+    private static string LocalPath(string? returnUrl) =>
+        returnUrl is { Length: > 0 and <= 2048 }
+        && returnUrl[0] == '/'
+        && (returnUrl.Length == 1 || (returnUrl[1] != '/' && returnUrl[1] != '\\'))
+        && !returnUrl.Any(char.IsControl)
+            ? returnUrl
+            : "/";
 
     private static async Task RejectAsync(HttpContext context, IStringLocalizer<ShopMessages> messages)
     {

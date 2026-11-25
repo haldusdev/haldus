@@ -21,7 +21,7 @@ builder.Services.AddDbContext<AppDbContext>(options =>
 
 // Kimlik doğrulama: parola ile giriş ve ASP.NET Core'un yerleşik taşıyıcı (bearer) token şeması; uçları
 // Features/Auth altındadır. Haldus kullanıcıyı ve kiracıyı token'daki claim'lerden okur (varsayılanı budur).
-builder.Services.AddShopAuth(builder.Configuration);
+builder.Services.AddShopAuth(builder.Configuration, builder.Environment);
 
 // Shop:DemoIdentity açıksa kimlik, doğrulanmadan, istek başlıklarından okunur (X-User-Id, X-Tenant-Id). Yalnızca
 // entegrasyon testleri ve yerel denemeler içindir; varsayılan olarak kapalıdır. AddHaldus kendi claim tabanlı

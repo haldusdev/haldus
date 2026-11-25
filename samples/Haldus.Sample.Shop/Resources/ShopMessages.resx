@@ -57,6 +57,9 @@
   <data name="EmailVerificationBody" xml:space="preserve">
     <value>Your verification code is {0}. It expires shortly and can be used once.</value>
   </data>
+  <data name="RequestHeaderRequired" xml:space="preserve">
+    <value>This request must carry the X-Shop-Request header.</value>
+  </data>
   <data name="StaffOnly" xml:space="preserve">
     <value>Only staff can change this resource.</value>
   </data>

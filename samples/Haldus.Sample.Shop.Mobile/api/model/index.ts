@@ -7,6 +7,7 @@
 
 export * from './accessTokenResponse';
 export * from './accountInfo';
+export * from './authConfig';
 export * from './basketItemResponse';
 export * from './basketResponse';
 export * from './batchCreateProductRequest';
@@ -21,6 +22,7 @@ export * from './createBasketItemRequest';
 export * from './createBasketRequest';
 export * from './createProductRequest';
 export * from './createProductRequestMetadata';
+export * from './externalProviderConfig';
 export * from './forgotPasswordRequest';
 export * from './httpValidationProblemDetails';
 export * from './httpValidationProblemDetailsErrors';

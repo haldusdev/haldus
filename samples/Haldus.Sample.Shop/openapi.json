@@ -665,6 +665,26 @@
         }
       }
     },
+    "/auth/config": {
+      "get": {
+        "tags": [
+          "Auth"
+        ],
+        "operationId": "GetAuthConfig",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthConfig"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/auth/email/resend": {
       "post": {
         "tags": [
@@ -30621,6 +30641,32 @@
           }
         }
       },
+      "AuthConfig": {
+        "required": [
+          "passwordSignIn",
+          "provider",
+          "serverSignIn"
+        ],
+        "type": "object",
+        "properties": {
+          "passwordSignIn": {
+            "type": "boolean"
+          },
+          "provider": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ExternalProviderConfig"
+              }
+            ]
+          },
+          "serverSignIn": {
+            "type": "boolean"
+          }
+        }
+      },
       "BalanceAdjustment": {
         "type": "object",
         "properties": {
@@ -33994,6 +34040,25 @@
               "null",
               "string"
             ]
+          }
+        }
+      },
+      "ExternalProviderConfig": {
+        "required": [
+          "authority",
+          "clientId",
+          "scopes"
+        ],
+        "type": "object",
+        "properties": {
+          "authority": {
+            "type": "string"
+          },
+          "clientId": {
+            "type": "string"
+          },
+          "scopes": {
+            "type": "string"
           }
         }
       },

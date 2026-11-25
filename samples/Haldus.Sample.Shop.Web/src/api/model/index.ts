@@ -7,6 +7,7 @@
 
 export * from './accessTokenResponse';
 export * from './accountInfo';
+export * from './authConfig';
 export * from './batchCreateProductRequest';
 export * from './batchGetResultOfProductResponseAndGuid';
 export * from './batchIdsRequestOfGuid';
@@ -25,6 +26,7 @@ export * from './createOrderItemRequest';
 export * from './createOrderRequest';
 export * from './createProductRequest';
 export * from './createProductRequestMetadata';
+export * from './externalProviderConfig';
 export * from './forgotPasswordRequest';
 export * from './httpValidationProblemDetails';
 export * from './httpValidationProblemDetailsErrors';

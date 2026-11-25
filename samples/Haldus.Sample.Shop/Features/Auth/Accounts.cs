@@ -28,6 +28,14 @@ public sealed class ShopAccount
 
     /// <summary>Hesap bu ana kadar kilitlidir: doğru parola da kabul edilmez.</summary>
     public DateTimeOffset? LockedUntil { get; set; }
+
+    /// <summary>
+    /// Hesap bir kimlik sağlayıcıyla açıldıysa sağlayıcının adresi (<c>iss</c>) ve oradaki kimliği (<c>sub</c>);
+    /// parolayla açılan hesapta boştur. Öyle bir hesabın parolası yoktur.
+    /// </summary>
+    public string? ExternalIssuer { get; set; }
+
+    public string? ExternalSubject { get; set; }
 }
 
 /// <summary>
@@ -235,6 +243,9 @@ public static class AuthModel
             entity.Property(account => account.Email).HasMaxLength(256);
             entity.Property(account => account.PasswordHash).HasMaxLength(512);
             entity.HasIndex(account => account.Email).IsUnique().HasDatabaseName(EmailIndex);
+            entity.Property(account => account.ExternalIssuer).HasMaxLength(512);
+            entity.Property(account => account.ExternalSubject).HasMaxLength(256);
+            entity.HasIndex(account => new { account.ExternalIssuer, account.ExternalSubject }).IsUnique().HasDatabaseName("UX_ShopAccounts_External");
         });
 
         modelBuilder.Entity<ShopSession>(entity =>
