@@ -71,6 +71,7 @@ Bilinen sınırlar: biyometrik kilit, ayrı bir kimlik sağlayıcı ve iki adım
 | `pnpm typecheck` | Tip denetimi |
 | `pnpm test` | Oturum ve istek mantığının testleri (`tests/`) |
 | `pnpm typecheck:tests` | Testlerin tip denetimi |
+| `pnpm test:e2e` | Ekran testleri: uygulamayı web'e dışa aktarır ve gerçek bir tarayıcıda sürer (`tests/e2e`) |
 
 ## API istemcisi
 
@@ -126,6 +127,13 @@ Bu seçimler kullanıcıya sorulmadan, önerilen seçenekle verildi (deponun `CL
 - **Kimlik doğrulama:** backend'in kendi parola girişi ve taşıyıcı token'ı; ayrı bir kimlik sağlayıcı yok.
 - **Test:** yeni bir paket eklenmedi. Oturum ve istek mantığı (`lib`: token'ın eklenmesi, 401'de tek yenileme, güvenli
   depodaki üç anahtar, hata gövdeleri) Node'un yerleşik test çalıştırıcısıyla sınanır (`pnpm test`; `react-native`,
-  `expo-secure-store` ve `fetch` elle yazılmış taklitlerle). Ekranların testi yoktur: onları çizmek bir React Native
-  test kütüphanesi (yeni bir bağımlılık) ister. `pnpm typecheck:tests`, Expo'nun dolaylı getirdiği `@types/node`
-  paketine dayanır.
+  `expo-secure-store` ve `fetch` elle yazılmış taklitlerle). `pnpm typecheck:tests`, Expo'nun dolaylı getirdiği
+  `@types/node` paketine dayanır.
+- **Ekran testleri:** yine paket eklenmedi. `pnpm test:e2e` uygulamayı web'e dışa aktarır (`dist-e2e`), kurulu bir
+  Chromium tarayıcısını (Chrome veya Edge; `HALDUS_TEST_BROWSER` ile seçilir) başsız açar ve DevTools protokolüyle
+  sürer. Backend çalışmaz; testler dışa aktarımı ve API'nin bellekteki bir taklidini sunan bir sunucuyla konuşur
+  (`tests/e2e/support/shop.mts`). Senaryolar: giriş, kayıt, parola sıfırlama, ürün arama ve sayfanın sonunda
+  sıradaki sayfanın istenmesi, favori ekleme / çıkarma, sepetin oluşması ve satırlarının değişmesi, e-posta
+  doğrulama, dil değişimi, parola değişimi, çıkış, token yenileme. Sürülen web hedefidir: ekranlar, gezinme ve
+  istekler cihazdakiyle aynı koddur, ama cihaza özgü olanlar (güvenli depo, klavye, güvenli alanlar, yerel
+  bileşenlerin görünümü) bu testlerde yoktur; onlar emülatörde elle denenir (aşağıda).

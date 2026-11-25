@@ -104,8 +104,6 @@ export function ProductsPage() {
           queryKey: getListProductsQueryKey(),
         })
       },
-      onError: (error) =>
-        toast.error(problemMessage(error, t("common.unexpectedError"))),
     },
   })
 
@@ -273,6 +271,7 @@ export function ProductsPage() {
         onOpenChange={(open) => {
           if (!open) {
             setDeleting(null)
+            remove.reset()
           }
         }}
         title={t("products.deleteTitle")}
@@ -281,6 +280,11 @@ export function ProductsPage() {
         })}
         confirmLabel={t("common.delete")}
         pending={remove.isPending}
+        error={
+          remove.isError
+            ? problemMessage(remove.error, t("common.unexpectedError"))
+            : undefined
+        }
         onConfirm={() => {
           if (deleting) {
             remove.mutate({ id: deleting.id })

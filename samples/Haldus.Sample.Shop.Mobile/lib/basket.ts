@@ -2,6 +2,7 @@ import { useQueryClient } from '@tanstack/react-query';
 
 import {
   getListBasketsQueryKey,
+  listBaskets,
   useCreateBasket,
   useListBaskets,
   useUpdateBasket,
@@ -9,6 +10,12 @@ import {
 import type { UpdateBasketItemRequest } from '@/api/model';
 
 const MAX_QUANTITY = 1000;
+const PARAMS = { pageSize: 1 } as const;
+
+// Değişiklikler sıraya girer ve her biri sepetin o andaki halini okur. Sepet bir bütün olarak yazıldığı için, bir
+// önceki değişikliğin sonucu görülmeden başlayan ikinci değişiklik onu ezerdi; henüz sepeti olmayan kullanıcının art
+// arda iki dokunuşu ise iki ayrı sepet oluştururdu. Sıra, hook'u kullanan bütün ekranlar için ortaktır.
+let queue: Promise<unknown> = Promise.resolve();
 
 /**
  * Kullanıcının sepeti (`/me/baskets`). Sepet, satırlarıyla birlikte bir bütündür: satırlar sepetin isteğinde gider
@@ -19,14 +26,23 @@ const MAX_QUANTITY = 1000;
  */
 export function useBasket() {
   const queryClient = useQueryClient();
-  const baskets = useListBaskets({ pageSize: 1 });
+  const baskets = useListBaskets(PARAMS);
   const create = useCreateBasket();
   const update = useUpdateBasket();
 
   const basket = baskets.data?.data.items[0] ?? null;
 
-  async function change(edit: (lines: UpdateBasketItemRequest[]) => UpdateBasketItemRequest[]) {
-    const current: UpdateBasketItemRequest[] = (basket?.basketItems ?? []).map((item) => ({
+  type Edit = (lines: UpdateBasketItemRequest[]) => UpdateBasketItemRequest[];
+
+  async function apply(edit: Edit) {
+    // Ekranın çizildiği andaki değil, sıradaki bir önceki değişiklikten sonraki sepet okunur.
+    const loaded = await queryClient.ensureQueryData({
+      queryKey: getListBasketsQueryKey(PARAMS),
+      queryFn: () => listBaskets(PARAMS),
+    });
+    const latest = loaded.data.items[0] ?? null;
+
+    const current: UpdateBasketItemRequest[] = (latest?.basketItems ?? []).map((item) => ({
       id: item.id,
       productName: item.productName,
       quantity: item.quantity,
@@ -36,13 +52,26 @@ export function useBasket() {
       .filter((line) => (line.quantity ?? 0) > 0)
       .map((line) => ({ ...line, quantity: Math.min(line.quantity ?? 1, MAX_QUANTITY) }));
 
-    if (basket) {
-      await update.mutateAsync({ id: basket.id, data: { note: basket.note, basketItems: lines } });
-    } else {
-      await create.mutateAsync({ data: { basketItems: lines } });
+    try {
+      if (latest) {
+        await update.mutateAsync({
+          id: latest.id,
+          data: { note: latest.note, basketItems: lines },
+        });
+      } else {
+        await create.mutateAsync({ data: { basketItems: lines } });
+      }
+    } finally {
+      // Sıradaki değişiklik güncel sepeti görsün diye yeniden okuma beklenir; hata durumunda da (istek sunucuya
+      // ulaşmış olabilir).
+      await queryClient.refetchQueries({ queryKey: getListBasketsQueryKey() });
     }
+  }
 
-    await queryClient.invalidateQueries({ queryKey: getListBasketsQueryKey() });
+  function change(edit: Edit): Promise<void> {
+    const next = queue.then(() => apply(edit));
+    queue = next.catch(() => undefined);
+    return next;
   }
 
   return {

@@ -11,7 +11,10 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 
-/** Geri alınamayan işlemler (silme) için onay penceresi. */
+/**
+ * Geri alınamayan işlemler (silme) için onay penceresi. İşlem reddedilirse neden pencerenin içinde gösterilir: açık
+ * bir pencerenin arkasındaki bildirim yardımcı teknolojilerden gizlidir.
+ */
 export function ConfirmDialog({
   open,
   onOpenChange,
@@ -19,6 +22,7 @@ export function ConfirmDialog({
   description,
   confirmLabel,
   pending,
+  error,
   onConfirm,
 }: {
   open: boolean
@@ -27,6 +31,7 @@ export function ConfirmDialog({
   description: string
   confirmLabel: string
   pending: boolean
+  error?: string
   onConfirm: () => void
 }) {
   const { t } = useTranslation()
@@ -38,6 +43,11 @@ export function ConfirmDialog({
           <AlertDialogTitle>{title}</AlertDialogTitle>
           <AlertDialogDescription>{description}</AlertDialogDescription>
         </AlertDialogHeader>
+        {error ? (
+          <p role="alert" className="text-sm text-destructive">
+            {error}
+          </p>
+        ) : null}
         <AlertDialogFooter>
           <AlertDialogCancel disabled={pending}>
             {t("common.cancel")}

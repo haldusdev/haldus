@@ -1,3 +1,5 @@
+import { Platform } from 'react-native';
+
 import i18n from '@/i18n';
 import { getSession, renewTokens, restoreSession, signOut } from '@/lib/session';
 import type { Session } from '@/lib/session';
@@ -111,6 +113,11 @@ async function refresh(sent: Session): Promise<boolean> {
 
   try {
     const tokens = await refresher(sent.refreshToken);
+
+    // Tarayıcıda başka bir sekmenin yazdığı değişiklik, olayı henüz gelmemiş olsa da görülsün diye depo yeniden okunur.
+    if (Platform.OS === 'web') {
+      await restoreSession();
+    }
 
     if (!unchanged()) {
       // Yenilenen token'lar başka bir hesabın oturumuna yazılmaz.

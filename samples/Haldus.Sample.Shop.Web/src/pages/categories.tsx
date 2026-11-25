@@ -96,9 +96,6 @@ export function CategoriesPage() {
           queryKey: getListCategoriesQueryKey(),
         })
       },
-      // Ürünü veya alt kategorisi olan kategori silinemez (409); nedeni backend açıklar.
-      onError: (error) =>
-        toast.error(problemMessage(error, t("common.unexpectedError"))),
     },
   })
 
@@ -189,6 +186,7 @@ export function CategoriesPage() {
         onOpenChange={(open) => {
           if (!open) {
             setDeleting(null)
+            remove.reset()
           }
         }}
         title={t("categories.deleteTitle")}
@@ -197,6 +195,12 @@ export function CategoriesPage() {
         })}
         confirmLabel={t("common.delete")}
         pending={remove.isPending}
+        // Ürünü veya alt kategorisi olan kategori silinemez (409); nedeni backend açıklar.
+        error={
+          remove.isError
+            ? problemMessage(remove.error, t("common.unexpectedError"))
+            : undefined
+        }
         onConfirm={() => {
           if (deleting) {
             remove.mutate({ id: deleting.id })

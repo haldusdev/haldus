@@ -12,7 +12,7 @@ import { problemMessage } from '@/lib/problem';
 /** Liste yüklenirken satırların yerini tutar; yükseklikleri gerçek satırlarla aynıdır ki ekran zıplamasın. */
 export function ListSkeleton({ rows = 6 }: { rows?: number }) {
   return (
-    <View className="gap-3 p-4" accessibilityState={{ busy: true }}>
+    <View className="gap-3 p-4" aria-busy>
       {Array.from({ length: rows }, (_, row) => (
         <Skeleton key={row} className="h-16 w-full rounded-lg" />
       ))}

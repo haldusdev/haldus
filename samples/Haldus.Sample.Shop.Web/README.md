@@ -93,7 +93,8 @@ doğrulama, e-posta değiştirme ve hesap silme yoktur.
 | `pnpm dev` | Geliştirme sunucusu |
 | `pnpm generate:api` | `src/api` altındaki istemciyi backend'in `openapi.json` dosyasından yeniden üretir |
 | `pnpm typecheck` | Tip denetimi |
-| `pnpm test` | Oturum ve istek mantığının testleri (`tests/`) |
+| `pnpm test` | Oturum ve istek mantığının ve bileşenlerin ilk çiziminin testleri (`tests/`) |
+| `pnpm test:e2e` | Etkileşim testleri: paneli derler ve gerçek bir tarayıcıda sürer (`tests/e2e`) |
 | `pnpm lint` | ESLint |
 | `pnpm build` | Tip denetimi + üretim derlemesi |
 | `pnpm format` | Prettier |
@@ -143,8 +144,18 @@ Bu seçimler kullanıcıya sorulmadan, önerilen seçenekle verildi (deponun `CL
   altında, `fetch`, `localStorage` ve Web Locks elle yazılmış taklitlerle). Bileşenler ve sayfalar `react-dom/server`
   ile metne çizilip çıktıları denetlenir (`tests/ui`): etiketler, erişilebilir adlar, iki dilde de çevrilmemiş metin
   kalmaması, giriş yönlendirmeleri, yüklenen ve boş liste durumları. Bu testler yalnızca ilk çizimi görür:
-  tıklama, yazma, veri yükleme ve açılır pencerelerin içeriği sınanmaz; onlar bir DOM kütüphanesi (yeni bir
-  bağımlılık) ister.
+  tıklama, yazma, veri yükleme ve açılır pencerelerin içeriği orada sınanmaz.
+- **Etkileşim testleri:** yine paket eklenmedi. `pnpm test:e2e` paneli derler, kurulu bir Chromium tarayıcısını (Chrome
+  veya Edge; `HALDUS_TEST_BROWSER` ile seçilir) başsız açar ve DevTools protokolüyle sürer: tıklama ve yazma gerçek
+  girdi olaylarıdır, açılır listeler ve pencereler kullanıcının elindeki gibi davranır. Backend çalışmaz; testler
+  derlenmiş paneli ve API'nin bellekteki bir taklidini aynı adresten sunan bir sunucuyla konuşur
+  (`tests/e2e/support/shop.ts`; yanıtları orval'ın tipleriyle yazılır). Her senaryo bir işlemden sonra giden isteği
+  (yol, gövde, `Authorization`, `Accept-Language`, `If-Match`, `Idempotency-Key`) ve yanıtın sayfaya yansımasını
+  denetler: giriş, kayıt, parola sıfırlama, dil değişimi, ürünlerde arama / sıralama / sayfalama / oluşturma /
+  düzenleme / silme, siparişin iş akışı ve sürüm çakışması, kategoriler, e-posta doğrulama, token yenileme (tek
+  yenileme, reddedilen yenileme, sunucu hatası, 409) ve iki sekmenin oturumu paylaşması. Taklit backend'in yerine
+  geçmez: backend'in kendi davranışı entegrasyon testlerindedir, panelin gerçek backend'le birlikte çalıştığı elle
+  doğrulanır. Tarayıcı bulunamazsa testler atlanır.
 - **Elle doğrulama:** panel, çalışan backend'e karşı tarayıcıda denendi. Güvenlik incelemelerinin düzeltmelerinden
   sonraki son turda: e-postasını doğrulamamış personel adresi ürün oluşturamadı (backend'in Türkçe 403 mesajı
   pencerede göründü), "Yeniden gönder" yeni bir kod üretti, küçük harf ve tireyle yazılan kod hesabı doğruladı ve

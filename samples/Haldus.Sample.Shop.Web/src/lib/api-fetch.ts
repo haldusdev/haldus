@@ -125,7 +125,11 @@ async function refresh(sent: Session): Promise<boolean> {
   }
 
   // Yanıt beklenirken oturum değişebilir (çıkış, başka hesapla giriş); sonuç yalnızca hâlâ aynı oturuma uygulanır.
-  const unchanged = () => getSession()?.refreshToken === sent.refreshToken
+  // Başka bir sekmenin yazdığı değişiklik, olayı henüz gelmemiş olsa da görülsün diye depo yeniden okunur.
+  const unchanged = () => {
+    reloadSession()
+    return getSession()?.refreshToken === sent.refreshToken
+  }
 
   try {
     const tokens = await refresher(sent.refreshToken)

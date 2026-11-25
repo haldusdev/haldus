@@ -150,8 +150,6 @@ function OrderView({ order, etag }: { order: OrderResponse; etag: string }) {
         })
         await navigate("/orders")
       },
-      onError: (error) =>
-        toast.error(problemMessage(error, t("common.unexpectedError"))),
     },
   })
 
@@ -414,11 +412,22 @@ function OrderView({ order, etag }: { order: OrderResponse; etag: string }) {
 
       <ConfirmDialog
         open={dialog === "delete"}
-        onOpenChange={(open) => setDialog(open ? "delete" : null)}
+        onOpenChange={(open) => {
+          setDialog(open ? "delete" : null)
+
+          if (!open) {
+            remove.reset()
+          }
+        }}
         title={t("orders.detail.deleteTitle")}
         description={t("orders.detail.deleteDescription")}
         confirmLabel={t("common.delete")}
         pending={remove.isPending}
+        error={
+          remove.isError
+            ? problemMessage(remove.error, t("common.unexpectedError"))
+            : undefined
+        }
         onConfirm={() => remove.mutate({ id: order.id })}
       />
     </>

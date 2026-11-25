@@ -49,14 +49,15 @@ export default function AccountScreen() {
 
       <View className="gap-2 py-3">
         <Text className="text-sm text-muted-foreground">{t('account.language')}</Text>
-        <View className="flex-row gap-2" role="radiogroup">
+        <View className="flex-row gap-2" role="radiogroup" aria-label={t('account.language')}>
           {languages.map((language) => (
             <Button
               key={language}
               variant={i18n.language === language ? 'default' : 'outline'}
               className="h-11 flex-1"
               role="radio"
-              accessibilityState={{ checked: i18n.language === language }}
+              // `aria-checked` cihazda da web'de de okunur; `accessibilityState` web'e hiç yansımıyordu.
+              aria-checked={i18n.language === language}
               // Dil backend'e de gider; önbellekteki yanıtlar eski dilde olabileceği için yenilenir.
               onPress={() =>
                 void setLanguage(language).then(() => queryClient.invalidateQueries())
@@ -70,14 +71,14 @@ export default function AccountScreen() {
 
       <View className="gap-2 py-3">
         <Text className="text-sm text-muted-foreground">{t('account.theme')}</Text>
-        <View className="flex-row gap-2" role="radiogroup">
+        <View className="flex-row gap-2" role="radiogroup" aria-label={t('account.theme')}>
           {themes.map((theme) => (
             <Button
               key={theme}
               variant={(colorScheme ?? 'light') === theme ? 'default' : 'outline'}
               className="h-11 flex-1"
               role="radio"
-              accessibilityState={{ checked: (colorScheme ?? 'light') === theme }}
+              aria-checked={(colorScheme ?? 'light') === theme}
               onPress={() => setColorScheme(theme)}>
               <Text>{t(themeLabels[theme])}</Text>
             </Button>

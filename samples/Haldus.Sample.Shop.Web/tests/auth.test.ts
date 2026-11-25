@@ -235,6 +235,66 @@ describe("auth", () => {
       assert.equal(storage.getItem(STORAGE_KEY), null)
     })
 
+    it("does not write the verified tokens into another account's session", async () => {
+      // Yanıt beklenirken başka bir sekmede başka bir hesapla giriş yapıldı.
+      const other = session({
+        accountId: "account-2",
+        email: "grace@example.com",
+        accessToken: "access-b",
+        refreshToken: "refresh-b",
+      })
+      signIn(session())
+      respondWith(() => {
+        storage.setItem(STORAGE_KEY, JSON.stringify(other))
+        return json(200, renewedTokens)
+      })
+
+      await confirmEmail("123456")
+
+      assert.deepEqual(getSession(), other)
+      assert.deepEqual(storedSession(), other)
+      assert.equal(callsTo("/auth/refresh").length, 0)
+    })
+
+    it("renews instead of storing tokens that went stale while verifying", async () => {
+      // Yanıt beklenirken başka bir sekme oturumu yeniledi: doğrulamanın verdiği token'lar bir önceki sıradadır.
+      const renewedElsewhere = session({
+        accessToken: "access-9",
+        refreshToken: "refresh-9",
+      })
+      signIn(session())
+      respondWith((call) => {
+        if (call.url.endsWith("/auth/refresh")) {
+          return json(200, renewedTokens)
+        }
+
+        storage.setItem(STORAGE_KEY, JSON.stringify(renewedElsewhere))
+        return json(200, { accessToken: "stale-a", refreshToken: "stale-r" })
+      })
+
+      await confirmEmail("123456")
+
+      assert.deepEqual(callsTo("/auth/refresh")[0].body, {
+        refreshToken: "refresh-9",
+      })
+      const expected = session({ ...renewedTokens, emailVerified: true })
+      assert.deepEqual(getSession(), expected)
+      assert.deepEqual(storedSession(), expected)
+    })
+
+    it("writes nothing when the user signed out while verifying", async () => {
+      signIn(session())
+      respondWith(() => {
+        storage.removeItem(STORAGE_KEY)
+        return json(200, renewedTokens)
+      })
+
+      await confirmEmail("123456")
+
+      assert.equal(getSession(), null)
+      assert.equal(storage.getItem(STORAGE_KEY), null)
+    })
+
     it("throws the problem of a wrong code and keeps the session", async () => {
       const problem = {
         title: "One or more validation errors occurred.",

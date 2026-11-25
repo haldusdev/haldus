@@ -180,6 +180,58 @@ describe('auth', () => {
       assert.deepEqual([...items].sort(), stored(expected).sort());
     });
 
+    it("does not write the verified tokens into another account's session", async () => {
+      // Yanıt beklenirken başka bir hesapla giriş yapıldı.
+      const other = session({
+        accountId: 'account-2',
+        email: 'grace@example.com',
+        accessToken: 'access-b',
+        refreshToken: 'refresh-b',
+      });
+      await signIn(session());
+      respondWith(async () => {
+        await signIn(other);
+        return json(200, renewedTokens);
+      });
+
+      await confirmEmail('123456');
+
+      assert.deepEqual(getSession(), other);
+      assert.deepEqual([...items].sort(), stored(other).sort());
+      assert.equal(callsTo('/auth/refresh').length, 0);
+    });
+
+    it('renews instead of storing tokens that went stale while verifying', async () => {
+      const renewedElsewhere = session({ accessToken: 'access-9', refreshToken: 'refresh-9' });
+      await signIn(session());
+      respondWith(async (call) => {
+        if (call.url.endsWith('/auth/refresh')) {
+          return json(200, renewedTokens);
+        }
+
+        await signIn(renewedElsewhere);
+        return json(200, { accessToken: 'stale-a', refreshToken: 'stale-r' });
+      });
+
+      await confirmEmail('123456');
+
+      assert.deepEqual(callsTo('/auth/refresh')[0].body, { refreshToken: 'refresh-9' });
+      assert.deepEqual(getSession(), session({ ...renewedTokens, emailVerified: true }));
+    });
+
+    it('writes nothing when the user signed out while verifying', async () => {
+      await signIn(session());
+      respondWith(async () => {
+        await signOut();
+        return json(200, renewedTokens);
+      });
+
+      await confirmEmail('123456');
+
+      assert.equal(getSession(), null);
+      assert.equal(items.size, 0);
+    });
+
     it('renews the session when the account was already verified', async () => {
       await signIn(session());
       respondWith((call) =>

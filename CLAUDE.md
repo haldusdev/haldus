@@ -29,8 +29,17 @@ EF Core yapılandırması üretilir.
   taşımaz. `@/` takma adını ve çalışamayan modülleri (`@/i18n`, `react-native`, `expo-secure-store`)
   `tests/register.mjs` çözer; panelde `.tsx` dosyalarını kurulu `typescript` paketiyle çevirir. İki projede de oturum
   ve istek mantığı (`lib`) sınanır. Panelde ayrıca bileşenler `react-dom/server` ile metne çizilip denetlenir
-  (`tests/ui`): yalnızca ilk çizim; etkileşim, efektler ve portal içeriği (açılır pencere, menü) görülmez. Mobilde
-  ekran testi yoktur.
+  (`tests/ui`): yalnızca ilk çizim; etkileşim, efektler ve portal içeriği (açılır pencere, menü) görülmez.
+- Örnek arayüzlerin etkileşim testleri: `pnpm test:e2e` (panelde ve mobilde; önce derler / web'e dışa aktarır). Paket
+  taşımaz: kurulu bir Chromium tarayıcısı (Chrome veya Edge; `HALDUS_TEST_BROWSER` ile seçilir) başsız açılır ve
+  DevTools protokolüyle, Node'un yerleşik WebSocket istemcisi üzerinden sürülür (`tests/e2e/support/chrome`; iki
+  projedeki dosya aynıdır, birini değiştirirken ötekini de değiştir). Tıklama ve yazma gerçek girdi olaylarıdır.
+  Backend çalışmaz: derlenmiş arayüzü ve API'nin bellekteki bir taklidini aynı adresten sunan bir sunucu konuşur
+  (`tests/e2e/support/shop`; yanıtları orval'ın tipleriyle yazılır, şema değişince tip denetiminden geçmez). Testler
+  bir dokunuştan sonra giden isteği (yol, gövde, başlıklar) ve gelen yanıtın ekrana yansımasını denetler. Tarayıcı
+  veya derleme yoksa testler atlanır. Mobilde sürülen, uygulamanın web dışa aktarımıdır (`dist-e2e`): ekranlar,
+  gezinme ve istekler cihazdakiyle aynı koddur; cihaza özgü olanlar (güvenli depo, klavye, güvenli alanlar) sınanmaz.
+  **Görünür sayılan öğe `aria-hidden` bir bölgenin içinde olamaz** (açık pencerenin arkası, etkin olmayan sekme).
 - Örnek uygulamada üretilen kod `samples/Haldus.Sample.Shop/obj/Generated` altında incelenebilir.
 - Yük ölçümü: `dotnet run -c Release --project tools/Haldus.LoadTest` (çalışan bir örnek mağaza ister; backend
   `Shop:DemoIdentity=true` ile ve Release kipinde başlatılır; ayrıntısı aracın README'sinde). Sonuçlar makineye bağlıdır;
@@ -484,7 +493,13 @@ Yapılmayanlar ve nedenleri:
   hatası (5xx dahil) oturumu kapatıyordu; yenilenen token'lar o sırada değişmiş başka bir hesabın oturumuna
   yazılabiliyordu. Panelin bileşenleri de DOM kütüphanesi olmadan, sunucu tarafı çizimle sınandı (panelde toplam 251,
   mobilde 112 test); o testler iç içe iki `<main>` ve çeviriden geçmeyen birkaç erişilebilirlik etiketi buldu.
-  Etkileşim testleri (tıklama, yazma, veri yükleme) ve mobil ekran testleri hâlâ yoktur.
+  Etkileşim testleri sonradan, yine paket eklenmeden yazıldı (`pnpm test:e2e`: panelde 32, mobilde 16 senaryo;
+  yukarıda, "Komutlar"). Onlar da gerçek hatalar buldu ve düzeltildi: mobilde sepete art arda eklemek her dokunuşta
+  yeni bir sepet oluşturuyordu (değişiklikler artık sıraya girer ve sepetin güncel halini okur, `lib/basket.ts`);
+  mobilde dil ve tema seçenekleri web'de seçili olduklarını bildirmiyordu (`accessibilityState` yerine
+  `aria-checked`); panelde silme reddedilince neden yalnızca açık pencerenin arkasındaki bildirimde yazıyordu
+  (artık pencerenin içinde, `role="alert"`). Mobil ekranlar yalnızca web hedefinde sürülür; cihazda otomatik ekran
+  testi yoktur (emülatörde elle denendi).
 - Yeni bağımlılık gerektirenler: kimlik sağlayıcı için JWT doğrulaması
   (`Microsoft.AspNetCore.Authentication.JwtBearer`) ve SQS dışındaki kuyrukların istemcileri (RabbitMQ, Kafka…).
   Eklenmediler; onay gerekir. Amazon SQS için bağımlılıksız bir yayıncı yazıldı (`Haldus.Events.Sqs`).

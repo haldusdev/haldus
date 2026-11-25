@@ -10,6 +10,7 @@
     "format": "prettier --write \"**/*.{ts,tsx}\"",
     "typecheck": "tsc -b --noEmit",
     "test": "node --enable-source-maps --import ./tests/register.mjs --test \"tests/**/*.test.ts\" \"tests/**/*.test.tsx\"",
+    "test:e2e": "pnpm build && node --enable-source-maps --import ./tests/register.mjs --test --test-concurrency=1 \"tests/e2e/**/*.e2e.ts\"",
     "generate:api": "orval",
     "preview": "vite preview"
   },
