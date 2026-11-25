@@ -25,12 +25,14 @@ internal sealed partial class EndpointEmitter
         _map.Append($$"""
                     group.MapPost("{{_keyRoute}}/read", MarkReadAsync)
                         .WithName("MarkRead{{_entity}}")
+                        .WithMetadata(new global::Haldus.HaldusResourceScope({{(_resource.TenantScoped ? "true" : "false")}}, true))
                         {{UserFilter}}
                         .ProducesProblem(401)
                         .ProducesProblem(404);
 
                     group.MapPost("{{_keyRoute}}/unread", MarkUnreadAsync)
                         .WithName("MarkUnread{{_entity}}")
+                        .WithMetadata(new global::Haldus.HaldusResourceScope({{(_resource.TenantScoped ? "true" : "false")}}, true))
                         {{UserFilter}}
                         .ProducesProblem(401)
                         .ProducesProblem(404);
@@ -43,6 +45,7 @@ internal sealed partial class EndpointEmitter
 
                     group.MapPost("/read-all", ReadAllAsync)
                         .WithName("ReadAll{{_plural}}")
+                        .WithMetadata(new global::Haldus.HaldusResourceScope({{(_resource.TenantScoped ? "true" : "false")}}, true))
                         {{UserFilter}}
                         .ProducesProblem(401);
 

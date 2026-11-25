@@ -134,7 +134,7 @@ public sealed class ShopAuthOptions
     /// </summary>
     public bool IsStaff(ShopAccount account) =>
         account.EmailVerifiedAt is not null
-        && Staff.Any(candidate => string.Equals(candidate.Trim(), account.Email, StringComparison.OrdinalIgnoreCase));
+        && Staff.Any(candidate => string.Equals(candidate?.Trim(), account.Email, StringComparison.OrdinalIgnoreCase));
 }
 
 public sealed record RegisterRequest

@@ -282,10 +282,15 @@ export type refreshSessionResponse401 = {
   status: 401
 }
 
+export type refreshSessionResponse409 = {
+  data: ProblemDetails
+  status: 409
+}
+
 export type refreshSessionResponseSuccess = (refreshSessionResponse200) & {
   headers: Headers;
 };
-export type refreshSessionResponseError = (refreshSessionResponse400 | refreshSessionResponse401) & {
+export type refreshSessionResponseError = (refreshSessionResponse400 | refreshSessionResponse401 | refreshSessionResponse409) & {
   headers: Headers;
 };
 

@@ -86,6 +86,9 @@ if (corsOrigins.Length > 0)
     app.UseCors();
 }
 
+// İsteğin dili en başta çözülür: kimlik doğrulamanın ve yetkilendirmenin ret mesajları da o dilde döner.
+app.UseHaldus();
+
 // Bir vekil sunucunun arkasında isteğin adresi vekilin adresidir; hız sınırı o zaman herkesi tek bir kaynak sayardı.
 // Vekiller tanıtılırsa (Shop:KnownProxies) asıl adres X-Forwarded-For başlığından okunur. Başlığa yalnızca tanıtılan
 // vekillerden geliyorsa güvenilir; yoksa isteği yapan, adresini kendisi yazabilirdi.
@@ -107,7 +110,6 @@ app.UseAuthentication();
 app.UseSessionValidation();
 app.UseRateLimiter();
 app.UseAuthorization();
-app.UseHaldus();
 app.MapOpenApi().AllowAnonymous();
 app.MapAuth();
 app.MapCatalog();

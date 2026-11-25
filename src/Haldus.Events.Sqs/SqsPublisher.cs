@@ -95,7 +95,7 @@ public sealed class HaldusSqsPublisher : IHaldusEventPublisher
 
         var settings = options.Value;
         Require(
-            settings.Region.Length > 0 && settings.Region.All(character => char.IsAsciiLetterOrDigit(character) || character == '-'),
+            settings.Region is { Length: > 0 } && settings.Region.All(character => char.IsAsciiLetterOrDigit(character) || character == '-'),
             "Region is required and is made of letters, digits and '-'.");
         Require(!string.IsNullOrEmpty(settings.AccessKey) && !string.IsNullOrEmpty(settings.SecretKey), "AccessKey and SecretKey are required.");
         Require(settings.Timeout > TimeSpan.Zero && settings.Timeout <= TimeSpan.FromHours(1), "Timeout must be positive and at most one hour.");
@@ -156,6 +156,12 @@ public sealed class HaldusSqsPublisher : IHaldusEventPublisher
         {
             using var response = await _clients.CreateClient(HttpClientName).SendAsync(request, HttpCompletionOption.ResponseHeadersRead, timeout.Token);
 
+            // İstemci yönlendirme izlemeyecek biçimde kurulur; uygulama onu yeniden yapılandırıp bunu kaldırdıysa
+            // yönlendirilmiş bir yanıt teslimat sayılmaz.
+            if (response.RequestMessage?.RequestUri is { } answered && answered != request.RequestUri)
+            {
+                throw new HaldusSqsException(_queue, response.StatusCode, errorCode: null, "the request was redirected");
+            }
             if (!response.IsSuccessStatusCode)
             {
                 throw new HaldusSqsException(_queue, response.StatusCode, ErrorCode(await ReadAsync(response, "__type", timeout.Token)));

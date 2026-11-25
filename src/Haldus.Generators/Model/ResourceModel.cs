@@ -147,13 +147,19 @@ internal sealed record ResourceModel(
     /// Uçların metadatasına yazılır; ebeveynin kapsamı bağlayıcıda çözülür.
     /// </summary>
     public bool TenantScoped =>
-        Has(Traits.MultiTenant) || References.Any(reference => reference.Kind == ReferenceKind.Parent && reference.TargetTenantScoped)
-        || References.Any(reference => reference.IsShallowParent && reference.TargetTenantScoped);
+        (Has(Traits.MultiTenant) || References.Any(reference => reference.Kind == ReferenceKind.Parent && reference.TargetTenantScoped)
+            || References.Any(reference => reference.IsShallowParent && reference.TargetTenantScoped))
+        && Transfer is not { Export: false, TargetTenantScoped: false };
 
     /// <summary>Kaynağın kayıtları tek bir kullanıcıya mı ait: kendisi sahiplidir veya sahipli bir ebeveynin altındadır.</summary>
+    /// <remarks>
+    /// İçe aktarma işi kayıt oluşturduğu kaynaktan daha dar bir kapsam bildiremez: kiracıya ait bir iş ortak bir
+    /// kaynağa kayıt ekliyorsa işin uçları da ortak veri yazar ve öyle sınıflanır.
+    /// </remarks>
     public bool OwnerScoped =>
-        Has(Traits.Owned) || References.Any(reference => reference.Kind == ReferenceKind.Parent && reference.TargetOwnerScoped)
-        || References.Any(reference => reference.IsShallowParent && reference.TargetOwnerScoped);
+        (Has(Traits.Owned) || References.Any(reference => reference.Kind == ReferenceKind.Parent && reference.TargetOwnerScoped)
+            || References.Any(reference => reference.IsShallowParent && reference.TargetOwnerScoped))
+        && Transfer is not { Export: false, TargetOwnerScoped: false };
 
     /// <summary>Bir dışa aktarma işi bu kaynağın kayıtlarını okuyor mu; okuyorsa kayıtları veren metot üretilir.</summary>
     public bool IsExported { get; init; }
@@ -821,7 +827,14 @@ internal sealed record TransferModel(
     string? TargetType,
     LocationInfo Location,
     string TargetNamespace = "",
-    bool NeedsTime = false);
+    bool NeedsTime = false)
+{
+    /// <summary>Aktarılan kaynağın kayıtları bir kiracıya mı ait.</summary>
+    public bool TargetTenantScoped { get; init; }
+
+    /// <summary>Aktarılan kaynağın kayıtları tek bir kullanıcıya mı ait.</summary>
+    public bool TargetOwnerScoped { get; init; }
+}
 
 /// <summary>
 /// Başka bir kaynaktan toplanan alan: <c>.Counts&lt;T&gt;()</c> veya <c>.Sums&lt;T&gt;(...)</c>. Alt kaynağın bu

@@ -134,6 +134,47 @@ public sealed class OwnershipTests
         Assert.Equal(4, endpoints.Split("HaldusReadOnly.Instance").Length - 1);
     }
     [Fact]
+    public void ReadReceipts_BelongToTheReaderEvenOnASharedResource()
+    {
+        var run = Run("""
+            app.MapCrud<Product>().ReadReceipts();
+            app.MapCrud<Order>().MultiTenant().ReadReceipts();
+            """).AssertCompiles();
+
+        // Kayıt ortaktır, ama okundu işareti işaretleyenindir: işaretleyen uçlar kullanıcıya ait sayılır. Yoksa
+        // "ortak kaynakları yalnızca personel yazar" gibi bir kural, okuyanın kendi işaretini koymasını engellerdi.
+        var shared = run.Sources["Shop.Product.Endpoints.g.cs"].Replace("\r\n", "\n");
+        Assert.Contains("new global::Haldus.HaldusResourceScope(false, false)", shared);
+
+        foreach (var name in new[] { "MarkReadProduct", "MarkUnreadProduct", "ReadAllProducts" })
+        {
+            Assert.Contains($".WithName(\"{name}\")\n            .WithMetadata(new global::Haldus.HaldusResourceScope(false, true))", shared);
+        }
+
+        Assert.Contains(
+            ".WithName(\"MarkReadOrder\")\n            .WithMetadata(new global::Haldus.HaldusResourceScope(true, true))",
+            run.Sources["Shop.Order.Endpoints.g.cs"].Replace("\r\n", "\n"));
+    }
+
+    [Fact]
+    public void ImportJob_IsNoMoreScopedThanTheResourceItWritesTo()
+    {
+        var run = Run("""
+            app.MapCrud<Product>().Batch();
+            app.MapCrud<Order>().MultiTenant().Batch();
+            app.MapJob<Export>().MultiTenant().Imports<Product>();
+            app.MapJob<Draft>().MultiTenant().Imports<Order>();
+            app.MapJob<Note>().MultiTenant().Exports<Product>();
+            """).AssertCompiles();
+
+        // Kiracıya ait bir iş ortak bir kaynağa kayıt ekliyorsa uçları da ortak veri yazar ve öyle sınıflanır.
+        Assert.Contains("new global::Haldus.HaldusResourceScope(false, false)", run.Sources["Shop.Export.Endpoints.g.cs"]);
+
+        // Hedef de kiracıya aitse iş kiracıya aittir; dışa aktarma yazmaz, işin kendi kapsamı geçerlidir.
+        Assert.Contains("new global::Haldus.HaldusResourceScope(true, false)", run.Sources["Shop.Draft.Endpoints.g.cs"]);
+        Assert.Contains("new global::Haldus.HaldusResourceScope(true, false)", run.Sources["Shop.Note.Endpoints.g.cs"]);
+    }
+    [Fact]
     public void Owned_AddsAnOwnerThatIsNeitherRequestedNorReturned()
     {
         var run = Run("app.MapCrud<Cart>().OwnedByCurrentUser();").AssertCompiles();

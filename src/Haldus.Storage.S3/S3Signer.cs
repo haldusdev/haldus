@@ -58,7 +58,7 @@ internal static class S3Signer
         Set(request.Headers, "x-amz-date", timestamp);
 
         var headers = request.Headers
-            .Select(header => (Name: header.Key.ToLowerInvariant(), Value: string.Join(", ", header.Value.Select(Collapse))))
+            .Select(header => (Name: header.Key.ToLowerInvariant(), Value: string.Join(",", header.Value.Select(Collapse))))
             .OrderBy(header => header.Name, StringComparer.Ordinal)
             .ToList();
         var signedHeaders = string.Join(';', headers.Select(header => header.Name));

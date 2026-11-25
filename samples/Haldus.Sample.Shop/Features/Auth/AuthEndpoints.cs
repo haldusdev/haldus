@@ -153,7 +153,8 @@ public static partial class AuthEndpoints
             .AddEndpointFilter<HaldusValidationFilter<RefreshRequest>>()
             .Produces<AccessTokenResponse>()
             .ProducesValidationProblem()
-            .ProducesProblem(StatusCodes.Status401Unauthorized);
+            .ProducesProblem(StatusCodes.Status401Unauthorized)
+            .ProducesProblem(StatusCodes.Status409Conflict);
 
         auth.MapPost("/logout", LogoutAsync)
             .WithName("Logout")
@@ -428,15 +429,22 @@ public static partial class AuthEndpoints
             // verilmez (verilseydi, çalınmış bir token bu pencerede geçerli bir oturuma çevrilebilirdi); istemci yeni
             // token'ları öteki istekten alır. Bundan eski bir token ise ya çalınmıştır ya da çalan kişi asıl
             // sahibinden önce davranmıştır; hangisi olduğu bilinemez, oturum kapatılır.
+            // İki sıra geriye kadar hoş görülür: e-posta doğrulaması da sırayı ilerletir ve onunla aynı anda gelen bir
+            // yenileme iki geride kalabilir.
             var grace = now.AddSeconds(-refresh.Value.RefreshGraceSeconds);
-            var justRotated = session is not null && session.RefreshVersion == version + 1 && session.RotatedAt > grace;
+            var justRotated = session is not null
+                && version < session.RefreshVersion
+                && version >= session.RefreshVersion - 2
+                && session.RotatedAt > grace;
 
             if (!justRotated)
             {
                 await RevokeAsync(db.Set<ShopSession>().Where(candidate => candidate.Id == sessionId), now, cancellationToken);
+                return SessionExpired(messages);
             }
 
-            return SessionExpired(messages);
+            // Ayrı bir yanıt: istemci oturumunu kapatmaz, yeni token'ları yenilemeyi yapan öteki istekten bekler.
+            return Results.Problem(detail: messages["SessionRenewedElsewhere"], statusCode: StatusCodes.Status409Conflict);
         }
 
         if (await db.Set<ShopAccount>().AsNoTracking().FirstOrDefaultAsync(candidate => candidate.Id == session.AccountId, cancellationToken) is not { } account)

@@ -60,4 +60,7 @@
   <data name="StaffOnly" xml:space="preserve">
     <value>Only staff can change this resource.</value>
   </data>
+  <data name="SessionRenewedElsewhere" xml:space="preserve">
+    <value>The session was just renewed by another request; use the tokens it received.</value>
+  </data>
 </root>

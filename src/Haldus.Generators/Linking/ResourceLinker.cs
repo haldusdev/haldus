@@ -1108,6 +1108,8 @@ internal static class ResourceLinker
                 {
                     TargetType = target.QualifiedName,
                     TargetNamespace = target.Namespace,
+                    TargetTenantScoped = IsTenantScoped(target, resources, byType),
+                    TargetOwnerScoped = IsOwnerScoped(target, resources, byType),
                     NeedsTime = target.Expiry is { LifetimeTicks: not null },
                 };
             }
