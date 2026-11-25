@@ -3,12 +3,14 @@ import { useColorScheme } from 'nativewind';
 import { useTranslation } from 'react-i18next';
 import { ScrollView, View } from 'react-native';
 
+import { ChangePassword, VerifyEmail } from '@/components/account-security';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { Text } from '@/components/ui/text';
 import { languages, setLanguage } from '@/i18n';
 import { API_URL } from '@/lib/api-fetch';
-import { signOut, useSession } from '@/lib/session';
+import { closeSession } from '@/lib/auth';
+import { useSession } from '@/lib/session';
 
 const themes = ['light', 'dark'] as const;
 
@@ -33,7 +35,11 @@ export default function AccountScreen() {
   const session = useSession();
 
   return (
-    <ScrollView className="flex-1 bg-background" contentContainerClassName="p-4">
+    <ScrollView
+      className="flex-1 bg-background"
+      contentContainerClassName="p-4"
+      keyboardShouldPersistTaps="handled">
+      <VerifyEmail />
       <Row label={t('account.user')} value={session?.email ?? ''} />
       <Separator />
       <Row label={t('account.tenant')} value={session?.tenantId ?? ''} />
@@ -80,13 +86,16 @@ export default function AccountScreen() {
       </View>
       <Separator />
 
+      <ChangePassword />
+      <Separator />
+
       <Button
         variant="destructive"
         className="mt-6 h-11"
         onPress={() => {
           // Başka bir kullanıcının verisi önbellekte kalmasın.
           queryClient.clear();
-          void signOut();
+          void closeSession();
         }}>
         <Text>{t('account.signOut')}</Text>
       </Button>

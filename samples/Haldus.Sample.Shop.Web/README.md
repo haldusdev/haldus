@@ -50,8 +50,17 @@ başlar.
 ## Kimlik doğrulama
 
 Örnek backend e-posta ve parola ile giriş yapar ve ASP.NET Core'un yerleşik taşıyıcı (bearer) token şemasını kullanır
-(`/auth/register`, `/auth/login`, `/auth/refresh`, `/auth/me`). Haldus kullanıcıyı ve kiracıyı token'daki claim'lerden
-okur; panelin bununla ilgili tek kodu `src/lib` altındadır:
+(`/auth/*`). Oturumlar sunucudadır: çıkış ve parola değişimi token'ları hemen geçersiz kılar. Haldus kullanıcıyı ve
+kiracıyı token'daki claim'lerden okur. Panelde:
+
+- Giriş ekranı kayıt, giriş ve parola sıfırlamayı (e-postayla gelen altı haneli kod) taşır.
+- E-postası doğrulanmamış hesaba üstte bir şerit gösterilir; kod orada girilir.
+- Hesap menüsünden parola değiştirilir (öteki oturumlar kapanır) ve çıkış yapılır (oturum sunucuda iptal edilir).
+
+Posta ayarı (`Shop__Smtp__Host` …) verilmediyse e-posta gönderilmez. Yerelde denemek için backend geliştirme
+ortamında başlatılır (`dotnet run … -- --environment Development`); kod o zaman backend'in günlüğüne yazılır.
+
+Panelin kimlikle ilgili kodu `src/lib` altındadır:
 
 - `session.ts`: token'lar ve hesabın kimliği. `localStorage` içinde durur; bu, sayfaya sızan bir betiğin onları
   okuyabileceği anlamına gelir. Örnek için kabul edilmiş bir ödünleşimdir; üretimde `HttpOnly` çerez veya bir kimlik
@@ -59,10 +68,11 @@ okur; panelin bununla ilgili tek kodu `src/lib` altındadır:
 - `api-fetch.ts`: erişim token'ını `Authorization` başlığına koyar. Backend 401 dönerse yenileme token'ı ile yeni
   bir oturum alır ve isteği bir kez yineler; aynı anda 401 alan istekler tek bir yenilemeyi bekler. Yenileme de
   reddedilirse oturum kapanır ve giriş ekranına dönülür.
-- `auth.ts`: giriş yanıtından oturumu açar ve yenileme isteğini `api-fetch.ts`'e bağlar.
+- `auth.ts`: giriş yanıtından oturumu açar, çıkışta oturumu backend'de kapatır ve yenileme isteğini
+  `api-fetch.ts`'e bağlar.
 
-Bilinen sınırlar: çıkış yalnızca token'ları tarayıcıdan siler (sunucuda iptal yoktur; yenileme token'ı süresi dolana
-kadar geçerlidir), e-posta doğrulaması, parola sıfırlama ve deneme sınırı (hesap kilidi, hız sınırı) yoktur.
+Bilinen sınırlar: ayrı bir kimlik sağlayıcı (OpenID Connect), iki adımlı doğrulama, e-posta değiştirme ve hesap silme
+yoktur.
 
 ## Komutlar
 

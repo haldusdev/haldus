@@ -28,7 +28,20 @@
     "registerSubmit": "Hesap oluştur",
     "submitting": "Lütfen bekleyin…",
     "switchToRegister": "Hesabınız yok mu? Oluşturun",
-    "switchToSignIn": "Zaten hesabınız var mı? Giriş yapın"
+    "switchToSignIn": "Zaten hesabınız var mı? Giriş yapın",
+    "forgot": "Parolanızı mı unuttunuz?",
+    "forgotHeading": "Parolanızı sıfırlayın",
+    "forgotDescription": "Hesabınızın e-postasını yazın. Kayıtlıysa bir kod göndereceğiz.",
+    "forgotSubmit": "Kod gönder",
+    "resetHeading": "Yeni bir parola seçin",
+    "resetDescription": "E-postadaki 6 haneli kodu ve yeni parolanızı yazın.",
+    "resetSubmit": "Parolayı sıfırla",
+    "code": "Kod",
+    "newPassword": "Yeni parola",
+    "backToSignIn": "Girişe dön",
+    "newCode": "Yeni kod gönder",
+    "codeSent": "Adres kayıtlıysa kod yola çıktı. Kod kısa bir süre geçerlidir.",
+    "passwordReset": "Parolanız sıfırlandı. Yeni parolanızla giriş yapın."
   },
   "products": {
     "searchPlaceholder": "Ürün ara",
@@ -55,6 +68,23 @@
     "lines_one": "{{count}} satır",
     "lines_other": "{{count}} satır",
     "expires": "{{date}} tarihine kadar saklanır"
+  },
+  "verify": {
+    "title": "E-posta adresinizi doğrulayın",
+    "description": "{{email}} adresine 6 haneli bir kod gönderdik.",
+    "code": "Kod",
+    "submit": "Doğrula",
+    "resend": "Yeniden gönder",
+    "resent": "Yeni kod yola çıktı."
+  },
+  "password": {
+    "cancel": "Vazgeç",
+    "save": "Kaydet",
+    "title": "Parolayı değiştir",
+    "description": "Öteki oturumlarınız kapatılacak.",
+    "current": "Geçerli parola",
+    "new": "Yeni parola",
+    "changed": "Parolanız değiştirildi."
   },
   "account": {
     "user": "Kullanıcı",

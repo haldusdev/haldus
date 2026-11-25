@@ -13,6 +13,7 @@ export type Session = {
   accountId: string;
   email: string;
   tenantId: string;
+  emailVerified: boolean;
 };
 
 // Güvenli depo büyük değerleri her platformda kabul etmez (yaklaşık 2 KB); token'lar bu yüzden ayrı anahtarlarda durur.
@@ -24,7 +25,7 @@ const KEYS = {
 
 function parseAccount(
   text: string | null
-): Pick<Session, 'accountId' | 'email' | 'tenantId'> | null {
+): Pick<Session, 'accountId' | 'email' | 'tenantId' | 'emailVerified'> | null {
   try {
     const parsed: unknown = JSON.parse(text ?? 'null');
 
@@ -38,7 +39,12 @@ function parseAccount(
       typeof parsed.email === 'string' &&
       typeof parsed.tenantId === 'string'
     ) {
-      return { accountId: parsed.accountId, email: parsed.email, tenantId: parsed.tenantId };
+      return {
+        accountId: parsed.accountId,
+        email: parsed.email,
+        tenantId: parsed.tenantId,
+        emailVerified: 'emailVerified' in parsed && parsed.emailVerified === true,
+      };
     }
   } catch {
     // Bozuk kayıt oturum yok sayılır.
@@ -67,7 +73,9 @@ export async function restoreSession(): Promise<void> {
     readItem(KEYS.account).then(parseAccount),
   ]);
 
-  publish(accessToken && refreshToken && account ? { accessToken, refreshToken, ...account } : null);
+  publish(
+    accessToken && refreshToken && account ? { accessToken, refreshToken, ...account } : null
+  );
 }
 
 export async function signIn(session: Session): Promise<void> {
@@ -90,6 +98,13 @@ export async function renewTokens(accessToken: string, refreshToken: string): Pr
       writeItem(KEYS.accessToken, accessToken),
       writeItem(KEYS.refreshToken, refreshToken),
     ]);
+  }
+}
+
+/** E-posta doğrulanınca backend'in verdiği yeni token'larla oturumu günceller. */
+export async function markEmailVerified(accessToken: string, refreshToken: string): Promise<void> {
+  if (current) {
+    await signIn({ ...current, accessToken, refreshToken, emailVerified: true });
   }
 }
 

@@ -1,6 +1,8 @@
+import { useState } from "react"
 import { useTranslation } from "react-i18next"
-import { ChevronsUpDownIcon, LogOutIcon } from "lucide-react"
+import { ChevronsUpDownIcon, KeyRoundIcon, LogOutIcon } from "lucide-react"
 
+import { ChangePasswordDialog } from "@/components/change-password-dialog"
 import { useTheme } from "@/components/theme-provider"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import {
@@ -20,7 +22,8 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar"
 import { languages } from "@/i18n"
-import { signOut, useSession } from "@/lib/session"
+import { closeSession } from "@/lib/auth"
+import { useSession } from "@/lib/session"
 
 const themes = ["light", "dark", "system"] as const
 
@@ -35,6 +38,7 @@ export function NavUser() {
   const { t, i18n } = useTranslation()
   const { theme, setTheme } = useTheme()
   const session = useSession()
+  const [changingPassword, setChangingPassword] = useState(false)
 
   if (!session) {
     return null
@@ -118,12 +122,20 @@ export function NavUser() {
               ))}
             </DropdownMenuRadioGroup>
             <DropdownMenuSeparator />
-            <DropdownMenuItem onSelect={signOut}>
+            <DropdownMenuItem onSelect={() => setChangingPassword(true)}>
+              <KeyRoundIcon aria-hidden="true" />
+              {t("nav.changePassword")}
+            </DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => void closeSession()}>
               <LogOutIcon aria-hidden="true" />
               {t("nav.signOut")}
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
+        <ChangePasswordDialog
+          open={changingPassword}
+          onOpenChange={setChangingPassword}
+        />
       </SidebarMenuItem>
     </SidebarMenu>
   )

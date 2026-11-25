@@ -61,5 +61,8 @@ public static class AccountEndpoints
 
         guests.MapDetail<GuestBasketItem>();
         guests.MapAction<AddBasketItem>();
+
+        // Misafirin hesabı yoktur: sepeti oturumsuz oluşturur, sonrasında onu token'ı tanıtır.
+        guests.AllowAnonymous();
     }
 }

@@ -1,4 +1,6 @@
+using System.Collections.Concurrent;
 using Haldus.Sample.Shop;
+using Haldus.Sample.Shop.Features.Auth;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
@@ -27,13 +29,33 @@ public sealed class ShopFixture : IAsyncLifetime
     /// </summary>
     public HttpClient CreateAuthenticatedAppClient()
     {
-        _authenticatedFactory ??= new WebApplicationFactory<ShopMessages>().WithWebHostBuilder(builder =>
-            builder.UseSetting("ConnectionStrings:Default", _database.GetConnectionString()));
-
+        // Testler tek bir adresten çok sayıda giriş yapar; hız sınırı kendi testinde, ayrı bir uygulamayla sınanır.
+        _authenticatedFactory ??= CreateAuthenticatedFactory(("Shop:Auth:RequestsPerMinute", "100000"));
         return _authenticatedFactory.CreateClient();
     }
 
+    /// <summary>
+    /// Gerçek kimlik doğrulamayla çalışan, ayarları verilen ayrı bir uygulama (ör. kısa bir hesap kilidiyle). Hesap
+    /// e-postaları gönderilmez, <see cref="Mail"/> içinde toplanır. Çağıran atar.
+    /// </summary>
+    public WebApplicationFactory<ShopMessages> CreateAuthenticatedFactory(params (string Key, string Value)[] settings) =>
+        new WebApplicationFactory<ShopMessages>().WithWebHostBuilder(builder =>
+        {
+            builder.UseSetting("ConnectionStrings:Default", _database.GetConnectionString());
+
+            foreach (var (key, value) in settings)
+            {
+                builder.UseSetting(key, value);
+            }
+
+            builder.ConfigureTestServices(services => services.AddSingleton<IAccountMailer>(Mail));
+        });
+
+    /// <summary>Gerçek kimlik doğrulamayla çalışan uygulamaların "gönderdiği" hesap e-postaları.</summary>
+    public CapturedMail Mail { get; } = new();
+
     private WebApplicationFactory<ShopMessages>? _authenticatedFactory;
+
     public WebApplicationFactory<ShopMessages> CreateFactory(Action<IServiceCollection> configureServices) =>
         (_factory ?? throw new InvalidOperationException("The fixture has not been initialized."))
             .WithWebHostBuilder(builder => builder.ConfigureTestServices(configureServices));
@@ -78,6 +100,26 @@ public sealed class ShopFixture : IAsyncLifetime
 
         await _database.DisposeAsync();
     }
+}
+
+/// <summary>E-posta göndermek yerine kodları saklayan gönderici; test, kullanıcının e-postasından okuyacağı kodu buradan alır.</summary>
+public sealed class CapturedMail : IAccountMailer
+{
+    private readonly ConcurrentDictionary<(string Email, AccountCodePurpose Purpose), string> _codes = new();
+    private readonly ConcurrentDictionary<(string Email, AccountCodePurpose Purpose), int> _counts = new();
+
+    public Task SendCodeAsync(string email, AccountCodePurpose purpose, string code, CancellationToken cancellationToken)
+    {
+        _codes[(email, purpose)] = code;
+        _counts.AddOrUpdate((email, purpose), 1, (_, count) => count + 1);
+        return Task.CompletedTask;
+    }
+
+    /// <summary>Adrese bu amaçla kaç e-posta gönderildiği.</summary>
+    public int CountFor(string email, AccountCodePurpose purpose) => _counts.GetValueOrDefault((email, purpose));
+
+    /// <summary>Adrese bu amaçla gönderilen son kod; hiç gönderilmediyse <c>null</c>.</summary>
+    public string? CodeFor(string email, AccountCodePurpose purpose) => _codes.GetValueOrDefault((email, purpose));
 }
 
 [CollectionDefinition(Name)]

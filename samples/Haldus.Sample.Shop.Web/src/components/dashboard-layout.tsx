@@ -2,6 +2,7 @@ import { useTranslation } from "react-i18next"
 import { Navigate, Outlet, useLocation } from "react-router"
 
 import { AppSidebar } from "@/components/app-sidebar"
+import { VerifyEmailBanner } from "@/components/verify-email-banner"
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -68,6 +69,7 @@ export function DashboardLayout() {
           </div>
         </header>
         <main className="flex flex-1 flex-col gap-4 p-4 pt-0">
+          <VerifyEmailBanner />
           <Outlet />
         </main>
       </SidebarInset>

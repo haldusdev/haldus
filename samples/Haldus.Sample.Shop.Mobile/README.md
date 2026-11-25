@@ -30,6 +30,8 @@ Expo geliştirme sunucusu açılır; `a` Android emülatöründe, `i` iOS simül
 çalıştırır. Gerçek cihazda [Expo Go](https://expo.dev/go) ile QR kod okutulur.
 
 Backend'in adresi `EXPO_PUBLIC_API_URL` ortam değişkeniyle verilir; verilmezse `http://localhost:5080` kullanılır.
+Yerel ağdaki bir adrese `http://` ile bağlanmak parolayı ve token'ları ağda açık taşır; yalnızca kendi ağınızda
+deneme için uygundur, gerçek bir kurulumda adres `https://` olmalıdır.
 
 | Nerede çalışıyor | Adres |
 |---|---|
@@ -52,8 +54,12 @@ claim'den okur.
   bir oturum alır ve isteği bir kez yineler; aynı anda 401 alan istekler tek bir yenilemeyi bekler. Yenileme de
   reddedilirse oturum kapanır.
 
-Bilinen sınırlar: çıkış yalnızca token'ları cihazdan siler (sunucuda iptal yoktur), e-posta doğrulaması, parola
-sıfırlama ve biyometrik kilit yoktur.
+- Giriş ekranı kayıt, giriş ve parola sıfırlamayı (e-postayla gelen altı haneli kod) taşır. Hesap sekmesinde
+  e-posta doğrulanır, parola değiştirilir ve çıkış yapılır; çıkış oturumu backend'de de iptal eder.
+- Posta ayarı verilmediyse e-posta gönderilmez; yerelde denemek için backend geliştirme ortamında başlatılır
+  (`-- --environment Development`) ve kod backend'in günlüğünden okunur.
+
+Bilinen sınırlar: biyometrik kilit, ayrı bir kimlik sağlayıcı ve iki adımlı doğrulama yoktur.
 
 ## Komutlar
 
@@ -92,10 +98,15 @@ içinde saklanır.
 
 ## Nasıl doğrulandı
 
-`pnpm typecheck` ile ve Expo'nun **web** hedefinde, çalışan backend'e karşı elle: hesap oluşturma (alan hatası
-dahil), giriş, sayfa yenilenince oturumun geri gelmesi, geçersiz erişim token'ının yenilenmesi, ürün listesi, favori
-ekleme, sepete ekleme ve adet değiştirme, dil değişimi. **Android ve iOS'ta çalıştırılmadı** (geliştirildiği makinede
-emülatör yoktu); o hedeflere özgü davranış (güvenli depo, klavye, güvenli alanlar) sınanmadı.
+`pnpm typecheck` ile ve çalışan backend'e karşı elle, iki hedefte:
+
+- **Android** (emülatör, Android 17, Expo Go 56; backend `http://10.0.2.2:5080`): hesap oluşturma (alan hatası dahil),
+  ürün listesi, favori ekleme, sepete ekleme, e-posta doğrulama (yanlış ve doğru kod), uygulama tümüyle kapatılıp
+  açılınca oturumun güvenli depodan geri gelmesi, çıkış, parola sıfırlama, eski parolanın reddedilip yenisiyle giriş.
+- **Web** (Expo'nun web hedefi): yukarıdakilere ek olarak geçersiz erişim token'ının yenilenmesi ve dil değişimi.
+
+**iOS'ta çalıştırılmadı** (geliştirildiği makine Windows); gerçek bir Android cihazda da denenmedi. Klavyenin alanı
+örtmesi, güvenli alanlar ve koyu tema Android'de ayrıca gözle denetlenmedi.
 
 ## Bu örnek için verilen kararlar
 

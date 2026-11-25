@@ -42,7 +42,9 @@ async function request<T>(
 
   const session = getSession()
   // Giriş, kayıt ve yenileme token istemez; süresi dolmuş bir token onlara eklenmez.
-  const credentialRoute = CREDENTIAL_ROUTES.some((route) => url.startsWith(route))
+  const credentialRoute = CREDENTIAL_ROUTES.some((route) =>
+    url.startsWith(route)
+  )
 
   if (session && !credentialRoute && !headers.has("Authorization")) {
     headers.set("Authorization", `Bearer ${session.accessToken}`)
@@ -77,7 +79,10 @@ async function request<T>(
   return { data, status: response.status, headers: response.headers } as T
 }
 
-/** Aynı anda 401 alan istekler tek bir yenilemeyi bekler; yenileme token'ı bir kez kullanılır. */
+/**
+ * Aynı anda 401 alan istekler tek bir yenilemeyi bekler. Yenileme token'ı bir kez kullanılır: backend eskisini yeniden
+ * görürse oturumu çalınmış sayıp kapatır.
+ */
 function renew(sent: Session): Promise<boolean> {
   const current = getSession()
 

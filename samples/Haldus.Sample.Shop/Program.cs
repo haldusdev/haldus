@@ -10,7 +10,7 @@ using Haldus.Sample.Shop.Features.Stock;
 using Haldus.Sample.Shop.Features.Content;
 using Haldus.Sample.Shop.Features.Engagement;
 using Haldus.Sample.Shop.Features.Supply;
-using Microsoft.AspNetCore.Authentication.BearerToken;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -21,14 +21,21 @@ builder.Services.AddDbContext<AppDbContext>(options =>
 
 // Kimlik doğrulama: parola ile giriş ve ASP.NET Core'un yerleşik taşıyıcı (bearer) token şeması; uçları
 // Features/Auth altındadır. Haldus kullanıcıyı ve kiracıyı token'daki claim'lerden okur (varsayılanı budur).
-builder.Services.AddAuthentication(BearerTokenDefaults.AuthenticationScheme).AddBearerToken();
-builder.Services.AddAuthorization();
+builder.Services.AddShopAuth(builder.Configuration);
 
 // Shop:DemoIdentity açıksa kimlik, doğrulanmadan, istek başlıklarından okunur (X-User-Id, X-Tenant-Id). Yalnızca
 // entegrasyon testleri ve yerel denemeler içindir; varsayılan olarak kapalıdır. AddHaldus kendi claim tabanlı
 // çözümleyicisini yalnızca başka bir uygulama kayıtlı değilse ekler.
 if (builder.Configuration.GetValue<bool>("Shop:DemoIdentity"))
 {
+    // Bu kip isteği yapanın söylediği kimliğe güvenir. Yanlışlıkla açık kalmış bir ortam değişkeni üretimde herkese
+    // her kiracının kapısını açardı; bu yüzden geliştirme ortamının dışında uygulama açılmaz.
+    if (!builder.Environment.IsDevelopment())
+    {
+        throw new InvalidOperationException(
+            "Shop:DemoIdentity trusts the identity sent in request headers and is only allowed in the Development environment.");
+    }
+
     builder.Services.AddSingleton<DemoIdentity>();
     builder.Services.AddSingleton<ITenantProvider>(services => services.GetRequiredService<DemoIdentity>());
     builder.Services.AddSingleton<ICurrentUser>(services => services.GetRequiredService<DemoIdentity>());
@@ -79,11 +86,29 @@ if (corsOrigins.Length > 0)
     app.UseCors();
 }
 
+// Bir vekil sunucunun arkasında isteğin adresi vekilin adresidir; hız sınırı o zaman herkesi tek bir kaynak sayardı.
+// Vekiller tanıtılırsa (Shop:KnownProxies) asıl adres X-Forwarded-For başlığından okunur. Başlığa yalnızca tanıtılan
+// vekillerden geliyorsa güvenilir; yoksa isteği yapan, adresini kendisi yazabilirdi.
+var knownProxies = app.Configuration.GetSection("Shop:KnownProxies").Get<string[]>() ?? [];
+
+if (knownProxies.Length > 0)
+{
+    var forwarded = new ForwardedHeadersOptions { ForwardedHeaders = ForwardedHeaders.XForwardedFor };
+
+    foreach (var proxy in knownProxies)
+    {
+        forwarded.KnownProxies.Add(System.Net.IPAddress.Parse(proxy));
+    }
+
+    app.UseForwardedHeaders(forwarded);
+}
+
 app.UseAuthentication();
-app.UseRejectedTokenChallenge();
+app.UseSessionValidation();
+app.UseRateLimiter();
 app.UseAuthorization();
 app.UseHaldus();
-app.MapOpenApi();
+app.MapOpenApi().AllowAnonymous();
 app.MapAuth();
 app.MapCatalog();
 app.MapSales();

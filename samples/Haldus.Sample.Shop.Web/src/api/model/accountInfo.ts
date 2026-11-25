@@ -9,4 +9,5 @@ export interface AccountInfo {
   id: string;
   email: string;
   tenantId: string;
+  emailVerified: boolean;
 }

@@ -26,11 +26,15 @@ import type {
 import type {
   AccessTokenResponse,
   AccountInfo,
+  ChangePasswordRequest,
+  ForgotPasswordRequest,
   HttpValidationProblemDetails,
   LoginRequest,
   ProblemDetails,
   RefreshRequest,
-  RegisterRequest
+  RegisterRequest,
+  ResetPasswordRequest,
+  VerifyEmailRequest
 } from '../model';
 
 
@@ -87,10 +91,15 @@ export type registerResponse409 = {
   status: 409
 }
 
+export type registerResponse429 = {
+  data: ProblemDetails
+  status: 429
+}
+
 export type registerResponseSuccess = (registerResponse200) & {
   headers: Headers;
 };
-export type registerResponseError = (registerResponse400 | registerResponse409) & {
+export type registerResponseError = (registerResponse400 | registerResponse409 | registerResponse429) & {
   headers: Headers;
 };
 
@@ -185,10 +194,15 @@ export type loginResponse401 = {
   status: 401
 }
 
+export type loginResponse429 = {
+  data: ProblemDetails
+  status: 429
+}
+
 export type loginResponseSuccess = (loginResponse200) & {
   headers: Headers;
 };
-export type loginResponseError = (loginResponse400 | loginResponse401) & {
+export type loginResponseError = (loginResponse400 | loginResponse401 | loginResponse429) & {
   headers: Headers;
 };
 
@@ -366,6 +380,192 @@ const {mutation: mutationOptions, fetch: fetchOptions} = options ?
       > => {
       return useMutation(getRefreshSessionMutationOptions(options), queryClient);
     }
+    export type logoutResponse204 = {
+  data: void
+  status: 204
+}
+
+export type logoutResponse401 = {
+  data: ProblemDetails
+  status: 401
+}
+
+export type logoutResponseSuccess = (logoutResponse204) & {
+  headers: Headers;
+};
+export type logoutResponseError = (logoutResponse401) & {
+  headers: Headers;
+};
+
+export type logoutResponse = (logoutResponseSuccess | logoutResponseError)
+
+export const getLogoutUrl = () => {
+
+
+
+
+  return `/auth/logout`
+}
+
+export const logout = async ( options?: RequestInit): Promise<logoutResponse> => {
+
+  const res = await fetch(getLogoutUrl(),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+)
+
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+
+  const data: logoutResponse['data'] = body ? JSON.parse(body) : undefined
+  return { data, status: res.status, headers: res.headers } as logoutResponse
+}
+
+
+
+
+
+export const getLogoutMutationKey = () => ['logout'] as const;
+
+export const getLogoutMutationOptions = <TError = ProblemDetails,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof logout>>, TError,void, TContext>, fetch?: RequestInit}
+): UseMutationOptions<Awaited<ReturnType<typeof logout>>, TError,void, TContext> => {
+
+const mutationKey = getLogoutMutationKey();
+const {mutation: mutationOptions, fetch: fetchOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, fetch: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof logout>>, void> = () => {
+
+
+          return  logout(fetchOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type LogoutMutationResult = NonNullable<Awaited<ReturnType<typeof logout>>>
+
+    export type LogoutMutationError = ProblemDetails
+
+
+    export const useLogout = <TError = ProblemDetails,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof logout>>, TError,void, TContext>, fetch?: RequestInit}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof logout>>,
+        TError,
+        void,
+        TContext
+      > => {
+      return useMutation(getLogoutMutationOptions(options), queryClient);
+    }
+    export type logoutEverywhereResponse204 = {
+  data: void
+  status: 204
+}
+
+export type logoutEverywhereResponse401 = {
+  data: ProblemDetails
+  status: 401
+}
+
+export type logoutEverywhereResponseSuccess = (logoutEverywhereResponse204) & {
+  headers: Headers;
+};
+export type logoutEverywhereResponseError = (logoutEverywhereResponse401) & {
+  headers: Headers;
+};
+
+export type logoutEverywhereResponse = (logoutEverywhereResponseSuccess | logoutEverywhereResponseError)
+
+export const getLogoutEverywhereUrl = () => {
+
+
+
+
+  return `/auth/logout-all`
+}
+
+export const logoutEverywhere = async ( options?: RequestInit): Promise<logoutEverywhereResponse> => {
+
+  const res = await fetch(getLogoutEverywhereUrl(),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+)
+
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+
+  const data: logoutEverywhereResponse['data'] = body ? JSON.parse(body) : undefined
+  return { data, status: res.status, headers: res.headers } as logoutEverywhereResponse
+}
+
+
+
+
+
+export const getLogoutEverywhereMutationKey = () => ['logoutEverywhere'] as const;
+
+export const getLogoutEverywhereMutationOptions = <TError = ProblemDetails,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof logoutEverywhere>>, TError,void, TContext>, fetch?: RequestInit}
+): UseMutationOptions<Awaited<ReturnType<typeof logoutEverywhere>>, TError,void, TContext> => {
+
+const mutationKey = getLogoutEverywhereMutationKey();
+const {mutation: mutationOptions, fetch: fetchOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, fetch: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof logoutEverywhere>>, void> = () => {
+
+
+          return  logoutEverywhere(fetchOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type LogoutEverywhereMutationResult = NonNullable<Awaited<ReturnType<typeof logoutEverywhere>>>
+
+    export type LogoutEverywhereMutationError = ProblemDetails
+
+
+    export const useLogoutEverywhere = <TError = ProblemDetails,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof logoutEverywhere>>, TError,void, TContext>, fetch?: RequestInit}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof logoutEverywhere>>,
+        TError,
+        void,
+        TContext
+      > => {
+      return useMutation(getLogoutEverywhereMutationOptions(options), queryClient);
+    }
     export type getCurrentAccountResponse200 = {
   data: AccountInfo
   status: 200
@@ -485,3 +685,508 @@ export function useGetCurrentAccount<TData = Awaited<ReturnType<typeof getCurren
 
 
 
+export type forgotPasswordResponse202 = {
+  data: void
+  status: 202
+}
+
+export type forgotPasswordResponse400 = {
+  data: HttpValidationProblemDetails
+  status: 400
+}
+
+export type forgotPasswordResponse429 = {
+  data: ProblemDetails
+  status: 429
+}
+
+export type forgotPasswordResponseSuccess = (forgotPasswordResponse202) & {
+  headers: Headers;
+};
+export type forgotPasswordResponseError = (forgotPasswordResponse400 | forgotPasswordResponse429) & {
+  headers: Headers;
+};
+
+export type forgotPasswordResponse = (forgotPasswordResponseSuccess | forgotPasswordResponseError)
+
+export const getForgotPasswordUrl = () => {
+
+
+
+
+  return `/auth/password/forgot`
+}
+
+export const forgotPassword = async (forgotPasswordRequest: ForgotPasswordRequest, options?: RequestInit): Promise<forgotPasswordResponse> => {
+
+  const res = await fetch(getForgotPasswordUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(forgotPasswordRequest)
+  }
+)
+
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+
+  const data: forgotPasswordResponse['data'] = body ? JSON.parse(body) : undefined
+  return { data, status: res.status, headers: res.headers } as forgotPasswordResponse
+}
+
+
+
+
+
+export const getForgotPasswordMutationKey = () => ['forgotPassword'] as const;
+
+export const getForgotPasswordMutationOptions = <TError = HttpValidationProblemDetails | ProblemDetails,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof forgotPassword>>, TError,ForgotPasswordMutationVariables, TContext>, fetch?: RequestInit}
+): UseMutationOptions<Awaited<ReturnType<typeof forgotPassword>>, TError,ForgotPasswordMutationVariables, TContext> => {
+
+const mutationKey = getForgotPasswordMutationKey();
+const {mutation: mutationOptions, fetch: fetchOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, fetch: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof forgotPassword>>, ForgotPasswordMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  forgotPassword(data,fetchOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ForgotPasswordMutationResult = NonNullable<Awaited<ReturnType<typeof forgotPassword>>>
+    export type ForgotPasswordMutationBody = ForgotPasswordRequest
+    export type ForgotPasswordMutationError = HttpValidationProblemDetails | ProblemDetails
+    export type ForgotPasswordMutationVariables = {data: ForgotPasswordRequest}
+
+    export const useForgotPassword = <TError = HttpValidationProblemDetails | ProblemDetails,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof forgotPassword>>, TError,ForgotPasswordMutationVariables, TContext>, fetch?: RequestInit}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof forgotPassword>>,
+        TError,
+        ForgotPasswordMutationVariables,
+        TContext
+      > => {
+      return useMutation(getForgotPasswordMutationOptions(options), queryClient);
+    }
+    export type resetPasswordResponse204 = {
+  data: void
+  status: 204
+}
+
+export type resetPasswordResponse400 = {
+  data: HttpValidationProblemDetails
+  status: 400
+}
+
+export type resetPasswordResponse429 = {
+  data: ProblemDetails
+  status: 429
+}
+
+export type resetPasswordResponseSuccess = (resetPasswordResponse204) & {
+  headers: Headers;
+};
+export type resetPasswordResponseError = (resetPasswordResponse400 | resetPasswordResponse429) & {
+  headers: Headers;
+};
+
+export type resetPasswordResponse = (resetPasswordResponseSuccess | resetPasswordResponseError)
+
+export const getResetPasswordUrl = () => {
+
+
+
+
+  return `/auth/password/reset`
+}
+
+export const resetPassword = async (resetPasswordRequest: ResetPasswordRequest, options?: RequestInit): Promise<resetPasswordResponse> => {
+
+  const res = await fetch(getResetPasswordUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(resetPasswordRequest)
+  }
+)
+
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+
+  const data: resetPasswordResponse['data'] = body ? JSON.parse(body) : undefined
+  return { data, status: res.status, headers: res.headers } as resetPasswordResponse
+}
+
+
+
+
+
+export const getResetPasswordMutationKey = () => ['resetPassword'] as const;
+
+export const getResetPasswordMutationOptions = <TError = HttpValidationProblemDetails | ProblemDetails,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof resetPassword>>, TError,ResetPasswordMutationVariables, TContext>, fetch?: RequestInit}
+): UseMutationOptions<Awaited<ReturnType<typeof resetPassword>>, TError,ResetPasswordMutationVariables, TContext> => {
+
+const mutationKey = getResetPasswordMutationKey();
+const {mutation: mutationOptions, fetch: fetchOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, fetch: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof resetPassword>>, ResetPasswordMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  resetPassword(data,fetchOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ResetPasswordMutationResult = NonNullable<Awaited<ReturnType<typeof resetPassword>>>
+    export type ResetPasswordMutationBody = ResetPasswordRequest
+    export type ResetPasswordMutationError = HttpValidationProblemDetails | ProblemDetails
+    export type ResetPasswordMutationVariables = {data: ResetPasswordRequest}
+
+    export const useResetPassword = <TError = HttpValidationProblemDetails | ProblemDetails,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof resetPassword>>, TError,ResetPasswordMutationVariables, TContext>, fetch?: RequestInit}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof resetPassword>>,
+        TError,
+        ResetPasswordMutationVariables,
+        TContext
+      > => {
+      return useMutation(getResetPasswordMutationOptions(options), queryClient);
+    }
+    export type changePasswordResponse204 = {
+  data: void
+  status: 204
+}
+
+export type changePasswordResponse400 = {
+  data: HttpValidationProblemDetails
+  status: 400
+}
+
+export type changePasswordResponse401 = {
+  data: ProblemDetails
+  status: 401
+}
+
+export type changePasswordResponse429 = {
+  data: ProblemDetails
+  status: 429
+}
+
+export type changePasswordResponseSuccess = (changePasswordResponse204) & {
+  headers: Headers;
+};
+export type changePasswordResponseError = (changePasswordResponse400 | changePasswordResponse401 | changePasswordResponse429) & {
+  headers: Headers;
+};
+
+export type changePasswordResponse = (changePasswordResponseSuccess | changePasswordResponseError)
+
+export const getChangePasswordUrl = () => {
+
+
+
+
+  return `/auth/password/change`
+}
+
+export const changePassword = async (changePasswordRequest: ChangePasswordRequest, options?: RequestInit): Promise<changePasswordResponse> => {
+
+  const res = await fetch(getChangePasswordUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(changePasswordRequest)
+  }
+)
+
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+
+  const data: changePasswordResponse['data'] = body ? JSON.parse(body) : undefined
+  return { data, status: res.status, headers: res.headers } as changePasswordResponse
+}
+
+
+
+
+
+export const getChangePasswordMutationKey = () => ['changePassword'] as const;
+
+export const getChangePasswordMutationOptions = <TError = HttpValidationProblemDetails | ProblemDetails,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof changePassword>>, TError,ChangePasswordMutationVariables, TContext>, fetch?: RequestInit}
+): UseMutationOptions<Awaited<ReturnType<typeof changePassword>>, TError,ChangePasswordMutationVariables, TContext> => {
+
+const mutationKey = getChangePasswordMutationKey();
+const {mutation: mutationOptions, fetch: fetchOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, fetch: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof changePassword>>, ChangePasswordMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  changePassword(data,fetchOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ChangePasswordMutationResult = NonNullable<Awaited<ReturnType<typeof changePassword>>>
+    export type ChangePasswordMutationBody = ChangePasswordRequest
+    export type ChangePasswordMutationError = HttpValidationProblemDetails | ProblemDetails
+    export type ChangePasswordMutationVariables = {data: ChangePasswordRequest}
+
+    export const useChangePassword = <TError = HttpValidationProblemDetails | ProblemDetails,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof changePassword>>, TError,ChangePasswordMutationVariables, TContext>, fetch?: RequestInit}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof changePassword>>,
+        TError,
+        ChangePasswordMutationVariables,
+        TContext
+      > => {
+      return useMutation(getChangePasswordMutationOptions(options), queryClient);
+    }
+    export type verifyEmailResponse200 = {
+  data: AccessTokenResponse
+  status: 200
+}
+
+export type verifyEmailResponse204 = {
+  data: void
+  status: 204
+}
+
+export type verifyEmailResponse400 = {
+  data: HttpValidationProblemDetails
+  status: 400
+}
+
+export type verifyEmailResponse401 = {
+  data: ProblemDetails
+  status: 401
+}
+
+export type verifyEmailResponse429 = {
+  data: ProblemDetails
+  status: 429
+}
+
+export type verifyEmailResponseSuccess = (verifyEmailResponse200 | verifyEmailResponse204) & {
+  headers: Headers;
+};
+export type verifyEmailResponseError = (verifyEmailResponse400 | verifyEmailResponse401 | verifyEmailResponse429) & {
+  headers: Headers;
+};
+
+export type verifyEmailResponse = (verifyEmailResponseSuccess | verifyEmailResponseError)
+
+export const getVerifyEmailUrl = () => {
+
+
+
+
+  return `/auth/email/verify`
+}
+
+export const verifyEmail = async (verifyEmailRequest: VerifyEmailRequest, options?: RequestInit): Promise<verifyEmailResponse> => {
+
+  const res = await fetch(getVerifyEmailUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(verifyEmailRequest)
+  }
+)
+
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+
+  const data: verifyEmailResponse['data'] = body ? JSON.parse(body) : {}
+  return { data, status: res.status, headers: res.headers } as verifyEmailResponse
+}
+
+
+
+
+
+export const getVerifyEmailMutationKey = () => ['verifyEmail'] as const;
+
+export const getVerifyEmailMutationOptions = <TError = HttpValidationProblemDetails | ProblemDetails,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof verifyEmail>>, TError,VerifyEmailMutationVariables, TContext>, fetch?: RequestInit}
+): UseMutationOptions<Awaited<ReturnType<typeof verifyEmail>>, TError,VerifyEmailMutationVariables, TContext> => {
+
+const mutationKey = getVerifyEmailMutationKey();
+const {mutation: mutationOptions, fetch: fetchOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, fetch: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof verifyEmail>>, VerifyEmailMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  verifyEmail(data,fetchOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type VerifyEmailMutationResult = NonNullable<Awaited<ReturnType<typeof verifyEmail>>>
+    export type VerifyEmailMutationBody = VerifyEmailRequest
+    export type VerifyEmailMutationError = HttpValidationProblemDetails | ProblemDetails
+    export type VerifyEmailMutationVariables = {data: VerifyEmailRequest}
+
+    export const useVerifyEmail = <TError = HttpValidationProblemDetails | ProblemDetails,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof verifyEmail>>, TError,VerifyEmailMutationVariables, TContext>, fetch?: RequestInit}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof verifyEmail>>,
+        TError,
+        VerifyEmailMutationVariables,
+        TContext
+      > => {
+      return useMutation(getVerifyEmailMutationOptions(options), queryClient);
+    }
+    export type resendEmailVerificationResponse202 = {
+  data: void
+  status: 202
+}
+
+export type resendEmailVerificationResponse401 = {
+  data: ProblemDetails
+  status: 401
+}
+
+export type resendEmailVerificationResponse429 = {
+  data: ProblemDetails
+  status: 429
+}
+
+export type resendEmailVerificationResponseSuccess = (resendEmailVerificationResponse202) & {
+  headers: Headers;
+};
+export type resendEmailVerificationResponseError = (resendEmailVerificationResponse401 | resendEmailVerificationResponse429) & {
+  headers: Headers;
+};
+
+export type resendEmailVerificationResponse = (resendEmailVerificationResponseSuccess | resendEmailVerificationResponseError)
+
+export const getResendEmailVerificationUrl = () => {
+
+
+
+
+  return `/auth/email/resend`
+}
+
+export const resendEmailVerification = async ( options?: RequestInit): Promise<resendEmailVerificationResponse> => {
+
+  const res = await fetch(getResendEmailVerificationUrl(),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+)
+
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+
+  const data: resendEmailVerificationResponse['data'] = body ? JSON.parse(body) : undefined
+  return { data, status: res.status, headers: res.headers } as resendEmailVerificationResponse
+}
+
+
+
+
+
+export const getResendEmailVerificationMutationKey = () => ['resendEmailVerification'] as const;
+
+export const getResendEmailVerificationMutationOptions = <TError = ProblemDetails,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof resendEmailVerification>>, TError,void, TContext>, fetch?: RequestInit}
+): UseMutationOptions<Awaited<ReturnType<typeof resendEmailVerification>>, TError,void, TContext> => {
+
+const mutationKey = getResendEmailVerificationMutationKey();
+const {mutation: mutationOptions, fetch: fetchOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, fetch: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof resendEmailVerification>>, void> = () => {
+
+
+          return  resendEmailVerification(fetchOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ResendEmailVerificationMutationResult = NonNullable<Awaited<ReturnType<typeof resendEmailVerification>>>
+
+    export type ResendEmailVerificationMutationError = ProblemDetails
+
+
+    export const useResendEmailVerification = <TError = ProblemDetails,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof resendEmailVerification>>, TError,void, TContext>, fetch?: RequestInit}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof resendEmailVerification>>,
+        TError,
+        void,
+        TContext
+      > => {
+      return useMutation(getResendEmailVerificationMutationOptions(options), queryClient);
+    }

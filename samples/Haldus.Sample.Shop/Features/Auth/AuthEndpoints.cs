@@ -1,8 +1,13 @@
-using System.ComponentModel.DataAnnotations;
+using System.Globalization;
+using System.Net;
+using System.Net.Sockets;
 using System.Security.Claims;
+using System.Security.Cryptography;
+using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.Authentication.BearerToken;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Localization;
 using Microsoft.Extensions.Options;
@@ -10,66 +15,101 @@ using Microsoft.Extensions.Options;
 namespace Haldus.Sample.Shop.Features.Auth;
 
 /// <summary>
-/// Örnek mağazanın hesabı. Haldus'un ürettiği bir kaynak değildir: kimlik doğrulama uygulamanın kendi işidir ve
-/// Haldus yalnızca sonucunu okur (kullanıcı ve kiracı claim'leri). Her hesap kendi kiracısıyla doğar.
-/// </summary>
-public sealed class ShopAccount
-{
-    public Guid Id { get; set; }
-
-    /// <summary>Küçük harfe çevrilmiş e-posta; benzersizdir.</summary>
-    public string Email { get; set; } = "";
-
-    public string PasswordHash { get; set; } = "";
-
-    public Guid TenantId { get; set; }
-
-    public DateTimeOffset CreatedAt { get; set; }
-}
-
-public sealed record RegisterRequest
-{
-    [Required]
-    [EmailAddress]
-    [MaxLength(256)]
-    public string Email { get; init; } = "";
-
-    [Required]
-    [MinLength(8)]
-    [MaxLength(128)]
-    public string Password { get; init; } = "";
-}
-
-public sealed record LoginRequest
-{
-    [Required]
-    [MaxLength(256)]
-    public string Email { get; init; } = "";
-
-    [Required]
-    [MaxLength(128)]
-    public string Password { get; init; } = "";
-}
-
-public sealed record RefreshRequest
-{
-    [Required]
-    [MaxLength(4096)]
-    public string RefreshToken { get; init; } = "";
-}
-
-public sealed record AccountInfo(Guid Id, string Email, Guid TenantId);
-
-/// <summary>
 /// Parola ile giriş ve taşıyıcı (bearer) token. ASP.NET Core'un yerleşik şeması kullanılır
 /// (<c>AddBearerToken</c>): token'lar Data Protection ile korunan, sunucunun kendisinin ürettiği değerlerdir; ayrı bir
 /// kimlik sağlayıcısı veya paket gerekmez. Gerçek bir uygulama burada kendi kimlik sağlayıcısını (OpenID Connect)
-/// kullanır; Haldus açısından fark yoktur, çünkü o yalnızca claim'leri okur.
+/// kullanabilir; Haldus açısından fark yoktur, çünkü o yalnızca claim'leri okur.
 /// </summary>
-public static class AuthEndpoints
+public static partial class AuthEndpoints
 {
+    public const string RateLimitPolicy = "auth";
+
+    /// <summary>Token'ın bağlı olduğu oturum (<see cref="ShopSession"/>).</summary>
+    internal const string SessionClaim = "sid";
+
+    /// <summary>Yenileme token'ının sırası (<see cref="ShopSession.RefreshVersion"/>).</summary>
+    internal const string RefreshClaim = "rv";
+
+    internal const string VerifiedClaim = "email_verified";
+
+    private static readonly PasswordHasher<ShopAccount> Hasher = new();
+
     // Hesap bulunamadığında da bir parola doğrulaması yapılır; yoksa yanıt süresi e-postanın kayıtlı olup olmadığını söylerdi.
-    private static readonly string DummyHash = new PasswordHasher<ShopAccount>().HashPassword(new ShopAccount(), Guid.NewGuid().ToString());
+    private static readonly string DummyHash = Hasher.HashPassword(new ShopAccount(), Guid.NewGuid().ToString());
+
+    public static IServiceCollection AddShopAuth(this IServiceCollection services, IConfiguration configuration)
+    {
+        services.Configure<ShopAuthOptions>(configuration.GetSection("Shop:Auth"));
+        services.Configure<SmtpOptions>(configuration.GetSection("Shop:Smtp"));
+        services.AddAuthentication(BearerTokenDefaults.AuthenticationScheme).AddBearerToken();
+
+        // Giriş yapılmadan hiçbir uca ulaşılmaz; açık kalması gerekenler bunu kendileri söyler (AllowAnonymous: giriş ve
+        // kayıt, token ile erişilen kayıtlar, süreli indirme bağlantıları, misafir sepeti). Bu olmadan kiracıya ait
+        // olmayan kaynaklar (ürünler, kategoriler) token'sız da yazılabilirdi. Demo kimliği kendi başına bir kimlik
+        // doğrulama olmadığı için o kipte bu kural konmaz.
+        var demo = configuration.GetValue<bool>("Shop:DemoIdentity");
+        services.AddAuthorization(options =>
+        {
+            if (!demo)
+            {
+                options.FallbackPolicy = new AuthorizationPolicyBuilder().RequireAuthenticatedUser().Build();
+            }
+        });
+
+        if (string.IsNullOrEmpty(configuration["Shop:Smtp:Host"]))
+        {
+            services.AddSingleton<IAccountMailer, LogAccountMailer>();
+        }
+        else
+        {
+            services.AddSingleton<IAccountMailer, SmtpAccountMailer>();
+        }
+
+        // Parola ve kod deneyen uçlar adres başına sınırlanır. Hesap kilidi ve kod bütçesi tek bir hesabı korur; bu
+        // sınır, birçok hesabı deneyen tek bir kaynağı yavaşlatır. Bir vekil sunucunun arkasında adres vekilin
+        // adresidir; vekil tanıtılmalıdır (Shop:KnownProxies), yoksa herkes tek bir sınırı paylaşır.
+        services.AddRateLimiter(limiter =>
+        {
+            limiter.OnRejected = async (context, cancellationToken) =>
+            {
+                var messages = context.HttpContext.RequestServices.GetRequiredService<IStringLocalizer<ShopMessages>>();
+                context.HttpContext.Response.Headers.RetryAfter = "60";
+                await Results.Problem(detail: messages["TooManyAttempts"], statusCode: StatusCodes.Status429TooManyRequests)
+                    .ExecuteAsync(context.HttpContext);
+            };
+
+            limiter.AddPolicy(RateLimitPolicy, context => RateLimitPartition.GetFixedWindowLimiter(
+                PartitionOf(context.Connection.RemoteIpAddress),
+                _ => new FixedWindowRateLimiterOptions
+                {
+                    PermitLimit = context.RequestServices.GetRequiredService<IOptions<ShopAuthOptions>>().Value.RequestsPerMinute,
+                    Window = TimeSpan.FromMinutes(1),
+                }));
+        });
+
+        return services;
+    }
+
+    /// <summary>
+    /// Hız sınırının kimi saydığı. IPv6'da bir abone tek bir adres değil bütün bir /64 bloğu alır; adresin tamamı
+    /// sayılsaydı sınır, bloğun içinde adres değiştirerek aşılırdı.
+    /// </summary>
+    public static string PartitionOf(IPAddress? address)
+    {
+        if (address is null)
+        {
+            return "unknown";
+        }
+
+        if (address.IsIPv4MappedToIPv6)
+        {
+            address = address.MapToIPv4();
+        }
+
+        return address.AddressFamily == AddressFamily.InterNetworkV6
+            ? Convert.ToHexString(address.GetAddressBytes().AsSpan(0, 8))
+            : address.ToString();
+    }
 
     public static void MapAuth(this IEndpointRouteBuilder app)
     {
@@ -78,18 +118,22 @@ public static class AuthEndpoints
         auth.MapPost("/register", RegisterAsync)
             .WithName("Register")
             .AllowAnonymous()
+            .RequireRateLimiting(RateLimitPolicy)
             .AddEndpointFilter<HaldusValidationFilter<RegisterRequest>>()
             .Produces<AccessTokenResponse>()
             .ProducesValidationProblem()
-            .ProducesProblem(StatusCodes.Status409Conflict);
+            .ProducesProblem(StatusCodes.Status409Conflict)
+            .ProducesProblem(StatusCodes.Status429TooManyRequests);
 
         auth.MapPost("/login", LoginAsync)
             .WithName("Login")
             .AllowAnonymous()
+            .RequireRateLimiting(RateLimitPolicy)
             .AddEndpointFilter<HaldusValidationFilter<LoginRequest>>()
             .Produces<AccessTokenResponse>()
             .ProducesValidationProblem()
-            .ProducesProblem(StatusCodes.Status401Unauthorized);
+            .ProducesProblem(StatusCodes.Status401Unauthorized)
+            .ProducesProblem(StatusCodes.Status429TooManyRequests);
 
         auth.MapPost("/refresh", RefreshAsync)
             .WithName("RefreshSession")
@@ -99,96 +143,240 @@ public static class AuthEndpoints
             .ProducesValidationProblem()
             .ProducesProblem(StatusCodes.Status401Unauthorized);
 
+        auth.MapPost("/logout", LogoutAsync)
+            .WithName("Logout")
+            .RequireAuthorization()
+            .Produces(StatusCodes.Status204NoContent)
+            .ProducesProblem(StatusCodes.Status401Unauthorized);
+
+        auth.MapPost("/logout-all", LogoutEverywhereAsync)
+            .WithName("LogoutEverywhere")
+            .RequireAuthorization()
+            .Produces(StatusCodes.Status204NoContent)
+            .ProducesProblem(StatusCodes.Status401Unauthorized);
+
         auth.MapGet("/me", MeAsync)
             .WithName("GetCurrentAccount")
             .RequireAuthorization()
             .Produces<AccountInfo>()
             .ProducesProblem(StatusCodes.Status401Unauthorized);
+
+        auth.MapPost("/password/forgot", ForgotPasswordAsync)
+            .WithName("ForgotPassword")
+            .AllowAnonymous()
+            .RequireRateLimiting(RateLimitPolicy)
+            .AddEndpointFilter<HaldusValidationFilter<ForgotPasswordRequest>>()
+            .Produces(StatusCodes.Status202Accepted)
+            .ProducesValidationProblem()
+            .ProducesProblem(StatusCodes.Status429TooManyRequests);
+
+        auth.MapPost("/password/reset", ResetPasswordAsync)
+            .WithName("ResetPassword")
+            .AllowAnonymous()
+            .RequireRateLimiting(RateLimitPolicy)
+            .AddEndpointFilter<HaldusValidationFilter<ResetPasswordRequest>>()
+            .Produces(StatusCodes.Status204NoContent)
+            .ProducesValidationProblem()
+            .ProducesProblem(StatusCodes.Status429TooManyRequests);
+
+        auth.MapPost("/password/change", ChangePasswordAsync)
+            .WithName("ChangePassword")
+            .RequireAuthorization()
+            .RequireRateLimiting(RateLimitPolicy)
+            .AddEndpointFilter<HaldusValidationFilter<ChangePasswordRequest>>()
+            .Produces(StatusCodes.Status204NoContent)
+            .ProducesValidationProblem()
+            .ProducesProblem(StatusCodes.Status401Unauthorized)
+            .ProducesProblem(StatusCodes.Status429TooManyRequests);
+
+        auth.MapPost("/email/verify", VerifyEmailAsync)
+            .WithName("VerifyEmail")
+            .RequireAuthorization()
+            .RequireRateLimiting(RateLimitPolicy)
+            .AddEndpointFilter<HaldusValidationFilter<VerifyEmailRequest>>()
+            .Produces<AccessTokenResponse>()
+            .Produces(StatusCodes.Status204NoContent)
+            .ProducesValidationProblem()
+            .ProducesProblem(StatusCodes.Status401Unauthorized)
+            .ProducesProblem(StatusCodes.Status429TooManyRequests);
+
+        auth.MapPost("/email/resend", ResendVerificationAsync)
+            .WithName("ResendEmailVerification")
+            .RequireAuthorization()
+            .RequireRateLimiting(RateLimitPolicy)
+            .Produces(StatusCodes.Status202Accepted)
+            .ProducesProblem(StatusCodes.Status401Unauthorized)
+            .ProducesProblem(StatusCodes.Status429TooManyRequests);
     }
 
     /// <summary>
-    /// Reddedilen bir token sunan isteği 401 ile yanıtlar. Kimlik doğrulama başarısız olunca istek anonim sayılır ve
-    /// aynı istek, vardığı kaynağa göre 401 (kullanıcıya ait), 403 (kiracıya ait) veya 200 (herkese açık) alırdı;
-    /// istemci oturumunu yenilemesi gerektiğini bunlardan anlayamaz. Token istemeyen kimlik uçları (giriş, yenileme)
-    /// bunun dışındadır: süresi dolmuş bir oturum onlara takılmamalıdır.
+    /// Sunulan token'ı oturumuyla birlikte sınar ve reddedilen token'ı her kaynakta 401 ile yanıtlar.
+    /// <list type="bullet">
+    /// <item>Reddedilen bir token sunan istek, token sunmayan istekle karıştırılmaz: istemci oturumunu yenilemesi
+    /// gerektiğini bu yanıttan anlar.</item>
+    /// <item>Token kendi başına geçerlidir, ama oturumu iptal edilmiş veya süresi dolmuş olabilir (çıkış, parola
+    /// değişimi); bu yüzden oturum her istekte veritabanına sorulur. Bedeli istek başına bir birincil anahtar
+    /// sorgusudur.</item>
+    /// <item><c>Shop:Auth:RequireVerifiedEmail</c> açıksa e-postası doğrulanmamış hesap yalnızca kimlik uçlarını
+    /// kullanabilir.</item>
+    /// </list>
+    /// Token istemeyen uçlar (giriş, yenileme, token ile erişim) bunun dışındadır: süresi dolmuş bir oturum onlara
+    /// takılmamalıdır.
     /// </summary>
-    public static IApplicationBuilder UseRejectedTokenChallenge(this IApplicationBuilder app) =>
+    public static IApplicationBuilder UseSessionValidation(this IApplicationBuilder app) =>
         app.Use(async (context, next) =>
         {
-            if (context.User.Identity?.IsAuthenticated != true
-                && context.Request.Headers.Authorization.ToString().StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase)
-                && context.GetEndpoint()?.Metadata.GetMetadata<IAllowAnonymous>() is null)
+            if (context.GetEndpoint()?.Metadata.GetMetadata<IAllowAnonymous>() is not null)
             {
-                var messages = context.RequestServices.GetRequiredService<IStringLocalizer<ShopMessages>>();
-                context.Response.Headers.WWWAuthenticate = "Bearer error=\"invalid_token\"";
-                await Results.Problem(detail: messages["SessionExpired"], statusCode: StatusCodes.Status401Unauthorized).ExecuteAsync(context);
+                await next(context);
                 return;
+            }
+
+            var messages = context.RequestServices.GetRequiredService<IStringLocalizer<ShopMessages>>();
+
+            if (context.User.Identity?.IsAuthenticated != true)
+            {
+                if (context.Request.Headers.Authorization.ToString().StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
+                {
+                    await RejectAsync(context, messages);
+                    return;
+                }
+
+                await next(context);
+                return;
+            }
+
+            // Token bir oturuma bağlıdır; başka bir şemayla (ör. sonradan eklenen bir kimlik sağlayıcı) gelen kimlik buraya girmez.
+            if (context.User.Identity.AuthenticationType == BearerTokenDefaults.AuthenticationScheme)
+            {
+                var db = context.RequestServices.GetRequiredService<AppDbContext>();
+                var now = HaldusTime.UtcNow(context.RequestServices.GetRequiredService<TimeProvider>());
+
+                if (!Guid.TryParse(context.User.FindFirstValue(SessionClaim), out var sessionId)
+                    || !await Live(db.Set<ShopSession>(), now).AnyAsync(session => session.Id == sessionId, context.RequestAborted))
+                {
+                    await RejectAsync(context, messages);
+                    return;
+                }
+
+                if (context.RequestServices.GetRequiredService<IOptions<ShopAuthOptions>>().Value.RequireVerifiedEmail
+                    && context.User.FindFirstValue(VerifiedClaim) != "true"
+                    && !context.Request.Path.StartsWithSegments("/auth"))
+                {
+                    await Results.Problem(detail: messages["EmailNotVerified"], statusCode: StatusCodes.Status403Forbidden).ExecuteAsync(context);
+                    return;
+                }
             }
 
             await next(context);
         });
 
+    private static async Task RejectAsync(HttpContext context, IStringLocalizer<ShopMessages> messages)
+    {
+        context.Response.Headers.WWWAuthenticate = "Bearer error=\"invalid_token\"";
+        await Results.Problem(detail: messages["SessionExpired"], statusCode: StatusCodes.Status401Unauthorized).ExecuteAsync(context);
+    }
+
     private static async Task<IResult> RegisterAsync(
         RegisterRequest request,
         AppDbContext db,
         TimeProvider time,
+        IAccountMailer mailer,
+        IOptions<ShopAuthOptions> options,
         IStringLocalizer<ShopMessages> messages,
+        ILoggerFactory loggers,
         CancellationToken cancellationToken)
     {
         var email = Normalize(request.Email);
 
+        // Kayıt, adresin alınmış olduğunu söyler (409). Bu bilinçli bir seçimdir: aksi, kullanıcıya hiçbir şey
+        // söylemeden kaydı yutmak olurdu. Adresin kayıtlı olup olmadığını gizlemesi gereken bir uygulama burada da
+        // aynı yanıtı verip adrese bir e-posta göndermelidir.
         if (await db.Set<ShopAccount>().AnyAsync(account => account.Email == email, cancellationToken))
         {
             return EmailTaken(messages);
         }
 
+        var now = HaldusTime.UtcNow(time);
         var account = new ShopAccount
         {
             Id = Guid.CreateVersion7(),
             Email = email,
             TenantId = Guid.CreateVersion7(),
-            CreatedAt = HaldusTime.UtcNow(time),
+            CreatedAt = now,
         };
-        account.PasswordHash = new PasswordHasher<ShopAccount>().HashPassword(account, request.Password);
+        account.PasswordHash = Hasher.HashPassword(account, request.Password);
+
+        var session = NewSession(account, now, options.Value);
         db.Add(account);
+        db.Add(session);
 
         try
         {
             await db.SaveChangesAsync(cancellationToken);
         }
-        catch (DbUpdateException exception) when (HaldusDb.IsUniqueViolation(exception, EmailIndex))
+        catch (DbUpdateException exception) when (HaldusDb.IsUniqueViolation(exception, AuthModel.EmailIndex))
         {
             // Aynı e-postayla aynı anda gelen iki kayıttan ikincisi.
             return EmailTaken(messages);
         }
 
-        return SignIn(account);
+        await SendCodeAsync(db, account, AccountCodePurpose.EmailVerification, now, mailer, options.Value, loggers, cancellationToken);
+        return SignIn(account, session);
     }
 
     private static async Task<IResult> LoginAsync(
         LoginRequest request,
         AppDbContext db,
+        TimeProvider time,
+        IOptions<ShopAuthOptions> options,
         IStringLocalizer<ShopMessages> messages,
         CancellationToken cancellationToken)
     {
         var email = Normalize(request.Email);
-        var account = await db.Set<ShopAccount>().FirstOrDefaultAsync(candidate => candidate.Email == email, cancellationToken);
-        var hasher = new PasswordHasher<ShopAccount>();
-        var verified = hasher.VerifyHashedPassword(account ?? new ShopAccount(), account?.PasswordHash ?? DummyHash, request.Password);
+        var now = HaldusTime.UtcNow(time);
+        var account = await db.Set<ShopAccount>().AsNoTracking().FirstOrDefaultAsync(candidate => candidate.Email == email, cancellationToken);
 
-        if (account is null || verified == PasswordVerificationResult.Failed)
+        // Hesap yoksa da aynı iş yapılır (bir güncelleme ve bir parola doğrulaması); yanıtın içeriği aynıdır ve süresi
+        // belirgin biçimde ayrışmaz. Kilitli hesapta doğru parola da kabul edilmez.
+        var counted = await CountAttemptAsync(db, account?.Id ?? Guid.Empty, now, options.Value, cancellationToken);
+        var verified = Hasher.VerifyHashedPassword(
+            account ?? new ShopAccount(),
+            counted ? account!.PasswordHash : DummyHash,
+            request.Password);
+
+        if (account is null || !counted || verified == PasswordVerificationResult.Failed)
         {
-            // Hangisinin yanlış olduğu söylenmez.
-            return Results.Problem(detail: messages["InvalidCredentials"], statusCode: StatusCodes.Status401Unauthorized);
+            return InvalidCredentials(messages);
         }
 
-        if (verified == PasswordVerificationResult.SuccessRehashNeeded)
+        // Oturum önce yazılır, sonra sayım sıfırlanır; sıfırlama yalnızca parola bu arada değişmediyse geçer. Sıra
+        // tersine olsaydı, tam bu sırada yapılan bir parola değişimi oturumları kapattıktan sonra eski parolayla
+        // doğrulanmış bu giriş yeni bir oturum açabilirdi.
+        var session = NewSession(account, now, options.Value);
+        db.Add(session);
+        await db.SaveChangesAsync(cancellationToken);
+
+        var hash = verified == PasswordVerificationResult.SuccessRehashNeeded
+            ? Hasher.HashPassword(account, request.Password)
+            : account.PasswordHash;
+
+        var unchanged = await db.Set<ShopAccount>()
+            .Where(candidate => candidate.Id == account.Id && candidate.PasswordHash == account.PasswordHash)
+            .ExecuteUpdateAsync(
+                setters => setters
+                    .SetProperty(candidate => candidate.FailedLogins, 0)
+                    .SetProperty(candidate => candidate.LockedUntil, (DateTimeOffset?)null)
+                    .SetProperty(candidate => candidate.PasswordHash, hash),
+                cancellationToken) == 1;
+
+        if (!unchanged)
         {
-            account.PasswordHash = hasher.HashPassword(account, request.Password);
-            await db.SaveChangesAsync(cancellationToken);
+            await RevokeAsync(db.Set<ShopSession>().Where(candidate => candidate.Id == session.Id), now, cancellationToken);
+            return InvalidCredentials(messages);
         }
 
-        return SignIn(account);
+        return SignIn(account, session);
     }
 
     private static async Task<IResult> RefreshAsync(
@@ -201,33 +389,417 @@ public static class AuthEndpoints
     {
         // Yenileme token'ı da sunucunun ürettiği korunmuş bir değerdir; bozuksa veya süresi dolduysa açılmaz.
         var ticket = options.Get(BearerTokenDefaults.AuthenticationScheme).RefreshTokenProtector.Unprotect(request.RefreshToken);
+        var now = HaldusTime.UtcNow(time);
 
         if (ticket?.Properties.ExpiresUtc is not { } expiresAt
-            || time.GetUtcNow() >= expiresAt
-            || !Guid.TryParse(ticket.Principal.FindFirstValue(ClaimTypes.NameIdentifier), out var id)
-            || await db.Set<ShopAccount>().FirstOrDefaultAsync(candidate => candidate.Id == id, cancellationToken) is not { } account)
+            || now >= expiresAt
+            || !Guid.TryParse(ticket.Principal.FindFirstValue(SessionClaim), out var sessionId)
+            || !int.TryParse(ticket.Principal.FindFirstValue(RefreshClaim), NumberStyles.None, CultureInfo.InvariantCulture, out var version))
         {
-            return Results.Problem(detail: messages["SessionExpired"], statusCode: StatusCodes.Status401Unauthorized);
+            return SessionExpired(messages);
         }
 
-        // Claim'ler hesaptan yeniden kurulur; silinmiş bir hesabın oturumu yenilenmez.
-        return SignIn(account);
+        // Yenileme token'ı bir kez kullanılır: sıra, token'daki değerle aynıysa bir ilerler. Aynı token'ı sunan iki
+        // istekten yalnızca biri bu güncellemeyi yapabilir.
+        var rotated = await Live(db.Set<ShopSession>(), now)
+            .Where(candidate => candidate.Id == sessionId && candidate.RefreshVersion == version)
+            .ExecuteUpdateAsync(setters => setters.SetProperty(candidate => candidate.RefreshVersion, candidate => candidate.RefreshVersion + 1), cancellationToken) == 1;
+
+        if (!rotated)
+        {
+            // Eskimiş bir yenileme token'ı sunuldu: ya çalındı ya da çalan kişi asıl sahibinden önce davrandı. Hangisi
+            // olduğu bilinemez; oturum kapatılır ve herkes yeniden giriş yapar.
+            await RevokeAsync(db.Set<ShopSession>().Where(candidate => candidate.Id == sessionId), now, cancellationToken);
+            return SessionExpired(messages);
+        }
+
+        if (await db.Set<ShopSession>().AsNoTracking().FirstOrDefaultAsync(candidate => candidate.Id == sessionId, cancellationToken) is not { } session
+            || await db.Set<ShopAccount>().AsNoTracking().FirstOrDefaultAsync(candidate => candidate.Id == session.AccountId, cancellationToken) is not { } account)
+        {
+            return SessionExpired(messages);
+        }
+
+        // Claim'ler hesaptan yeniden kurulur.
+        return SignIn(account, session);
+    }
+
+    private static async Task<IResult> LogoutAsync(ClaimsPrincipal user, AppDbContext db, TimeProvider time, CancellationToken cancellationToken)
+    {
+        if (Guid.TryParse(user.FindFirstValue(SessionClaim), out var sessionId))
+        {
+            await RevokeAsync(db.Set<ShopSession>().Where(session => session.Id == sessionId), HaldusTime.UtcNow(time), cancellationToken);
+        }
+
+        return Results.NoContent();
+    }
+
+    private static async Task<IResult> LogoutEverywhereAsync(ClaimsPrincipal user, AppDbContext db, TimeProvider time, CancellationToken cancellationToken)
+    {
+        if (AccountId(user) is { } accountId)
+        {
+            await RevokeAsync(db.Set<ShopSession>().Where(session => session.AccountId == accountId), HaldusTime.UtcNow(time), cancellationToken);
+        }
+
+        return Results.NoContent();
     }
 
     private static async Task<IResult> MeAsync(ClaimsPrincipal user, AppDbContext db, CancellationToken cancellationToken) =>
-        Guid.TryParse(user.FindFirstValue(ClaimTypes.NameIdentifier), out var id)
-        && await db.Set<ShopAccount>().AsNoTracking().FirstOrDefaultAsync(account => account.Id == id, cancellationToken) is { } account
-            ? Results.Ok(new AccountInfo(account.Id, account.Email, account.TenantId))
+        await FindAccountAsync(user, db, cancellationToken) is { } account
+            ? Results.Ok(new AccountInfo(account.Id, account.Email, account.TenantId, account.EmailVerifiedAt is not null))
             : Results.Problem(statusCode: StatusCodes.Status401Unauthorized);
 
+    private static async Task<IResult> ForgotPasswordAsync(
+        ForgotPasswordRequest request,
+        AppDbContext db,
+        TimeProvider time,
+        IAccountMailer mailer,
+        IOptions<ShopAuthOptions> options,
+        ILoggerFactory loggers,
+        CancellationToken cancellationToken)
+    {
+        var email = Normalize(request.Email);
+
+        if (await db.Set<ShopAccount>().AsNoTracking().FirstOrDefaultAsync(candidate => candidate.Email == email, cancellationToken) is { } account)
+        {
+            // E-posta yanıt beklemeden gönderilir: posta sunucusunun süresi yanıta yansısaydı, kayıtlı adres yanıtın
+            // gecikmesinden anlaşılırdı.
+            await SendCodeAsync(db, account, AccountCodePurpose.PasswordReset, HaldusTime.UtcNow(time), mailer, options.Value, loggers, cancellationToken, background: true);
+        }
+        else
+        {
+            // Kayıtlı adreste kodun özeti hesaplanır; aynı iş burada da yapılır ki iki yanıtın süresi belirgin biçimde ayrışmasın.
+            Hasher.HashPassword(new ShopAccount(), "000000");
+        }
+
+        // Yanıt, e-postanın kayıtlı olup olmadığını söylemez.
+        return Results.Accepted();
+    }
+
+    private static async Task<IResult> ResetPasswordAsync(
+        ResetPasswordRequest request,
+        AppDbContext db,
+        TimeProvider time,
+        IOptions<ShopAuthOptions> options,
+        IStringLocalizer<ShopMessages> messages,
+        CancellationToken cancellationToken)
+    {
+        var email = Normalize(request.Email);
+        var now = HaldusTime.UtcNow(time);
+        var account = await db.Set<ShopAccount>().AsNoTracking().FirstOrDefaultAsync(candidate => candidate.Email == email, cancellationToken);
+
+        if (account is null)
+        {
+            // Kayıtlı adresteki doğrulamanın süresi burada da harcanır.
+            Hasher.VerifyHashedPassword(new ShopAccount(), DummyHash, request.Code);
+            return InvalidCode(messages);
+        }
+
+        if (!await ConsumeCodeAsync(db, account, AccountCodePurpose.PasswordReset, request.Code, now, options.Value, cancellationToken))
+        {
+            return InvalidCode(messages);
+        }
+
+        // Kodu e-postasından okuyan kişi adresin sahibidir: sıfırlama e-postayı da doğrular ve kilidi açar.
+        var hash = Hasher.HashPassword(account, request.NewPassword);
+        await db.Set<ShopAccount>()
+            .Where(candidate => candidate.Id == account.Id)
+            .ExecuteUpdateAsync(
+                setters => setters
+                    .SetProperty(candidate => candidate.PasswordHash, hash)
+                    .SetProperty(candidate => candidate.FailedLogins, 0)
+                    .SetProperty(candidate => candidate.LockedUntil, (DateTimeOffset?)null)
+                    .SetProperty(candidate => candidate.EmailVerifiedAt, candidate => candidate.EmailVerifiedAt ?? now),
+                cancellationToken);
+
+        // Parola önce değişir, oturumlar sonra kapanır (girişteki sıranın karşılığı). Eski oturumların hepsi kapanır.
+        await RevokeAsync(db.Set<ShopSession>().Where(session => session.AccountId == account.Id), now, cancellationToken);
+        return Results.NoContent();
+    }
+
+    private static async Task<IResult> ChangePasswordAsync(
+        ChangePasswordRequest request,
+        ClaimsPrincipal user,
+        AppDbContext db,
+        TimeProvider time,
+        IOptions<ShopAuthOptions> options,
+        IStringLocalizer<ShopMessages> messages,
+        CancellationToken cancellationToken)
+    {
+        if (await FindAccountAsync(user, db, cancellationToken) is not { } account)
+        {
+            return Results.Problem(statusCode: StatusCodes.Status401Unauthorized);
+        }
+
+        // Geçerli parolayı sormak da bir parola denemesidir ve girişle aynı sayaca yazılır; yoksa ele geçirilmiş bir
+        // erişim token'ı parolayı burada, kilide takılmadan deneyebilirdi.
+        var now = HaldusTime.UtcNow(time);
+        var counted = await CountAttemptAsync(db, account.Id, now, options.Value, cancellationToken);
+
+        if (!counted || Hasher.VerifyHashedPassword(account, account.PasswordHash, request.CurrentPassword) == PasswordVerificationResult.Failed)
+        {
+            return Results.ValidationProblem(new Dictionary<string, string[]> { ["currentPassword"] = [messages["CurrentPasswordIncorrect"]] });
+        }
+
+        var hash = Hasher.HashPassword(account, request.NewPassword);
+        await db.Set<ShopAccount>()
+            .Where(candidate => candidate.Id == account.Id)
+            .ExecuteUpdateAsync(
+                setters => setters
+                    .SetProperty(candidate => candidate.PasswordHash, hash)
+                    .SetProperty(candidate => candidate.FailedLogins, 0)
+                    .SetProperty(candidate => candidate.LockedUntil, (DateTimeOffset?)null),
+                cancellationToken);
+
+        // Bu oturum açık kalır, ötekiler kapanır.
+        Guid.TryParse(user.FindFirstValue(SessionClaim), out var current);
+        await RevokeAsync(db.Set<ShopSession>().Where(session => session.AccountId == account.Id && session.Id != current), now, cancellationToken);
+        return Results.NoContent();
+    }
+
+    private static async Task<IResult> VerifyEmailAsync(
+        VerifyEmailRequest request,
+        ClaimsPrincipal user,
+        AppDbContext db,
+        TimeProvider time,
+        IOptions<ShopAuthOptions> options,
+        IStringLocalizer<ShopMessages> messages,
+        CancellationToken cancellationToken)
+    {
+        if (await FindAccountAsync(user, db, cancellationToken) is not { } account
+            || !Guid.TryParse(user.FindFirstValue(SessionClaim), out var sessionId))
+        {
+            return Results.Problem(statusCode: StatusCodes.Status401Unauthorized);
+        }
+
+        if (account.EmailVerifiedAt is not null)
+        {
+            // Zaten doğrulanmış: kod sınanmadığı için yeni token da verilmez (yoksa bu uç, elinde yalnızca bir erişim
+            // token'ı olan birine kodsuz bir yenileme token'ı dağıtırdı). İstemci güncel claim'i oturumunu yenileyerek alır.
+            return Results.NoContent();
+        }
+
+        var now = HaldusTime.UtcNow(time);
+
+        if (!await ConsumeCodeAsync(db, account, AccountCodePurpose.EmailVerification, request.Code, now, options.Value, cancellationToken))
+        {
+            return InvalidCode(messages);
+        }
+
+        await db.Set<ShopAccount>()
+            .Where(candidate => candidate.Id == account.Id)
+            .ExecuteUpdateAsync(setters => setters.SetProperty(candidate => candidate.EmailVerifiedAt, now), cancellationToken);
+        account.EmailVerifiedAt = now;
+
+        // Token'daki claim eskidir; doğrulanmış haliyle yenisi verilir. Yeni bir yenileme token'ı verildiği için sıra
+        // ilerler ve eskisi geçersiz olur.
+        await Live(db.Set<ShopSession>(), now)
+            .Where(candidate => candidate.Id == sessionId)
+            .ExecuteUpdateAsync(setters => setters.SetProperty(candidate => candidate.RefreshVersion, candidate => candidate.RefreshVersion + 1), cancellationToken);
+
+        return await Live(db.Set<ShopSession>(), now).AsNoTracking().FirstOrDefaultAsync(candidate => candidate.Id == sessionId, cancellationToken) is { } session
+            ? SignIn(account, session)
+            : SessionExpired(messages);
+    }
+
+    private static async Task<IResult> ResendVerificationAsync(
+        ClaimsPrincipal user,
+        AppDbContext db,
+        TimeProvider time,
+        IAccountMailer mailer,
+        IOptions<ShopAuthOptions> options,
+        ILoggerFactory loggers,
+        CancellationToken cancellationToken)
+    {
+        if (await FindAccountAsync(user, db, cancellationToken) is not { } account)
+        {
+            return Results.Problem(statusCode: StatusCodes.Status401Unauthorized);
+        }
+
+        if (account.EmailVerifiedAt is null)
+        {
+            await SendCodeAsync(db, account, AccountCodePurpose.EmailVerification, HaldusTime.UtcNow(time), mailer, options.Value, loggers, cancellationToken);
+        }
+
+        return Results.Accepted();
+    }
+
+    /// <summary>
+    /// Bir parola denemesini sayar ve denemenin yapılıp yapılamayacağını söyler. Sayım, parola sınanmadan önce ve tek
+    /// bir ifadeyle yapılır: aynı anda gelen yüz deneme de sınırı aşamaz. Kilitli hesapta hiçbir satır güncellenmez.
+    /// Süresi dolmuş bir kilitten sonra sayım baştan başlar.
+    /// </summary>
+    private static async Task<bool> CountAttemptAsync(AppDbContext db, Guid accountId, DateTimeOffset now, ShopAuthOptions options, CancellationToken cancellationToken)
+    {
+        var maxFailures = options.MaxFailedLogins;
+        var lockedUntil = now.AddSeconds(options.LockoutSeconds);
+
+        return await db.Set<ShopAccount>()
+            .Where(candidate => candidate.Id == accountId && (candidate.LockedUntil == null || candidate.LockedUntil <= now))
+            .ExecuteUpdateAsync(
+                setters => setters
+                    .SetProperty(candidate => candidate.FailedLogins, candidate => candidate.LockedUntil != null ? 1 : candidate.FailedLogins + 1)
+                    .SetProperty(
+                        candidate => candidate.LockedUntil,
+                        candidate => (candidate.LockedUntil != null ? 1 : candidate.FailedLogins + 1) >= maxFailures ? lockedUntil : (DateTimeOffset?)null),
+                cancellationToken) == 1;
+    }
+
+    /// <summary>
+    /// Yeni bir kod üretir (eskisinin yerine geçer) ve e-postayla gönderir. Pencerenin gönderim hakkı dolduysa kod
+    /// üretilmez ve e-posta gönderilmez; deneme sayısı yeni kodla sıfırlanmaz. Gönderim hatası isteği düşürmez.
+    /// </summary>
+    private static async Task SendCodeAsync(
+        AppDbContext db,
+        ShopAccount account,
+        AccountCodePurpose purpose,
+        DateTimeOffset now,
+        IAccountMailer mailer,
+        ShopAuthOptions options,
+        ILoggerFactory loggers,
+        CancellationToken cancellationToken,
+        bool background = false)
+    {
+        var code = RandomNumberGenerator.GetInt32(0, 1_000_000).ToString("D6", CultureInfo.InvariantCulture);
+        var hash = Hasher.HashPassword(account, code);
+        var expiresAt = now.AddMinutes(options.CodeMinutes);
+        var windowEnded = now.AddSeconds(-options.CodeWindowSeconds);
+        var maxIssued = options.MaxCodesPerWindow;
+        var codes = db.Set<ShopAccountCode>().Where(candidate => candidate.AccountId == account.Id && candidate.Purpose == purpose);
+
+        // Tek ifade: pencere dolduysa sayımlar sıfırlanır, dolmadıysa gönderim sayılır ve deneme sayısı korunur.
+        var renewed = await codes
+            .Where(candidate => candidate.WindowStart <= windowEnded || candidate.Issued < maxIssued)
+            .ExecuteUpdateAsync(
+                setters => setters
+                    .SetProperty(candidate => candidate.CodeHash, hash)
+                    .SetProperty(candidate => candidate.ExpiresAt, expiresAt)
+                    .SetProperty(candidate => candidate.Issued, candidate => candidate.WindowStart <= windowEnded ? 1 : candidate.Issued + 1)
+                    .SetProperty(candidate => candidate.Attempts, candidate => candidate.WindowStart <= windowEnded ? 0 : candidate.Attempts)
+                    .SetProperty(candidate => candidate.WindowStart, candidate => candidate.WindowStart <= windowEnded ? now : candidate.WindowStart),
+                cancellationToken) == 1;
+
+        if (!renewed)
+        {
+            if (await codes.AnyAsync(cancellationToken))
+            {
+                // Bu pencerenin gönderim hakkı doldu.
+                return;
+            }
+
+            var record = new ShopAccountCode
+            {
+                Id = Guid.CreateVersion7(),
+                AccountId = account.Id,
+                Purpose = purpose,
+                CodeHash = hash,
+                ExpiresAt = expiresAt,
+                WindowStart = now,
+                Issued = 1,
+            };
+            db.Add(record);
+
+            try
+            {
+                await db.SaveChangesAsync(cancellationToken);
+            }
+            catch (DbUpdateException exception) when (HaldusDb.IsUniqueViolation(exception, AuthModel.CodeIndex))
+            {
+                // Aynı anda gelen ikinci istek: öteki isteğin kodu geçerlidir, bu gönderilmez.
+                db.Entry(record).State = EntityState.Detached;
+                return;
+            }
+        }
+
+        var logger = loggers.CreateLogger(typeof(AuthEndpoints));
+
+        if (background)
+        {
+            // İstek bittikten sonra da sürer; bu yüzden isteğin iptal belirtecine bağlanmaz. Dil, çalışma bağlamıyla taşınır.
+            _ = Task.Run(() => DeliverAsync(mailer, account.Email, purpose, code, logger, CancellationToken.None), CancellationToken.None);
+        }
+        else
+        {
+            await DeliverAsync(mailer, account.Email, purpose, code, logger, cancellationToken);
+        }
+    }
+
+    private static async Task DeliverAsync(
+        IAccountMailer mailer,
+        string email,
+        AccountCodePurpose purpose,
+        string code,
+        ILogger logger,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            await mailer.SendCodeAsync(email, purpose, code, cancellationToken);
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            // Yanıt, e-postanın gönderilip gönderilemediğini söylememelidir (parola sıfırlamada hesabın varlığını söylerdi).
+            LogMailFailed(logger, exception, purpose);
+        }
+    }
+
+    /// <summary>
+    /// Kodu sınar ve doğruysa tüketir. Deneme önce, tek bir ifadeyle sayılır (aynı anda gelen denemeler sınırı aşamaz);
+    /// sayım pencereye aittir, yeni bir kod istemek onu sıfırlamaz. Kod bir kez kullanılır; kullanılınca kaydı da
+    /// (sayımlarıyla birlikte) silinir.
+    /// </summary>
+    private static async Task<bool> ConsumeCodeAsync(
+        AppDbContext db,
+        ShopAccount account,
+        AccountCodePurpose purpose,
+        string code,
+        DateTimeOffset now,
+        ShopAuthOptions options,
+        CancellationToken cancellationToken)
+    {
+        var maxAttempts = options.MaxCodeAttempts;
+        var candidates = db.Set<ShopAccountCode>().Where(candidate => candidate.AccountId == account.Id && candidate.Purpose == purpose);
+
+        var counted = await candidates
+            .Where(candidate => candidate.ExpiresAt > now && candidate.Attempts < maxAttempts)
+            .ExecuteUpdateAsync(setters => setters.SetProperty(candidate => candidate.Attempts, candidate => candidate.Attempts + 1), cancellationToken);
+
+        return counted == 1
+            && await candidates.AsNoTracking().FirstOrDefaultAsync(cancellationToken) is { } record
+            && Hasher.VerifyHashedPassword(account, record.CodeHash, code.Trim()) != PasswordVerificationResult.Failed
+            && await db.Set<ShopAccountCode>().Where(candidate => candidate.Id == record.Id).ExecuteDeleteAsync(cancellationToken) == 1;
+    }
+
+    /// <summary>İptal edilmemiş ve süresi dolmamış oturumlar.</summary>
+    private static IQueryable<ShopSession> Live(IQueryable<ShopSession> sessions, DateTimeOffset now) =>
+        sessions.Where(session => session.RevokedAt == null && session.ExpiresAt > now);
+
+    private static Task<int> RevokeAsync(IQueryable<ShopSession> sessions, DateTimeOffset now, CancellationToken cancellationToken) =>
+        sessions
+            .Where(session => session.RevokedAt == null)
+            .ExecuteUpdateAsync(setters => setters.SetProperty(session => session.RevokedAt, now), cancellationToken);
+
+    private static Guid? AccountId(ClaimsPrincipal user) =>
+        Guid.TryParse(user.FindFirstValue(ClaimTypes.NameIdentifier), out var id) ? id : null;
+
+    private static async Task<ShopAccount?> FindAccountAsync(ClaimsPrincipal user, AppDbContext db, CancellationToken cancellationToken) =>
+        AccountId(user) is { } id
+            ? await db.Set<ShopAccount>().AsNoTracking().FirstOrDefaultAsync(account => account.Id == id, cancellationToken)
+            : null;
+
+    private static ShopSession NewSession(ShopAccount account, DateTimeOffset now, ShopAuthOptions options) =>
+        new() { Id = Guid.CreateVersion7(), AccountId = account.Id, CreatedAt = now, ExpiresAt = now.AddDays(options.SessionDays) };
+
     /// <summary>Haldus kullanıcıyı ve kiracıyı bu claim'lerden okur (<c>HaldusOptions</c>).</summary>
-    private static IResult SignIn(ShopAccount account)
+    private static IResult SignIn(ShopAccount account, ShopSession session)
     {
         var identity = new ClaimsIdentity(
             [
                 new Claim(ClaimTypes.NameIdentifier, account.Id.ToString()),
                 new Claim(ClaimTypes.Email, account.Email),
                 new Claim("tenant_id", account.TenantId.ToString()),
+                new Claim(SessionClaim, session.Id.ToString()),
+                new Claim(RefreshClaim, session.RefreshVersion.ToString(CultureInfo.InvariantCulture)),
+                new Claim(VerifiedClaim, account.EmailVerifiedAt is null ? "false" : "true"),
             ],
             BearerTokenDefaults.AuthenticationScheme);
 
@@ -237,7 +809,17 @@ public static class AuthEndpoints
     private static IResult EmailTaken(IStringLocalizer<ShopMessages> messages) =>
         Results.Problem(detail: messages["EmailTaken"], statusCode: StatusCodes.Status409Conflict);
 
+    private static IResult InvalidCredentials(IStringLocalizer<ShopMessages> messages) =>
+        Results.Problem(detail: messages["InvalidCredentials"], statusCode: StatusCodes.Status401Unauthorized);
+
+    private static IResult SessionExpired(IStringLocalizer<ShopMessages> messages) =>
+        Results.Problem(detail: messages["SessionExpired"], statusCode: StatusCodes.Status401Unauthorized);
+
+    private static IResult InvalidCode(IStringLocalizer<ShopMessages> messages) =>
+        Results.ValidationProblem(new Dictionary<string, string[]> { ["code"] = [messages["InvalidCode"]] });
+
     private static string Normalize(string email) => email.Trim().ToLowerInvariant();
 
-    internal const string EmailIndex = "UX_ShopAccounts_Email";
+    [LoggerMessage(Level = LogLevel.Error, Message = "The {Purpose} message could not be sent.")]
+    private static partial void LogMailFailed(ILogger logger, Exception exception, AccountCodePurpose purpose);
 }

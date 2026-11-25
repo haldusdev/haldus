@@ -25,12 +25,36 @@
     <value>Misafir sepeti bulunamadı veya süresi doldu.</value>
   </data>
   <data name="InvalidCredentials" xml:space="preserve">
-    <value>E-posta adresi veya parola hatalı.</value>
+    <value>E-posta adresi veya parola hatalı ya da hesap geçici olarak kilitli.</value>
   </data>
   <data name="SessionExpired" xml:space="preserve">
     <value>Oturumunuzun süresi doldu; lütfen yeniden giriş yapın.</value>
   </data>
   <data name="EmailTaken" xml:space="preserve">
     <value>Bu e-posta adresiyle bir hesap zaten var.</value>
+  </data>
+  <data name="TooManyAttempts" xml:space="preserve">
+    <value>Çok fazla deneme yapıldı. Lütfen bir dakika sonra yeniden deneyin.</value>
+  </data>
+  <data name="InvalidCode" xml:space="preserve">
+    <value>Kod hatalı veya süresi dolmuş.</value>
+  </data>
+  <data name="EmailNotVerified" xml:space="preserve">
+    <value>Devam etmek için e-posta adresinizi doğrulayın.</value>
+  </data>
+  <data name="CurrentPasswordIncorrect" xml:space="preserve">
+    <value>Geçerli parola hatalı.</value>
+  </data>
+  <data name="PasswordResetSubject" xml:space="preserve">
+    <value>Parolanızı sıfırlayın</value>
+  </data>
+  <data name="PasswordResetBody" xml:space="preserve">
+    <value>Parola sıfırlama kodunuz {0}. Kod kısa süre geçerlidir ve bir kez kullanılabilir. Bunu siz istemediyseniz bu iletiyi yok sayabilirsiniz.</value>
+  </data>
+  <data name="EmailVerificationSubject" xml:space="preserve">
+    <value>E-posta adresinizi doğrulayın</value>
+  </data>
+  <data name="EmailVerificationBody" xml:space="preserve">
+    <value>Doğrulama kodunuz {0}. Kod kısa süre geçerlidir ve bir kez kullanılabilir.</value>
   </data>
 </root>

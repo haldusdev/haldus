@@ -13,6 +13,7 @@ export type Session = {
   accountId: string
   email: string
   tenantId: string
+  emailVerified: boolean
 }
 
 const STORAGE_KEY = "haldus-shop.session"
@@ -44,7 +45,14 @@ function read(): Session | null {
       )
     ) {
       const [accessToken, refreshToken, accountId, email, tenantId] = values
-      return { accessToken, refreshToken, accountId, email, tenantId }
+      return {
+        accessToken,
+        refreshToken,
+        accountId,
+        email,
+        tenantId,
+        emailVerified: record.emailVerified === true,
+      }
     }
   } catch {
     // Bozuk kayıt oturum yok sayılır.
@@ -83,6 +91,13 @@ export function renewTokens(accessToken: string, refreshToken: string) {
   }
 }
 
+/** E-posta doğrulanınca backend'in verdiği yeni token'ları yazar. */
+export function markEmailVerified(accessToken: string, refreshToken: string) {
+  if (current) {
+    publish({ ...current, accessToken, refreshToken, emailVerified: true })
+  }
+}
+
 export function signOut() {
   publish(null)
 }
@@ -93,6 +108,15 @@ export function subscribeSession(listener: () => void) {
     listeners.delete(listener)
   }
 }
+
+// Başka bir sekme oturumu değiştirdiyse (giriş, çıkış, token yenileme) bu sekme de onu izler. Yenileme token'ı bir kez
+// kullanılır: eskisini sunan sekme, backend'in oturumu çalınmış sayıp kapatmasına yol açardı.
+window.addEventListener("storage", (event) => {
+  if (event.key === STORAGE_KEY) {
+    current = read()
+    listeners.forEach((listener) => listener())
+  }
+})
 
 export function useSession(): Session | null {
   return useSyncExternalStore(subscribeSession, getSession)

@@ -74,7 +74,10 @@ async function request<T>(url: string, options: RequestInit, mayRenew: boolean):
   return { data, status: response.status, headers: response.headers } as T;
 }
 
-/** Aynı anda 401 alan istekler tek bir yenilemeyi bekler; yenileme token'ı bir kez kullanılır. */
+/**
+ * Aynı anda 401 alan istekler tek bir yenilemeyi bekler. Yenileme token'ı bir kez kullanılır: backend eskisini yeniden
+ * görürse oturumu çalınmış sayıp kapatır.
+ */
 function renew(sent: Session): Promise<boolean> {
   const current = getSession();
 

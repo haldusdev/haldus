@@ -28,7 +28,20 @@
     "registerSubmit": "Create account",
     "submitting": "Please wait…",
     "switchToRegister": "Don't have an account? Create one",
-    "switchToSignIn": "Already have an account? Sign in"
+    "switchToSignIn": "Already have an account? Sign in",
+    "forgot": "Forgot password?",
+    "forgotHeading": "Reset your password",
+    "forgotDescription": "Enter the e-mail of your account. We will send a code if it is registered.",
+    "forgotSubmit": "Send code",
+    "resetHeading": "Choose a new password",
+    "resetDescription": "Enter the 6-digit code from the e-mail and your new password.",
+    "resetSubmit": "Reset password",
+    "code": "Code",
+    "newPassword": "New password",
+    "backToSignIn": "Back to sign in",
+    "newCode": "Send a new code",
+    "codeSent": "If the address is registered, a code is on its way. It is valid for a short time.",
+    "passwordReset": "Your password has been reset. Sign in with the new password."
   },
   "products": {
     "searchPlaceholder": "Search products",
@@ -55,6 +68,23 @@
     "lines_one": "{{count}} line",
     "lines_other": "{{count}} lines",
     "expires": "Kept until {{date}}"
+  },
+  "verify": {
+    "title": "Verify your e-mail address",
+    "description": "We sent a 6-digit code to {{email}}.",
+    "code": "Code",
+    "submit": "Verify",
+    "resend": "Send again",
+    "resent": "A new code is on its way."
+  },
+  "password": {
+    "cancel": "Cancel",
+    "save": "Save",
+    "title": "Change password",
+    "description": "Your other sessions will be signed out.",
+    "current": "Current password",
+    "new": "New password",
+    "changed": "Your password has been changed."
   },
   "account": {
     "user": "User",
