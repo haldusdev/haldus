@@ -1613,6 +1613,10 @@ Yapılmayanlar ve nedenleri:
     anahtarlar silme kalıcı olunca kaldırılır: açık transaction yoksa kaydetmeden hemen sonra, varsa commit'te.
     Geri alma ve kayıt noktasına dönme (EF Core'un kendi kayıt noktaları ve `HaldusBatch` dahil) bekleyenleri düşürür;
     kayıt noktası adları olay verisinde olmadığı için bir yığınla izlenir ve dönülen kayıt noktası orada biter.
+    **Bekleyen anahtarlar ait oldukları transaction'a bağlıdır** (`TransactionId`) ve yalnızca onun commit'i içeriği
+    kaldırır; başka bir transaction'ın olayı veya transaction'sız bir kaydetme onları geri alınmış sayıp atar. Commit
+    edilmeden atılan transaction olay vermez; ilk yazımda onun bekleyenleri, sonraki tek komutluk (transaction açmayan)
+    kaydetmede siliniyor ve geri gelen kayıtların içeriği kayboluyordu (otomatik güvenlik incelemesinde çıktı).
     Depodan kaldırma commit'ten sonra başarısız olursa günlüğe yazılır, istek başarısız sayılmaz. İlk yazımda içerik
     yalnızca dosyanın kendi silme ucunda kaldırılıyordu: zincirleme ve uygulamanın kendi koduyla silinen dosyaların
     içeriği depoda sahipsiz kalıyor, dosya sistemi deposunda geri alınan toplu silme içeriği geri getirmiyordu (belge

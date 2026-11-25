@@ -93,8 +93,8 @@ internal static class HaldusFileCleanup
     internal static void Collect(DbContext context) => CollectAsync(context, CancellationToken.None).GetAwaiter().GetResult();
 
     /// <summary>
-    /// Kaydetme bitti. En dıştaki kaydetmenin topladıkları silinmeyi bekler; açık bir transaction yoksa silme zaten
-    /// kalıcıdır ve içerik hemen kaldırılır.
+    /// Kaydetme bitti. En dıştaki kaydetmenin topladıkları, sürmekte olan transaction'a bağlanıp onun commit edilmesini
+    /// bekler; açık bir transaction yoksa silme zaten kalıcıdır ve yalnızca bu kaydetmenin topladıkları hemen kaldırılır.
     /// </summary>
     internal static async Task SavedAsync(DbContext context, CancellationToken cancellationToken)
     {
@@ -103,13 +103,20 @@ internal static class HaldusFileCleanup
             return;
         }
 
-        state.Pending.AddRange(state.Saving);
+        var saved = state.Saving.ToList();
         state.Saving.Clear();
 
-        if (context.Database.CurrentTransaction is null)
+        if (context.Database.CurrentTransaction is { } transaction)
         {
-            await FlushAsync(context, state, cancellationToken);
+            Bind(state, transaction.TransactionId);
+            state.Pending.AddRange(saved);
+            return;
         }
+
+        // Bekleyen başka anahtar kalmışsa onların transaction'ı commit görülmeden kapanmıştır (ör. commit edilmeden
+        // atıldı); kayıtları geri gelmiştir ve içeriklerine dokunulmaz.
+        Reset(state);
+        await FlushAsync(context, saved, cancellationToken);
     }
 
     /// <summary>Başarısız veya iptal edilen kaydetmenin topladıkları bırakılır: kayıtlar silinmedi.</summary>
@@ -121,17 +128,24 @@ internal static class HaldusFileCleanup
         }
     }
 
-    internal static Task CommittedAsync(DbContext? context, CancellationToken cancellationToken) =>
-        context is not null && States.TryGetValue(context, out var state)
-            ? FlushAsync(context, state, cancellationToken)
-            : Task.CompletedTask;
-
-    internal static void RolledBack(DbContext? context)
+    /// <summary>Yalnızca anahtarların bağlı olduğu transaction'ın commit'i içeriği kaldırır.</summary>
+    internal static async Task CommittedAsync(DbContext? context, Guid transactionId, CancellationToken cancellationToken)
     {
-        if (context is not null && States.TryGetValue(context, out var state))
+        if (context is null || !States.TryGetValue(context, out var state) || state.Transaction != transactionId)
         {
-            state.Pending.Clear();
-            state.Savepoints.Clear();
+            return;
+        }
+
+        var keys = state.Pending.ToList();
+        Reset(state);
+        await FlushAsync(context, keys, cancellationToken);
+    }
+
+    internal static void RolledBack(DbContext? context, Guid transactionId)
+    {
+        if (context is not null && States.TryGetValue(context, out var state) && state.Transaction == transactionId)
+        {
+            Reset(state);
         }
     }
 
@@ -139,19 +153,26 @@ internal static class HaldusFileCleanup
     /// Yeni bir transaction başlıyor. Bekleyen anahtarlar kalmışsa önceki transaction commit edilmeden kapatılmıştır
     /// (geri alınmıştır); onların içeriği kaldırılmaz.
     /// </summary>
-    internal static void Started(DbContext? context) => RolledBack(context);
-
-    internal static void SavepointCreated(DbContext? context)
+    internal static void Started(DbContext? context, Guid transactionId)
     {
         if (context is not null && States.TryGetValue(context, out var state))
         {
+            Bind(state, transactionId);
+        }
+    }
+
+    internal static void SavepointCreated(DbContext? context, Guid transactionId)
+    {
+        if (context is not null && States.TryGetValue(context, out var state))
+        {
+            Bind(state, transactionId);
             state.Savepoints.Push(state.Pending.Count);
         }
     }
 
-    internal static void SavepointReleased(DbContext? context)
+    internal static void SavepointReleased(DbContext? context, Guid transactionId)
     {
-        if (context is not null && States.TryGetValue(context, out var state))
+        if (context is not null && States.TryGetValue(context, out var state) && state.Transaction == transactionId)
         {
             state.Savepoints.TryPop(out _);
         }
@@ -161,28 +182,47 @@ internal static class HaldusFileCleanup
     /// Kayıt noktasına dönüldü: ondan sonra kaydedilen silmeler geri alındı. Kayıt noktasını açan kod (EF Core'un
     /// kaydetmesi, toplu işlemlerin öğesi) ona döndükten sonra onu bırakmaz; kayıt noktasının ömrü burada biter.
     /// </summary>
-    internal static void SavepointRolledBack(DbContext? context)
+    internal static void SavepointRolledBack(DbContext? context, Guid transactionId)
     {
-        if (context is not null && States.TryGetValue(context, out var state) && state.Savepoints.TryPop(out var mark))
+        if (context is not null
+            && States.TryGetValue(context, out var state)
+            && state.Transaction == transactionId
+            && state.Savepoints.TryPop(out var mark))
         {
             state.Pending.RemoveRange(mark, state.Pending.Count - mark);
         }
     }
 
-    private static async Task FlushAsync(DbContext context, State state, CancellationToken cancellationToken)
+    /// <summary>
+    /// Durumu verilen transaction'a bağlar. Başka bir transaction'a ait bekleyenler atılır: o transaction'ın commit'i
+    /// görülmedi, yani geri alındı (veya bağlam havuzdan yeniden kiralandı).
+    /// </summary>
+    private static void Bind(State state, Guid transactionId)
     {
-        if (state.Pending.Count == 0)
+        if (state.Transaction != transactionId)
+        {
+            Reset(state);
+            state.Transaction = transactionId;
+        }
+    }
+
+    private static void Reset(State state)
+    {
+        state.Pending.Clear();
+        state.Savepoints.Clear();
+        state.Transaction = null;
+    }
+
+    private static async Task FlushAsync(DbContext context, List<string> pending, CancellationToken cancellationToken)
+    {
+        if (pending.Count == 0)
         {
             return;
         }
 
-        var keys = state.Pending.Distinct(StringComparer.Ordinal).ToList();
-        state.Pending.Clear();
-        state.Savepoints.Clear();
-
         var storage = context.GetService<IHaldusFileStorage>();
 
-        foreach (var key in keys)
+        foreach (var key in pending.Distinct(StringComparer.Ordinal))
         {
             try
             {
@@ -315,8 +355,11 @@ internal static class HaldusFileCleanup
 
         public Stack<int> Starts { get; } = new();
 
-        /// <summary>Kaydedilmiş, transaction'ın commit edilmesini bekleyen anahtarlar.</summary>
+        /// <summary>Kaydedilmiş, <see cref="Transaction"/>'ın commit edilmesini bekleyen anahtarlar.</summary>
         public List<string> Pending { get; } = [];
+
+        /// <summary>Bekleyen anahtarların ve kayıt noktalarının ait olduğu transaction.</summary>
+        public Guid? Transaction { get; set; }
 
         public Stack<int> Savepoints { get; } = new();
     }
@@ -330,7 +373,7 @@ internal sealed class HaldusFileTransactionInterceptor : Microsoft.EntityFramewo
         Microsoft.EntityFrameworkCore.Diagnostics.TransactionEndEventData eventData,
         System.Data.Common.DbTransaction result)
     {
-        HaldusFileCleanup.Started(eventData.Context);
+        HaldusFileCleanup.Started(eventData.Context, eventData.TransactionId);
         return base.TransactionStarted(connection, eventData, result);
     }
 
@@ -340,64 +383,64 @@ internal sealed class HaldusFileTransactionInterceptor : Microsoft.EntityFramewo
         System.Data.Common.DbTransaction result,
         CancellationToken cancellationToken = default)
     {
-        HaldusFileCleanup.Started(eventData.Context);
+        HaldusFileCleanup.Started(eventData.Context, eventData.TransactionId);
         return base.TransactionStartedAsync(connection, eventData, result, cancellationToken);
     }
 
     public override void TransactionCommitted(System.Data.Common.DbTransaction transaction, Microsoft.EntityFrameworkCore.Diagnostics.TransactionEndEventData eventData) =>
-        HaldusFileCleanup.CommittedAsync(eventData.Context, CancellationToken.None).GetAwaiter().GetResult();
+        HaldusFileCleanup.CommittedAsync(eventData.Context, eventData.TransactionId, CancellationToken.None).GetAwaiter().GetResult();
 
     public override Task TransactionCommittedAsync(
         System.Data.Common.DbTransaction transaction,
         Microsoft.EntityFrameworkCore.Diagnostics.TransactionEndEventData eventData,
         CancellationToken cancellationToken = default) =>
-        HaldusFileCleanup.CommittedAsync(eventData.Context, cancellationToken);
+        HaldusFileCleanup.CommittedAsync(eventData.Context, eventData.TransactionId, cancellationToken);
 
     public override void TransactionRolledBack(System.Data.Common.DbTransaction transaction, Microsoft.EntityFrameworkCore.Diagnostics.TransactionEndEventData eventData) =>
-        HaldusFileCleanup.RolledBack(eventData.Context);
+        HaldusFileCleanup.RolledBack(eventData.Context, eventData.TransactionId);
 
     public override Task TransactionRolledBackAsync(
         System.Data.Common.DbTransaction transaction,
         Microsoft.EntityFrameworkCore.Diagnostics.TransactionEndEventData eventData,
         CancellationToken cancellationToken = default)
     {
-        HaldusFileCleanup.RolledBack(eventData.Context);
+        HaldusFileCleanup.RolledBack(eventData.Context, eventData.TransactionId);
         return Task.CompletedTask;
     }
 
     public override void CreatedSavepoint(System.Data.Common.DbTransaction transaction, Microsoft.EntityFrameworkCore.Diagnostics.TransactionEventData eventData) =>
-        HaldusFileCleanup.SavepointCreated(eventData.Context);
+        HaldusFileCleanup.SavepointCreated(eventData.Context, eventData.TransactionId);
 
     public override Task CreatedSavepointAsync(
         System.Data.Common.DbTransaction transaction,
         Microsoft.EntityFrameworkCore.Diagnostics.TransactionEventData eventData,
         CancellationToken cancellationToken = default)
     {
-        HaldusFileCleanup.SavepointCreated(eventData.Context);
+        HaldusFileCleanup.SavepointCreated(eventData.Context, eventData.TransactionId);
         return Task.CompletedTask;
     }
 
     public override void ReleasedSavepoint(System.Data.Common.DbTransaction transaction, Microsoft.EntityFrameworkCore.Diagnostics.TransactionEventData eventData) =>
-        HaldusFileCleanup.SavepointReleased(eventData.Context);
+        HaldusFileCleanup.SavepointReleased(eventData.Context, eventData.TransactionId);
 
     public override Task ReleasedSavepointAsync(
         System.Data.Common.DbTransaction transaction,
         Microsoft.EntityFrameworkCore.Diagnostics.TransactionEventData eventData,
         CancellationToken cancellationToken = default)
     {
-        HaldusFileCleanup.SavepointReleased(eventData.Context);
+        HaldusFileCleanup.SavepointReleased(eventData.Context, eventData.TransactionId);
         return Task.CompletedTask;
     }
 
     public override void RolledBackToSavepoint(System.Data.Common.DbTransaction transaction, Microsoft.EntityFrameworkCore.Diagnostics.TransactionEventData eventData) =>
-        HaldusFileCleanup.SavepointRolledBack(eventData.Context);
+        HaldusFileCleanup.SavepointRolledBack(eventData.Context, eventData.TransactionId);
 
     public override Task RolledBackToSavepointAsync(
         System.Data.Common.DbTransaction transaction,
         Microsoft.EntityFrameworkCore.Diagnostics.TransactionEventData eventData,
         CancellationToken cancellationToken = default)
     {
-        HaldusFileCleanup.SavepointRolledBack(eventData.Context);
+        HaldusFileCleanup.SavepointRolledBack(eventData.Context, eventData.TransactionId);
         return Task.CompletedTask;
     }
 }

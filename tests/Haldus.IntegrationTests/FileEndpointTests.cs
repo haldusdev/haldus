@@ -239,6 +239,21 @@ public sealed class FileEndpointTests(ShopFixture fixture)
                 Assert.Equal(1, stored());
                 context.ChangeTracker.Clear();
 
+                // Commit edilmeden atılan transaction da geri alınmış sayılır; sonraki, transaction açmayan tek komutluk
+                // bir kaydetme onun bekleyen silmelerini çalıştırmaz.
+                await using (await context.Database.BeginTransactionAsync(CancellationToken))
+                {
+                    context.Remove(await context.Set<Article>().SingleAsync(item => item.Id == cascaded.Article, CancellationToken));
+                    await context.SaveChangesAsync(CancellationToken);
+                }
+
+                context.ChangeTracker.Clear();
+                context.Add(new HaldusFileContent { Key = $"Test/{Guid.NewGuid():N}" });
+                await context.SaveChangesAsync(CancellationToken);
+                Assert.Equal(1, stored());
+                Assert.True(await context.Set<Attachment>().AnyAsync(item => item.Id == cascaded.File, CancellationToken));
+                context.ChangeTracker.Clear();
+
                 await using (var transaction = await context.Database.BeginTransactionAsync(CancellationToken))
                 {
                     context.Remove(await context.Set<Article>().SingleAsync(item => item.Id == cascaded.Article, CancellationToken));
