@@ -25,9 +25,12 @@ EF Core yapılandırması üretilir.
   `pnpm typecheck`. Backend'in adresi `EXPO_PUBLIC_API_URL` ile verilir. Tarayıcıda çalıştırılırken backend'e kaynak
   izni gerekir (`Shop:CorsOrigins`). pnpm burada düz `node_modules` kurar (`pnpm-workspace.yaml`: `nodeLinker: hoisted`);
   Metro, sembolik bağlı düzende dolaylı bağımlılıkları (`react-native-css-interop`) çözemiyor.
-- Örnek arayüzlerin testleri: `pnpm test` (panelde ve mobilde). Yalnızca oturum ve istek mantığını (`lib`) sınar;
-  Node'un yerleşik test çalıştırıcısıyla çalışır, paket taşımaz. `@/` takma adını ve çalışamayan modülleri
-  (`@/i18n`, `react-native`, `expo-secure-store`) `tests/register.mjs` çözer. Bileşen testleri yoktur.
+- Örnek arayüzlerin testleri: `pnpm test` (panelde ve mobilde). Node'un yerleşik test çalıştırıcısıyla çalışır, paket
+  taşımaz. `@/` takma adını ve çalışamayan modülleri (`@/i18n`, `react-native`, `expo-secure-store`)
+  `tests/register.mjs` çözer; panelde `.tsx` dosyalarını kurulu `typescript` paketiyle çevirir. İki projede de oturum
+  ve istek mantığı (`lib`) sınanır. Panelde ayrıca bileşenler `react-dom/server` ile metne çizilip denetlenir
+  (`tests/ui`): yalnızca ilk çizim; etkileşim, efektler ve portal içeriği (açılır pencere, menü) görülmez. Mobilde
+  ekran testi yoktur.
 - Örnek uygulamada üretilen kod `samples/Haldus.Sample.Shop/obj/Generated` altında incelenebilir.
 - Yük ölçümü: `dotnet run -c Release --project tools/Haldus.LoadTest` (çalışan bir örnek mağaza ister; backend
   `Shop:DemoIdentity=true` ile ve Release kipinde başlatılır; ayrıntısı aracın README'sinde). Sonuçlar makineye bağlıdır;
@@ -477,9 +480,11 @@ Yapılmayanlar ve nedenleri:
 
 - Arayüz bileşenlerinin testi: test çerçevesinin kurulumu (`pnpm add -D vitest …`) izin sistemi tarafından
   reddedildi. Bunun yerine istemcilerin oturum ve istek mantığı, paket eklemeden, Node'un yerleşik test
-  çalıştırıcısıyla sınandı (panelde 106, mobilde 111 test). Bu testler iki gerçek hata buldu ve ikisi de düzeltildi:
-  yenileme isteğindeki her HTTP hatası (5xx dahil) oturumu kapatıyordu; yenilenen token'lar o sırada değişmiş başka
-  bir hesabın oturumuna yazılabiliyordu. Bileşenleri çizen testler hâlâ yoktur (DOM kütüphanesi ister).
+  çalıştırıcısıyla sınandı. Bu testler iki gerçek hata buldu ve ikisi de düzeltildi: yenileme isteğindeki her HTTP
+  hatası (5xx dahil) oturumu kapatıyordu; yenilenen token'lar o sırada değişmiş başka bir hesabın oturumuna
+  yazılabiliyordu. Panelin bileşenleri de DOM kütüphanesi olmadan, sunucu tarafı çizimle sınandı (panelde toplam 251,
+  mobilde 112 test); o testler iç içe iki `<main>` ve çeviriden geçmeyen birkaç erişilebilirlik etiketi buldu.
+  Etkileşim testleri (tıklama, yazma, veri yükleme) ve mobil ekran testleri hâlâ yoktur.
 - Yeni bağımlılık gerektirenler: kimlik sağlayıcı için JWT doğrulaması
   (`Microsoft.AspNetCore.Authentication.JwtBearer`) ve SQS dışındaki kuyrukların istemcileri (RabbitMQ, Kafka…).
   Eklenmediler; onay gerekir. Amazon SQS için bağımlılıksız bir yayıncı yazıldı (`Haldus.Events.Sqs`).
@@ -532,9 +537,13 @@ Yapılmayanlar ve nedenleri:
       hemen sonra (`RefreshGraceSeconds`, 30 sn) bir önceki token'ı sunan istek oturumu kapatmaz, ama yeni token da
       alamaz: aynı anda yenileyen ikinci sekme oturumu düşürmez, eskimiş bir token ise hiçbir zaman geçerli bir oturuma
       çevrilmez. (Toleranssız ilk hali ikinci incelemede, toleransta yeni token veren ikinci hali otomatik incelemede
-      çıktı.) Web paneli yenilemeyi sekmeler arasında sıraya sokar (Web Locks), oturumu `storage` olayıyla eşitler ve
-      yenileme reddedilince önce başka bir sekmenin yenileyip yenilemediğine bakar. Yanıtı yolda kaybolan istemci
-      yeniden giriş yapar.
+      çıktı.) Tolerans içindeki yanıt ayrıdır (409): istemciler onu ret saymaz, oturumu kapatmaz ve yeni token'ları
+      yenilemeyi yapan istekten (öteki sekmenin depoya yazmasından) kısa bir süre bekler. Web paneli ayrıca yenilemeyi
+      sekmeler arasında sıraya sokar (Web Locks; yalnızca güvenli bağlamda vardır) ve oturumu `storage` olayıyla
+      eşitler. E-posta doğrulaması da sırayı ilerlettiği için tolerans iki sıra geriyi kapsar. Bilinen ödünleşimler:
+      yanıtı yolda kaybolan istemci tolerans bitince yeniden giriş yapar; çalan kişi asıl sahibinden önce yenilerse ve
+      sahibin eskimiş token'ı tolerans içinde gelirse hırsızlık o an fark edilmez (sahip oturumdan düşer, oturum
+      kapanmaz).
     - Parola sıfırlama ve e-posta doğrulama, e-postayla gönderilen kodladır (bağlantı değil: mobilde derin bağlantı,
       web'de adreste token gerekmez). Kod sekiz karakterdir (Crockford base32, 40 bit); özeti saklanır, 15 dakika
       yaşar ve bir kez kullanılır; yazılışı normalleştirilir (küçük harf, tire, O/0, I/L/1). **Hesap başına deneme
@@ -802,7 +811,11 @@ Yapılmayanlar ve nedenleri:
   entity'ye bağlı olmayan uçlar metadata taşımaz (bir yetki kuralı onları kapsamı bilinmeyen, yani en kısıtlı sınıfta
   saymalıdır). Gövde taşıdığı için `POST` olan ama yazmayan uçlar ayrıca `HaldusReadOnly` ile işaretlenir (`/search`,
   `/batch-get`, `/preview`, `/{id}/preview`). **Yazmayan yeni bir `POST` ucu üretilirse o da işaretlenmelidir; yazan bir
-  uç asla işaretlenmemelidir.**
+  uç asla işaretlenmemelidir.** İki istisna grubun kapsamını uç düzeyinde değiştirir: okundu işaretini yazan uçlar
+  (`/read`, `/unread`, `/read-all`) her zaman kullanıcıya aittir (kayıt ortak olsa da işaret işaretleyenindir; yoksa
+  ortak bir duyuruyu yalnızca personel "okundu" işaretleyebilirdi), ve içe aktarma işi kayıt eklediği kaynaktan daha
+  dar bir kapsam bildiremez (kiracıya ait bir iş ortak kaynağa yazıyorsa ortak sınıflanır). Bilinen sınır:
+  `CreatedFrom(on:)` ile bir geçişin başka bir kaynakta doğurduğu kayıt, geçişin kaynağının kapsamıyla yazılır.
 - **Sahiplik.** `Traits.Owned` (`IOwned`, `OwnerId`); `/me` dışında kalma `Traits.OwnedPlainRoute` ile tutulur.
   Görünürlük modeldeki `HaldusFilters.Owner` filtresidir ve kullanıcıyı kiracı filtresiyle aynı yoldan okur
   (`HaldusScope.UserId(context)`); bu yüzden uçlarda sahiplikle ilgili tek satır yoktur ve kaynağa dokunan her
@@ -1287,6 +1300,7 @@ Yapılmayanlar ve nedenleri:
   MinIO testleri aynen geçer); S3 dışı yol AWS SigV4 test takımının dört vektörüyle sınanır. Hata, kuyruğun adını,
   durumu ve AWS hata kodunu taşır (yanıtın metni ve sır yazılmaz); 2xx olup `MessageId` taşımayan yanıt da hatadır.
   Ayarlar yayıncının kurucusunda doğrulanır: geçersiz ayar arka plan servisini düşürür ve uygulama açılmaz.
+  Yönlendirilmiş bir yanıt teslimat sayılmaz (uygulama adlandırılmış istemciyi yeniden yapılandırsa da).
   Testler ElasticMQ'yu özetiyle sabitlenmiş imajdan başlatır (`HALDUS_TEST_ELASTICMQ_IMAGE` ile değiştirilir).
   **Öykünücü imzayı doğrulamaz; gerçek AWS SQS'e karşı sınanmadı.** Sınırlar: uygulama başına tek kuyruk; toplu
   gönderim yok (olay başına bir istek, dağıtıcının kilidi altında); mesaj boyutu denetlenmez (sınırı aşan olay on

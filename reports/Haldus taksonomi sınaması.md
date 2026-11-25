@@ -242,6 +242,16 @@ durum modeli" kuralı da açılmadı: ek durum eksenleri asıl durumun yanında,
   yoktu ve kayıt olan her hesap ortak kaynakları yazabiliyordu. Bunun için üretilen uçlar artık kaynağın kapsamını
   metadata olarak taşıyor (`HaldusResourceScope`) ve örnek, ortak kaynakların yazılmasını personele bırakıyor; kural
   kaynakları tek tek saymadığı için sonradan eklenen kaynakları da kapsıyor.
+- **O kuralın kendisi de iki incelemeden geçti ve ilk hali dört yerden açıktı.** Rol, e-postası doğrulanmamış hesaba da
+  veriliyordu (personel adresiyle ilk kaydolan rolü alırdı); kapsamını bildirmeyen yazma uçları kuralın dışında
+  kalıyordu (bütün ürünlerin fiyatını değiştiren bir aksiyon her hesaba açıktı); okuma, adresin sonuna bakılarak
+  tanınıyordu; okundu işaretleri ise tersine, ortak kaynakta yanlışlıkla personele kalmıştı. Kural artık kapalı
+  başlıyor, yazmayan `POST` uçlarını üretici işaretliyor (`HaldusReadOnly`) ve işaret uçları kullanıcıya ait
+  sınıflanıyor. Kuralın gerçek kimlik doğrulamayla sınanmamış olması bu açıkların geçmesinin nedeniydi: entegrasyon
+  testlerinin çoğu, yetki kuralının hiç çalışmadığı demo kimliğiyle koşuyor.
+- **İstemcilerin oturum mantığı için yazılan testler iki hata buldu:** yenileme isteğindeki her HTTP hatası (geçici bir
+  sunucu arızası da) kullanıcıyı oturumdan atıyordu ve yenilenen token'lar, o sırada değişmiş başka bir hesabın
+  oturumuna yazılabiliyordu.
 - **Güvenlik incelemeleri üçüncü planda da aynı türden bulgular verdi.** Dört aşamadan sonra düzeltme gerekti:
   kullanıcılara ait kayıtların ortak bir kayıtta örtük toplanması (22), hassas alanın değişiklik kümesinde saklanıp
   geri gösterilmesi ve ölçütsüz sayılabilecek toplu silme (27), rolün zincirleme silmesinin kiracı sınırını aşması
@@ -274,7 +284,7 @@ sınırları ayrıca [README](../README.md) ve `CLAUDE.md` dosyalarında, özell
 | İstemcinin verdiği metin kimlik (slug) | — | ULID ve istemcinin verdiği `Guid` kimlik sonradan yazıldı; anlamlı metin anahtar için `NaturalKey` veya `MapStore` vardır |
 | "Uzatma kancaları" | — | Araştırmanın ilk sürüm listesinde adı geçiyor, tanımı yok |
 | Kimlik sağlayıcılı (OpenID Connect) örnek; iki adımlı doğrulama; rol yönetimi | — | Gerçek kimlik doğrulama sonradan yazıldı: parola ile giriş, sunucuda oturum ve çıkış, kodla parola sıfırlama ve e-posta doğrulama, hesap kilidi, hız sınırı; iki arayüz de bunları kullanır. Kimlik sağlayıcının token'ını doğrulamak ayrı bir paket (yeni bağımlılık) ister |
-| Arayüz bileşenlerinin otomatik testi | — | İstemcilerin oturum ve istek mantığı paket eklenmeden, Node'un yerleşik test çalıştırıcısıyla sınanıyor (panel 106, mobil 111 test; iki gerçek hata buldular). Bileşenleri çizen testler bir DOM kütüphanesi ister; o kurulum izin sistemi tarafından reddedildi. Ekranlar tip denetimi, derleme ve elle (tarayıcı, Android emülatörü) doğrulandı |
+| Arayüzlerin etkileşim testleri; mobil ekran testleri | — | Paket eklenmeden yazılanlar: istemcilerin oturum ve istek mantığı (Node'un yerleşik test çalıştırıcısı) ve panelin bileşenlerinin sunucu tarafı çizimle denetimi (panel 251, mobil 112 test; gerçek hatalar buldular). Tıklama, yazma ve veri yükleme gibi etkileşimler bir DOM kütüphanesi ister; o kurulum izin sistemi tarafından reddedildi. Ekranlar ayrıca elle (tarayıcı, Android emülatörü) doğrulandı |
 
 ## Yük altında ölçüm
 
