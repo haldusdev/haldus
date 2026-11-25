@@ -60,9 +60,15 @@ export function providerRedirectUri(): string {
   return AuthSession.makeRedirectUri({ native: 'haldus-shop://sign-in', path: 'sign-in' });
 }
 
-/** Adres HTTPS mi, ya da yalnızca cihazın kendisine (veya emülatörün bilgisayarına) giden bir geliştirme adresi mi? */
+/**
+ * Adres HTTPS mi, ya da yalnızca cihazın kendisine (veya emülatörün bilgisayarına) giden bir geliştirme adresi mi?
+ *
+ * Sunucu adı, kendisinden sonra yalnızca bağlantı noktası ve yol gelebilecek biçimde okunur. Kullanıcı bilgisi taşıyan
+ * adres (`http://localhost:1@evil.test`) hiç kabul edilmez: orada `localhost` sunucu değil kullanıcı adıdır ve istek
+ * başka bir sunucuya, şifresiz giderdi.
+ */
 function isTrustworthy(address: string): boolean {
-  const match = /^(https?):\/\/(\[[^\]]+\]|[^/:?#]+)/i.exec(address);
+  const match = /^(https?):\/\/(\[[^\]]+\]|[^/:?#@\\\s]+)(?::\d+)?(?=[/?#]|$)/i.exec(address);
 
   if (!match) {
     return false;
@@ -113,6 +119,12 @@ export async function prepareProviderSignIn(
   // Keşif isteği yanıtın durumuna bakmaz; bir hata sayfasının JSON gövdesi de buraya kadar gelir.
   if (!authorizationEndpoint || !tokenEndpoint) {
     throw new ProviderSignInError('the discovery document names no endpoints');
+  }
+
+  // Kullanıcı parolasını yetkilendirme ucundaki sayfaya yazar; kod, PKCE doğrulayıcısı ve yenileme token'ı token ucuna
+  // gider. Sağlayıcının adresi için geçerli olan kural uçları için de geçerlidir.
+  if (!isTrustworthy(authorizationEndpoint) || !isTrustworthy(tokenEndpoint)) {
+    throw new ProviderSignInError('the discovery document names an endpoint that is not https');
   }
 
   // Yanıt tipi (code) ve PKCE (S256) kütüphanenin varsayılanlarıdır.

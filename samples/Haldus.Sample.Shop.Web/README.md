@@ -25,7 +25,8 @@ docker run -d --name haldus-shop-demo -e POSTGRES_PASSWORD=<parola> -e POSTGRES_
 ```
 
 Backend bağlantı dizesini ortamdan okur. `Shop__CreateDatabase=true` tabloları açılışta, yoksa oluşturur (yalnızca
-bu deneme için; gerçek bir uygulama şemasını migration'larla yönetir). PowerShell'de:
+bu deneme için; gerçek bir uygulama şemasını migration'larla yönetir). Var olan tabloları değiştirmez: örnek
+güncellendikten sonra (yeni bir kolon geldiyse) deneme veritabanı silinip yeniden oluşturulur. PowerShell'de:
 
 ```powershell
 $env:ConnectionStrings__Default = "Host=127.0.0.1;Port=5432;Database=shop;Username=postgres;Password=<parola>"

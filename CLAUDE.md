@@ -553,9 +553,18 @@ Yapılmayanlar ve nedenleri:
       - `Shop:Auth:Oidc` (`Authority`, `ClientId`, `ClientSecret`): backend'in kendisi tarayıcıyı sağlayıcıya
         yönlendirir (`GET /auth/oidc/sign-in?returnUrl=`) ve çerezle oturum açar
         (`Microsoft.AspNetCore.Authentication.OpenIdConnect`). Çerez kendiliğinden gönderildiği için, çerezle kimliği
-        doğrulanan ve yazan her istek `X-Shop-Request` başlığını taşımalıdır (CSRF; giriş istemeyen uçlarda da:
-        çıkış da oturumu değiştirir); dönüş adresi yalnızca uygulamanın içindeki bir yol olabilir. Bozuk veya sahte bir
-        dönüş isteği 400 alır. Bu uçlar yalnızca ayar verildiyse eşlenir ve şemaya girmez. Bir vekilin arkasında
+        doğrulanan ve yazan her istek `X-Shop-Request` başlığını taşımalıdır (CSRF). Giriş istemeyen uçlarda kural
+        ikiye ayrılır: çerezin oturumunu değiştiren uç (`/auth/oidc/sign-out`; `ChangesSession` metadatası) başlığı
+        yine ister, ötekilerde (parola girişi, kayıt, yenileme, token'larımızın çıkışı, misafir sepeti) başlıksız
+        istek reddedilmez ama çerez kimlik sayılmaz, istek kimliksiz sürer. Başlığı giriş istemeyen her uçta isteyen
+        ara hal, tarayıcıda çerez dururken parola girişini 403 ile kapatıyordu (bağımsız incelemede çıktı). **Giriş
+        istemeyen ama çerezin oturumunu değiştiren yeni bir uç `ChangesSession` ile işaretlenmelidir.** Çerezle çıkış,
+        çerezi taşımayan isteğe çerezi sildirmez (çerez `SameSite=Lax` olduğu için başka bir siteden gönderilen form
+        onu taşımaz; yanıt yine de sildirseydi o site kullanıcıyı oturumdan düşürebilirdi). Aynı nedenle sağlayıcının
+        ön kanal çıkış adresi (`/signout-oidc`) kapalıdır (404). Dönüş adresi
+        yalnızca uygulamanın içindeki bir yol olabilir. Bozuk veya sahte bir
+        dönüş isteği 400 alır; günlüğe yalnızca hatanın türü yazılır (metni isteği yapanın yazdığı bir metin olabilir).
+        Bu uçlar yalnızca ayar verildiyse eşlenir ve şemaya girmez. Bir vekilin arkasında
         istek şeması da vekilden okunur (`X-Forwarded-Proto`; `Shop:KnownProxies`).
         Çerez kendi başına geçerli değildir: girişte sunucuda bir oturum (`ShopSession`) açılır ve çerez ona bağlanır
         (`sid`); her istekte oturumun açık olduğu sorulur ve kimlik hesaptan yeniden kurulur (rol ve doğrulama
@@ -571,6 +580,11 @@ Yapılmayanlar ve nedenleri:
         (`email_verified`) ve başka hesapta değilse alınır; değilse hesap, kimseye ait olamayacak bir adresle
         (`…@external.invalid`) ve doğrulanmamış olarak açılır. Yer tutucu adres rastgeledir (kimlikten türetilseydi,
         kişinin sağlayıcıdaki kimliğini bilen biri o adresle önceden kayıt olup hesabının açılmasını engelleyebilirdi).
+        Hesap açılırken yalnızca iki çakışma karşılanır (aynı kimliğin eşzamanlı ilk isteği; adresin bu arada
+        alınması, o zaman hesap adressiz açılır); başka bir hata yutulmaz, istek hata verir ve sonraki istek yeniden
+        dener. Adresini ilk gelişinde alamamış hesap (erişim token'ı adresi taşımıyordu, adres o sırada başkasındaydı)
+        doğrulanmış adres sonradan gelirse onu alır; yoksa sonsuza kadar doğrulanmamış kalırdı. Bir kez yazılan adres
+        değişmez.
       - **Sağlayıcı hesabının parolası yoktur ve parola uçlarından bir parola da edinemez.** Giriş, "parolamı
         unuttum" ve sıfırlama uçları öyle bir hesabı hiç yokmuş gibi yanıtlar (`PasswordAccounts`); parola değiştirme,
         e-posta doğrulama ve kodu yeniden gönderme 409 döner (`ManagedByProvider`). İlk yazımda sıfırlama ucu hesaba
@@ -582,8 +596,11 @@ Yapılmayanlar ve nedenleri:
         personel rolü alamaz. Herkesin hesap açabildiği veya adresi doğrulamadan beyan eden bir sağlayıcıda bu beyan,
         personel adresini yazan herkese rol verirdi (ilk yazımda beyana her zaman güveniliyordu; otomatik incelemede
         çıktı). Ayar yalnızca adresleri gerçekten doğrulayan, kuruluşun kendi sağlayıcısı için açılır. Güven her istekte
-        yeniden uygulanır: ayar sonradan kapatılırsa, daha önce doğrulanmış yazılmış hesap da rolünü kaybeder. İki
-        bölüm aynı sağlayıcıyı gösteriyorsa ayar ikisinde aynı olmalıdır; değilse uygulama açılmaz.
+        yeniden uygulanır: ayar sonradan kapatılırsa, daha önce doğrulanmış yazılmış hesap da rolünü kaybeder; `/auth/me`
+        de dış hesap için kayıttaki değeri değil, isteğin taşıdığı doğrulama ve rol bilgisini döndürür. İki
+        bölüm aynı sağlayıcıyı gösteriyorsa ayar ikisinde aynı olmalıdır (adresler yazılışlarıyla değil anlamlarıyla
+        karşılaştırılır); değilse uygulama açılmaz. `RequireVerifiedEmail` açıkken adresine güvenilmeyen bir sağlayıcı
+        da uygulamayı açtırmaz: hesapları adreslerini hiçbir yoldan doğrulayamazdı.
       - İstemciler neyin sunulduğunu `GET /auth/config` ucundan okur (gizli bir şey taşımaz).
       - Oturum denetimi (`sid`) yalnızca kendi token'larımız içindir; sağlayıcının token'ının ömrünü ve iptalini
         sağlayıcı yönetir. `RequireVerifiedEmail` her yoldan giriş için geçerlidir.
@@ -595,10 +612,26 @@ Yapılmayanlar ve nedenleri:
         Keycloak'ın kendi giriş sayfasından geçen yönlendirmeli giriş (ASP.NET Core burada PAR da kullanır). Başka
         sağlayıcılara (Entra ID, Auth0...) karşı sınanmadı. Sınırlar: tek sağlayıcı; sağlayıcıdaki adres sonradan değişirse hesaba
         yansımaz; sağlayıcıdan çıkış (tek oturum kapatma) yoktur; dış hesabın parolası yoktur ve parola uçları onu
-        kabul etmez; erişim token'ında `email` / `email_verified` yoksa hesap adressiz açılır; çerez, sağlayıcıdaki
-        oturum kapansa da sekiz saate kadar geçerli kalır (sağlayıcının ön kanal çıkışı desteklenmez) ve sağlayıcının
-        JWT'si `/auth/logout-all` sonrasında da süresi dolana kadar geçer; token'ın türü sabitlenmez, bu yüzden
-        `Audience` istemcinin kimliğiyle aynı olmamalıdır (yoksa kimlik token'ı da erişim token'ı sayılırdı).
+        kabul etmez; erişim token'ında `email` / `email_verified` yoksa hesap adressiz açılır (sonradan gelirse yazılır).
+      - Çıkış ve token'ın türü (incelemede sınır olarak not edilmiş, sonra düzeltilmiştir):
+        - `/auth/logout-all` sağlayıcının o ana kadar verdiği **erişim** token'larını da geçersiz kılar: hesap o anı
+          taşır (`ShopAccount.SignedOutEverywhereAt`) ve o andan önce verilmiş token (`iat`, yoksa `nbf`; kesirli de
+          yazılabilir) reddedilir. Verildiği anı hiç söylemeyen token ilk istekten reddedilir (yoksa hesap çalışır
+          görünür ve ilk "her yerden çık"tan sonra kalıcı olarak kilitlenirdi; uyumsuz sağlayıcı kurulurken fark
+          edilir). Sınır en az, isteği yapan token'ın verildiği andır (saati ileride bir sağlayıcının token'ı da ölür;
+          beş dakikalık saat farkıyla sınırlı) ve geri alınmaz. Sağlayıcıda yeniden alınan token geçer. **Bu,
+          sağlayıcıdaki oturumu kapatmaz:** yenileme token'ı tutan başka bir cihaz yeni bir erişim token'ı alıp geri
+          gelir; onu ancak sağlayıcı iptal eder. Saat farkının bilinen etkisi: sağlayıcının saati gerideyse, çıkıştan
+          sonra o fark kadar süre içinde aldığı token'lar da reddedilir (kullanıcı o süre dolana kadar giremez).
+        - `Audience` bir istemcinin kimliği olamaz (uygulama açılmaz; sondaki eğik çizgi sayılmaz): kimlik token'ının
+          audience'ı istemcinin kimliğidir ve öyle bir ayarda kimlik token'ı da erişim token'ı sayılırdı. Token'ın
+          türü (`typ: at+jwt`) ayrıca istenmez: Keycloak erişim token'ını `JWT` türüyle verir.
+        - Çerez oturumunun ömrü ayardır (`Shop:Auth:Oidc:SessionMinutes`, varsayılan 480). Sağlayıcıdaki oturum
+          kapandığında backend'e haber gelmez: sağlayıcının ön kanal çıkışı `SameSite=Lax` çerezle çalışmaz, arka
+          kanal çıkışı (imzalı çıkış token'ının doğrulanması) yazılmadı. Çerez en geç bu süre sonunda biter; süre
+          kısaltılarak daraltılır.
+        - Örnekte migration yoktur: `ShopAccount`'a eklenen kolonlar (`ExternalIssuer`, `SignedOutEverywhereAt`...)
+          `Shop:CreateDatabase` ile daha önce oluşturulmuş bir veritabanına eklenmez; o veritabanı yeniden oluşturulur.
       - **İstemciler** (kullanıcının onayladığı paketlerle; panelde `oidc-client-ts`, mobilde `expo-auth-session`).
         İkisi de sağlayıcıyı `/auth/config` yanıtından öğrenir ve Authorization Code + PKCE akışını kendisi yapar;
         backend'e sağlayıcının erişim token'ını sunar ve hesabı `/auth/me` ile sorar. Oturum kaydı türünü taşır
@@ -615,7 +648,9 @@ Yapılmayanlar ve nedenleri:
           zamanlayıcıyla ve iframe ile yenilemesi kapalıdır (`src/lib/provider.ts`).
         - Mobil: dönüş adresi `haldus-shop://sign-in`'dir (Expo Go'da `exp://…/--/sign-in`, web'de `/sign-in`);
           sağlayıcının token ucu oturumla birlikte saklanır (`lib/provider.ts`, `lib/provider-sign-in.ts`).
-          Sağlayıcının adresi HTTPS olmalıdır (düz HTTP yalnızca `localhost` ve emülatörün `10.0.2.2` adresinde) ve
+          Sağlayıcının adresi HTTPS olmalıdır (düz HTTP yalnızca `localhost` ve emülatörün `10.0.2.2` adresinde;
+          kullanıcı bilgisi taşıyan adres, `http://localhost:1@başka.sunucu`, hiç kabul edilmez; keşif belgesinin
+          söylediği yetkilendirme ve token uçları da aynı kuraldan geçer) ve
           keşif belgesinin `issuer` alanı istenen adresle aynı olmalıdır.
         - Sınananlar: iki projede birim testleri ve sahte bir sağlayıcıya karşı etkileşim testleri (mobilde web
           hedefinde, açılır pencere dahil). Panel ayrıca gerçek backend ve kapsayıcıdaki Keycloak ile tarayıcıda elle
@@ -624,7 +659,8 @@ Yapılmayanlar ve nedenleri:
           Mobilde emülatörde (Expo Go, Keycloak ve backend `adb reverse` ile) görülenler: giriş ekranında düğmenin
           çıkması ve dokununca sistem tarayıcısının açılması. **Giriş tamamlanamadı:** emülatördeki Chrome ilk
           açılış ekranında kaldı ve devam etmek Google'ın hizmet şartlarını kabul etmek demekti; bu, kullanıcı adına
-          yapılmadı. Kullanıcı Chrome'u bir kez açıp o ekranı geçerse deneme yinelenebilir.
+          yapılmadı. Öteki sanal cihazda (`Fix1_API_36_1`) da Chrome aynı ekrandadır ve Expo Go kurulu değildir
+          (kurmak indirme ister). İki engel de kullanıcının kararıdır; deneme o ekran geçilmiş bir cihazda yinelenebilir.
         - Sınırlar: sağlayıcının oturumu kapatılmaz ve token'ı iptal edilmez (çıkış yereldir); kimlik token'ı
           (`id_token`) kullanılmaz; yalnızca kapsam gönderilir (`audience` / `resource` parametresi isteyen
           sağlayıcılar yapılandırılamaz); panelde `serverSignIn` için düğme yoktur; panel paketi `oidc-client-ts`'i

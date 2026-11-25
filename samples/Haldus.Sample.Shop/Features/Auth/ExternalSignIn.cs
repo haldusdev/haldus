@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
@@ -66,11 +67,17 @@ public sealed class ShopOidcOptions
     /// </summary>
     public bool TrustEmailVerified { get; set; }
 
+    /// <summary>
+    /// Çerezle açılan oturumun ömrü (dakika). Sağlayıcıdaki oturum kapandığında backend'e haber gelmez; çerez en geç bu
+    /// süre sonunda biter. Kısa tutmak, sağlayıcıda kapatılan bir hesabın burada açık kaldığı süreyi kısaltır.
+    /// </summary>
+    public int SessionMinutes { get; set; } = 480;
+
     public bool Enabled => !string.IsNullOrWhiteSpace(Authority);
 }
 
 /// <summary>Bir kimlik sağlayıcıdan gelen kimliğin örnek mağazanın hesabına bağlanması ve şemaların kurulması.</summary>
-public static class ExternalSignIn
+public static partial class ExternalSignIn
 {
     /// <summary>Gelen isteğe bakıp doğru şemayı seçen şema; yalnızca dış kimlik açıkken kurulur.</summary>
     public const string SelectorScheme = "Shop";
@@ -80,13 +87,14 @@ public static class ExternalSignIn
     public const string OidcScheme = "ShopOidc";
     public const string CookieName = "shop.session";
 
-    private static readonly TimeSpan CookieLifetime = TimeSpan.FromHours(8);
-
     /// <summary>
     /// Çerezle kimliği doğrulanan ve yazan (güvenli olmayan) her istek bu başlığı taşımalıdır. Başka bir siteden
     /// gönderilen bir form onu ekleyemez; çerezin kendiliğinden gönderilmesine dayanan istek sahteciliğini (CSRF) keser.
     /// </summary>
     public const string RequestHeader = "X-Shop-Request";
+
+    /// <summary>Sağlayıcının token'ının verildiği an (saniye); "her yerden çık" isteği yapan token'ı buradan tanır.</summary>
+    internal const string IssuedAtClaim = "provider_iat";
 
     public static void AddExternalSignIn(this AuthenticationBuilder builder, ShopJwtOptions jwt, ShopOidcOptions oidc, bool development)
     {
@@ -99,6 +107,14 @@ public static class ExternalSignIn
         if (jwt.Enabled)
         {
             Require(!string.IsNullOrWhiteSpace(jwt.Audience), "Shop:Auth:Jwt:Audience is required when Shop:Auth:Jwt:Authority is set.");
+
+            // Kimlik token'ının (id_token) audience'ı istemcinin kimliğidir. API'nin audience'ı da o olsaydı, erişim
+            // token'ı yerine kimlik token'ı da kabul edilirdi.
+            // Sondaki eğik çizgi sayılmaz: token doğrulayıcı audience'ı karşılaştırırken onu yok sayar.
+            Require(
+                !SameName(jwt.Audience, jwt.ClientId)
+                    && !(oidc.Enabled && SameAuthority(jwt.Authority!, oidc.Authority!) && SameName(jwt.Audience, oidc.ClientId)),
+                "Shop:Auth:Jwt:Audience must name the API, not a client: with a client id as the audience, ID tokens would be accepted as access tokens.");
             RequireAuthority("Shop:Auth:Jwt", jwt.Authority!, jwt.RequireHttpsMetadata, development);
 
             builder.AddJwtBearer(JwtScheme, options =>
@@ -132,6 +148,7 @@ public static class ExternalSignIn
                 !string.IsNullOrWhiteSpace(oidc.ClientId) && !string.IsNullOrWhiteSpace(oidc.ClientSecret),
                 "Shop:Auth:Oidc:ClientId and ClientSecret are required when Shop:Auth:Oidc:Authority is set.");
             RequireAuthority("Shop:Auth:Oidc", oidc.Authority!, oidc.RequireHttpsMetadata, development);
+            Require(oidc.SessionMinutes is >= 1 and <= 1440, "Shop:Auth:Oidc:SessionMinutes must be between 1 and 1440.");
 
             builder.AddCookie(CookieScheme, options =>
             {
@@ -139,7 +156,7 @@ public static class ExternalSignIn
                 options.Cookie.HttpOnly = true;
                 options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
                 options.Cookie.SameSite = SameSiteMode.Lax;
-                options.ExpireTimeSpan = CookieLifetime;
+                options.ExpireTimeSpan = TimeSpan.FromMinutes(oidc.SessionMinutes);
                 options.SlidingExpiration = false;
 
                 // Çerez kendi başına geçerli değildir: sunucudaki oturumuna bağlıdır (çıkış ve "her yerden çık" onu
@@ -194,7 +211,21 @@ public static class ExternalSignIn
                     // Sağlayıcının reddi, bozuk veya sahte bir dönüş isteği: işlenmeyen bir hata (500) değil, 400.
                     OnRemoteFailure = context =>
                     {
+                        // Neden istemciye yazılmaz. Günlüğe yalnızca hatanın türü yazılır: bu uca herkes istek
+                        // gönderebilir ve hatanın metni (sağlayıcının `error_description` alanı) isteği yapanın
+                        // yazdığı bir metin olabilir. Ayrıntıyı ASP.NET Core'un kendi günlüğü taşır.
+                        LogRemoteFailure(Logger(context.HttpContext), context.Failure?.GetType().Name ?? "unknown");
                         context.Response.StatusCode = StatusCodes.Status400BadRequest;
+                        context.HandleResponse();
+                        return Task.CompletedTask;
+                    },
+
+                    // Sağlayıcının ön kanal çıkışı (`/signout-oidc`) kullanılmaz: oturum çerezi `SameSite=Lax`
+                    // olduğu için sağlayıcının iframe'inden gelen isteğe zaten eklenmez; çerezsiz gelen istek ise
+                    // yanıtında çerezi sildirirdi (başka bir site kullanıcıyı oturumdan düşürebilirdi).
+                    OnRemoteSignOut = context =>
+                    {
+                        context.Response.StatusCode = StatusCodes.Status404NotFound;
                         context.HandleResponse();
                         return Task.CompletedTask;
                     },
@@ -253,21 +284,68 @@ public static class ExternalSignIn
         var options = http.RequestServices.GetRequiredService<IOptions<ShopAuthOptions>>().Value;
         var cancellationToken = http.RequestAborted;
 
+        long? issuedAt = null;
+
+        if (!openSession)
+        {
+            // Erişim token'ı verildiği anı söylemelidir (RFC 9068 zorunlu tutar): "her yerden çık" buna dayanır.
+            // Söylemeyen token ilk istekten reddedilir; yoksa hesap çalışır görünür ve ilk "her yerden çık"tan
+            // sonra kalıcı olarak kilitlenirdi. Uyumsuz bir sağlayıcı böylece kurulurken fark edilir.
+            issuedAt = IssuedAt(external);
+
+            if (issuedAt is null)
+            {
+                LogNoIssuedAt(Logger(http));
+                return null;
+            }
+        }
+
         var account = await FindAsync(db, issuer, subject, cancellationToken);
+
+        // "Her yerden çık"tan önce verilmiş bir token artık kimlik değildir.
+        // Çerezle girişte bu sınanmaz: orada her giriş yeni bir oturum açar ve çıkış o oturumları kapatır.
+        if (issuedAt is { } issued && account?.SignedOutEverywhereAt is { } signedOut && issued <= signedOut.ToUnixTimeSeconds())
+        {
+            return null;
+        }
+
+        // Adresin doğrulandığını söyleyen sağlayıcıdır; ona ancak açıkça güvenildiyse inanılır (TrustEmailVerified).
+        // Adres yalnızca sağlayıcı onu doğruladıysa ve başka bir hesapta değilse alınır. Var olan bir hesaba adres
+        // üzerinden bağlanılmaz: aynı adresi taşıdığını söyleyen bir dış kimlik, parolayla açılmış hesabı ele
+        // geçirmemelidir. Öyle bir kimlik kendi ayrı hesabını (ve kiracısını) alır.
+        var email = account is null || account.EmailVerifiedAt is null ? VerifiedAddress(external, trustEmail) : null;
+        var usable = email is not null && !await db.Set<ShopAccount>().AnyAsync(candidate => candidate.Email == email, cancellationToken);
+
+        if (account is not null && usable)
+        {
+            // Hesap ilk gelişinde adresini alamamış olabilir (erişim token'ı adresi taşımıyordu, sağlayıcı onu henüz
+            // doğrulamamıştı ya da adres o sırada başkasındaydı). Doğrulanmış adres sonradan gelirse yazılır; yoksa
+            // hesap, adresini bizim kod akışımızla da doğrulayamadığı için sonsuza kadar doğrulanmamış kalırdı.
+            db.Attach(account);
+            account.Email = email!;
+            account.EmailVerifiedAt = HaldusTime.UtcNow(http.RequestServices.GetRequiredService<TimeProvider>());
+
+            try
+            {
+                await db.SaveChangesAsync(cancellationToken);
+                db.Entry(account).State = EntityState.Detached;
+            }
+            catch (DbUpdateException exception) when (HaldusDb.IsUniqueViolation(exception, AuthModel.EmailIndex))
+            {
+                // Adresi bu arada başkası aldı: hesap olduğu gibi kalır.
+                db.Entry(account).State = EntityState.Detached;
+                account = await FindAsync(db, issuer, subject, cancellationToken);
+
+                if (account is null)
+                {
+                    return null;
+                }
+            }
+        }
 
         if (account is null)
         {
             var now = HaldusTime.UtcNow(http.RequestServices.GetRequiredService<TimeProvider>());
-            var email = external.FindFirstValue("email")?.Trim().ToLowerInvariant();
-            // Adresin doğrulandığını söyleyen sağlayıcıdır; ona ancak açıkça güvenildiyse inanılır (TrustEmailVerified).
-            var verified = trustEmail && string.Equals(external.FindFirstValue("email_verified"), "true", StringComparison.OrdinalIgnoreCase);
-
-            // Adres yalnızca sağlayıcı onu doğruladıysa ve başka bir hesapta değilse alınır. Var olan bir hesaba adres
-            // üzerinden bağlanılmaz: aynı adresi taşıdığını söyleyen bir dış kimlik, parolayla açılmış hesabı ele
-            // geçirmemelidir. Öyle bir kimlik kendi ayrı hesabını (ve kiracısını) alır.
-            var usable = verified
-                && email is { Length: > 0 and <= 256 }
-                && !await db.Set<ShopAccount>().AnyAsync(candidate => candidate.Email == email, cancellationToken);
 
             account = new ShopAccount
             {
@@ -286,8 +364,11 @@ public static class ExternalSignIn
             {
                 await db.SaveChangesAsync(cancellationToken);
             }
-            catch (DbUpdateException)
+            catch (DbUpdateException exception)
+                when (HaldusDb.IsUniqueViolation(exception, AuthModel.ExternalIndex) || HaldusDb.IsUniqueViolation(exception, AuthModel.EmailIndex))
             {
+                // Yalnızca iki çakışma karşılanır; başka bir hata (geçici bir arıza) yutulmaz ve hesabı adressiz
+                // bırakmaz: istek hata verir, bir sonraki istek yeniden dener.
                 // Aynı kişinin aynı anda gelen iki ilk isteğinden ikincisi: hesap yeniden okunur.
                 db.Entry(account).State = EntityState.Detached;
                 var existing = await FindAsync(db, issuer, subject, cancellationToken);
@@ -298,12 +379,26 @@ public static class ExternalSignIn
                     account.Email = Placeholder();
                     account.EmailVerifiedAt = null;
                     db.Add(account);
-                    await db.SaveChangesAsync(cancellationToken);
+
+                    try
+                    {
+                        await db.SaveChangesAsync(cancellationToken);
+                        existing = account;
+                    }
+                    catch (DbUpdateException retry) when (HaldusDb.IsUniqueViolation(retry, AuthModel.ExternalIndex))
+                    {
+                        // Aynı anda yeniden deneyen öteki istek hesabı açtı.
+                        db.Entry(account).State = EntityState.Detached;
+                        existing = await FindAsync(db, issuer, subject, cancellationToken);
+                    }
                 }
-                else
+
+                if (existing is null)
                 {
-                    account = existing;
+                    return null;
                 }
+
+                account = existing;
             }
         }
 
@@ -313,13 +408,14 @@ public static class ExternalSignIn
         {
             // Çerezle açılan oturum sunucuda da bir kayıttır; çıkış onu iptal eder.
             var now = HaldusTime.UtcNow(http.RequestServices.GetRequiredService<TimeProvider>());
-            var session = new ShopSession { Id = Guid.CreateVersion7(), AccountId = account.Id, CreatedAt = now, ExpiresAt = now + CookieLifetime };
+            var lifetime = TimeSpan.FromMinutes(http.RequestServices.GetRequiredService<ShopOidcOptions>().SessionMinutes);
+            var session = new ShopSession { Id = Guid.CreateVersion7(), AccountId = account.Id, CreatedAt = now, ExpiresAt = now + lifetime };
             db.Add(session);
             await db.SaveChangesAsync(cancellationToken);
             sessionId = session.Id;
         }
 
-        return Principal(account, options, scheme, sessionId, trustEmail);
+        return Principal(account, options, scheme, sessionId, trustEmail, issuedAt);
     }
 
     /// <summary>Çerezdeki kimliği oturumuyla sınar ve hesaptan yeniden kurar; oturum kapandıysa veya hesap yoksa null.</summary>
@@ -349,7 +445,7 @@ public static class ExternalSignIn
                 : null;
     }
 
-    private static ClaimsPrincipal Principal(ShopAccount account, ShopAuthOptions options, string scheme, Guid? sessionId, bool trustEmail)
+    private static ClaimsPrincipal Principal(ShopAccount account, ShopAuthOptions options, string scheme, Guid? sessionId, bool trustEmail, long? issuedAt = null)
     {
         // Adres, sağlayıcıya güvenildiği sürece doğrulanmış sayılır: güven sonradan kapatılırsa, daha önce doğrulanmış
         // yazılmış bir hesap da rolünü kaybeder.
@@ -367,6 +463,11 @@ public static class ExternalSignIn
         if (sessionId is { } id)
         {
             identity.AddClaim(new Claim(AuthEndpoints.SessionClaim, id.ToString()));
+        }
+
+        if (issuedAt is { } issued)
+        {
+            identity.AddClaim(new Claim(IssuedAtClaim, issued.ToString(CultureInfo.InvariantCulture)));
         }
 
         if (verified && options.IsStaff(account))
@@ -389,8 +490,55 @@ public static class ExternalSignIn
     private static string Placeholder() =>
         Convert.ToHexStringLower(RandomNumberGenerator.GetBytes(16)) + "@external.invalid";
 
+    /// <summary>Sağlayıcının doğruladığını söylediği adres; sağlayıcıya bu konuda güvenilmiyorsa ya da adres yoksa null.</summary>
+    private static string? VerifiedAddress(ClaimsPrincipal external, bool trustEmail) =>
+        trustEmail
+        && string.Equals(external.FindFirstValue("email_verified"), "true", StringComparison.OrdinalIgnoreCase)
+        && external.FindFirstValue("email")?.Trim().ToLowerInvariant() is { Length: > 0 and <= 256 } email
+            ? email
+            : null;
+
+    /// <summary>
+    /// Token'ın verildiği an (saniye): <c>iat</c>, yoksa <c>nbf</c>. Sayı kesirli de yazılabilir (RFC 7519); aşağı
+    /// yuvarlanır. Kullanıcının sağlayıcıda giriş yaptığı an (<c>auth_time</c>) kullanılmaz: yenilenen token'da eskidir.
+    /// </summary>
+    private static long? IssuedAt(ClaimsPrincipal external)
+    {
+        foreach (var type in (ReadOnlySpan<string>)["iat", "nbf"])
+        {
+            if (decimal.TryParse(external.FindFirstValue(type), NumberStyles.AllowDecimalPoint, CultureInfo.InvariantCulture, out var seconds)
+                && seconds is >= 0 and < 253402300800m)
+            {
+                return (long)decimal.Floor(seconds);
+            }
+        }
+
+        return null;
+    }
+
+    // Adresler yazılışlarıyla değil anlamlarıyla karşılaştırılır: varsayılan bağlantı noktası, büyük-küçük harf,
+    // sondaki eğik çizgi, sunucu adının sonundaki nokta ve uluslararası adların iki yazımı (punycode) aynı sayılır.
     private static bool SameAuthority(string left, string right) =>
-        string.Equals(left.TrimEnd('/'), right.TrimEnd('/'), StringComparison.OrdinalIgnoreCase);
+        Uri.TryCreate(left, UriKind.Absolute, out var first)
+        && Uri.TryCreate(right, UriKind.Absolute, out var second)
+        && string.Equals(first.Scheme, second.Scheme, StringComparison.OrdinalIgnoreCase)
+        && string.Equals(first.IdnHost.TrimEnd('.'), second.IdnHost.TrimEnd('.'), StringComparison.OrdinalIgnoreCase)
+        && first.Port == second.Port
+        && string.Equals(first.AbsolutePath.TrimEnd('/'), second.AbsolutePath.TrimEnd('/'), StringComparison.OrdinalIgnoreCase);
+
+    private static bool SameName(string? left, string? right) =>
+        !string.IsNullOrWhiteSpace(left)
+        && !string.IsNullOrWhiteSpace(right)
+        && string.Equals(left.Trim().TrimEnd('/'), right.Trim().TrimEnd('/'), StringComparison.Ordinal);
+
+    private static ILogger Logger(HttpContext http) =>
+        http.RequestServices.GetRequiredService<ILoggerFactory>().CreateLogger(typeof(ExternalSignIn).FullName!);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "The sign-in at the identity provider did not complete ({Reason}).")]
+    private static partial void LogRemoteFailure(ILogger logger, string reason);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "An access token of the identity provider was rejected: it carries neither iat nor nbf.")]
+    private static partial void LogNoIssuedAt(ILogger logger);
 
     private static void RequireAuthority(string section, string authority, bool requireHttps, bool development)
     {

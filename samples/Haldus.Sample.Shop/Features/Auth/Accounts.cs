@@ -36,6 +36,12 @@ public sealed class ShopAccount
     public string? ExternalIssuer { get; set; }
 
     public string? ExternalSubject { get; set; }
+
+    /// <summary>
+    /// "Her yerden çık" denildiği an. Kimlik sağlayıcının bu andan önce verdiği token'lar artık kabul edilmez: onların
+    /// sunucuda iptal edilecek bir oturum kaydı yoktur, bu yüzden hesap bu sınırı taşır.
+    /// </summary>
+    public DateTimeOffset? SignedOutEverywhereAt { get; set; }
 }
 
 /// <summary>
@@ -232,6 +238,7 @@ public sealed record AccountInfo(Guid Id, string Email, Guid TenantId, bool Emai
 public static class AuthModel
 {
     internal const string EmailIndex = "UX_ShopAccounts_Email";
+    internal const string ExternalIndex = "UX_ShopAccounts_External";
     internal const string CodeIndex = "UX_ShopAccountCodes_Account_Purpose";
 
     public static void Configure(ModelBuilder modelBuilder)
@@ -245,7 +252,7 @@ public static class AuthModel
             entity.HasIndex(account => account.Email).IsUnique().HasDatabaseName(EmailIndex);
             entity.Property(account => account.ExternalIssuer).HasMaxLength(512);
             entity.Property(account => account.ExternalSubject).HasMaxLength(256);
-            entity.HasIndex(account => new { account.ExternalIssuer, account.ExternalSubject }).IsUnique().HasDatabaseName("UX_ShopAccounts_External");
+            entity.HasIndex(account => new { account.ExternalIssuer, account.ExternalSubject }).IsUnique().HasDatabaseName(ExternalIndex);
         });
 
         modelBuilder.Entity<ShopSession>(entity =>

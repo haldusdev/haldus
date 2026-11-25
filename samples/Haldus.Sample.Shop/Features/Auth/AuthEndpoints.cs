@@ -59,6 +59,15 @@ public static partial class AuthEndpoints
         services.AddSingleton(jwt);
         services.AddSingleton(oidc);
 
+        // Doğrulanmış adres zorunluyken adresine güvenilmeyen bir sağlayıcının hesapları hiçbir şey yapamazdı
+        // (adreslerini bizim kod akışımızla da doğrulayamazlar).
+        if (configuration.GetValue<bool>("Shop:Auth:RequireVerifiedEmail")
+            && ((jwt.Enabled && !jwt.TrustEmailVerified) || (oidc.Enabled && !oidc.TrustEmailVerified)))
+        {
+            throw new InvalidOperationException(
+                "Shop:Auth:RequireVerifiedEmail needs TrustEmailVerified for every configured identity provider; their accounts could never be verified otherwise.");
+        }
+
         if (jwt.Enabled || oidc.Enabled)
         {
             services.AddAuthentication(ExternalSignIn.SelectorScheme)
@@ -263,6 +272,13 @@ public static partial class AuthEndpoints
             // Çerez silinir ve oturumu sunucuda da kapanır: kopyalanmış bir çerez de artık geçmez.
             auth.MapPost("/oidc/sign-out", async (ClaimsPrincipal user, AppDbContext db, TimeProvider time, CancellationToken cancellationToken) =>
                 {
+                    // Çerez isteğe eklenmediyse (başka bir siteden gönderilen form: `SameSite=Lax`) kapatılacak bir
+                    // oturum yoktur ve yanıt çerezi sildirmez; yoksa başka bir site kullanıcıyı oturumdan düşürebilirdi.
+                    if (user.Identity?.AuthenticationType != ExternalSignIn.CookieScheme)
+                    {
+                        return Results.NoContent();
+                    }
+
                     if (Guid.TryParse(user.FindFirstValue(SessionClaim), out var sessionId))
                     {
                         await RevokeAsync(db.Set<ShopSession>().Where(session => session.Id == sessionId), HaldusTime.UtcNow(time), cancellationToken);
@@ -271,6 +287,7 @@ public static partial class AuthEndpoints
                     return Results.SignOut(authenticationSchemes: [ExternalSignIn.CookieScheme]);
                 })
                 .AllowAnonymous()
+                .WithMetadata(new ChangesSession())
                 .ExcludeFromDescription();
         }
 
@@ -341,15 +358,22 @@ public static partial class AuthEndpoints
 
             // Çerez kendiliğinden gönderilir; yazan bir isteğin bu uygulamanın kendi kodundan geldiğini, başka bir
             // sitenin ekleyemeyeceği başlık gösterir. Token taşıyan isteklerde gerek yoktur: token kendiliğinden gitmez.
-            // Giriş istemeyen uçlar da (çıkış gibi) kapsamdadır: çerezin oturumunu onlar da değiştirir.
+            // Giriş istemeyen uçlardan yalnızca çerezin oturumunu değiştireni (çerezle çıkış) başlığı ister.
             if (context.User.Identity.AuthenticationType == ExternalSignIn.CookieScheme
                 && !HttpMethods.IsGet(context.Request.Method)
                 && !HttpMethods.IsHead(context.Request.Method)
                 && !HttpMethods.IsOptions(context.Request.Method)
                 && !context.Request.Headers.ContainsKey(ExternalSignIn.RequestHeader))
             {
-                await Results.Problem(detail: messages["RequestHeaderRequired"], statusCode: StatusCodes.Status403Forbidden).ExecuteAsync(context);
-                return;
+                if (!open || context.GetEndpoint()?.Metadata.GetMetadata<ChangesSession>() is not null)
+                {
+                    await Results.Problem(detail: messages["RequestHeaderRequired"], statusCode: StatusCodes.Status403Forbidden).ExecuteAsync(context);
+                    return;
+                }
+
+                // Giriş istemeyen öteki uçlar (parola girişi, kayıt, yenileme, misafir sepeti) çerez tarayıcıda dursa
+                // da çalışmalıdır: çerez orada kimlik sayılmaz, istek kimliksiz sürer.
+                context.User = new ClaimsPrincipal(new ClaimsIdentity());
             }
 
             // Hangi yoldan girilmiş olursa olsun (parola, sağlayıcı) geçerlidir.
@@ -579,7 +603,29 @@ public static partial class AuthEndpoints
     {
         if (AccountId(user) is { } accountId)
         {
-            await RevokeAsync(db.Set<ShopSession>().Where(session => session.AccountId == accountId), HaldusTime.UtcNow(time), cancellationToken);
+            var now = HaldusTime.UtcNow(time);
+            await RevokeAsync(db.Set<ShopSession>().Where(session => session.AccountId == accountId), now, cancellationToken);
+
+            // Kimlik sağlayıcının verdiği token'ların sunucuda bir oturumu yoktur; onları bu an geçersiz kılar
+            // (ExternalSignIn.ResolveAsync). Sağlayıcıda yeniden alınan token yine geçer.
+            // Sağlayıcının saati bizimkinden ilerideyse isteği yapan token "şimdi"den sonra verilmiş görünür ve
+            // sınırın üstünde kalırdı; sınır o yüzden en az o token'ın verildiği andır (kabul edilen saat farkıyla
+            // sınırlı). Sınır geri de alınmaz.
+            DateTimeOffset? cutoff = now;
+
+            if (long.TryParse(user.FindFirstValue(ExternalSignIn.IssuedAtClaim), NumberStyles.None, CultureInfo.InvariantCulture, out var seconds)
+                && seconds > now.ToUnixTimeSeconds())
+            {
+                cutoff = DateTimeOffset.FromUnixTimeSeconds(Math.Min(seconds, (now + MaxClockSkew).ToUnixTimeSeconds()));
+            }
+
+            await db.Set<ShopAccount>()
+                .Where(account => account.Id == accountId)
+                .ExecuteUpdateAsync(
+                    setters => setters.SetProperty(
+                        account => account.SignedOutEverywhereAt,
+                        account => account.SignedOutEverywhereAt > cutoff ? account.SignedOutEverywhereAt : cutoff),
+                    cancellationToken);
         }
 
         return Results.NoContent();
@@ -587,7 +633,12 @@ public static partial class AuthEndpoints
 
     private static async Task<IResult> MeAsync(ClaimsPrincipal user, AppDbContext db, IOptions<ShopAuthOptions> options, CancellationToken cancellationToken) =>
         await FindAccountAsync(user, db, cancellationToken) is { } account
-            ? Results.Ok(new AccountInfo(account.Id, account.Email, account.TenantId, account.EmailVerifiedAt is not null, options.Value.IsStaff(account)))
+            ? Results.Ok(account.ExternalIssuer is null
+                ? new AccountInfo(account.Id, account.Email, account.TenantId, account.EmailVerifiedAt is not null, options.Value.IsStaff(account))
+
+                // Dış hesabın adresine ne kadar güvenildiği ayara bağlıdır ve her istekte uygulanır; yanıt, isteğin
+                // gerçekten taşıdığı yetkiyi söyler (kayıttaki eski değeri değil).
+                : new AccountInfo(account.Id, account.Email, account.TenantId, user.FindFirstValue(VerifiedClaim) == "true", user.IsInRole(SharedWrites.StaffRole)))
             : Results.Problem(statusCode: StatusCodes.Status401Unauthorized);
 
     private static async Task<IResult> ForgotPasswordAsync(
@@ -1012,6 +1063,12 @@ public static partial class AuthEndpoints
     /// </summary>
     private static IQueryable<ShopAccount> PasswordAccounts(AppDbContext db) =>
         db.Set<ShopAccount>().AsNoTracking().Where(account => account.ExternalIssuer == null);
+
+    // Token doğrulayıcının kabul ettiği saat farkıyla aynıdır (TokenValidationParameters.DefaultClockSkew).
+    private static readonly TimeSpan MaxClockSkew = TimeSpan.FromMinutes(5);
+
+    /// <summary>Çerezin oturumunu değiştiren, giriş istemeyen uç: çerezle gelen istek başlığı burada da taşımalıdır.</summary>
+    internal sealed class ChangesSession;
 
     private static IResult ManagedByProvider(IStringLocalizer<ShopMessages> messages) =>
         Results.Problem(detail: messages["ManagedByProvider"], statusCode: StatusCodes.Status409Conflict);

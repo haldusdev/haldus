@@ -49,6 +49,51 @@ describe('the address of the provider', () => {
     }
   });
 
+  it('reads the host as the server does, not from the user information in front of it', async () => {
+    for (const authority of [
+      'http://localhost:8080@evil.test/realms/shop',
+      'http://localhost:x@evil.test/realms/shop',
+      'http://127.0.0.1:1@evil.test',
+      'http://[::1]@evil.test/realms/shop',
+      'http://10.0.2.2@evil.test',
+      'http://localhost\\@evil.test/realms/shop',
+      'http://localhost.evil.test/realms/shop',
+      'http://localhost evil.test/realms/shop',
+    ]) {
+      respondWith(() => json(200, { ...metadata, issuer: authority }));
+
+      await assert.rejects(
+        prepareProviderSignIn({ ...provider, authority }),
+        ProviderSignInError,
+        authority
+      );
+    }
+
+    assert.equal(calls.length, 0);
+  });
+
+  it('accepts a development address with or without a port and a path', async () => {
+    for (const authority of ['http://localhost', 'http://127.0.0.1:8080', 'http://[::1]:8080/realms/shop']) {
+      respondWith(() => json(200, { ...metadata, issuer: authority }));
+
+      const prompt = await prepareProviderSignIn({ ...provider, authority });
+      assert.equal(prompt.tokenEndpoint, metadata.token_endpoint);
+    }
+  });
+
+  it('refuses endpoints that would carry the password or the tokens over plain http', async () => {
+    for (const endpoints of [
+      { authorization_endpoint: 'http://id.test/connect/authorize' },
+      { token_endpoint: 'http://id.test/connect/token' },
+      { token_endpoint: 'http://localhost:1@id.test/connect/token' },
+      { authorization_endpoint: 'javascript:alert(1)' },
+    ]) {
+      respondWith(() => json(200, { ...metadata, ...endpoints }));
+
+      await assert.rejects(prepareProviderSignIn(provider), ProviderSignInError);
+    }
+  });
+
   it('refuses a discovery document that belongs to another issuer', async () => {
     respondWith(() => json(200, { ...metadata, issuer: 'https://evil.test/realms/shop' }));
 

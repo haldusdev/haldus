@@ -77,6 +77,9 @@ public sealed class ExternalSignInTests(ShopFixture fixture)
             ["unsigned"] = FakeProvider.Unsigned(provider.AccessToken(subject)),
             ["tampered"] = FakeProvider.Tampered(provider.AccessToken(subject), subject, NewSubject()),
             ["no subject"] = provider.AccessToken(subject: null),
+
+            // Verildiği anı söylemeyen token ilk istekten reddedilir ("her yerden çık" o ana dayanır).
+            ["no issue time"] = provider.AccessToken(subject, timestamps: false),
         };
 
         foreach (var (reason, token) in rejected)
@@ -108,6 +111,86 @@ public sealed class ExternalSignInTests(ShopFixture fixture)
         var account = await ReadAsync<AccountInfo>(await SendAsync(client, HttpMethod.Get, "/auth/me", token: unverified));
         Assert.Equal((false, false), (account.EmailVerified, account.IsStaff));
         Assert.NotEqual(claimed, account.Email);
+    }
+
+    [Fact]
+    public async Task SignOutEverywhere_AlsoEndsTheTokensTheProviderHasAlreadyIssued()
+    {
+        using var provider = new FakeProvider();
+        await using var factory = CreateFactory(provider);
+        using var client = factory.CreateClient();
+        var subject = NewSubject();
+        var token = provider.AccessToken(subject);
+
+        Assert.Equal(HttpStatusCode.OK, (await SendAsync(client, HttpMethod.Get, "/auth/me", token: token)).StatusCode);
+        Assert.Equal(HttpStatusCode.NoContent, (await SendAsync(client, HttpMethod.Post, "/auth/logout-all", token: token)).StatusCode);
+
+        // Sağlayıcının token'ının sunucuda iptal edilecek bir oturumu yoktur; hesap, o andan önce verilenleri reddeder.
+        // Çalınmış bir token "her yerden çık"tan sonra, süresi dolmamış olsa da, işe yaramaz.
+        Assert.Equal(HttpStatusCode.Unauthorized, (await SendAsync(client, HttpMethod.Get, "/auth/me", token: token)).StatusCode);
+
+        // Sağlayıcıda yeniden giriş yapınca alınan token geçer.
+        await Task.Delay(TimeSpan.FromSeconds(1.2), CancellationToken);
+        Assert.Equal(HttpStatusCode.OK, (await SendAsync(client, HttpMethod.Get, "/auth/me", token: provider.AccessToken(subject))).StatusCode);
+    }
+
+    [Fact]
+    public async Task SignOutEverywhere_EndsTheTokenThatAsksForItEvenWhenTheClockOfTheProviderIsAhead()
+    {
+        using var provider = new FakeProvider();
+        await using var factory = CreateFactory(provider);
+        using var client = factory.CreateClient();
+        var subject = NewSubject();
+
+        // Sağlayıcının saati yarım dakika ileride: token "şimdi"den sonra verilmiş görünür.
+        var token = provider.AccessToken(subject, issuedIn: TimeSpan.FromSeconds(30));
+        Assert.Equal(HttpStatusCode.OK, (await SendAsync(client, HttpMethod.Get, "/auth/me", token: token)).StatusCode);
+        Assert.Equal(HttpStatusCode.NoContent, (await SendAsync(client, HttpMethod.Post, "/auth/logout-all", token: token)).StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await SendAsync(client, HttpMethod.Get, "/auth/me", token: token)).StatusCode);
+
+        // Sınır, isteği yapan token'ın verildiği andır; sağlayıcının ondan sonra verdiği token geçer.
+        Assert.Equal(HttpStatusCode.OK, (await SendAsync(client, HttpMethod.Get, "/auth/me", token: provider.AccessToken(subject, issuedIn: TimeSpan.FromSeconds(32)))).StatusCode);
+
+        // Sınır geri alınmaz: saati doğru bir yoldan yinelenen çıkış, ilerideki sınırı öne çekmez.
+        Assert.Equal(HttpStatusCode.NoContent, (await SendAsync(client, HttpMethod.Post, "/auth/logout-all", token: provider.AccessToken(subject, issuedIn: TimeSpan.FromSeconds(32)))).StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await SendAsync(client, HttpMethod.Get, "/auth/me", token: provider.AccessToken(subject, issuedIn: TimeSpan.FromSeconds(31)))).StatusCode);
+    }
+
+    [Fact]
+    public async Task VerifiedAddress_IsTakenWhenItArrivesAfterTheAccountWasOpened()
+    {
+        using var provider = new FakeProvider();
+        var staff = NewEmail();
+        await using var factory = CreateFactory(provider, ("Shop:Auth:Staff:0", staff));
+        using var client = factory.CreateClient();
+        var subject = NewSubject();
+
+        // Erişim token'ı çoğu zaman adresi taşımaz: hesap adressiz ve doğrulanmamış açılır.
+        var opened = await ReadAsync<AccountInfo>(await SendAsync(client, HttpMethod.Get, "/auth/me", token: provider.AccessToken(subject)));
+        Assert.Equal((false, false), (opened.EmailVerified, opened.IsStaff));
+
+        // Doğrulanmamış bir iddia yine yazılmaz.
+        var claimed = await ReadAsync<AccountInfo>(await SendAsync(client, HttpMethod.Get, "/auth/me", token: provider.AccessToken(subject, staff, emailVerified: false)));
+        Assert.Equal((opened.Email, false), (claimed.Email, claimed.EmailVerified));
+
+        // Sağlayıcı adresi sonradan doğrulanmış olarak söylerse hesaba yazılır; yoksa hesap sonsuza kadar
+        // doğrulanmamış kalırdı (adresini bizim kodumuzla da doğrulayamaz).
+        var verified = await ReadAsync<AccountInfo>(await SendAsync(client, HttpMethod.Get, "/auth/me", token: provider.AccessToken(subject, staff, emailVerified: true)));
+        Assert.Equal((opened.Id, opened.TenantId, staff, true, true), (verified.Id, verified.TenantId, verified.Email, verified.EmailVerified, verified.IsStaff));
+
+        // Yazılan adres kalır: sonraki token başka bir adres söylese de değişmez, söylemese de silinmez.
+        var later = await ReadAsync<AccountInfo>(await SendAsync(client, HttpMethod.Get, "/auth/me", token: provider.AccessToken(subject, NewEmail(), emailVerified: true)));
+        Assert.Equal((staff, true), (later.Email, later.EmailVerified));
+        Assert.Equal(staff, (await ReadAsync<AccountInfo>(await SendAsync(client, HttpMethod.Get, "/auth/me", token: provider.AccessToken(subject)))).Email);
+
+        // Başkasının hesabındaki adres sonradan da alınmaz.
+        var taken = NewEmail();
+        await ReadAsync<AccessTokenResponse>(await SendAsync(client, HttpMethod.Post, "/auth/register", new { email = taken, password = Password }));
+        var intruder = NewSubject();
+        await ReadAsync<AccountInfo>(await SendAsync(client, HttpMethod.Get, "/auth/me", token: provider.AccessToken(intruder)));
+        var refused = await ReadAsync<AccountInfo>(await SendAsync(client, HttpMethod.Get, "/auth/me", token: provider.AccessToken(intruder, taken, emailVerified: true)));
+        Assert.NotEqual(taken, refused.Email);
+        Assert.False(refused.EmailVerified);
     }
 
     [Fact]
@@ -213,6 +296,9 @@ public sealed class ExternalSignInTests(ShopFixture fixture)
             Assert.Equal(
                 HttpStatusCode.Created,
                 (await SendAsync(client, HttpMethod.Post, "/products", product, provider.AccessToken(subject, staff, emailVerified: true))).StatusCode);
+
+            var trusted = await ReadAsync<AccountInfo>(await SendAsync(client, HttpMethod.Get, "/auth/me", token: provider.AccessToken(subject, staff, emailVerified: true)));
+            Assert.Equal((true, true), (trusted.EmailVerified, trusted.IsStaff));
         }
 
         // Aynı sağlayıcı, aynı kişi; ama adresi doğruladığına artık güvenilmiyor.
@@ -223,6 +309,11 @@ public sealed class ExternalSignInTests(ShopFixture fixture)
         Assert.Equal(
             HttpStatusCode.Forbidden,
             (await SendAsync(cautious, HttpMethod.Post, "/products", product with { name = $"Kettle {Guid.NewGuid():N}" }, later.AccessToken(subject, staff, emailVerified: true))).StatusCode);
+
+        // Hesap ucu da isteğin gerçekten taşıdığı yetkiyi söyler; kayıtta duran eski doğrulamayı değil. Arayüzler
+        // yazamayacakları bir ürün için "kaydet" düğmesi göstermesin.
+        var account = await ReadAsync<AccountInfo>(await SendAsync(cautious, HttpMethod.Get, "/auth/me", token: later.AccessToken(subject, staff, emailVerified: true)));
+        Assert.Equal((false, false), (account.EmailVerified, account.IsStaff));
     }
 
     [Fact]
@@ -252,6 +343,27 @@ public sealed class ExternalSignInTests(ShopFixture fixture)
             [("Shop:Auth:Jwt:Authority", "http://idp.test"), ("Shop:Auth:Jwt:Audience", "shop-api")],
             [("Shop:Auth:Jwt:Authority", "idp.test"), ("Shop:Auth:Jwt:Audience", "shop-api")],
             [("Shop:Auth:Oidc:Authority", "https://idp.test"), ("Shop:Auth:Oidc:ClientId", "shop-server")],
+
+            // API'nin audience'ı bir istemcinin kimliği olamaz: kimlik token'ı da erişim token'ı sayılırdı.
+            [("Shop:Auth:Jwt:Authority", "https://idp.test"), ("Shop:Auth:Jwt:Audience", "shop-app"), ("Shop:Auth:Jwt:ClientId", "shop-app")],
+
+            // Sondaki eğik çizgi audience'ı bir istemcinin kimliğinden ayırmaz (doğrulayıcı onu yok sayar).
+            [("Shop:Auth:Jwt:Authority", "https://idp.test"), ("Shop:Auth:Jwt:Audience", "shop-app/"), ("Shop:Auth:Jwt:ClientId", "shop-app")],
+
+            // Aynı sağlayıcının başka bir yazımı (büyük harf, sunucu adının sonunda nokta) da aynı sağlayıcıdır.
+            [
+                ("Shop:Auth:Jwt:Authority", "https://idp.test"), ("Shop:Auth:Jwt:Audience", "shop-api"), ("Shop:Auth:Jwt:TrustEmailVerified", "true"),
+                ("Shop:Auth:Oidc:Authority", "https://IDP.test.:443/"), ("Shop:Auth:Oidc:ClientId", "shop-server"), ("Shop:Auth:Oidc:ClientSecret", "secret"),
+            ],
+
+            // Çerez oturumunun ömrü sınırlıdır.
+            [
+                ("Shop:Auth:Oidc:Authority", "https://idp.test"), ("Shop:Auth:Oidc:ClientId", "shop-server"), ("Shop:Auth:Oidc:ClientSecret", "secret"),
+                ("Shop:Auth:Oidc:SessionMinutes", "0"),
+            ],
+
+            // Doğrulanmış adres zorunluyken adresine güvenilmeyen sağlayıcının hesapları hiçbir şey yapamazdı.
+            [("Shop:Auth:Jwt:Authority", "https://idp.test"), ("Shop:Auth:Jwt:Audience", "shop-api"), ("Shop:Auth:RequireVerifiedEmail", "true")],
 
             // Aynı sağlayıcıya iki yoldan farklı güvenilemez.
             [
@@ -354,10 +466,74 @@ public sealed class ExternalSignInTests(ShopFixture fixture)
         Assert.Equal(HttpStatusCode.Redirect, (await browser.PostAsync("/auth/oidc/callback", callback, CancellationToken)).StatusCode);
 
         // Çıkış da oturumu değiştirir: çerezle gelen istek, başka bir sitenin ekleyemeyeceği başlığı taşımadan
-        // (giriş istemeyen bu uçlarda da) oturumu kapatamaz.
+        // (giriş istemeyen bu uçta da) oturumu kapatamaz.
         Assert.Equal(HttpStatusCode.Forbidden, (await SendAsync(browser, HttpMethod.Post, "/auth/oidc/sign-out")).StatusCode);
-        Assert.Equal(HttpStatusCode.Forbidden, (await SendAsync(browser, HttpMethod.Post, "/auth/logout")).StatusCode);
         Assert.Equal(HttpStatusCode.OK, (await SendAsync(browser, HttpMethod.Get, "/auth/me")).StatusCode);
+
+        // Token'larımızın çıkış ucu başlığı istemez (çerez orada kimlik sayılmaz) ve çerezin oturumuna dokunamaz.
+        Assert.Equal(HttpStatusCode.NoContent, (await SendAsync(browser, HttpMethod.Post, "/auth/logout")).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await SendAsync(browser, HttpMethod.Get, "/auth/me")).StatusCode);
+
+        // Çerezi taşımayan çıkış isteği (başka bir siteden gönderilen form: çerez `SameSite=Lax`) tarayıcıya çerezi
+        // sildirmez; yoksa başka bir site kullanıcıyı oturumdan düşürebilirdi.
+        using var stranger = factory.CreateClient(new WebApplicationFactoryClientOptions { BaseAddress = new Uri("https://localhost"), AllowAutoRedirect = false, HandleCookies = false });
+        var signedOut = await SendAsync(stranger, HttpMethod.Post, "/auth/oidc/sign-out", ownRequest: true);
+        Assert.Equal(HttpStatusCode.NoContent, signedOut.StatusCode);
+        Assert.False(signedOut.Headers.Contains("Set-Cookie"));
+
+        // Sağlayıcının ön kanal çıkış adresi kapalıdır: çerezli de çerezsiz de oturuma dokunmaz, çerezi sildirmez.
+        foreach (var caller in new[] { browser, stranger })
+        {
+            foreach (var method in new[] { HttpMethod.Get, HttpMethod.Post })
+            {
+                var remote = await SendAsync(caller, method, "/signout-oidc");
+                Assert.Equal(HttpStatusCode.NotFound, remote.StatusCode);
+                Assert.False(remote.Headers.Contains("Set-Cookie"));
+            }
+        }
+
+        Assert.Equal(HttpStatusCode.OK, (await SendAsync(browser, HttpMethod.Get, "/auth/me")).StatusCode);
+    }
+
+    [Fact]
+    public async Task SessionCookie_DoesNotStandInTheWayOfTheOpenEndpoints()
+    {
+        using var provider = new FakeProvider();
+        await using var factory = CreateFactory(
+            provider,
+            ("Shop:Auth:Oidc:Authority", FakeProvider.Issuer),
+            ("Shop:Auth:Oidc:ClientId", FakeProvider.ServerClient),
+            ("Shop:Auth:Oidc:ClientSecret", FakeProvider.ServerSecret));
+
+        using var browser = factory.CreateClient(new WebApplicationFactoryClientOptions
+        {
+            BaseAddress = new Uri("https://localhost"),
+            AllowAutoRedirect = false,
+            HandleCookies = true,
+        });
+
+        var challenge = await SendAsync(browser, HttpMethod.Get, "/auth/oidc/sign-in");
+        var query = HttpUtility.ParseQueryString(challenge.Headers.Location!.Query);
+        var external = NewEmail();
+        var code = provider.Authorize(query["nonce"]!, query["code_challenge"]!, NewSubject(), external);
+        using var callback = new FormUrlEncodedContent(new Dictionary<string, string> { ["code"] = code, ["state"] = query["state"]! });
+        Assert.Equal(HttpStatusCode.Redirect, (await browser.PostAsync("/auth/oidc/callback", callback, CancellationToken)).StatusCode);
+
+        // Tarayıcıda oturum çerezi dururken parola ile kayıt ve giriş, başlığı taşımadan da çalışır: bu uçlar giriş
+        // istemez ve çerez orada kimlik sayılmaz. (Başlığı her yerde isteyen ilk düzeltme parola girişini kapatıyordu.)
+        var email = NewEmail();
+        var registered = await ReadAsync<AccessTokenResponse>(await SendAsync(browser, HttpMethod.Post, "/auth/register", new { email, password = Password }));
+        var signedIn = await ReadAsync<AccessTokenResponse>(await SendAsync(browser, HttpMethod.Post, "/auth/login", new { email, password = Password }));
+        await ReadAsync<AccessTokenResponse>(await SendAsync(browser, HttpMethod.Post, "/auth/refresh", new { refreshToken = registered.RefreshToken }));
+
+        // Taşıyıcı token çerezin önüne geçer; token'sız istek yine çerezin hesabıdır.
+        Assert.Equal(email, (await ReadAsync<AccountInfo>(await SendAsync(browser, HttpMethod.Get, "/auth/me", token: signedIn.AccessToken))).Email);
+        Assert.Equal(external, (await ReadAsync<AccountInfo>(await SendAsync(browser, HttpMethod.Get, "/auth/me"))).Email);
+
+        // Çerezle gelen hesap sağlayıcınındır: adresini bizim kodumuzla doğrulayamaz (başlığı taşısa da).
+        Assert.Equal(HttpStatusCode.Forbidden, (await SendAsync(browser, HttpMethod.Post, "/auth/email/verify", new { code = "ABCD-EFGH" })).StatusCode);
+        Assert.Equal(HttpStatusCode.Conflict, (await SendAsync(browser, HttpMethod.Post, "/auth/email/verify", new { code = "ABCD-EFGH" }, ownRequest: true)).StatusCode);
+        Assert.Equal(HttpStatusCode.Conflict, (await SendAsync(browser, HttpMethod.Post, "/auth/email/resend", ownRequest: true)).StatusCode);
     }
 
     [Fact]
@@ -478,8 +654,10 @@ public sealed class ExternalSignInTests(ShopFixture fixture)
             string? audience = null,
             string? issuer = null,
             TimeSpan? expiresIn = null,
-            RSA? key = null) =>
-            Sign(subject, email, emailVerified, audience ?? ApiAudience, issuer ?? Issuer, expiresIn ?? TimeSpan.FromMinutes(10), key ?? _key, nonce: null);
+            RSA? key = null,
+            TimeSpan? issuedIn = null,
+            bool timestamps = true) =>
+            Sign(subject, email, emailVerified, audience ?? ApiAudience, issuer ?? Issuer, expiresIn ?? TimeSpan.FromMinutes(10), key ?? _key, nonce: null, issuedIn ?? TimeSpan.Zero, timestamps);
 
         /// <summary>Kullanıcının sağlayıcıda giriş yaptığını ve backend'e döneceği kodu aldığını varsayar.</summary>
         public string Authorize(string nonce, string challenge, string subject, string email)
@@ -553,7 +731,7 @@ public sealed class ExternalSignInTests(ShopFixture fixture)
                         token_type = "Bearer",
                         access_token = Convert.ToHexStringLower(RandomNumberGenerator.GetBytes(16)),
                         expires_in = 600,
-                        id_token = Sign(granted.Subject, granted.Email, emailVerified: true, ServerClient, Issuer, TimeSpan.FromMinutes(10), _key, granted.Nonce),
+                        id_token = Sign(granted.Subject, granted.Email, emailVerified: true, ServerClient, Issuer, TimeSpan.FromMinutes(10), _key, granted.Nonce, TimeSpan.Zero, timestamps: true),
                     });
 
                 default:
@@ -571,7 +749,8 @@ public sealed class ExternalSignInTests(ShopFixture fixture)
             base.Dispose(disposing);
         }
 
-        private static string Sign(string? subject, string? email, bool emailVerified, string audience, string issuer, TimeSpan expiresIn, RSA key, string? nonce)
+        private static string Sign(
+            string? subject, string? email, bool emailVerified, string audience, string issuer, TimeSpan expiresIn, RSA key, string? nonce, TimeSpan issuedIn, bool timestamps)
         {
             var claims = new Dictionary<string, object>();
 
@@ -591,15 +770,19 @@ public sealed class ExternalSignInTests(ShopFixture fixture)
                 claims["nonce"] = nonce;
             }
 
-            var expires = DateTime.UtcNow + expiresIn;
+            // Token şimdi verilmiştir (saati ileride bir sağlayıcıda: biraz sonra); süresi dolmuş bir örnek istenirse
+            // geçmişte verilmiş olur. `timestamps` kapalıysa token verildiği anı hiç söylemez (`iat` ve `nbf` yok).
+            var now = DateTime.UtcNow;
+            var expires = now + expiresIn;
+            var issued = expires > now ? now + issuedIn : expires.AddMinutes(-20);
 
-            return new JsonWebTokenHandler().CreateToken(new SecurityTokenDescriptor
+            return new JsonWebTokenHandler { SetDefaultTimesOnTokenCreation = false }.CreateToken(new SecurityTokenDescriptor
             {
                 Issuer = issuer,
                 Audience = audience,
                 Claims = claims,
-                IssuedAt = expires.AddMinutes(-20),
-                NotBefore = expires.AddMinutes(-20),
+                IssuedAt = timestamps ? issued : null,
+                NotBefore = timestamps ? issued : null,
                 Expires = expires,
                 SigningCredentials = new SigningCredentials(new RsaSecurityKey(key) { KeyId = KeyId }, SecurityAlgorithms.RsaSha256),
             });
