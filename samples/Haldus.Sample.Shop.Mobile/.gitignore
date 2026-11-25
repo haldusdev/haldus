@@ -41,3 +41,4 @@ expo-env.d.ts
 # @end expo-cli
 # Ekran testlerinin sürdüğü web dışa aktarımı (pnpm test:e2e)
 dist-e2e/
+dist-native/

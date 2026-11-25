@@ -22,7 +22,8 @@ EF Core yapılandırması üretilir.
   README'sinde; `Shop:CreateDatabase` ayarı tabloları açılışta oluşturur). Panel yalnızca kullandığı etiketlerin
   istemcisini üretir (`orval.config.ts`: `filters.tags`); yeni bir kaynak kullanılacaksa etiketi oraya eklenir.
 - Örnek mobil uygulama (`samples/Haldus.Sample.Shop.Mobile`): `pnpm install`, `pnpm dev` (Expo), `pnpm generate:api`,
-  `pnpm typecheck`. Backend'in adresi `EXPO_PUBLIC_API_URL` ile verilir. Tarayıcıda çalıştırılırken backend'e kaynak
+  `pnpm typecheck`, `pnpm bundle:native` (iOS ve Android üretim paketlerini derler; iOS bu makinede çalıştırılamadığı
+  için oradaki tek denetim budur). Backend'in adresi `EXPO_PUBLIC_API_URL` ile verilir. Tarayıcıda çalıştırılırken backend'e kaynak
   izni gerekir (`Shop:CorsOrigins`). pnpm burada düz `node_modules` kurar (`pnpm-workspace.yaml`: `nodeLinker: hoisted`);
   Metro, sembolik bağlı düzende dolaylı bağımlılıkları (`react-native-css-interop`) çözemiyor.
 - Örnek arayüzlerin testleri: `pnpm test` (panelde ve mobilde). Node'un yerleşik test çalıştırıcısıyla çalışır, paket
@@ -515,7 +516,8 @@ Yapılmayanlar ve nedenleri:
   (artık pencerenin içinde, `role="alert"`). Mobil ekranlar yalnızca web hedefinde sürülür; cihazda otomatik ekran
   testi yoktur (emülatörde elle denendi).
 
-- iOS: Windows'ta iOS simülatörü çalışmaz; uygulama iOS'ta denenmedi.
+- iOS: Windows'ta iOS simülatörü çalışmaz; uygulama iOS'ta denenmedi. iOS üretim paketi derlenir
+  (`pnpm bundle:native`); çalıştığını göstermez.
 - Raporun "Bilinen sınırlar" tablosunda kalan satırlar bilerek dar bırakılanlardır.
 ## Açık kararlar
 

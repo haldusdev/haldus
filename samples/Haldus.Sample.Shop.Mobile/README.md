@@ -161,6 +161,7 @@ dönüş bir derin bağlantıdır, Expo Router onu da açar ve var olmayan bir y
 | `pnpm test` | Oturum, giriş ve istek mantığının testleri (`tests/`) |
 | `pnpm typecheck:tests` | Testlerin tip denetimi |
 | `pnpm test:e2e` | Ekran testleri: uygulamayı web'e dışa aktarır ve gerçek bir tarayıcıda sürer (`tests/e2e`) |
+| `pnpm bundle:native` | iOS ve Android üretim paketlerini derler (`dist-native`); yalnızca derlenebildiklerini gösterir |
 
 ## API istemcisi
 
@@ -203,7 +204,10 @@ dönülmesi, hesap oluşturma, panelden eklenen ürünün listede görünmesi, f
 yazılarak doğrulanması, dilin Türkçeye çevrilmesi, çıkış, yanlış parolada backend'in Türkçe mesajı, doğru parolayla
 giriş. Bu turda parola sıfırlama ve uygulamayı kapatıp açma yinelenmedi.
 
-**iOS'ta çalıştırılmadı** (geliştirildiği makine Windows); gerçek bir Android cihazda da denenmedi. Klavyenin alanı
+**iOS'ta çalıştırılmadı** (geliştirildiği makine Windows; simülatör macOS ister). iOS için yapılabilen denetim
+yapıldı: `pnpm bundle:native` uygulamanın iOS ve Android üretim paketlerini (Metro + Hermes bayt kodu) derler; ikisi de
+hatasız derleniyor, yani iOS'a özgü modül çözümlemesi ve kodun tamamı paketlenebiliyor. Bu, uygulamanın iOS'ta
+çalıştığını göstermez. Gerçek bir Android cihazda da denenmedi. Klavyenin alanı
 örtmesi, güvenli alanlar ve koyu tema Android'de ayrıca gözle denetlenmedi.
 
 **Kimlik sağlayıcıyla giriş** iki yoldan doğrulandı. Ekran testleri girişin tamamını (açılır pencere, kodun

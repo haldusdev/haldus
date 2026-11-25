@@ -11,6 +11,7 @@
     "typecheck:tests": "tsc --noEmit -p tests",
     "test": "node --import ./tests/register.mjs --test \"tests/**/*.test.mts\"",
     "test:e2e": "node tests/e2e/export.mjs && node --import ./tests/register.mjs --test --test-concurrency=1 \"tests/e2e/**/*.e2e.mts\"",
+    "bundle:native": "expo export --platform ios --platform android --output-dir dist-native",
     "generate:api": "orval"
   },
   "dependencies": {
