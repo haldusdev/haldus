@@ -226,7 +226,10 @@ public static class HaldusEvents
                 delivered++;
             }
 #pragma warning disable CA1031 // Yayıncı ne fırlatırsa fırlatsın olay kaybolmamalı, sonra yeniden denenmelidir.
-            catch (Exception exception) when (exception is not OperationCanceledException)
+            // Yayıncının kendi zaman aşımı da bir iptal istisnasıdır (HttpClient böyle bildirir), ama süreç kapanmıyordur:
+            // yalnızca dağıtımın kendi iptali dışarı bırakılır. Öbürü bırakılsaydı arka plan servisi ve onunla birlikte
+            // uygulama dururdu.
+            catch (Exception exception) when (exception is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
 #pragma warning restore CA1031
             {
                 item.Attempts++;

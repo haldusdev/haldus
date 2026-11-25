@@ -102,7 +102,7 @@ internal sealed class HaldusEventService(
                     }
                 }
 #pragma warning disable CA1031 // Bir tur başarısız olursa servis durmamalı, bir sonraki turda yeniden denemelidir.
-                catch (Exception exception) when (exception is not OperationCanceledException)
+                catch (Exception exception) when (exception is not OperationCanceledException || !stoppingToken.IsCancellationRequested)
 #pragma warning restore CA1031
                 {
                     logger.LogWarning(exception, "Haldus event delivery failed; it will run again shortly.");
