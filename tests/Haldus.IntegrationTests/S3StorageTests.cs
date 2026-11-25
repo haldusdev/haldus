@@ -5,7 +5,9 @@ using System.Net.Sockets;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
-using System.Xml.Linq;
+using Amazon.Runtime;
+using Amazon.S3;
+using Amazon.S3.Model;
 using DotNet.Testcontainers.Builders;
 using DotNet.Testcontainers.Containers;
 using Haldus.Sample.Shop;
@@ -15,76 +17,6 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Haldus.IntegrationTests;
-
-/// <summary>İmzanın, AWS belgelerindeki örnek isteklerle aynı sonucu verdiği; bir sunucu gerekmez.</summary>
-public sealed class S3SignerTests
-{
-    // AWS'nin "Signature Calculations for the Authorization Header" belgesindeki örnek kimlik; gerçek bir hesaba ait değildir.
-    private const string AccessKey = "AKIAIOSFODNN7EXAMPLE";
-    private const string SecretKey = "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY";
-    private const string EmptyHash = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
-
-    private static readonly DateTimeOffset Now = new(2013, 5, 24, 0, 0, 0, TimeSpan.Zero);
-
-    [Fact]
-    public void Signer_MatchesTheExamplesOfTheAwsDocumentation()
-    {
-        using var get = new HttpRequestMessage(HttpMethod.Get, "https://examplebucket.s3.amazonaws.com/test.txt");
-        get.Headers.Range = new RangeHeaderValue(0, 9);
-        Assert.Equal(
-            "host;range;x-amz-content-sha256;x-amz-date/f0e8bdb87c964420e857bd35b5d6ed310bd44f0170aba48dd91039c6036bdb41",
-            Sign(get, EmptyHash));
-        Assert.Equal("20130524T000000Z", Assert.Single(get.Headers.GetValues("x-amz-date")));
-        Assert.Equal(EmptyHash, Assert.Single(get.Headers.GetValues("x-amz-content-sha256")));
-        Assert.Equal("examplebucket.s3.amazonaws.com", get.Headers.Host);
-
-        // Yoldaki özel karakter kodlanır, gövdenin özeti ve istekteki öteki başlıklar imzaya girer.
-        using var put = new HttpRequestMessage(HttpMethod.Put, "https://examplebucket.s3.amazonaws.com/test$file.text");
-        put.Headers.Date = Now;
-        put.Headers.Add("x-amz-storage-class", "REDUCED_REDUNDANCY");
-        var body = Encoding.UTF8.GetBytes("Welcome to Amazon S3.");
-        Assert.Equal("44ce7dd67c959e0d3524ffac1771dfbba87d2b6b4b4e99e42034a8b803f8b072", S3Signer.HashOf(body));
-        Assert.Equal(
-            "date;host;x-amz-content-sha256;x-amz-date;x-amz-storage-class/98ad721746da40c64f1a55b78f14c238d841ea1380cd77a1b5971af0ece108bd",
-            Sign(put, S3Signer.HashOf(body)));
-
-        // Değeri olmayan ve birden çok sorgu parametresi.
-        using var lifecycle = new HttpRequestMessage(HttpMethod.Get, "https://examplebucket.s3.amazonaws.com/?lifecycle");
-        Assert.EndsWith("/fea454ca298b7da1c68078a5d1bdbfbbe0d65c699e0f91ac7a200a0136783543", Sign(lifecycle, EmptyHash), StringComparison.Ordinal);
-
-        using var list = new HttpRequestMessage(HttpMethod.Get, "https://examplebucket.s3.amazonaws.com/?prefix=J&max-keys=2");
-        Assert.EndsWith("/34b48302e7b5fa45bde8084f4b7868a86f0a534bc59db6670ed5711ef69dc6f7", Sign(list, EmptyHash), StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public void Signer_NeverPutsTheSecretKeyOnTheRequest()
-    {
-        using var request = new HttpRequestMessage(HttpMethod.Put, "http://localhost:9000/bucket/Attachment/abc?partNumber=1&uploadId=a%2Fb%3D");
-        S3Signer.Sign(request, S3Signer.UnsignedPayload, AccessKey, SecretKey, "eu-central-1", Now);
-
-        Assert.DoesNotContain(SecretKey, request.ToString(), StringComparison.Ordinal);
-        Assert.Equal("localhost:9000", request.Headers.Host);
-        Assert.StartsWith($"Credential={AccessKey}/20130524/eu-central-1/s3/aws4_request,", request.Headers.Authorization!.Parameter, StringComparison.Ordinal);
-
-        // Aynı istek yeniden imzalanırsa önceki imza imzalanan başlıklara karışmaz.
-        var first = request.Headers.Authorization.Parameter;
-        S3Signer.Sign(request, S3Signer.UnsignedPayload, AccessKey, SecretKey, "eu-central-1", Now);
-        Assert.Equal(first, request.Headers.Authorization!.Parameter);
-    }
-
-    /// <summary>İmzalanan başlıklar ve imza; kimlik ve kapsam her örnekte aynıdır.</summary>
-    private static string Sign(HttpRequestMessage request, string payloadHash)
-    {
-        S3Signer.Sign(request, payloadHash, AccessKey, SecretKey, "us-east-1", Now);
-
-        const string credential = $"Credential={AccessKey}/20130524/us-east-1/s3/aws4_request,SignedHeaders=";
-        var authorization = request.Headers.Authorization!;
-        Assert.Equal(S3Signer.Algorithm, authorization.Scheme);
-        Assert.StartsWith(credential, authorization.Parameter, StringComparison.Ordinal);
-
-        return authorization.Parameter![credential.Length..].Replace(",Signature=", "/", StringComparison.Ordinal);
-    }
-}
 
 /// <summary>S3 deposu (<c>AddHaldusS3Storage</c>), gerçek bir MinIO sunucusuna karşı.</summary>
 [Collection(ShopCollection.Name)]
@@ -553,12 +485,15 @@ public sealed class MinioFixture : IAsyncLifetime
     public IHaldusFileStorage CreateStorage(Action<HaldusS3StorageOptions> configure, Func<SocketsHttpHandler>? handler = null)
     {
         var services = new ServiceCollection();
-        services.AddHaldusS3Storage(configure);
-
-        if (handler is not null)
+        services.AddHaldusS3Storage(options =>
         {
-            services.AddHttpClient(HaldusS3Storage.HttpClientName).ConfigurePrimaryHttpMessageHandler(handler);
-        }
+            configure(options);
+
+            if (handler is not null)
+            {
+                options.ConfigureClient = config => config.HttpClientFactory = new HandlerFactory(handler);
+            }
+        });
 
         var provider = services.BuildServiceProvider();
         _providers.Add(provider);
@@ -578,11 +513,17 @@ public sealed class MinioFixture : IAsyncLifetime
         await Secure.DisposeAsync();
     }
 
+    /// <summary>SDK'nın isteklerini testin verdiği bağlantı işleyicisiyle gönderir (sertifika, konteynere doğrudan bağlantı).</summary>
+    private sealed class HandlerFactory(Func<SocketsHttpHandler> handler) : HttpClientFactory
+    {
+        public override HttpClient CreateHttpClient(IClientConfig clientConfig) => new(handler());
+    }
+
     public sealed class Server : IAsyncDisposable
     {
         private readonly IContainer _container;
         private readonly string? _thumbprint;
-        private HttpClient? _http;
+        private AmazonS3Client? _admin;
 
         internal Server(X509Certificate2? certificate, string? privateKey)
         {
@@ -655,62 +596,60 @@ public sealed class MinioFixture : IAsyncLifetime
             return handler;
         }
 
+        // Kovayı hazırlamak ve içine bakmak için, depodan bağımsız bir istemci.
+        private AmazonS3Client Admin => _admin ?? throw new InvalidOperationException("The server has not been started.");
+
         internal async Task StartAsync()
         {
             await _container.StartAsync();
-            _http = new HttpClient(CreateHandler());
 
-            using var created = await SendAsync(HttpMethod.Put, $"/{Bucket}");
-            Assert.True(created.IsSuccessStatusCode, $"{(int)created.StatusCode}: {await created.Content.ReadAsStringAsync()}");
+            _admin = new AmazonS3Client(
+                new BasicAWSCredentials(AccessKey, SecretKey),
+                new AmazonS3Config
+                {
+                    ServiceURL = Endpoint.GetLeftPart(UriPartial.Authority),
+                    AuthenticationRegion = Region,
+                    ForcePathStyle = true,
+                    HttpClientFactory = new HandlerFactory(CreateHandler),
+                    RequestChecksumCalculation = RequestChecksumCalculation.WHEN_REQUIRED,
+                    ResponseChecksumValidation = ResponseChecksumValidation.WHEN_REQUIRED,
+                });
+
+            await _admin.PutBucketAsync(new PutBucketRequest { BucketName = Bucket });
         }
 
         public async Task<byte[]?> ReadObjectAsync(string key)
         {
-            using var response = await SendAsync(HttpMethod.Get, $"/{Bucket}/{key}");
-
-            if (response.StatusCode == HttpStatusCode.NotFound)
+            try
+            {
+                using var response = await Admin.GetObjectAsync(Bucket, key);
+                using var buffer = new MemoryStream();
+                await response.ResponseStream.CopyToAsync(buffer);
+                return buffer.ToArray();
+            }
+            catch (AmazonS3Exception exception) when (exception.StatusCode == HttpStatusCode.NotFound)
             {
                 return null;
             }
-
-            Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-            return await response.Content.ReadAsByteArrayAsync();
         }
 
-        public async Task<string> ETagAsync(string key)
+        public async Task<string> ETagAsync(string key) => (await Admin.GetObjectMetadataAsync(Bucket, key)).ETag;
+
+        public async Task<List<string>> ListKeysAsync(string prefix = "")
         {
-            using var response = await SendAsync(HttpMethod.Head, $"/{Bucket}/{key}");
-            Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-            return response.Headers.ETag!.Tag;
+            var response = await Admin.ListObjectsV2Async(new ListObjectsV2Request { BucketName = Bucket, Prefix = prefix });
+            return (response.S3Objects ?? []).Select(item => item.Key).Order(StringComparer.Ordinal).ToList();
         }
-
-        public Task<List<string>> ListKeysAsync(string prefix = "") =>
-            ListAsync($"/{Bucket}?list-type=2&prefix={Uri.EscapeDataString(prefix)}", "Key");
 
         /// <summary>Başlatılıp tamamlanmamış çok parçalı yüklemelerin anahtarları.</summary>
-        public Task<List<string>> ListPendingUploadsAsync() => ListAsync($"/{Bucket}?uploads", "Upload");
-
-        private async Task<List<string>> ListAsync(string address, string element)
+        public async Task<List<string>> ListPendingUploadsAsync()
         {
-            using var response = await SendAsync(HttpMethod.Get, address);
-            var body = await response.Content.ReadAsStringAsync();
-            Assert.True(response.IsSuccessStatusCode, $"{(int)response.StatusCode}: {body}");
-
-            return XDocument.Parse(body).Descendants().Where(node => node.Name.LocalName == element).Select(node => node.Value).Order(StringComparer.Ordinal).ToList();
+            var response = await Admin.ListMultipartUploadsAsync(new ListMultipartUploadsRequest { BucketName = Bucket });
+            return (response.MultipartUploads ?? []).Select(upload => upload.Key).Order(StringComparer.Ordinal).ToList();
         }
-
-        // Kovayı hazırlamak ve içine bakmak için, depodan bağımsız imzalı istekler.
-        private async Task<HttpResponseMessage> SendAsync(HttpMethod method, string address)
-        {
-            using var request = new HttpRequestMessage(method, new Uri(Endpoint, address));
-            S3Signer.Sign(request, S3Signer.HashOf([]), AccessKey, SecretKey, Region, DateTimeOffset.UtcNow);
-
-            return await (_http ?? throw new InvalidOperationException("The server has not been started.")).SendAsync(request);
-        }
-
         public async ValueTask DisposeAsync()
         {
-            _http?.Dispose();
+            _admin?.Dispose();
             await _container.DisposeAsync();
         }
     }

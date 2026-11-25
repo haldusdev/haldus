@@ -1,3 +1,5 @@
+using Amazon.SQS;
+using Amazon.SQS.Model;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
@@ -14,277 +16,11 @@ using Microsoft.Extensions.Hosting;
 
 namespace Haldus.IntegrationTests;
 
-/// <summary>İmzalayıcının S3 dışındaki bir servis için de AWS'nin örnekleriyle aynı sonucu verdiği; bir sunucu gerekmez.</summary>
-public sealed class SqsSignerTests
+/// <summary>SQS yayıncısının ayarlarının doğrulanması; bir sunucu gerekmez.</summary>
+public sealed class SqsPublisherOptionsTests
 {
-    // AWS'nin Signature Version 4 sınama takımındaki (aws-sig-v4-test-suite) örnek kimlik; gerçek bir hesaba ait değildir.
     private const string AccessKey = "AKIDEXAMPLE";
     private const string SecretKey = "wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY";
-    private const string EmptyHash = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
-
-    private static readonly DateTimeOffset Now = new(2015, 8, 30, 12, 36, 0, TimeSpan.Zero);
-
-    [Fact]
-    public void Signer_MatchesTheAwsTestSuiteForAnotherService()
-    {
-        // get-vanilla
-        using var get = new HttpRequestMessage(HttpMethod.Get, "https://example.amazonaws.com/");
-        Assert.Equal("host;x-amz-date/5fa00fa31553b73ebf1942676e86291e8372ff2a2260956d9b8aae1d763fbf31", Sign(get));
-        Assert.Equal("20150830T123600Z", Assert.Single(get.Headers.GetValues("x-amz-date")));
-        Assert.Equal("example.amazonaws.com", get.Headers.Host);
-
-        // Gövdenin özetini başlıkta yalnızca S3 ister.
-        Assert.False(get.Headers.Contains("x-amz-content-sha256"));
-
-        // post-vanilla
-        using var post = new HttpRequestMessage(HttpMethod.Post, "https://example.amazonaws.com/");
-        Assert.Equal("host;x-amz-date/5da7c1a2acd57cee7505fc6676e4e544621c30862966e37dddb68e92efbe5d6b", Sign(post));
-
-        // get-vanilla-query-order-key-case: sorgu parametreleri sıralanır.
-        using var query = new HttpRequestMessage(HttpMethod.Get, "https://example.amazonaws.com/?Param2=value2&Param1=value1");
-        Assert.Equal("host;x-amz-date/b97d918cfa904a5beff61c982a1b6f458b799221646efd99d3219ec94cdf2500", Sign(query));
-
-        // post-header-key-sort: istekteki öteki başlıklar da imzalanır.
-        using var header = new HttpRequestMessage(HttpMethod.Post, "https://example.amazonaws.com/");
-        header.Headers.TryAddWithoutValidation("My-Header1", "value1");
-        Assert.Equal("host;my-header1;x-amz-date/c5410059b04c1ee005303aed430f6e6645f61f4dc9e1461ec8f8916fdf18852c", Sign(header));
-
-        // Takımın özel karakterli yol örnekleri (get-utf8, get-space) yolu bir kez kodlar; S3 dışındaki servislerin
-        // beklediği iki kez kodlamayı sınamaz. Öyle bir örnek bulunamadığı için yolun kodlanması burada sınanmıyor;
-        // SQS yayıncısı yalnızca köke ("/") istek gönderir.
-    }
-
-    [Fact]
-    public void Signer_SignsForS3UnlessAnotherServiceIsNamed()
-    {
-        static AuthenticationHeaderValue Signed(HttpRequestMessage request, string? service)
-        {
-            if (service is null)
-            {
-                S3Signer.Sign(request, EmptyHash, AccessKey, SecretKey, "eu-central-1", Now);
-            }
-            else
-            {
-                S3Signer.Sign(request, EmptyHash, AccessKey, SecretKey, "eu-central-1", Now, service);
-            }
-
-            return request.Headers.Authorization!;
-        }
-
-        const string address = "https://example.amazonaws.com/a%20b/c$d?x=1";
-        using var implicitS3 = new HttpRequestMessage(HttpMethod.Put, address);
-        using var explicitS3 = new HttpRequestMessage(HttpMethod.Put, address);
-        using var sqs = new HttpRequestMessage(HttpMethod.Put, address);
-
-        Assert.Equal(Signed(implicitS3, null), Signed(explicitS3, "s3"));
-        Assert.Contains("/eu-central-1/s3/aws4_request,SignedHeaders=host;x-amz-content-sha256;x-amz-date,", implicitS3.Headers.Authorization!.Parameter, StringComparison.Ordinal);
-
-        Assert.Contains("/eu-central-1/sqs/aws4_request,SignedHeaders=host;x-amz-date,", Signed(sqs, "sqs").Parameter, StringComparison.Ordinal);
-        Assert.DoesNotContain(SecretKey, sqs.ToString(), StringComparison.Ordinal);
-    }
-
-    /// <summary>İmzalanan başlıklar ve imza; kimlik ve kapsam her örnekte aynıdır.</summary>
-    private static string Sign(HttpRequestMessage request)
-    {
-        S3Signer.Sign(request, EmptyHash, AccessKey, SecretKey, "us-east-1", Now, "service");
-
-        const string credential = $"Credential={AccessKey}/20150830/us-east-1/service/aws4_request,SignedHeaders=";
-        var authorization = request.Headers.Authorization!;
-        Assert.Equal(S3Signer.Algorithm, authorization.Scheme);
-        Assert.StartsWith(credential, authorization.Parameter, StringComparison.Ordinal);
-
-        return authorization.Parameter![credential.Length..].Replace(",Signature=", "/", StringComparison.Ordinal);
-    }
-}
-
-/// <summary>SQS yayıncısının gönderdiği istek ve yanıtı yorumlaması; servis yerine sahte bir işleyici yanıt verir.</summary>
-public sealed class SqsPublisherRequestTests : IAsyncDisposable
-{
-    private const string AccessKey = "AKIDEXAMPLE";
-    private const string SecretKey = "a-secret-key-that-must-never-be-written-anywhere";
-
-    private readonly List<ServiceProvider> _providers = [];
-
-    private static CancellationToken CancellationToken => TestContext.Current.CancellationToken;
-
-    [Fact]
-    public async Task Request_IsASignedSendMessageCallToTheRegionOfTheQueue()
-    {
-        var sent = new List<Sent>();
-        var publisher = CreatePublisher(
-            options =>
-            {
-                options.Region = "eu-west-3";
-                options.QueueUrl = new Uri("https://sqs.eu-west-3.amazonaws.com/123456789012/orders.fifo");
-                options.EventTypes.Add("ticket.*");
-            },
-            async (message, _) =>
-            {
-                sent.Add(await Sent.OfAsync(message));
-                return Json(HttpStatusCode.OK, """{"MD5OfMessageBody":"x","MessageId":"1"}""");
-            });
-
-        var published = Event(41, "0198c0de");
-        await publisher.PublishAsync(published, CancellationToken);
-
-        // Süzülen tür için istek gönderilmez; olay teslim edilmiş sayılır.
-        await publisher.PublishAsync(Event(42, "0198c0de", "reply.created"), CancellationToken);
-
-        // Adres verilmediyse AWS'nin bölgedeki adresi kullanılır; istek JSON protokolüyle köke gider.
-        var request = Assert.Single(sent);
-        Assert.Equal((HttpMethod.Post, "https://sqs.eu-west-3.amazonaws.com/"), (request.Method, request.Address));
-        Assert.Equal("AmazonSQS.SendMessage", request.Headers["X-Amz-Target"]);
-        Assert.Equal("sqs.eu-west-3.amazonaws.com", request.Headers["Host"]);
-        Assert.Equal("application/x-amz-json-1.0", request.ContentType);
-        Assert.False(request.Headers.ContainsKey("x-amz-content-sha256"));
-
-        var date = request.Headers["x-amz-date"];
-        var authorization = request.Headers["Authorization"];
-        Assert.StartsWith(
-            $"AWS4-HMAC-SHA256 Credential={AccessKey}/{date[..8]}/eu-west-3/sqs/aws4_request,SignedHeaders=host;x-amz-date;x-amz-target,Signature=",
-            authorization,
-            StringComparison.Ordinal);
-        Assert.DoesNotContain(SecretKey, request.Text, StringComparison.Ordinal);
-
-        // İmza gönderilen gövdeye aittir: aynı istek aynı saatle yeniden imzalanınca aynı imza çıkar.
-        using var again = new HttpRequestMessage(HttpMethod.Post, request.Address);
-        again.Headers.Add("X-Amz-Target", "AmazonSQS.SendMessage");
-        var now = DateTimeOffset.ParseExact(date, "yyyyMMdd'T'HHmmss'Z'", null, System.Globalization.DateTimeStyles.AssumeUniversal);
-        S3Signer.Sign(again, S3Signer.HashOf(request.Body), AccessKey, SecretKey, "eu-west-3", now, "sqs");
-        Assert.Equal(authorization, again.Headers.Authorization!.ToString());
-
-        using var body = JsonDocument.Parse(request.Body);
-        var root = body.RootElement;
-        Assert.Equal("https://sqs.eu-west-3.amazonaws.com/123456789012/orders.fifo", root.GetProperty("QueueUrl").GetString());
-        Assert.Equal("ticket:0198c0de", root.GetProperty("MessageGroupId").GetString());
-        Assert.Equal("ticket:0198c0de:41", root.GetProperty("MessageDeduplicationId").GetString());
-        Assert.Equal(("Number", "41"), Attribute(root, "EventId"));
-        Assert.Equal(("String", "ticket.created"), Attribute(root, "EventType"));
-        Assert.Equal(("String", "ticket"), Attribute(root, "Resource"));
-
-        // Gövde olayın kendisidir, webhook yayıncısının gönderdiği biçimde.
-        Assert.Equal(
-            JsonSerializer.Serialize(published, new JsonSerializerOptions(JsonSerializerDefaults.Web)),
-            root.GetProperty("MessageBody").GetString());
-
-        static (string?, string?) Attribute(JsonElement root, string name)
-        {
-            var attribute = root.GetProperty("MessageAttributes").GetProperty(name);
-            return (attribute.GetProperty("DataType").GetString(), attribute.GetProperty("StringValue").GetString());
-        }
-    }
-
-    [Fact]
-    public async Task FifoIds_ThatSqsWouldReject_AreReplacedWithTheirHash()
-    {
-        var sent = new List<Sent>();
-        Func<HttpRequestMessage, CancellationToken, Task<HttpResponseMessage>> accept = async (request, _) =>
-        {
-            sent.Add(await Sent.OfAsync(request));
-            return Json(HttpStatusCode.OK, """{"MessageId":"1"}""");
-        };
-
-        // Boşluk veya ASCII dışı karakter taşıyan ya da 128 karakteri aşan kimlik olduğu gibi gönderilemez.
-        var fifo = CreatePublisher(options => options.QueueUrl = new Uri("http://localhost:9324/000000000000/orders.fifo"), accept);
-        await fifo.PublishAsync(Event(7, "has space"), CancellationToken);
-        await fifo.PublishAsync(Event(8, "çay"), CancellationToken);
-        await fifo.PublishAsync(Event(9, new string('k', 130)), CancellationToken);
-
-        Assert.All(sent, request =>
-        {
-            using var body = JsonDocument.Parse(request.Body);
-            Assert.Matches("^[0-9a-f]{64}$", body.RootElement.GetProperty("MessageGroupId").GetString());
-            Assert.Matches("^[0-9a-f]{64}$", body.RootElement.GetProperty("MessageDeduplicationId").GetString());
-        });
-        Assert.Equal(3, sent.Select(request => Encoding.UTF8.GetString(request.Body)).Distinct().Count());
-
-        // Standart kuyruğa grup ve yineleme kimliği gönderilmez.
-        sent.Clear();
-        var standard = CreatePublisher(options => options.QueueUrl = new Uri("http://localhost:9324/000000000000/orders"), accept);
-        await standard.PublishAsync(Event(7, "0198c0de"), CancellationToken);
-
-        using var plain = JsonDocument.Parse(Assert.Single(sent).Body);
-        Assert.False(plain.RootElement.TryGetProperty("MessageGroupId", out _));
-        Assert.False(plain.RootElement.TryGetProperty("MessageDeduplicationId", out _));
-    }
-
-    [Fact]
-    public async Task Failure_CarriesTheErrorCodeButNeitherTheResponseNorTheSecret()
-    {
-        var answer = Json(HttpStatusCode.OK, "{}");
-        var publisher = CreatePublisher(Configure, (_, _) => Task.FromResult(answer));
-
-        async Task<HaldusSqsException> FailAsync(HttpResponseMessage response)
-        {
-            answer = response;
-            var failure = await Assert.ThrowsAsync<HaldusSqsException>(() => publisher.PublishAsync(Event(1, "a"), CancellationToken));
-
-            Assert.StartsWith("SQS SendMessage failed for queue 'orders': ", failure.Message, StringComparison.Ordinal);
-            Assert.DoesNotContain(SecretKey, failure.ToString(), StringComparison.Ordinal);
-            Assert.DoesNotContain("123456789012", failure.ToString(), StringComparison.Ordinal);
-            Assert.DoesNotContain("leaky", failure.ToString(), StringComparison.Ordinal);
-            return failure;
-        }
-
-        var missing = await FailAsync(Json(HttpStatusCode.BadRequest, """{"__type":"com.amazonaws.sqs#QueueDoesNotExist","message":"a leaky description"}"""));
-        Assert.Equal((HttpStatusCode.BadRequest, "QueueDoesNotExist"), (missing.StatusCode, missing.ErrorCode));
-        Assert.EndsWith(": 400 QueueDoesNotExist", missing.Message, StringComparison.Ordinal);
-
-        var denied = await FailAsync(Json(HttpStatusCode.Forbidden, """{"__type":"InvalidClientTokenId","message":"a leaky description"}"""));
-        Assert.Equal((HttpStatusCode.Forbidden, "InvalidClientTokenId"), (denied.StatusCode, denied.ErrorCode));
-
-        // Kod biçiminde olmayan bir metin (hata metnine sızdırılmak istenen bir içerik) alınmaz.
-        var hostile = await FailAsync(Json(HttpStatusCode.BadRequest, """{"__type":"x#a leaky\nwith a line break"}"""));
-        Assert.Null(hostile.ErrorCode);
-        Assert.EndsWith(": 400 BadRequest", hostile.Message, StringComparison.Ordinal);
-
-        // Yanıt SQS'e ait değilse (araya giren bir vekil sunucunun sayfası) yalnızca durum kodu kalır.
-        var gateway = await FailAsync(new HttpResponseMessage(HttpStatusCode.BadGateway) { Content = new StringContent("<html>a leaky page</html>") });
-        Assert.Equal(HttpStatusCode.BadGateway, gateway.StatusCode);
-        Assert.Null(gateway.ErrorCode);
-
-        var moved = await FailAsync(new HttpResponseMessage(HttpStatusCode.Found) { Headers = { Location = new Uri("https://elsewhere.example/") } });
-        Assert.Equal(HttpStatusCode.Found, moved.StatusCode);
-
-        // Her isteğe 200 dönen bir adres olayı almış sayılmaz; yoksa olay kutudan silinir ve kaybolurdu.
-        foreach (var body in new[] { "<html>a leaky page</html>", "", "{}", """{"MessageId":""}""", """["MessageId"]""" })
-        {
-            var accepted = await FailAsync(new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(body) });
-            Assert.EndsWith(": 200 OK (the response is not a SendMessage result)", accepted.Message, StringComparison.Ordinal);
-        }
-    }
-
-    [Fact]
-    public async Task Service_ThatDoesNotAnswerInTime_IsATimeoutAndNotACancellation()
-    {
-        void Short(HaldusSqsOptions options)
-        {
-            Configure(options);
-            options.Timeout = TimeSpan.FromMilliseconds(200);
-        }
-
-        // Yanıt hiç gelmez.
-        var silent = CreatePublisher(Short, async (_, cancellationToken) =>
-        {
-            await Task.Delay(Timeout.Infinite, cancellationToken);
-            return Json(HttpStatusCode.OK, "{}");
-        });
-
-        // Başlıklar gelir ama gövde gelmez; süre gövdenin okunmasını da kapsar.
-        var stalled = CreatePublisher(Short, (_, _) => Task.FromResult(
-            new HttpResponseMessage(HttpStatusCode.OK) { Content = new StreamContent(new StalledStream()) }));
-
-        foreach (var publisher in new[] { silent, stalled })
-        {
-            var failure = await Assert.ThrowsAsync<TimeoutException>(() => publisher.PublishAsync(Event(1, "a"), CancellationToken));
-            Assert.Equal("The SQS queue 'orders' did not answer in time.", failure.Message);
-        }
-
-        // Çağıranın iptali ise iptal olarak kalır.
-        using var cancelled = new CancellationTokenSource();
-        await cancelled.CancelAsync();
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => silent.PublishAsync(Event(1, "a"), cancelled.Token));
-    }
 
     [Fact]
     public void Options_AreValidatedWhenThePublisherIsFirstCreated()
@@ -334,103 +70,18 @@ public sealed class SqsPublisherRequestTests : IAsyncDisposable
         Assert.IsType<HaldusSqsPublisher>(Assert.Single(valid.GetServices<IHaldusEventPublisher>()));
     }
 
-    public async ValueTask DisposeAsync()
-    {
-        foreach (var provider in _providers)
-        {
-            await provider.DisposeAsync();
-        }
-    }
-
     private static void Configure(HaldusSqsOptions options)
     {
         options.QueueUrl ??= new Uri("https://sqs.us-east-1.amazonaws.com/123456789012/orders");
         options.AccessKey = AccessKey;
         options.SecretKey = SecretKey;
     }
+}
 
-    private IHaldusEventPublisher CreatePublisher(
-        Action<HaldusSqsOptions> configure,
-        Func<HttpRequestMessage, CancellationToken, Task<HttpResponseMessage>> respond)
-    {
-        var services = new ServiceCollection();
-        services.AddHaldusSqsPublisher(options =>
-        {
-            configure(options);
-            Configure(options);
-        });
-        services.AddHttpClient(HaldusSqsPublisher.HttpClientName).ConfigurePrimaryHttpMessageHandler(() => new StubHandler(respond));
-
-        var provider = services.BuildServiceProvider();
-        _providers.Add(provider);
-        return provider.GetRequiredService<IHaldusEventPublisher>();
-    }
-
-    private static HaldusEvent Event(long id, string recordId, string type = "ticket.created") => new(
-        id,
-        type,
-        type[..type.IndexOf('.', StringComparison.Ordinal)],
-        recordId,
-        TenantId: null,
-        UserId: "ada",
-        JsonSerializer.SerializeToElement(new { subject = "Çay & <kahve>" }),
-        new DateTimeOffset(2026, 11, 25, 9, 30, 0, TimeSpan.Zero));
-
-    private static HttpResponseMessage Json(HttpStatusCode status, string body) =>
-        new(status) { Content = new StringContent(body, Encoding.UTF8, "application/x-amz-json-1.0") };
-
-    private sealed record Sent(HttpMethod Method, string Address, Dictionary<string, string> Headers, string? ContentType, byte[] Body, string Text)
-    {
-        public static async Task<Sent> OfAsync(HttpRequestMessage request) => new(
-            request.Method,
-            request.RequestUri!.AbsoluteUri,
-            request.Headers.ToDictionary(header => header.Key, header => string.Join(",", header.Value), StringComparer.OrdinalIgnoreCase),
-            request.Content!.Headers.ContentType?.ToString(),
-            await request.Content.ReadAsByteArrayAsync(CancellationToken),
-            request.ToString());
-    }
-
-    private sealed class StubHandler(Func<HttpRequestMessage, CancellationToken, Task<HttpResponseMessage>> respond) : HttpMessageHandler
-    {
-        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) =>
-            respond(request, cancellationToken);
-    }
-
-    /// <summary>Hiç veri vermeyen, okuması ancak iptalle biten gövde.</summary>
-    private sealed class StalledStream : Stream
-    {
-        public override bool CanRead => true;
-
-        public override bool CanSeek => false;
-
-        public override bool CanWrite => false;
-
-        public override long Length => throw new NotSupportedException();
-
-        public override long Position
-        {
-            get => throw new NotSupportedException();
-            set => throw new NotSupportedException();
-        }
-
-        public override async ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default)
-        {
-            await Task.Delay(Timeout.Infinite, cancellationToken);
-            return 0;
-        }
-
-        public override int Read(byte[] buffer, int offset, int count) => throw new NotSupportedException();
-
-        public override void Flush()
-        {
-        }
-
-        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
-
-        public override void SetLength(long value) => throw new NotSupportedException();
-
-        public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
-    }
+/// <summary>SDK'nın isteklerini testin verdiği işleyiciden geçirir.</summary>
+internal sealed class HandlerClientFactory(Func<HttpMessageHandler> handler) : Amazon.Runtime.HttpClientFactory
+{
+    public override HttpClient CreateHttpClient(Amazon.Runtime.IClientConfig clientConfig) => new(handler(), disposeHandler: false);
 }
 
 /// <summary>Olayların bir SQS kuyruğuna gönderilmesi (<c>AddHaldusSqsPublisher</c>), SQS uyumlu bir sunucuya (ElasticMQ) karşı.</summary>
@@ -519,8 +170,11 @@ public sealed class SqsPublisherTests(ShopFixture fixture, ElasticMqFixture sqs)
 
         await using var factory = fixture.CreateFactory(services =>
         {
-            services.AddHaldusSqsPublisher(queue.Configure);
-            services.AddHttpClient(HaldusSqsPublisher.HttpClientName).AddHttpMessageHandler(() => sends);
+            services.AddHaldusSqsPublisher(options =>
+            {
+                queue.Configure(options);
+                options.ConfigureClient = config => config.HttpClientFactory = new HandlerClientFactory(() => sends);
+            });
             services.AddSingleton<IHaldusEventPublisher>(flaky);
         });
         var client = factory.CreateClient();
@@ -759,7 +413,7 @@ public sealed class SqsPublisherTests(ShopFixture fixture, ElasticMqFixture sqs)
     }
 
     /// <summary>Gövdesinde verilen metin geçen gönderimleri sayar.</summary>
-    private sealed class SendCounter(string marker) : DelegatingHandler
+    private sealed class SendCounter(string marker) : DelegatingHandler(new SocketsHttpHandler())
     {
         private int _count;
 
@@ -778,8 +432,8 @@ public sealed class SqsPublisherTests(ShopFixture fixture, ElasticMqFixture sqs)
 }
 
 /// <summary>
-/// SQS uyumlu bir sunucu (ElasticMQ). Kuyruklar testlerin içinden, imzalı isteklerle oluşturulur ve okunur. ElasticMQ
-/// imzayı doğrulamaz: bu testler isteğin biçimini ve kuyruğun davranışını sınar, imzanın AWS'de kabul edileceğini değil.
+/// SQS uyumlu bir sunucu (ElasticMQ). Kuyruklar testlerin içinden, AWS SDK istemcisiyle oluşturulur ve okunur.
+/// ElasticMQ imzayı doğrulamaz: bu testler kuyruğun davranışını sınar, kimlik bilgisinin AWS'de kabul edileceğini değil.
 /// </summary>
 public sealed class ElasticMqFixture : IAsyncLifetime
 {
@@ -795,7 +449,7 @@ public sealed class ElasticMqFixture : IAsyncLifetime
         .WithWaitStrategy(Wait.ForUnixContainer().UntilHttpRequestIsSucceeded(request => request.ForPort(9324).ForPath("/health")))
         .Build();
 
-    private readonly HttpClient _http = new();
+    private AmazonSQSClient? _admin;
     private readonly List<ServiceProvider> _providers = [];
 
     public string AccessKey { get; } = "haldus" + Convert.ToHexStringLower(RandomNumberGenerator.GetBytes(6));
@@ -827,7 +481,17 @@ public sealed class ElasticMqFixture : IAsyncLifetime
         return provider.GetRequiredService<IHaldusEventPublisher>();
     }
 
-    public async ValueTask InitializeAsync() => await _container.StartAsync();
+    public async ValueTask InitializeAsync()
+    {
+        await _container.StartAsync();
+
+        _admin = new AmazonSQSClient(
+            new Amazon.Runtime.BasicAWSCredentials(AccessKey, SecretKey),
+            new AmazonSQSConfig { ServiceURL = Endpoint.GetLeftPart(UriPartial.Authority), AuthenticationRegion = Region });
+    }
+
+    // Kuyruğu hazırlamak ve içine bakmak için, yayıncıdan bağımsız bir istemci.
+    private AmazonSQSClient Admin => _admin ?? throw new InvalidOperationException("The server has not been started.");
 
     public async ValueTask DisposeAsync()
     {
@@ -836,30 +500,8 @@ public sealed class ElasticMqFixture : IAsyncLifetime
             await provider.DisposeAsync();
         }
 
-        _http.Dispose();
+        _admin?.Dispose();
         await _container.DisposeAsync();
-    }
-
-    // Kuyruğu hazırlamak ve içine bakmak için, yayıncıdan bağımsız imzalı istekler.
-    private async Task<JsonElement> CallAsync(string action, object input)
-    {
-        var body = JsonSerializer.SerializeToUtf8Bytes(input);
-        using var request = new HttpRequestMessage(HttpMethod.Post, Endpoint) { Content = new ByteArrayContent(body) };
-        request.Content.Headers.ContentType = new MediaTypeHeaderValue("application/x-amz-json-1.0");
-        request.Headers.Add("X-Amz-Target", "AmazonSQS." + action);
-        S3Signer.Sign(request, S3Signer.HashOf(body), AccessKey, SecretKey, Region, DateTimeOffset.UtcNow, "sqs");
-
-        using var response = await _http.SendAsync(request, CancellationToken);
-        var text = await response.Content.ReadAsStringAsync(CancellationToken);
-        Assert.True(response.IsSuccessStatusCode, $"{action}: {(int)response.StatusCode}: {text}");
-
-        if (text.Length == 0)
-        {
-            return default;
-        }
-
-        using var document = JsonDocument.Parse(text);
-        return document.RootElement.Clone();
     }
 
     public sealed record QueueMessage(
@@ -903,56 +545,48 @@ public sealed class ElasticMqFixture : IAsyncLifetime
             options.SecretKey = _owner.SecretKey;
         }
 
-        public Task CreateAsync() => _owner.CallAsync(
-            "CreateQueue",
-            new
+        public Task CreateAsync() => _owner.Admin.CreateQueueAsync(
+            new CreateQueueRequest
             {
                 QueueName = Name,
                 Attributes = Name.EndsWith(".fifo", StringComparison.Ordinal) ? new Dictionary<string, string> { ["FifoQueue"] = "true" } : [],
-            });
+            },
+            CancellationToken);
 
         /// <summary>Kuyrukta bekleyen mesajları okur (ve kuyruktan siler); şimdiye kadar okunanların hepsini döndürür.</summary>
         public async Task<IReadOnlyList<QueueMessage>> ReceiveAsync()
         {
             while (true)
             {
-                var received = await _owner.CallAsync(
-                    "ReceiveMessage",
-                    new
+                var received = await _owner.Admin.ReceiveMessageAsync(
+                    new ReceiveMessageRequest
                     {
                         QueueUrl = Url.AbsoluteUri,
                         MaxNumberOfMessages = 10,
-                        MessageAttributeNames = new[] { "All" },
-                        MessageSystemAttributeNames = new[] { "All" },
-                    });
+                        MessageAttributeNames = ["All"],
+                        MessageSystemAttributeNames = ["All"],
+                    },
+                    CancellationToken);
 
-                if (received.ValueKind != JsonValueKind.Object
-                    || !received.TryGetProperty("Messages", out var messages)
-                    || messages.GetArrayLength() == 0)
+                if (received.Messages is not { Count: > 0 } messages)
                 {
                     return [.. _messages];
                 }
 
-                foreach (var message in messages.EnumerateArray())
+                foreach (var message in messages)
                 {
-                    var body = message.GetProperty("Body").GetString()!;
-                    using var parsed = JsonDocument.Parse(body);
+                    using var parsed = JsonDocument.Parse(message.Body);
 
                     _messages.Add(new QueueMessage(
-                        body,
+                        message.Body,
                         parsed.RootElement.Clone(),
-                        message.TryGetProperty("MessageAttributes", out var attributes)
-                            ? attributes.EnumerateObject().ToDictionary(
-                                attribute => attribute.Name,
-                                attribute => (attribute.Value.GetProperty("DataType").GetString()!, attribute.Value.GetProperty("StringValue").GetString()!))
-                            : [],
-                        message.GetProperty("Attributes").EnumerateObject().ToDictionary(attribute => attribute.Name, attribute => attribute.Value.GetString()!)));
+                        (message.MessageAttributes ?? []).ToDictionary(attribute => attribute.Key, attribute => (attribute.Value.DataType, attribute.Value.StringValue)),
+                        new Dictionary<string, string>(message.Attributes ?? [])));
 
-                    await _owner.CallAsync("DeleteMessage", new { QueueUrl = Url.AbsoluteUri, ReceiptHandle = message.GetProperty("ReceiptHandle").GetString() });
+                    await _owner.Admin.DeleteMessageAsync(Url.AbsoluteUri, message.ReceiptHandle, CancellationToken);
                 }
             }
         }
-
         public async Task<List<QueueMessage>> WaitForAsync(string recordId, int count)
         {
             var deadline = DateTimeOffset.UtcNow + Timeout;

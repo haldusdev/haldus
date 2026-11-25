@@ -10,6 +10,8 @@
     <Project Path="src/Haldus.Abstractions/Haldus.Abstractions.csproj" />
     <Project Path="src/Haldus.AspNetCore/Haldus.AspNetCore.csproj" />
     <Project Path="src/Haldus.EntityFrameworkCore/Haldus.EntityFrameworkCore.csproj" />
+    <Project Path="src/Haldus.Events.Kafka/Haldus.Events.Kafka.csproj" />
+    <Project Path="src/Haldus.Events.RabbitMq/Haldus.Events.RabbitMq.csproj" />
     <Project Path="src/Haldus.Events.Sqs/Haldus.Events.Sqs.csproj" />
     <Project Path="src/Haldus.Generators/Haldus.Generators.csproj" />
     <Project Path="src/Haldus.Jobs.Hangfire/Haldus.Jobs.Hangfire.csproj" />

@@ -51,9 +51,10 @@ EF Core yapılandırması üretilir.
 - `src/Haldus.Generators`: Roslyn incremental generator (netstandard2.0, Roslyn 5.0.0'a sabit).
 - `src/Haldus.EntityFrameworkCore`: model kayıt defteri, interceptor'lar, sorgu filtreleri.
 - `src/Haldus.AspNetCore`: `AddHaldus`, `Map*` giriş noktaları, validasyon, hata yanıtları, `.resx`.
-- `src/Haldus.Storage.S3`: S3 uyumlu nesne deposu (`IHaldusFileStorage`); AWS SigV4 imzası elle yazıldı, paket taşımaz.
-- `src/Haldus.Events.Sqs`: olayları Amazon SQS'e taşıyan yayıncı (`IHaldusEventPublisher`); imzalayıcıyı S3 paketinden
-  kaynak dosyası olarak bağlar (paketler birbirine başvurmaz), paket taşımaz.
+- `src/Haldus.Storage.S3`: S3 uyumlu nesne deposu (`IHaldusFileStorage`); `AWSSDK.S3` üzerine.
+- `src/Haldus.Events.Sqs`, `src/Haldus.Events.RabbitMq`, `src/Haldus.Events.Kafka`: olayları Amazon SQS'e, RabbitMQ'ya
+  ve Kafka'ya taşıyan yayıncılar (`IHaldusEventPublisher`); sırasıyla `AWSSDK.SQS`, `RabbitMQ.Client` ve
+  `Confluent.Kafka` üzerine. Çekirdek bu paketlere başvurmaz; uygulama istediğini ekler.
 - `src/Haldus.Jobs.InMemory`, `src/Haldus.Jobs.PostgreSql`, `src/Haldus.Jobs.Hangfire`: `MapJob` işlerini
   yürütücüye ulaştıran altyapı paketleri. Çekirdek yalnızca `IHaldusJobDispatcher` arayüzünü bilir.
 - `tests/Haldus.Generators.Tests`: generator çıktısı testleri.
@@ -222,8 +223,8 @@ Bunlar kullanıcıyla kararlaştırıldı; yeniden sorma.
     bir multipart formun dosya parçasını da kabul eder, ve `.SignedLinks()` içeriğe süreli, oturumsuz açılan
     bağlantılar üretir. Devam ettirilebilir (parça parça) yükleme ve nesne deposuna doğrudan yükleme yazılmadı.
   - Depolama yeni bağımlılık eklemeden yazıldı: varsayılan veritabanı (`HaldusFileContents`), isteğe bağlı dosya
-    sistemi (`AddHaldusFileSystemStorage`). Nesne depoları (S3 vb.) `IHaldusFileStorage` uygulanarak eklenir; Haldus
-    onlar için paket taşımaz.
+    sistemi (`AddHaldusFileSystemStorage`). Nesne depoları `IHaldusFileStorage` uygulanarak eklenir; çekirdek onlar
+    için paket taşımaz, S3 uyumlu depo ayrı bir pakettir (`Haldus.Storage.S3`).
   - `.AttachedTo<T>()` her hedef için isteğe bağlı gerçek bir yabancı anahtar üretir ("tip + kimlik" çifti değil)
     ve kaynağı her hedefin adresi altında ayrı ayrı sunar. `Attachable<TFile>()` ve `Commentable<TComment>()` aynı
     bildirimin hedef tarafında yazılan biçimidir; `Taggable<TTag>()` bir `MapAssociation`'dır.
@@ -290,8 +291,9 @@ Bunlar kullanıcıyla kararlaştırıldı; yeniden sorma.
     çalıştırmadır, yeniden çalıştırma girdileri kopyalanmış yeni bir iş kaydıdır.
 - Olay yayını (28. aşama). Kullanıcı sormamamı istedi; yazılan, önerdiğim seçeneklerdir ve ayrıca onaylanmadı:
   - `.PublishesEvents()` bir "outbox"tur: olay kayıtla aynı kaydetmede `HaldusOutbox` tablosuna yazılır ve commit'ten
-    sonra uygulamanın kaydettiği `IHaldusEventPublisher` servislerine teslim edilir. Haldus bir mesaj kuyruğu paketi
-    taşımaz (yeni bağımlılık yok); kuyruğa, webhook'a ya da başka bir modüle taşımak yayıncının işidir.
+    sonra uygulamanın kaydettiği `IHaldusEventPublisher` servislerine teslim edilir. Çekirdek bir mesaj kuyruğu
+    paketi taşımaz; kuyruğa, webhook'a ya da başka bir modüle taşımak yayıncının işidir. Hazır yayıncılar ayrı
+    paketlerdir (SQS, RabbitMQ, Kafka) ve webhook yayıncısı çekirdektedir.
   - Olay türleri: `{kaynak}.created` / `.updated` / `.deleted` ve geçiş başına `{kaynak}.{geçiş}` (geçişin adı
     olduğu gibi; geçmiş zamana çevrilmez). Veri, kaydın yanıt biçimidir ("kalın" olay).
   - Teslimat en az bir kez ve tek sıralıdır: başarısız olay arkasındakileri bekletir, on denemeden sonra bırakılır.
@@ -481,7 +483,18 @@ aşaması değildir ve kararları yine sorulmadan verildi:
 
 - Kimlik doğrulamanın eksikleri: sunucuda oturum ve çıkış, parola sıfırlama, e-posta doğrulama, hesap kilidi, hız sınırı.
 - S3 uyumlu dosya deposu (`src/Haldus.Storage.S3`; `AddHaldusS3Storage`) ve webhook olay yayıncısı
-  (`AddHaldusWebhookPublisher`); ikisi de yeni bağımlılık eklemeden yazıldı (aşağıda, "Generator'ın işleyişi").
+  (`AddHaldusWebhookPublisher`; aşağıda, "Generator'ın işleyişi").
+- **İstemci paketleri (kullanıcı kararı, 2026-11-25).** S3 deposu ve SQS yayıncısı önce, onay sormamak için, AWS
+  imzası elle yazılarak kurulmuştu; RabbitMQ ve Kafka için de tel protokolü elle yazılmaya başlanmıştı. Kullanıcı bunu
+  reddetti ("saçmalama") ve dördünün de resmi istemci paketleriyle yazılmasını istedi: `AWSSDK.S3`, `AWSSDK.SQS`,
+  `RabbitMQ.Client`, `Confluent.Kafka`. Elle yazılmış imzalayıcı (`S3Signer`) ve protokol kodu kaldırıldı.
+  **Olgun bir kütüphanenin yerine protokol istemcisi veya güvenlik kodu elle yazılmaz; paket gerekiyorsa kullanıcıya
+  sorulur.**
+- **OIDC / JWT (kullanıcı kararı, 2026-11-25; soruldu ve yanıtlandı).** Backend'e
+  `Microsoft.AspNetCore.Authentication.JwtBearer` ve `Microsoft.AspNetCore.Authentication.OpenIdConnect` eklenir;
+  OIDC girişi panele (`oidc-client-ts`) ve mobil uygulamaya (`expo-auth-session`, `expo-web-browser`, `expo-crypto`)
+  de eklenir; e-posta + parola girişi kalır ve OIDC yapılandırma verilince açılır (varsayılan kapalı). Henüz
+  yazılmadı.
 - Mobil uygulama Android'de denendi (emülatör, Android 17, Expo Go). Önceki "bu makinede emülatör yok" tespiti
   yanlıştı: SDK ve sanal cihazlar kuruluydu, yalnızca `PATH`'te değildiler (`%LOCALAPPDATA%\Android\Sdk`).
 
@@ -500,9 +513,7 @@ Yapılmayanlar ve nedenleri:
   `aria-checked`); panelde silme reddedilince neden yalnızca açık pencerenin arkasındaki bildirimde yazıyordu
   (artık pencerenin içinde, `role="alert"`). Mobil ekranlar yalnızca web hedefinde sürülür; cihazda otomatik ekran
   testi yoktur (emülatörde elle denendi).
-- Yeni bağımlılık gerektirenler: kimlik sağlayıcı için JWT doğrulaması
-  (`Microsoft.AspNetCore.Authentication.JwtBearer`) ve SQS dışındaki kuyrukların istemcileri (RabbitMQ, Kafka…).
-  Eklenmediler; onay gerekir. Amazon SQS için bağımlılıksız bir yayıncı yazıldı (`Haldus.Events.Sqs`).
+
 - iOS: Windows'ta iOS simülatörü çalışmaz; uygulama iOS'ta denenmedi.
 - Raporun "Bilinen sınırlar" tablosunda kalan satırlar bilerek dar bırakılanlardır.
 ## Açık kararlar
@@ -1301,34 +1312,55 @@ Yapılmayanlar ve nedenleri:
   - Sınırlar: dosya sistemi deposunda atomik toplu silme geri alınırsa içerik geri gelmez; veritabanı deposu
     içeriği belleğe alır; `Workflow`, `Document`, `SoftDeletable`, `Cloneable`, `Publishable`, zincir işlemleri ve
     `CreatedFrom` ile birleşmez; virüs taraması, görsel işleme ve devam ettirilebilir yükleme yoktur.
-- **S3 deposu.** `Haldus.Storage.S3` (`AddHaldusS3Storage`; MinIO ve AWS S3, varsayılan yol biçimli adres). İstekler
-  `HttpClient` ile gönderilir ve `S3Signer` ile imzalanır (AWS SigV4; AWS belgelerindeki örnek vektörlerle sınanır).
-  Uzunluğu bilinen (aranabilir) içerik tek bir `PUT` ile akıtılır: HTTPS'te `UNSIGNED-PAYLOAD`, düz HTTP'de önce
-  özeti hesaplanıp imzalanır. Uzunluğu bilinmeyen içerik (`HaldusFiles` her zaman böyle verir) `PartSize` kadar
-  tamponlanır; tampona sığarsa tek `PUT`, sığmazsa çok parçalı yüklemedir ve bellekte en çok bir parça durur. Yarıda
-  kalan yükleme iptal edilir ve özgün hata aynen yeniden fırlatılır (`HaldusFiles` boyut sınırını ondan 413'e
-  çevirir). Ayarlar açılışta değil depo ilk kullanıldığında doğrulanır (build sırasındaki şema üretimi kimlik bilgisi
-  olmadan çalışsın diye). Testler MinIO'yu genel Testcontainers kapsayıcısıyla başlatır; `minio/minio` imajı artık
-  çekilemediği için `cgr.dev/chainguard/minio` kullanılır, özetiyle (`@sha256:…`) sabitlenmiş olarak
-  (`HALDUS_TEST_MINIO_IMAGE` ile değiştirilir; kayıt defteri o özeti kaldırırsa testler imajı çekemez). Sınırlar: gerçek AWS S3'e karşı denenmedi; geçici kimlik bilgisi (oturum token'ı, rol) yoktur;
-  kovayı Haldus oluşturmaz; içerik kayıtla aynı transaction'da değildir (kayıt kaydedilemezse nesne sahipsiz kalabilir);
-  indirmede `Range` desteklenmez; nesne deposuna doğrudan (ön imzalı) yükleme ve devam ettirilebilir yükleme yoktur.
-- **SQS yayıncısı.** `Haldus.Events.Sqs` (`AddHaldusSqsPublisher`). Her olay bir `SendMessage` isteğidir (AWS JSON
-  protokolü: `POST /`, `X-Amz-Target: AmazonSQS.SendMessage`); gövde, webhook yayıncısının gönderdiği olayla aynıdır;
-  öznitelikler `EventId`, `EventType`, `Resource`. FIFO kuyrukta grup kimliği `{kaynak}:{kayıt}`, yineleme kimliği
-  `{kaynak}:{kayıt}:{olay}`'dır (olay kimliği yalnızca veritabanı başına benzersizdir; ayrı bağlamlı iki modül aynı
-  kuyruğa yazarsa çakışırdı); 128 karakteri veya yazdırılabilir ASCII'yi aşan kimliklerin SHA-256'sı kullanılır.
-  İmzalayıcı S3 paketindeki `S3Signer`'dır: servis adı parametre oldu, S3 dışında gövde özeti başlığı yazılmaz ve yol
-  iki kez kodlanır; dosya bu projeye `Compile Include` ile bağlanır. S3 davranışı değişmedi (AWS belge vektörleri ve
-  MinIO testleri aynen geçer); S3 dışı yol AWS SigV4 test takımının dört vektörüyle sınanır. Hata, kuyruğun adını,
-  durumu ve AWS hata kodunu taşır (yanıtın metni ve sır yazılmaz); 2xx olup `MessageId` taşımayan yanıt da hatadır.
-  Ayarlar yayıncının kurucusunda doğrulanır: geçersiz ayar arka plan servisini düşürür ve uygulama açılmaz.
-  Yönlendirilmiş bir yanıt teslimat sayılmaz (uygulama adlandırılmış istemciyi yeniden yapılandırsa da).
-  Testler ElasticMQ'yu özetiyle sabitlenmiş imajdan başlatır (`HALDUS_TEST_ELASTICMQ_IMAGE` ile değiştirilir).
-  **Öykünücü imzayı doğrulamaz; gerçek AWS SQS'e karşı sınanmadı.** Sınırlar: uygulama başına tek kuyruk; toplu
-  gönderim yok (olay başına bir istek, dağıtıcının kilidi altında); mesaj boyutu denetlenmez (sınırı aşan olay on
-  denemeden sonra bırakılır ve bu sırada arkasındakileri bekletir); geçici kimlik bilgisi yok; FIFO yineleme penceresi
-  beş dakikadır, kutunun yeniden deneme aralığı da beş dakikaya çıkabildiği için geç bir yeniden deneme yinelenebilir.
+- **S3 deposu.** `Haldus.Storage.S3` (`AddHaldusS3Storage`; MinIO ve AWS S3, varsayılan yol biçimli adres). Servisle
+  AWS SDK konuşur (`AmazonS3Client`); `ServiceUrl` verilmezse AWS'nin bölgedeki adresi kullanılır. Erişim anahtarı
+  verilmezse kimlik bilgisi SDK'nın varsayılan zincirinden okunur (ortam, profil, rol); `SessionToken` geçici kimlik
+  bilgisi içindir. Uzunluğu bilinen (aranabilir) içerik tek bir `PutObject` ile akıtılır (HTTPS'te gövde imzaya
+  girmez). Uzunluğu bilinmeyen içerik (`HaldusFiles` her zaman böyle verir) `PartSize` kadar tamponlanır; tampona
+  sığarsa tek `PutObject`, sığmazsa çok parçalı yüklemedir ve bellekte en çok bir parça durur. Çok parçalı yükleme
+  SDK'nın `TransferUtility`'siyle değil kendi döngümüzle yapılır: yarıda kalan yükleme iptal edilir ve içeriği
+  okurken çıkan özgün hata aynen yeniden fırlatılır (`HaldusFiles` boyut sınırını ondan 413'e çevirir). Servisin
+  reddi `HaldusS3StorageException` olur (durum ve hata kodu; SDK'nın istisnası iç istisnadır). Özel bir adrese
+  (`ServiceUrl`) karşı SDK'nın yeni varsayılan bütünlük özetleri kapatılır (`WHEN_REQUIRED`): S3 uyumlu servislerin
+  hepsi onları tanımaz. İstemcinin öteki ayarları `ConfigureClient` ile değiştirilir. Ayarlar açılışta değil depo ilk
+  kullanıldığında doğrulanır (build sırasındaki şema üretimi kimlik bilgisi olmadan çalışsın diye). Testler MinIO'yu
+  genel Testcontainers kapsayıcısıyla başlatır; `minio/minio` imajı artık çekilemediği için
+  `cgr.dev/chainguard/minio` kullanılır, özetiyle (`@sha256:…`) sabitlenmiş olarak (`HALDUS_TEST_MINIO_IMAGE` ile
+  değiştirilir; kayıt defteri o özeti kaldırırsa testler imajı çekemez). Sınırlar: gerçek AWS S3'e karşı denenmedi;
+  kovayı Haldus oluşturmaz; içerik kayıtla aynı transaction'da değildir (kayıt kaydedilemezse nesne sahipsiz
+  kalabilir); indirmede `Range` desteklenmez; nesne deposuna doğrudan (ön imzalı) yükleme ve devam ettirilebilir
+  yükleme yoktur.
+- **Kuyruk yayıncıları.** Üçü de aynı biçimdedir: ayarlar yayıncının kurucusunda doğrulanır (geçersiz ayar arka plan
+  servisini düşürür ve uygulama açılmaz), bağlantı ilk olayda kurulur, `EventTypes` gönderilecek türleri süzer
+  (süzülen olay teslim edilmiş sayılır), gövde webhook yayıncısının gönderdiği olayla aynı JSON'dur ve zaman aşımı
+  bir `TimeoutException`'a çevrilir (dağıtıcı onu sürecin kapanması sanmasın diye). Teslimat en az bir kezdir;
+  tüketici yineleneni olayın kimliğinden tanır. Uygulama başına tek bir hedef kaydedilir ve gönderim, dağıtıcının
+  kilidi altında, olay başına bir istektir.
+  - **SQS** (`Haldus.Events.Sqs`, `AddHaldusSqsPublisher`; `AmazonSQSClient.SendMessageAsync`). Öznitelikler
+    `EventId`, `EventType`, `Resource`. FIFO kuyrukta grup kimliği `{kaynak}:{kayıt}`, yineleme kimliği
+    `{kaynak}:{kayıt}:{olay}`'dır (olay kimliği yalnızca veritabanı başına benzersizdir; ayrı bağlamlı iki modül aynı
+    kuyruğa yazarsa çakışırdı); 128 karakteri veya yazdırılabilir ASCII'yi aşan kimliklerin SHA-256'sı kullanılır.
+    Servisin reddi `HaldusSqsException` olur: kuyruğun adını, durumu ve hata kodunu taşır, servisin açıklamasını
+    taşımaz; `MessageId` taşımayan yanıt da hatadır. Kimlik bilgisi S3 deposundaki gibi verilir. Testler ElasticMQ'yu
+    özetiyle sabitlenmiş imajdan başlatır (`HALDUS_TEST_ELASTICMQ_IMAGE`). **Öykünücü imzayı doğrulamaz; gerçek AWS
+    SQS'e karşı sınanmadı.** Sınırlar: mesaj boyutu denetlenmez (sınırı aşan olay on denemeden sonra bırakılır ve bu
+    sırada arkasındakileri bekletir); FIFO yineleme penceresi beş dakikadır, kutunun yeniden deneme aralığı da beş
+    dakikaya çıkabildiği için geç bir yeniden deneme yinelenebilir.
+  - **RabbitMQ** (`Haldus.Events.RabbitMq`, `AddHaldusRabbitMqPublisher`; `RabbitMQ.Client` 7). Mesaj kalıcıdır ve
+    kanal onay izlemeyle açılır: `BasicPublishAsync` aracının onayını bekler, ret ve hiçbir kuyruğa yönlendirilemeyen
+    mesaj (`mandatory`) hata olur. Yönlendirme anahtarı verilmezse olayın türüdür (topic exchange'de tüketiciler türe
+    göre bağlanır); varsayılan exchange'de anahtar hedef kuyruğun adı olmalıdır. Özellikler: `message-id` (olayın
+    kimliği), `type`, başlıklarda `resource` ve `record-id`. Bağlantının kendiliğinden kurtarılması kapalıdır: hatadan
+    sonra kanal ve bağlantı atılır, bir sonraki olay yenisini kurar. Exchange, kuyruk ve bağları Haldus oluşturmaz.
+    Testler gerçek bir aracıya karşıdır (`HALDUS_TEST_RABBITMQ_IMAGE`). Sınırlar: TLS yolu sınanmadı; aynı kaydın
+    olaylarının sırası tek tüketicili bir kuyrukta korunur, tüketiciler arasında korunmaz.
+  - **Kafka** (`Haldus.Events.Kafka`, `AddHaldusKafkaPublisher`; `Confluent.Kafka`). Anahtar `{kaynak}:{kayıt}`'tır:
+    bir kaydın olayları aynı bölüme düşer ve sıralı kalır (bölümleme Java istemcisiyle aynıdır, `Murmur2Random`).
+    `acks=all`, idempotent üretici, olay başına bekleme (`LingerMs = 0`). Başlıklar `event-id`, `event-type`,
+    `resource`. Güvenlik ayarları (SASL, TLS) `ConfigureProducer` ile istemcinin kendi ayarlarından verilir.
+    İstemcinin günlüğü uygulamanın günlüğüne yönlendirilir. Konuyu Haldus oluşturmaz. Testler tek düğümlü gerçek bir
+    kümeye karşıdır (`HALDUS_TEST_KAFKA_IMAGE`; düğüm kendi adresini bildirdiği için bağlantı noktası kapsayıcıdan
+    önce seçilir). Sınırlar: SASL ve TLS yolları sınanmadı; paket yerel bir kütüphane (`librdkafka`) taşır.
 - **Webhook yayıncısı.** `AddHaldusWebhookPublisher` (`HaldusWebhooks.cs`) olayları yapılandırılmış adreslere imzalı
   HTTP isteğiyle teslim eden bir `IHaldusEventPublisher`'dır. İmza Standard Webhooks düzenindedir: `Webhook-Id`
   (olayın kimliği), `Webhook-Timestamp`, `Webhook-Signature: v1,{base64(HMAC-SHA256(anahtar, "id.zaman.gövde"))}`;

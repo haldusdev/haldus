@@ -12,9 +12,9 @@
     <ProjectReference Include="..\Haldus.Abstractions\Haldus.Abstractions.csproj" />
   </ItemGroup>
 
+
   <ItemGroup>
-    <!-- İmzalayıcı S3 deposuyla ortaktır. İki paket birbirine başvurmasın diye kaynak dosya olarak paylaşılır. -->
-    <Compile Include="..\Haldus.Storage.S3\S3Signer.cs" Link="S3Signer.cs" />
+    <PackageReference Include="AWSSDK.SQS" />
   </ItemGroup>
 
 </Project>

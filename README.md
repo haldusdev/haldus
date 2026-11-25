@@ -453,14 +453,17 @@ kaynağın kurallarını alır.
 Dosya içerikleri varsayılan olarak veritabanında saklanır (ek altyapı gerekmez, içerik ve kayıt birlikte kalıcı
 olur). `builder.Services.AddHaldusFileSystemStorage(path)` içerikleri bir klasöre taşır; başka bir depo
 `IHaldusFileStorage` uygulanarak eklenir. S3 uyumlu bir nesne deposu (AWS S3, MinIO) için ayrı paket vardır
-(`Haldus.Storage.S3`; AWS imzasını kendisi üretir, başka paket taşımaz):
+(`Haldus.Storage.S3`; `AWSSDK.S3` üzerine):
 
 ```csharp
 builder.Services.AddHaldusS3Storage(options =>
 {
-    options.ServiceUrl = new Uri("https://s3.eu-central-1.amazonaws.com");   // MinIO için kendi adresi
     options.Region = "eu-central-1";
     options.Bucket = "uploads";
+
+    // AWS dışındaki S3 uyumlu servisler (MinIO...) için adres ve anahtarlar verilir. İkisi de boş bırakılırsa
+    // AWS'nin bölgedeki adresi ve SDK'nın varsayılan kimlik bilgisi zinciri (ortam, profil, rol) kullanılır.
+    options.ServiceUrl = new Uri("http://localhost:9000");
     options.AccessKey = builder.Configuration["S3:AccessKey"]!;
     options.SecretKey = builder.Configuration["S3:SecretKey"]!;
 });
@@ -541,7 +544,7 @@ public sealed class QueuePublisher(IQueue queue) : IHaldusEventPublisher
 ```
 
 Olayları bir Amazon SQS kuyruğuna (veya SQS uyumlu bir servise) taşımak için ayrı bir paket vardır
-(`Haldus.Events.Sqs`; AWS imzasını kendisi üretir, başka paket taşımaz):
+(`Haldus.Events.Sqs`; `AWSSDK.SQS` üzerine):
 
 ```csharp
 builder.Services.AddHaldusSqsPublisher(options =>
@@ -557,8 +560,34 @@ builder.Services.AddHaldusSqsPublisher(options =>
 Her olay bir mesajdır; gövdesi olayın kendisi, öznitelikleri olayın kimliği, türü ve kaynağıdır. FIFO kuyrukta
 (`.fifo`) aynı kaydın olayları sıralı kalır (grup kimliği kaynak + kayıt kimliğidir) ve yeniden teslim edilen olay
 kuyrukta yinelenmez (SQS'in beş dakikalık yineleme penceresi içinde). Standart kuyruk sırayı korumaz ve yineleneni
-ayıklamaz; tüketici olayın kimliğine bakmalıdır. Bir SQS öykünücüsüne (ElasticMQ) karşı sınandı; gerçek AWS'ye karşı
-sınanmadı. Başka kuyruklar (RabbitMQ, Kafka…) için istemci paketi gerekir ve yukarıdaki gibi bir sınıf yazılır.
+ayıklamaz; tüketici olayın kimliğine bakmalıdır. Erişim anahtarı verilmezse kimlik bilgisi SDK'nın varsayılan
+zincirinden okunur. Bir SQS öykünücüsüne (ElasticMQ) karşı sınandı; gerçek AWS'ye karşı sınanmadı.
+
+RabbitMQ ve Kafka için de ayrı paketler vardır (`Haldus.Events.RabbitMq`, `RabbitMQ.Client` üzerine;
+`Haldus.Events.Kafka`, `Confluent.Kafka` üzerine):
+
+```csharp
+builder.Services.AddHaldusRabbitMqPublisher(options =>
+{
+    options.HostName = "rabbit.internal";
+    options.UserName = builder.Configuration["Rabbit:User"]!;
+    options.Password = builder.Configuration["Rabbit:Password"]!;
+    options.Exchange = "shop.events";   // yönlendirme anahtarı olayın türüdür: ticket.created
+});
+
+builder.Services.AddHaldusKafkaPublisher(options =>
+{
+    options.BootstrapServers = "kafka-1:9092,kafka-2:9092";
+    options.Topic = "shop.events";
+    options.ConfigureProducer = config => config.SecurityProtocol = SecurityProtocol.Ssl;   // SASL, TLS...
+});
+```
+
+RabbitMQ'da mesaj kalıcıdır ve aracı onaylayana kadar teslim edilmiş sayılmaz; hiçbir kuyruğa yönlendirilemeyen
+olay da teslim edilmemiş sayılır ve kutuda kalır (bağı unutulmuş bir kuyruk olayları sessizce kaybettirmez).
+Kafka'da mesajın anahtarı kayıttır (`ticket:{id}`): bir kaydın olayları aynı bölüme düşer ve sırayla tüketilir;
+mesaj eşlenik kopyaların hepsi yazana kadar (`acks=all`) teslim edilmiş sayılmaz. Exchange'i, kuyrukları ve konuyu
+uygulama oluşturur. İkisi de kapsayıcıda çalışan gerçek bir aracıya karşı sınandı; TLS ve SASL yolları sınanmadı.
 
 Olayları başka bir sisteme HTTP ile taşımak için de hazır bir yayıncı vardır:
 
@@ -871,9 +900,10 @@ Planlardan sonra, o belgenin "Bilinen sınırlar" tablosundan yeni bağımlılı
 serisinde haftanın günleri ve saat dilimi, şifreli alan, onay zinciri, kullanıcı başına okundu bilgisi, zamanlanmış
 yayın, ULID ve istemcinin verdiği kimlik, bakiyeye karşı tutma, multipart yükleme ve süreli indirme bağlantısı), örnek
 mağaza gerçek kimlik doğrulamaya geçirildi ve kilide dayanan özellikler yük altında ölçüldü. Yapılmayanlar aynı
-belgededir; başlıcaları: mobil uygulama iOS'ta çalıştırılmadı (Android'de emülatörde denendi), arayüzlerin otomatik
-bileşen testi yok (oturum ve istek mantığı sınanıyor), kimlik sağlayıcı (OpenID Connect) desteği yok (yeni bağımlılık
-gerektirir). S3 uyumlu dosya deposu, webhook ve SQS olay yayıncıları bağımlılık eklenmeden yazıldı.
+belgededir; başlıcaları: mobil uygulama iOS'ta çalıştırılmadı (Android'de emülatörde denendi), mobil uygulamanın
+otomatik ekran testleri yalnızca web hedefinde çalışır, kimlik sağlayıcı (OpenID Connect) girişi henüz yazılmadı
+(paketleri kararlaştırıldı). S3 uyumlu dosya deposu ile SQS, RabbitMQ ve Kafka olay yayıncıları resmi istemci
+paketleriyle, ayrı paketler olarak yazıldı; webhook yayıncısı çekirdektedir.
 
 Tasarım kararları için [CLAUDE.md](CLAUDE.md), kararların dayandığı araştırma için [reports](reports/)
 klasörüne bakın. İki örnek backend var: tek projeli [mağaza](samples/Haldus.Sample.Shop) ve

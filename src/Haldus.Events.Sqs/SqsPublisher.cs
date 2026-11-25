@@ -1,8 +1,12 @@
 using System.Globalization;
 using System.Net;
-using System.Net.Http.Headers;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using Amazon;
+using Amazon.Runtime;
+using Amazon.SQS;
+using Amazon.SQS.Model;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 
@@ -12,12 +16,12 @@ namespace Haldus;
 public sealed class HaldusSqsOptions
 {
     /// <summary>
-    /// Servisin adresi (<c>http://localhost:9324</c>); yol içeremez. Boşsa AWS'nin <see cref="Region"/> bölgesindeki
-    /// adresi (<c>https://sqs.{Region}.amazonaws.com</c>) kullanılır.
+    /// Servisin adresi (<c>http://localhost:9324</c>); SQS uyumlu servisler ve öykünücüler içindir, yol içeremez.
+    /// Boşsa AWS'nin <see cref="Region"/> bölgesindeki adresi kullanılır.
     /// </summary>
     public Uri? ServiceUrl { get; set; }
 
-    /// <summary>İmzaya giren bölge; kuyruğun bölgesi olmalıdır.</summary>
+    /// <summary>Bölge; kuyruğun bölgesi olmalıdır.</summary>
     public string Region { get; set; } = "us-east-1";
 
     /// <summary>
@@ -26,9 +30,16 @@ public sealed class HaldusSqsOptions
     /// </summary>
     public Uri? QueueUrl { get; set; }
 
+    /// <summary>
+    /// Erişim anahtarı. <see cref="SecretKey"/> ile birlikte verilir; ikisi de boşsa kimlik bilgisi AWS SDK'nın
+    /// varsayılan zincirinden okunur (ortam değişkenleri, profil, kapsayıcı veya sunucu rolü).
+    /// </summary>
     public string AccessKey { get; set; } = "";
 
     public string SecretKey { get; set; } = "";
+
+    /// <summary>Geçici kimlik bilgisinin oturum token'ı; yalnızca <see cref="AccessKey"/> ile birlikte anlamlıdır.</summary>
+    public string? SessionToken { get; set; }
 
     /// <summary>
     /// Gönderilecek olay türleri; boşsa hepsi. Tür tam adıyla (<c>order.created</c>) veya kaynağın bütün olayları
@@ -36,15 +47,21 @@ public sealed class HaldusSqsOptions
     /// </summary>
     public IList<string> EventTypes { get; } = [];
 
-    /// <summary>Bir gönderimin, yanıtı okunana kadar en çok ne kadar süreceği.</summary>
+    /// <summary>Bir gönderimin, SDK'nın yeniden denemeleri dahil, en çok ne kadar süreceği.</summary>
     public TimeSpan Timeout { get; set; } = TimeSpan.FromSeconds(10);
+
+    /// <summary>
+    /// AWS SDK istemcisinin ayarlarını, Haldus kendi ayarlarını yazdıktan sonra değiştirir (vekil sunucu, yeniden
+    /// deneme sayısı...).
+    /// </summary>
+    public Action<AmazonSQSConfig>? ConfigureClient { get; set; }
 }
 
 /// <summary>Servisin reddettiği bir gönderim. Metin servisin hata kodunu taşır; yanıtın gövdesini ve kimlik bilgisini taşımaz.</summary>
 public sealed class HaldusSqsException : Exception
 {
-    internal HaldusSqsException(string queue, HttpStatusCode statusCode, string? errorCode, string? detail = null)
-        : base($"SQS SendMessage failed for queue '{queue}': {(int)statusCode} {errorCode ?? statusCode.ToString()}{(detail is null ? string.Empty : $" ({detail})")}")
+    internal HaldusSqsException(string queue, HttpStatusCode statusCode, string? errorCode, Exception? inner = null)
+        : base($"SQS SendMessage failed for queue '{queue}': {(int)statusCode} {errorCode ?? statusCode.ToString()}", inner)
     {
         StatusCode = statusCode;
         ErrorCode = errorCode;
@@ -52,58 +69,51 @@ public sealed class HaldusSqsException : Exception
 
     public HttpStatusCode StatusCode { get; }
 
-    /// <summary>Servisin hata kodu (<c>QueueDoesNotExist</c>, <c>InvalidClientTokenId</c>...); yanıt bir SQS hatası değilse boştur.</summary>
+    /// <summary>Servisin hata kodu (<c>AWS.SimpleQueueService.NonExistentQueue</c>, <c>InvalidClientTokenId</c>...).</summary>
     public string? ErrorCode { get; }
 }
 
 /// <summary>
-/// Olayları bir Amazon SQS kuyruğuna (veya SQS uyumlu bir servise) gönderen yayıncı. İstekler <see cref="HttpClient"/>
-/// ile gönderilir ve AWS Signature Version 4 ile imzalanır. Servis isteği kabul etmezse veya ulaşılamazsa hata
-/// fırlatır; olay kutuda kalır ve sonra yeniden denenir. Teslimat bu yüzden en az bir kezdir: FIFO kuyruk yinelenen
-/// olayı kendisi ayıklar (beş dakika içinde), standart kuyrukta tüketici <c>EventId</c> özniteliğinden tanımalıdır.
-/// Standart kuyruk sırayı da korumaz.
+/// Olayları bir Amazon SQS kuyruğuna (veya SQS uyumlu bir servise) gönderen yayıncı; servisle AWS SDK
+/// (<c>AWSSDK.SQS</c>) konuşur. Servis isteği kabul etmezse veya ulaşılamazsa hata fırlatır; olay kutuda kalır ve
+/// sonra yeniden denenir. Teslimat bu yüzden en az bir kezdir: FIFO kuyruk yinelenen olayı kendisi ayıklar (beş dakika
+/// içinde), standart kuyrukta tüketici <c>EventId</c> özniteliğinden tanımalıdır. Standart kuyruk sırayı da korumaz.
 /// </summary>
-public sealed class HaldusSqsPublisher : IHaldusEventPublisher
+public sealed class HaldusSqsPublisher : IHaldusEventPublisher, IDisposable
 {
-    public const string HttpClientName = "Haldus.Events.Sqs";
-
-    private const string Service = "sqs";
     private const string FifoSuffix = ".fifo";
     private const int MaxFifoIdLength = 128;
-    private const int MaxResponseBytes = 8 * 1024;
 
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
 
-    private readonly IHttpClientFactory _clients;
-    private readonly Uri _service;
+    private readonly AmazonSQSClient _client;
     private readonly string _queueUrl;
     private readonly string _queue;
     private readonly bool _fifo;
-    private readonly string _region;
-    private readonly string _accessKey;
-    private readonly string _secretKey;
     private readonly string[] _eventTypes;
     private readonly TimeSpan _timeout;
 
     // Ayarlar kaydedilirken değil yayıncı ilk kurulduğunda doğrulanır: build sırasındaki şema üretimi uygulamayı
     // kimlik bilgileri olmadan başlatır ve orada durmamalıdır. Olay servisi yayıncıları o sırada hiç kurmaz; gerçek
     // bir açılışta ise kurar ve yanlış ayar uygulamayı ilk olaydan önce durdurur.
-    public HaldusSqsPublisher(IHttpClientFactory clients, IOptions<HaldusSqsOptions> options)
+    public HaldusSqsPublisher(IOptions<HaldusSqsOptions> options)
     {
-        ArgumentNullException.ThrowIfNull(clients);
         ArgumentNullException.ThrowIfNull(options);
 
         var settings = options.Value;
         Require(
             settings.Region is { Length: > 0 } && settings.Region.All(character => char.IsAsciiLetterOrDigit(character) || character == '-'),
             "Region is required and is made of letters, digits and '-'.");
-        Require(!string.IsNullOrEmpty(settings.AccessKey) && !string.IsNullOrEmpty(settings.SecretKey), "AccessKey and SecretKey are required.");
+        Require(
+            string.IsNullOrEmpty(settings.AccessKey) == string.IsNullOrEmpty(settings.SecretKey),
+            "AccessKey and SecretKey are given together, or both are left empty to use the default AWS credentials.");
         Require(settings.Timeout > TimeSpan.Zero && settings.Timeout <= TimeSpan.FromHours(1), "Timeout must be positive and at most one hour.");
         Require(settings.EventTypes.All(type => !string.IsNullOrWhiteSpace(type)), "EventTypes cannot contain an empty entry.");
 
-        var service = settings.ServiceUrl ?? new Uri($"https://sqs.{settings.Region}.amazonaws.com");
+        var service = settings.ServiceUrl;
         Require(
-            service.IsAbsoluteUri && service.Scheme is "http" or "https" && service.AbsolutePath == "/" && service.Query.Length == 0 && service.UserInfo.Length == 0,
+            service is null
+                || (service.IsAbsoluteUri && service.Scheme is "http" or "https" && service.AbsolutePath == "/" && service.Query.Length == 0 && service.UserInfo.Length == 0),
             "ServiceUrl must be an absolute http or https address without a path, query or user info.");
 
         var queue = settings.QueueUrl;
@@ -118,14 +128,31 @@ public sealed class HaldusSqsPublisher : IHaldusEventPublisher
             name.Length <= 80 && stem.Length > 0 && stem.All(character => char.IsAsciiLetterOrDigit(character) || character is '-' or '_'),
             "QueueUrl must end with a queue name of up to 80 letters, digits, '-' and '_' (and '.fifo' for a FIFO queue).");
 
-        _clients = clients;
-        _service = service;
+        var config = new AmazonSQSConfig { Timeout = settings.Timeout };
+
+        if (service is null)
+        {
+            config.RegionEndpoint = RegionEndpoint.GetBySystemName(settings.Region);
+        }
+        else
+        {
+            config.ServiceURL = service.GetLeftPart(UriPartial.Authority);
+            config.AuthenticationRegion = settings.Region;
+        }
+
+        settings.ConfigureClient?.Invoke(config);
+
+        _client = string.IsNullOrEmpty(settings.AccessKey)
+            ? new AmazonSQSClient(config)
+            : new AmazonSQSClient(
+                string.IsNullOrEmpty(settings.SessionToken)
+                    ? new BasicAWSCredentials(settings.AccessKey, settings.SecretKey)
+                    : new SessionAWSCredentials(settings.AccessKey, settings.SecretKey, settings.SessionToken),
+                config);
+
         _queueUrl = queue.AbsoluteUri;
         _queue = name;
         _fifo = name.Length != stem.Length;
-        _region = settings.Region;
-        _accessKey = settings.AccessKey;
-        _secretKey = settings.SecretKey;
         _eventTypes = [.. settings.EventTypes];
         _timeout = settings.Timeout;
     }
@@ -139,40 +166,51 @@ public sealed class HaldusSqsPublisher : IHaldusEventPublisher
             return;
         }
 
-        var payload = Message(published);
-        using var request = new HttpRequestMessage(HttpMethod.Post, _service) { Content = new ByteArrayContent(payload) };
-        request.Content.Headers.ContentType = new MediaTypeHeaderValue("application/x-amz-json-1.0");
-        request.Headers.TryAddWithoutValidation("X-Amz-Target", "AmazonSQS.SendMessage");
+        var id = published.Id.ToString(CultureInfo.InvariantCulture);
+        var request = new SendMessageRequest
+        {
+            QueueUrl = _queueUrl,
 
-        // İmzanın saati gerçek saat olmalıdır (servis birkaç dakikadan fazla sapmayı reddeder); bu yüzden
-        // uygulamanın, testlerde değiştirilebilen TimeProvider servisi kullanılmaz.
-        S3Signer.Sign(request, S3Signer.HashOf(payload), _accessKey, _secretKey, _region, DateTimeOffset.UtcNow, Service);
+            // Gövde webhook yayıncısının gönderdiğiyle aynı JSON'dur.
+            MessageBody = JsonSerializer.Serialize(published, Json),
+            MessageAttributes = new Dictionary<string, MessageAttributeValue>
+            {
+                ["EventId"] = new() { DataType = "Number", StringValue = id },
+                ["EventType"] = new() { DataType = "String", StringValue = published.Type },
+                ["Resource"] = new() { DataType = "String", StringValue = published.Resource },
+            },
+        };
 
-        // Süre yanıtın gövdesini okumayı da kapsar; HttpClient'ın kendi süresi başlıklar gelince biter.
+        if (_fifo)
+        {
+            // Grup kayıttır: bir kaydın olayları sırayla tüketilir, başka kayıtların olayları onu beklemez.
+            var record = $"{published.Resource}:{published.RecordId}";
+            request.MessageGroupId = FifoId(record);
+
+            // Olayın kimliği yalnızca kendi veritabanında benzersizdir; ayrı bağlamı olan iki modül aynı kuyruğa
+            // yazarsa aynı numaralı iki ayrı olaydan biri yinelenmiş sayılıp düşerdi. Kayıt bu yüzden kimliğe katılır.
+            request.MessageDeduplicationId = FifoId($"{record}:{id}");
+        }
+
+        // Süre SDK'nın yeniden denemelerini de kapsar; dağıtıcı bu sırada sırayı ve kilidini tutar.
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         timeout.CancelAfter(_timeout);
 
         try
         {
-            using var response = await _clients.CreateClient(HttpClientName).SendAsync(request, HttpCompletionOption.ResponseHeadersRead, timeout.Token);
-
-            // İstemci yönlendirme izlemeyecek biçimde kurulur; uygulama onu yeniden yapılandırıp bunu kaldırdıysa
-            // yönlendirilmiş bir yanıt teslimat sayılmaz.
-            if (response.RequestMessage?.RequestUri is { } answered && answered != request.RequestUri)
-            {
-                throw new HaldusSqsException(_queue, response.StatusCode, errorCode: null, "the request was redirected");
-            }
-            if (!response.IsSuccessStatusCode)
-            {
-                throw new HaldusSqsException(_queue, response.StatusCode, ErrorCode(await ReadAsync(response, "__type", timeout.Token)));
-            }
+            var response = await _client.SendMessageAsync(request, timeout.Token);
 
             // Başarı yalnızca beklenen yanıtla sayılır: her isteğe 200 dönen bir adres (yanlış ServiceUrl, araya giren
             // bir vekil sunucu) olayı almış sayılırsa olay kutudan silinir ve kaybolur.
-            if (string.IsNullOrEmpty(await ReadAsync(response, "MessageId", timeout.Token)))
+            if (string.IsNullOrEmpty(response.MessageId))
             {
-                throw new HaldusSqsException(_queue, response.StatusCode, errorCode: null, "the response is not a SendMessage result");
+                throw new HaldusSqsException(_queue, response.HttpStatusCode, "NoMessageId");
             }
+        }
+        catch (AmazonSQSException exception)
+        {
+            // Servisin açıklaması kutuya ve günlüğe yazılan metne alınmaz; yalnızca kodu alınır.
+            throw new HaldusSqsException(_queue, exception.StatusCode, exception.ErrorCode, exception);
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
@@ -180,6 +218,8 @@ public sealed class HaldusSqsPublisher : IHaldusEventPublisher
             throw new TimeoutException($"The SQS queue '{_queue}' did not answer in time.");
         }
     }
+
+    public void Dispose() => _client.Dispose();
 
     private bool Accepts(string type)
     {
@@ -200,97 +240,12 @@ public sealed class HaldusSqsPublisher : IHaldusEventPublisher
         return false;
     }
 
-    private byte[] Message(HaldusEvent published)
-    {
-        var id = published.Id.ToString(CultureInfo.InvariantCulture);
-
-        using var buffer = new MemoryStream();
-
-        using (var writer = new Utf8JsonWriter(buffer))
-        {
-            writer.WriteStartObject();
-            writer.WriteString("QueueUrl", _queueUrl);
-
-            // Gövde webhook yayıncısının gönderdiğiyle aynı JSON'dur.
-            writer.WriteString("MessageBody", JsonSerializer.SerializeToUtf8Bytes(published, Json));
-
-            writer.WriteStartObject("MessageAttributes");
-            Attribute(writer, "EventId", "Number", id);
-            Attribute(writer, "EventType", "String", published.Type);
-            Attribute(writer, "Resource", "String", published.Resource);
-            writer.WriteEndObject();
-
-            if (_fifo)
-            {
-                // Grup kayıttır: bir kaydın olayları sırayla tüketilir, başka kayıtların olayları onu beklemez.
-                var record = $"{published.Resource}:{published.RecordId}";
-                writer.WriteString("MessageGroupId", FifoId(record));
-
-                // Olayın kimliği yalnızca kendi veritabanında benzersizdir; ayrı bağlamı olan iki modül aynı kuyruğa
-                // yazarsa aynı numaralı iki ayrı olaydan biri yinelenmiş sayılıp düşerdi. Kayıt bu yüzden kimliğe katılır.
-                writer.WriteString("MessageDeduplicationId", FifoId($"{record}:{id}"));
-            }
-
-            writer.WriteEndObject();
-        }
-
-        return buffer.ToArray();
-    }
-
-    private static void Attribute(Utf8JsonWriter writer, string name, string type, string value)
-    {
-        writer.WriteStartObject(name);
-        writer.WriteString("DataType", type);
-        writer.WriteString("StringValue", value);
-        writer.WriteEndObject();
-    }
-
     // SQS bu kimliklerde en çok 128 karakter ve yalnızca ASCII harf, rakam ve noktalama kabul eder; sığmayan
     // (ör. boşluk taşıyan bir doğal anahtar) özetiyle yazılır.
     private static string FifoId(string value) =>
         value.Length <= MaxFifoIdLength && value.All(character => character is > ' ' and <= '~')
             ? value
-            : S3Signer.HashOf(Encoding.UTF8.GetBytes(value));
-
-    // Yanıt beklenen JSON olmayabilir (araya giren bir vekil sunucunun sayfası); o zaman yalnızca durum kodu kalır.
-    private static async Task<string?> ReadAsync(HttpResponseMessage response, string property, CancellationToken cancellationToken)
-    {
-        var buffer = new byte[MaxResponseBytes];
-
-        await using var body = await response.Content.ReadAsStreamAsync(cancellationToken);
-        var read = await body.ReadAtLeastAsync(buffer, buffer.Length, throwOnEndOfStream: false, cancellationToken);
-
-        try
-        {
-            using var document = JsonDocument.Parse(buffer.AsMemory(0, read));
-
-            return document.RootElement.ValueKind == JsonValueKind.Object
-                && document.RootElement.TryGetProperty(property, out var value)
-                && value.ValueKind == JsonValueKind.String
-                    ? value.GetString()
-                    : null;
-        }
-        catch (JsonException)
-        {
-            return null;
-        }
-    }
-
-    // Kod "com.amazonaws.sqs#QueueDoesNotExist" biçiminde gelir. Hata metni kutuya ve günlüğe yazıldığı için
-    // yanıttan yalnızca kod biçimindeki kısa bir metin alınır; servisin açıklaması alınmaz.
-    private static string? ErrorCode(string? type)
-    {
-        if (type is null)
-        {
-            return null;
-        }
-
-        var code = type[(type.LastIndexOf('#') + 1)..];
-
-        return code.Length is > 0 and <= 100 && code.All(character => char.IsAsciiLetterOrDigit(character) || character is '.' or '_' or '-')
-            ? code
-            : null;
-    }
+            : Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(value)));
 
     private static void Require(bool condition, string message)
     {
@@ -305,8 +260,8 @@ public static class HaldusSqsServiceCollectionExtensions
 {
     /// <summary>
     /// Olayları (<c>.PublishesEvents()</c>) bir SQS kuyruğuna gönderir. Kuyruk önceden oluşturulmuş olmalıdır.
-    /// İstekler <see cref="HaldusSqsPublisher.HttpClientName"/> adlı istemciyle gönderilir; uygulama onu
-    /// <c>AddHttpClient</c> ile ayrıca yapılandırabilir (vekil sunucu). Bir uygulamada tek bir kuyruk kaydedilir.
+    /// Servisle AWS SDK konuşur; istemcinin ayarları <see cref="HaldusSqsOptions.ConfigureClient"/> ile
+    /// değiştirilebilir. Bir uygulamada tek bir kuyruk kaydedilir.
     /// </summary>
     public static IServiceCollection AddHaldusSqsPublisher(this IServiceCollection services, Action<HaldusSqsOptions> configure)
     {
@@ -314,13 +269,6 @@ public static class HaldusSqsServiceCollectionExtensions
         ArgumentNullException.ThrowIfNull(configure);
 
         services.AddOptions<HaldusSqsOptions>().Configure(configure);
-
-        // Yönlendirme izlenmez: imza ilk adrese aittir ve olayın verisi adresin gösterdiği başka bir yere gitmemelidir.
-        // Süreyi yayıncı kendisi ölçer (yanıtın gövdesi dahil); istemcinin kendi süresi onu kısaltmamalıdır.
-        services.AddHttpClient(HaldusSqsPublisher.HttpClientName)
-            .ConfigureHttpClient(client => client.Timeout = Timeout.InfiniteTimeSpan)
-            .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler { AllowAutoRedirect = false });
-
         services.AddSingleton<IHaldusEventPublisher, HaldusSqsPublisher>();
         return services;
     }

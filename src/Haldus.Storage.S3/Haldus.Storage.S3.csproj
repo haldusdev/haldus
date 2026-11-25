@@ -16,4 +16,8 @@
     <InternalsVisibleTo Include="Haldus.IntegrationTests" />
   </ItemGroup>
 
+  <ItemGroup>
+    <PackageReference Include="AWSSDK.S3" />
+  </ItemGroup>
+
 </Project>
