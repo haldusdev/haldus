@@ -30413,10 +30413,12 @@
         "properties": {
           "level": {
             "type": "integer",
+            "description": "Kararın verildiği düzey (1'den başlar).",
             "format": "int32"
           },
           "approved": {
-            "type": "boolean"
+            "type": "boolean",
+            "description": "Onay mı, ret mi."
           },
           "userId": {
             "type": "string"
@@ -30431,7 +30433,8 @@
             "type": "string",
             "format": "date-time"
           }
-        }
+        },
+        "description": "Bir kayıt için verilmiş tek bir karar."
       },
       "ApprovalDecisionRequest": {
         "type": "object",
@@ -30441,16 +30444,19 @@
             "type": [
               "null",
               "string"
-            ]
+            ],
+            "description": "Kararın gerekçesi; karar kaydında saklanır."
           }
-        }
+        },
+        "description": "Onay ve ret uçlarının isteğe bağlı gövdesi."
       },
       "ApprovalStatus": {
         "enum": [
           "Pending",
           "Approved",
           "Rejected"
-        ]
+        ],
+        "description": "Onay bekleyen bir kaydın (`.Approvable()`) onay durumu."
       },
       "ArticleResponse": {
         "required": [
@@ -30672,6 +30678,7 @@
         "properties": {
           "delta": {
             "type": "number",
+            "description": "Eklenecek (pozitif) veya düşülecek (negatif) miktar; sıfır olamaz.",
             "format": "double"
           },
           "bucket": {
@@ -30679,16 +30686,19 @@
             "type": [
               "null",
               "string"
-            ]
+            ],
+            "description": "Düzeltilen kova; verilmezse ilk kova."
           },
           "reason": {
             "maxLength": 500,
             "type": [
               "null",
               "string"
-            ]
+            ],
+            "description": "Deftere yazılan açıklama: \"sayım farkı\", \"sipariş 1042\"."
           }
-        }
+        },
+        "description": "Bakiyeyi bir miktar artırır veya azaltır (`POST /{key}/adjust`). Bakiyenin yeni değeri değil, değişimi\r\ngönderilir; böylece aynı anda gelen iki düzeltme birbirini ezmez."
       },
       "BalanceEntry": {
         "required": [
@@ -30704,6 +30714,7 @@
         "properties": {
           "id": {
             "type": "integer",
+            "description": "Kaydın sırası; aynı bakiyenin kayıtları arasında artar.",
             "format": "int64"
           },
           "bucket": {
@@ -30711,10 +30722,12 @@
           },
           "delta": {
             "type": "number",
+            "description": "Kovadaki değişim.",
             "format": "double"
           },
           "balance": {
             "type": "number",
+            "description": "Kovanın bu kayıttan sonraki bakiyesi.",
             "format": "double"
           },
           "reason": {
@@ -30733,7 +30746,8 @@
               "string"
             ]
           }
-        }
+        },
+        "description": "Bakiyenin defterindeki bir kayıt: bakiyeyi değiştiren her yazma bir tane üretir."
       },
       "BalanceHold": {
         "required": [
@@ -30755,7 +30769,8 @@
             "format": "double"
           },
           "status": {
-            "type": "string"
+            "type": "string",
+            "description": "`Active`, `Captured`, `Released` veya `Expired`."
           },
           "createdAt": {
             "type": "string",
@@ -30774,13 +30789,15 @@
               "string"
             ]
           }
-        }
+        },
+        "description": "Bakiyeye karşı bir tutma."
       },
       "BalanceHoldRequest": {
         "type": "object",
         "properties": {
           "quantity": {
             "type": "number",
+            "description": "Tutulan miktar; sıfırdan büyük olmalıdır.",
             "format": "double"
           },
           "expiresInSeconds": {
@@ -30790,6 +30807,7 @@
               "null",
               "integer"
             ],
+            "description": "Tutmanın ömrü, saniye olarak; verilmezse tutma kendiliğinden bırakılmaz.",
             "format": "int32"
           },
           "reason": {
@@ -30799,7 +30817,8 @@
               "string"
             ]
           }
-        }
+        },
+        "description": "Bakiyeye karşı bir tutma başlatır (`POST /{key}/holds`): miktar eldeki kovadan ayrılan kovaya geçer ve\r\ntutma kapanana kadar orada bekler. Tutma tahsil edilir (miktar bakiyeden düşer), bırakılır (geri döner) veya\r\nsüresi dolunca kendiliğinden bırakılır."
       },
       "BalanceMove": {
         "required": [
@@ -30818,6 +30837,7 @@
           },
           "quantity": {
             "type": "number",
+            "description": "Taşınan miktar; sıfırdan büyük olmalıdır.",
             "format": "double"
           },
           "reason": {
@@ -30827,7 +30847,8 @@
               "string"
             ]
           }
-        }
+        },
+        "description": "Bir miktarı bir kovadan ötekine taşır (`POST /{key}/move`): eldeki stoktan ayrılmış stoğa gibi."
       },
       "BalanceSetting": {
         "type": "object",
@@ -30841,6 +30862,7 @@
               "null",
               "number"
             ],
+            "description": "İstemcinin gördüğü bakiye; verilmişse ve bakiye bu sırada değiştiyse istek 409 ile reddedilir.",
             "format": "double"
           },
           "bucket": {
@@ -30857,7 +30879,8 @@
               "string"
             ]
           }
-        }
+        },
+        "description": "Bakiyeyi mutlak bir değere çeker (`POST /{key}/set`); sayım sonucu gibi. decimal? BalanceSetting.Expected verilirse\r\nyalnızca bakiye hâlâ o değerdeyse yazılır."
       },
       "BasketItemResponse": {
         "required": [
@@ -30995,7 +31018,8 @@
               "format": "uuid"
             }
           }
-        }
+        },
+        "description": "Toplu okumanın sonucu: bulunan kayıtlar ve bulunamayan (veya isteği yapanın göremediği) kimlikler."
       },
       "BatchGetResultOfContactResponseAndGuid": {
         "required": [
@@ -31017,7 +31041,8 @@
               "format": "uuid"
             }
           }
-        }
+        },
+        "description": "Toplu okumanın sonucu: bulunan kayıtlar ve bulunamayan (veya isteği yapanın göremediği) kimlikler."
       },
       "BatchGetResultOfProductResponseAndGuid": {
         "required": [
@@ -31039,7 +31064,8 @@
               "format": "uuid"
             }
           }
-        }
+        },
+        "description": "Toplu okumanın sonucu: bulunan kayıtlar ve bulunamayan (veya isteği yapanın göremediği) kimlikler."
       },
       "BatchGetResultOfTagResponseAndGuid": {
         "required": [
@@ -31061,7 +31087,8 @@
               "format": "uuid"
             }
           }
-        }
+        },
+        "description": "Toplu okumanın sonucu: bulunan kayıtlar ve bulunamayan (veya isteği yapanın göremediği) kimlikler."
       },
       "BatchIdsRequestOfGuid": {
         "required": [
@@ -31076,7 +31103,8 @@
               "format": "uuid"
             }
           }
-        }
+        },
+        "description": "Kimlikleriyle verilen kayıtlar üzerinde toplu okuma ve silme isteği."
       },
       "BatchIdsRequestOfstring": {
         "required": [
@@ -31090,7 +31118,8 @@
               "type": "string"
             }
           }
-        }
+        },
+        "description": "Kimlikleriyle verilen kayıtlar üzerinde toplu okuma ve silme isteği."
       },
       "BatchItemResultOfGuid": {
         "required": [
@@ -31103,10 +31132,12 @@
         "properties": {
           "index": {
             "type": "integer",
+            "description": "Öğenin istekteki sırası.",
             "format": "int32"
           },
           "status": {
             "type": "integer",
+            "description": "Öğe tek başına gönderilseydi dönecek HTTP durum kodu.",
             "format": "int32"
           },
           "item": {
@@ -31119,11 +31150,13 @@
                 "type": "null"
               },
               {
+                "description": "Başarısızsa neden; tekil ucun döndüreceği hata ile aynıdır.",
                 "$ref": "#/components/schemas/ProblemDetails"
               }
             ]
           }
-        }
+        },
+        "description": "Toplu işlemdeki tek bir öğenin sonucu."
       },
       "BatchItemResultOfTagResponse": {
         "required": [
@@ -31136,10 +31169,12 @@
         "properties": {
           "index": {
             "type": "integer",
+            "description": "Öğenin istekteki sırası.",
             "format": "int32"
           },
           "status": {
             "type": "integer",
+            "description": "Öğe tek başına gönderilseydi dönecek HTTP durum kodu.",
             "format": "int32"
           },
           "item": {
@@ -31158,11 +31193,13 @@
                 "type": "null"
               },
               {
+                "description": "Başarısızsa neden; tekil ucun döndüreceği hata ile aynıdır.",
                 "$ref": "#/components/schemas/ProblemDetails"
               }
             ]
           }
-        }
+        },
+        "description": "Toplu işlemdeki tek bir öğenin sonucu."
       },
       "BatchResultOfAddressResponse": {
         "required": [
@@ -31176,7 +31213,8 @@
               "$ref": "#/components/schemas/AddressResponse"
             }
           }
-        }
+        },
+        "description": "Atomik bir toplu yazmanın sonucu: öğeler, istekteki sırayla."
       },
       "BatchResultOfContactResponse": {
         "required": [
@@ -31190,7 +31228,8 @@
               "$ref": "#/components/schemas/ContactResponse"
             }
           }
-        }
+        },
+        "description": "Atomik bir toplu yazmanın sonucu: öğeler, istekteki sırayla."
       },
       "BatchResultOfProductResponse": {
         "required": [
@@ -31204,7 +31243,8 @@
               "$ref": "#/components/schemas/ProductResponse"
             }
           }
-        }
+        },
+        "description": "Atomik bir toplu yazmanın sonucu: öğeler, istekteki sırayla."
       },
       "BatchResultsOfGuid": {
         "required": [
@@ -31218,7 +31258,8 @@
               "$ref": "#/components/schemas/BatchItemResultOfGuid"
             }
           }
-        }
+        },
+        "description": "Kısmi başarılı bir toplu işlemin sonucu: her öğe için ayrı sonuç, istekteki sırayla."
       },
       "BatchResultsOfTagResponse": {
         "required": [
@@ -31232,7 +31273,8 @@
               "$ref": "#/components/schemas/BatchItemResultOfTagResponse"
             }
           }
-        }
+        },
+        "description": "Kısmi başarılı bir toplu işlemin sonucu: her öğe için ayrı sonuç, istekteki sırayla."
       },
       "BatchUpdateAddressItem": {
         "required": [
@@ -31792,12 +31834,15 @@
           },
           "next": {
             "type": "integer",
+            "description": "Bir sonraki istekte `since` olarak gönderilecek imleç.",
             "format": "int64"
           },
           "hasMore": {
-            "type": "boolean"
+            "type": "boolean",
+            "description": "Bu imleçten sonra okunmayı bekleyen değişiklik var mı."
           }
-        }
+        },
+        "description": "Değişiklik akışının bir sayfası."
       },
       "ChangeOfArticleResponse": {
         "required": [
@@ -31809,10 +31854,12 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string"
+            "type": "string",
+            "description": "Kaydın anahtarı, metin olarak."
           },
           "deleted": {
-            "type": "boolean"
+            "type": "boolean",
+            "description": "Kayıt artık yok (silindi ya da isteği yapana görünmez oldu); Record boştur."
           },
           "record": {
             "oneOf": [
@@ -31820,15 +31867,18 @@
                 "type": "null"
               },
               {
+                "description": "Kaydın şimdiki hali.",
                 "$ref": "#/components/schemas/ArticleResponse"
               }
             ]
           },
           "changedAt": {
             "type": "string",
+            "description": "Kaydın bu sayfadaki son değişikliğinin zamanı.",
             "format": "date-time"
           }
-        }
+        },
+        "description": "Değişiklik akışındaki tek bir kayıt."
       },
       "ChangePasswordRequest": {
         "required": [
@@ -31868,6 +31918,7 @@
             "$ref": "#/components/schemas/ChangeSetStatus"
           },
           "changes": {
+            "description": "Biriken değişiklikler: kaydın kısmi güncelleme (`PATCH`) gövdesiyle aynı biçimde.",
             "$ref": "#/components/schemas/JsonElement"
           },
           "createdAt": {
@@ -31893,7 +31944,8 @@
               "string"
             ]
           }
-        }
+        },
+        "description": "Bir kayda uygulanmak üzere biriktirilen değişiklikler (`.ChangeSets()`): verilmiş bir siparişin düzenlenmesi\r\ngibi, adım adım hazırlanan, önizlenen ve sonunda tek seferde uygulanan bir düzenleme oturumu."
       },
       "ChangeSetStatus": {
         "type": "integer"
@@ -33731,24 +33783,29 @@
         "type": "object",
         "properties": {
           "key": {
-            "type": "string"
+            "type": "string",
+            "description": "Değer çantasındaki anahtar."
           },
           "label": {
-            "type": "string"
+            "type": "string",
+            "description": "Alanın kullanıcıya gösterilen adı."
           },
           "type": {
             "$ref": "#/components/schemas/CustomFieldType"
           },
           "required": {
-            "type": "boolean"
+            "type": "boolean",
+            "description": "Kayıt bu alan olmadan yazılamaz mı."
           },
           "options": {
             "type": "array",
             "items": {
               "type": "string"
-            }
+            },
+            "description": "Tür CustomFieldType.Choice ise kabul edilen değerler."
           }
-        }
+        },
+        "description": "Bir kaynağın özel alanlarından birinin tanımı."
       },
       "CustomFieldDefinitionRequest": {
         "required": [
@@ -33773,9 +33830,11 @@
             ],
             "items": {
               "type": "string"
-            }
+            },
+            "description": "Tür CustomFieldType.Choice ise zorunludur: en çok 100 seçenek, her biri en çok 200 karakter."
           }
-        }
+        },
+        "description": "Özel bir alanı tanımlayan veya değiştiren isteğin gövdesi; anahtar adrestedir."
       },
       "CustomFieldType": {
         "enum": [
@@ -33784,7 +33843,8 @@
           "Boolean",
           "Date",
           "Choice"
-        ]
+        ],
+        "description": "Özel bir alanın değerinin türü."
       },
       "DeliveryResponse": {
         "required": [
@@ -33902,7 +33962,8 @@
           "Draft",
           "Submitted",
           "Cancelled"
-        ]
+        ],
+        "description": "Belgenin (`.Document()`) sabit durumları: taslak düzenlenir ve silinir, gönderilen belge kilitlidir, iptal\r\nedilen belge yalnızca düzeltilebilir (yeni bir taslak doğar)."
       },
       "EchoResponse": {
         "required": [
@@ -33970,7 +34031,8 @@
             ]
           }
         },
-        "additionalProperties": false
+        "additionalProperties": false,
+        "description": "Yalnızca eşitlikle karşılaştırılabilen alanların (Guid, bool, enum) koşulu."
       },
       "ExpenseClaimResponse": {
         "required": [
@@ -34092,19 +34154,22 @@
         "type": "object",
         "properties": {
           "url": {
-            "type": "string"
+            "type": "string",
+            "description": "Bağlantının adresi; sunucunun köküne görelidir."
           },
           "expiresAt": {
             "type": "string",
             "format": "date-time"
           }
-        }
+        },
+        "description": "Bir dosyanın içeriğine, oturumu olmayan birinin de açabildiği süreli bağlantı."
       },
       "FileStatus": {
         "enum": [
           "Pending",
           "Uploaded"
-        ]
+        ],
+        "description": "Bir dosya kaydının (`MapFile`) içeriğinin durumu."
       },
       "ForgotPasswordRequest": {
         "required": [
@@ -34393,7 +34458,8 @@
           "Succeeded",
           "Failed",
           "Cancelled"
-        ]
+        ],
+        "description": "Bir işin bulunduğu aşama."
       },
       "JsonElement": { },
       "LabelResponse": {
@@ -34682,9 +34748,11 @@
               "null",
               "integer"
             ],
+            "description": "Kaydın gideceği yer; listenin dışındaysa kayıt sona gider.",
             "format": "int32"
           }
-        }
+        },
+        "description": "Sıralı bir kaydı taşıma isteği: `POST /{id}/move`."
       },
       "NotificationResponse": {
         "required": [
@@ -34733,16 +34801,20 @@
         "properties": {
           "originalStart": {
             "type": "string",
+            "description": "Kuralın verdiği zaman; oluşun adresteki kimliğidir.",
             "format": "date-time"
           },
           "start": {
             "type": "string",
+            "description": "Oluşun gerçek zamanı; ertelendiyse OriginalStart değerinden farklıdır.",
             "format": "date-time"
           },
           "cancelled": {
-            "type": "boolean"
+            "type": "boolean",
+            "description": "Bu oluş iptal edildi mi."
           }
-        }
+        },
+        "description": "Serinin tek bir oluşu."
       },
       "OccurrenceChange": {
         "type": "object",
@@ -34752,12 +34824,15 @@
               "null",
               "string"
             ],
+            "description": "Oluşun yeni zamanı; boşsa zamanı değişmez.",
             "format": "date-time"
           },
           "cancelled": {
-            "type": "boolean"
+            "type": "boolean",
+            "description": "Oluş iptal mi edildi."
           }
-        }
+        },
+        "description": "Tek bir oluşun kuraldan sapması (`PUT /{id}/occurrences/{start}`)."
       },
       "OrderItemResponse": {
         "required": [
@@ -34937,7 +35012,8 @@
             "type": "integer",
             "format": "int64"
           }
-        }
+        },
+        "description": "Liste endpoint'lerinin döndürdüğü sayfalanmış sonuç."
       },
       "PagedResultOfAddressResponse": {
         "required": [
@@ -34966,7 +35042,8 @@
             "type": "integer",
             "format": "int64"
           }
-        }
+        },
+        "description": "Liste endpoint'lerinin döndürdüğü sayfalanmış sonuç."
       },
       "PagedResultOfAnnouncementResponse": {
         "required": [
@@ -34995,7 +35072,8 @@
             "type": "integer",
             "format": "int64"
           }
-        }
+        },
+        "description": "Liste endpoint'lerinin döndürdüğü sayfalanmış sonuç."
       },
       "PagedResultOfApiKeyResponse": {
         "required": [
@@ -35024,7 +35102,8 @@
             "type": "integer",
             "format": "int64"
           }
-        }
+        },
+        "description": "Liste endpoint'lerinin döndürdüğü sayfalanmış sonuç."
       },
       "PagedResultOfArticleResponse": {
         "required": [
@@ -35053,7 +35132,8 @@
             "type": "integer",
             "format": "int64"
           }
-        }
+        },
+        "description": "Liste endpoint'lerinin döndürdüğü sayfalanmış sonuç."
       },
       "PagedResultOfAttachmentResponse": {
         "required": [
@@ -35082,7 +35162,8 @@
             "type": "integer",
             "format": "int64"
           }
-        }
+        },
+        "description": "Liste endpoint'lerinin döndürdüğü sayfalanmış sonuç."
       },
       "PagedResultOfBalanceEntry": {
         "required": [
@@ -35111,7 +35192,8 @@
             "type": "integer",
             "format": "int64"
           }
-        }
+        },
+        "description": "Liste endpoint'lerinin döndürdüğü sayfalanmış sonuç."
       },
       "PagedResultOfBasketResponse": {
         "required": [
@@ -35140,7 +35222,8 @@
             "type": "integer",
             "format": "int64"
           }
-        }
+        },
+        "description": "Liste endpoint'lerinin döndürdüğü sayfalanmış sonuç."
       },
       "PagedResultOfBillPaymentResponse": {
         "required": [
@@ -35169,7 +35252,8 @@
             "type": "integer",
             "format": "int64"
           }
-        }
+        },
+        "description": "Liste endpoint'lerinin döndürdüğü sayfalanmış sonuç."
       },
       "PagedResultOfBillResponse": {
         "required": [
@@ -35198,7 +35282,8 @@
             "type": "integer",
             "format": "int64"
           }
-        }
+        },
+        "description": "Liste endpoint'lerinin döndürdüğü sayfalanmış sonuç."
       },
       "PagedResultOfBrandResponse": {
         "required": [
@@ -35227,7 +35312,8 @@
             "type": "integer",
             "format": "int64"
           }
-        }
+        },
+        "description": "Liste endpoint'lerinin döndürdüğü sayfalanmış sonuç."
       },
       "PagedResultOfBudgetRequestResponse": {
         "required": [
@@ -35256,7 +35342,8 @@
             "type": "integer",
             "format": "int64"
           }
-        }
+        },
+        "description": "Liste endpoint'lerinin döndürdüğü sayfalanmış sonuç."
       },
       "PagedResultOfCarResponse": {
         "required": [
@@ -35285,7 +35372,8 @@
             "type": "integer",
             "format": "int64"
           }
-        }
+        },
+        "description": "Liste endpoint'lerinin döndürdüğü sayfalanmış sonuç."
       },
       "PagedResultOfCartResponse": {
         "required": [
@@ -35314,7 +35402,8 @@
             "type": "integer",
             "format": "int64"
           }
-        }
+        },
+        "description": "Liste endpoint'lerinin döndürdüğü sayfalanmış sonuç."
       },
       "PagedResultOfCatalogRecountResponse": {
         "required": [
@@ -35343,7 +35432,8 @@
             "type": "integer",
             "format": "int64"
           }
-        }
+        },
+        "description": "Liste endpoint'lerinin döndürdüğü sayfalanmış sonuç."
       },
       "PagedResultOfCategoryResponse": {
         "required": [
@@ -35372,7 +35462,8 @@
             "type": "integer",
             "format": "int64"
           }
-        }
+        },
+        "description": "Liste endpoint'lerinin döndürdüğü sayfalanmış sonuç."
       },
       "PagedResultOfCommentResponse": {
         "required": [
@@ -35401,7 +35492,8 @@
             "type": "integer",
             "format": "int64"
           }
-        }
+        },
+        "description": "Liste endpoint'lerinin döndürdüğü sayfalanmış sonuç."
       },
       "PagedResultOfContactResponse": {
         "required": [
@@ -35430,7 +35522,8 @@
             "type": "integer",
             "format": "int64"
           }
-        }
+        },
+        "description": "Liste endpoint'lerinin döndürdüğü sayfalanmış sonuç."
       },
       "PagedResultOfCouponResponse": {
         "required": [
@@ -35459,7 +35552,8 @@
             "type": "integer",
             "format": "int64"
           }
-        }
+        },
+        "description": "Liste endpoint'lerinin döndürdüğü sayfalanmış sonuç."
       },
       "PagedResultOfCustomerResponse": {
         "required": [
@@ -35488,7 +35582,8 @@
             "type": "integer",
             "format": "int64"
           }
-        }
+        },
+        "description": "Liste endpoint'lerinin döndürdüğü sayfalanmış sonuç."
       },
       "PagedResultOfDeliveryResponse": {
         "required": [
@@ -35517,7 +35612,8 @@
             "type": "integer",
             "format": "int64"
           }
-        }
+        },
+        "description": "Liste endpoint'lerinin döndürdüğü sayfalanmış sonuç."
       },
       "PagedResultOfDeviceModelResponse": {
         "required": [
@@ -35546,7 +35642,8 @@
             "type": "integer",
             "format": "int64"
           }
-        }
+        },
+        "description": "Liste endpoint'lerinin döndürdüğü sayfalanmış sonuç."
       },
       "PagedResultOfDeviceResponse": {
         "required": [
@@ -35575,7 +35672,8 @@
             "type": "integer",
             "format": "int64"
           }
-        }
+        },
+        "description": "Liste endpoint'lerinin döndürdüğü sayfalanmış sonuç."
       },
       "PagedResultOfDiscussionResponse": {
         "required": [
@@ -35604,7 +35702,8 @@
             "type": "integer",
             "format": "int64"
           }
-        }
+        },
+        "description": "Liste endpoint'lerinin döndürdüğü sayfalanmış sonuç."
       },
       "PagedResultOfEnrollmentResponse": {
         "required": [
@@ -35633,7 +35732,8 @@
             "type": "integer",
             "format": "int64"
           }
-        }
+        },
+        "description": "Liste endpoint'lerinin döndürdüğü sayfalanmış sonuç."
       },
       "PagedResultOfExpenseClaimResponse": {
         "required": [
@@ -35662,7 +35762,8 @@
             "type": "integer",
             "format": "int64"
           }
-        }
+        },
+        "description": "Liste endpoint'lerinin döndürdüğü sayfalanmış sonuç."
       },
       "PagedResultOfFeatureFlagResponse": {
         "required": [
@@ -35691,7 +35792,8 @@
             "type": "integer",
             "format": "int64"
           }
-        }
+        },
+        "description": "Liste endpoint'lerinin döndürdüğü sayfalanmış sonuç."
       },
       "PagedResultOfGarmentResponse": {
         "required": [
@@ -35720,7 +35822,8 @@
             "type": "integer",
             "format": "int64"
           }
-        }
+        },
+        "description": "Liste endpoint'lerinin döndürdüğü sayfalanmış sonuç."
       },
       "PagedResultOfInventoryResponse": {
         "required": [
@@ -35749,7 +35852,8 @@
             "type": "integer",
             "format": "int64"
           }
-        }
+        },
+        "description": "Liste endpoint'lerinin döndürdüğü sayfalanmış sonuç."
       },
       "PagedResultOfInvitationResponse": {
         "required": [
@@ -35778,7 +35882,8 @@
             "type": "integer",
             "format": "int64"
           }
-        }
+        },
+        "description": "Liste endpoint'lerinin döndürdüğü sayfalanmış sonuç."
       },
       "PagedResultOfLabelResponse": {
         "required": [
@@ -35807,7 +35912,8 @@
             "type": "integer",
             "format": "int64"
           }
-        }
+        },
+        "description": "Liste endpoint'lerinin döndürdüğü sayfalanmış sonuç."
       },
       "PagedResultOfLeaveAllowanceResponse": {
         "required": [
@@ -35836,7 +35942,8 @@
             "type": "integer",
             "format": "int64"
           }
-        }
+        },
+        "description": "Liste endpoint'lerinin döndürdüğü sayfalanmış sonuç."
       },
       "PagedResultOfMachineResponse": {
         "required": [
@@ -35865,7 +35972,8 @@
             "type": "integer",
             "format": "int64"
           }
-        }
+        },
+        "description": "Liste endpoint'lerinin döndürdüğü sayfalanmış sonuç."
       },
       "PagedResultOfMediaFileResponse": {
         "required": [
@@ -35894,7 +36002,8 @@
             "type": "integer",
             "format": "int64"
           }
-        }
+        },
+        "description": "Liste endpoint'lerinin döndürdüğü sayfalanmış sonuç."
       },
       "PagedResultOfMeetingResponse": {
         "required": [
@@ -35923,7 +36032,8 @@
             "type": "integer",
             "format": "int64"
           }
-        }
+        },
+        "description": "Liste endpoint'lerinin döndürdüğü sayfalanmış sonuç."
       },
       "PagedResultOfNotificationResponse": {
         "required": [
@@ -35952,7 +36062,8 @@
             "type": "integer",
             "format": "int64"
           }
-        }
+        },
+        "description": "Liste endpoint'lerinin döndürdüğü sayfalanmış sonuç."
       },
       "PagedResultOfOrderNoteResponse": {
         "required": [
@@ -35981,7 +36092,8 @@
             "type": "integer",
             "format": "int64"
           }
-        }
+        },
+        "description": "Liste endpoint'lerinin döndürdüğü sayfalanmış sonuç."
       },
       "PagedResultOfOrderResponse": {
         "required": [
@@ -36010,7 +36122,8 @@
             "type": "integer",
             "format": "int64"
           }
-        }
+        },
+        "description": "Liste endpoint'lerinin döndürdüğü sayfalanmış sonuç."
       },
       "PagedResultOfParcelResponse": {
         "required": [
@@ -36039,7 +36152,8 @@
             "type": "integer",
             "format": "int64"
           }
-        }
+        },
+        "description": "Liste endpoint'lerinin döndürdüğü sayfalanmış sonuç."
       },
       "PagedResultOfPaymentResponse": {
         "required": [
@@ -36068,7 +36182,8 @@
             "type": "integer",
             "format": "int64"
           }
-        }
+        },
+        "description": "Liste endpoint'lerinin döndürdüğü sayfalanmış sonuç."
       },
       "PagedResultOfPaymentTransactionResponse": {
         "required": [
@@ -36097,7 +36212,8 @@
             "type": "integer",
             "format": "int64"
           }
-        }
+        },
+        "description": "Liste endpoint'lerinin döndürdüğü sayfalanmış sonuç."
       },
       "PagedResultOfPersonResponse": {
         "required": [
@@ -36126,7 +36242,8 @@
             "type": "integer",
             "format": "int64"
           }
-        }
+        },
+        "description": "Liste endpoint'lerinin döndürdüğü sayfalanmış sonuç."
       },
       "PagedResultOfPlanResponse": {
         "required": [
@@ -36155,7 +36272,8 @@
             "type": "integer",
             "format": "int64"
           }
-        }
+        },
+        "description": "Liste endpoint'lerinin döndürdüğü sayfalanmış sonuç."
       },
       "PagedResultOfPreferenceResponse": {
         "required": [
@@ -36184,7 +36302,8 @@
             "type": "integer",
             "format": "int64"
           }
-        }
+        },
+        "description": "Liste endpoint'lerinin döndürdüğü sayfalanmış sonuç."
       },
       "PagedResultOfProductExportResponse": {
         "required": [
@@ -36213,7 +36332,8 @@
             "type": "integer",
             "format": "int64"
           }
-        }
+        },
+        "description": "Liste endpoint'lerinin döndürdüğü sayfalanmış sonuç."
       },
       "PagedResultOfProductImportResponse": {
         "required": [
@@ -36242,7 +36362,8 @@
             "type": "integer",
             "format": "int64"
           }
-        }
+        },
+        "description": "Liste endpoint'lerinin döndürdüğü sayfalanmış sonuç."
       },
       "PagedResultOfProductNoteResponse": {
         "required": [
@@ -36271,7 +36392,8 @@
             "type": "integer",
             "format": "int64"
           }
-        }
+        },
+        "description": "Liste endpoint'lerinin döndürdüğü sayfalanmış sonuç."
       },
       "PagedResultOfProductResponse": {
         "required": [
@@ -36300,7 +36422,8 @@
             "type": "integer",
             "format": "int64"
           }
-        }
+        },
+        "description": "Liste endpoint'lerinin döndürdüğü sayfalanmış sonuç."
       },
       "PagedResultOfProductReviewResponse": {
         "required": [
@@ -36329,7 +36452,8 @@
             "type": "integer",
             "format": "int64"
           }
-        }
+        },
+        "description": "Liste endpoint'lerinin döndürdüğü sayfalanmış sonuç."
       },
       "PagedResultOfPurchaseRequestResponse": {
         "required": [
@@ -36358,7 +36482,8 @@
             "type": "integer",
             "format": "int64"
           }
-        }
+        },
+        "description": "Liste endpoint'lerinin döndürdüğü sayfalanmış sonuç."
       },
       "PagedResultOfQuoteResponse": {
         "required": [
@@ -36387,7 +36512,8 @@
             "type": "integer",
             "format": "int64"
           }
-        }
+        },
+        "description": "Liste endpoint'lerinin döndürdüğü sayfalanmış sonuç."
       },
       "PagedResultOfReceiptResponse": {
         "required": [
@@ -36416,7 +36542,8 @@
             "type": "integer",
             "format": "int64"
           }
-        }
+        },
+        "description": "Liste endpoint'lerinin döndürdüğü sayfalanmış sonuç."
       },
       "PagedResultOfRefundResponse": {
         "required": [
@@ -36445,7 +36572,8 @@
             "type": "integer",
             "format": "int64"
           }
-        }
+        },
+        "description": "Liste endpoint'lerinin döndürdüğü sayfalanmış sonuç."
       },
       "PagedResultOfReplyResponse": {
         "required": [
@@ -36474,7 +36602,8 @@
             "type": "integer",
             "format": "int64"
           }
-        }
+        },
+        "description": "Liste endpoint'lerinin döndürdüğü sayfalanmış sonuç."
       },
       "PagedResultOfReportExportResponse": {
         "required": [
@@ -36503,7 +36632,8 @@
             "type": "integer",
             "format": "int64"
           }
-        }
+        },
+        "description": "Liste endpoint'lerinin döndürdüğü sayfalanmış sonuç."
       },
       "PagedResultOfReservationResponse": {
         "required": [
@@ -36532,7 +36662,8 @@
             "type": "integer",
             "format": "int64"
           }
-        }
+        },
+        "description": "Liste endpoint'lerinin döndürdüğü sayfalanmış sonuç."
       },
       "PagedResultOfRevisionInfo": {
         "required": [
@@ -36561,7 +36692,8 @@
             "type": "integer",
             "format": "int64"
           }
-        }
+        },
+        "description": "Liste endpoint'lerinin döndürdüğü sayfalanmış sonuç."
       },
       "PagedResultOfShoppingListItemResponse": {
         "required": [
@@ -36590,7 +36722,8 @@
             "type": "integer",
             "format": "int64"
           }
-        }
+        },
+        "description": "Liste endpoint'lerinin döndürdüğü sayfalanmış sonuç."
       },
       "PagedResultOfShoppingListResponse": {
         "required": [
@@ -36619,7 +36752,8 @@
             "type": "integer",
             "format": "int64"
           }
-        }
+        },
+        "description": "Liste endpoint'lerinin döndürdüğü sayfalanmış sonuç."
       },
       "PagedResultOfStaffMemberResponse": {
         "required": [
@@ -36648,7 +36782,8 @@
             "type": "integer",
             "format": "int64"
           }
-        }
+        },
+        "description": "Liste endpoint'lerinin döndürdüğü sayfalanmış sonuç."
       },
       "PagedResultOfStockLevelResponse": {
         "required": [
@@ -36677,7 +36812,8 @@
             "type": "integer",
             "format": "int64"
           }
-        }
+        },
+        "description": "Liste endpoint'lerinin döndürdüğü sayfalanmış sonuç."
       },
       "PagedResultOfStockMovementResponse": {
         "required": [
@@ -36706,7 +36842,8 @@
             "type": "integer",
             "format": "int64"
           }
-        }
+        },
+        "description": "Liste endpoint'lerinin döndürdüğü sayfalanmış sonuç."
       },
       "PagedResultOfSupplierContactResponse": {
         "required": [
@@ -36735,7 +36872,8 @@
             "type": "integer",
             "format": "int64"
           }
-        }
+        },
+        "description": "Liste endpoint'lerinin döndürdüğü sayfalanmış sonuç."
       },
       "PagedResultOfSupplierProductResponse": {
         "required": [
@@ -36764,7 +36902,8 @@
             "type": "integer",
             "format": "int64"
           }
-        }
+        },
+        "description": "Liste endpoint'lerinin döndürdüğü sayfalanmış sonuç."
       },
       "PagedResultOfSupplierRateResponse": {
         "required": [
@@ -36793,7 +36932,8 @@
             "type": "integer",
             "format": "int64"
           }
-        }
+        },
+        "description": "Liste endpoint'lerinin döndürdüğü sayfalanmış sonuç."
       },
       "PagedResultOfSupplierResponse": {
         "required": [
@@ -36822,7 +36962,8 @@
             "type": "integer",
             "format": "int64"
           }
-        }
+        },
+        "description": "Liste endpoint'lerinin döndürdüğü sayfalanmış sonuç."
       },
       "PagedResultOfSupplyContractResponse": {
         "required": [
@@ -36851,7 +36992,8 @@
             "type": "integer",
             "format": "int64"
           }
-        }
+        },
+        "description": "Liste endpoint'lerinin döndürdüğü sayfalanmış sonuç."
       },
       "PagedResultOfTagResponse": {
         "required": [
@@ -36880,7 +37022,8 @@
             "type": "integer",
             "format": "int64"
           }
-        }
+        },
+        "description": "Liste endpoint'lerinin döndürdüğü sayfalanmış sonuç."
       },
       "PagedResultOfTicketResponse": {
         "required": [
@@ -36909,7 +37052,8 @@
             "type": "integer",
             "format": "int64"
           }
-        }
+        },
+        "description": "Liste endpoint'lerinin döndürdüğü sayfalanmış sonuç."
       },
       "PagedResultOfTruckResponse": {
         "required": [
@@ -36938,7 +37082,8 @@
             "type": "integer",
             "format": "int64"
           }
-        }
+        },
+        "description": "Liste endpoint'lerinin döndürdüğü sayfalanmış sonuç."
       },
       "PagedResultOfVehicleResponse": {
         "required": [
@@ -36967,7 +37112,8 @@
             "type": "integer",
             "format": "int64"
           }
-        }
+        },
+        "description": "Liste endpoint'lerinin döndürdüğü sayfalanmış sonuç."
       },
       "PagedResultOfWebhookEndpointResponse": {
         "required": [
@@ -36996,7 +37142,8 @@
             "type": "integer",
             "format": "int64"
           }
-        }
+        },
+        "description": "Liste endpoint'lerinin döndürdüğü sayfalanmış sonuç."
       },
       "ParcelResponse": {
         "required": [
@@ -38708,7 +38855,8 @@
             "type": "string",
             "format": "date-time"
           }
-        }
+        },
+        "description": "Taslağın yayına alınacağı an (`POST /{id}/schedule`)."
       },
       "PurchaseRequestLineResponse": {
         "required": [
@@ -38841,10 +38989,12 @@
         "properties": {
           "matched": {
             "type": "integer",
+            "description": "Ölçüte uyan kayıtların sayısı.",
             "format": "int64"
           },
           "purged": {
             "type": "integer",
+            "description": "Bu istekte silinen kayıtların sayısı; Matched değerinden azsa istek yinelenir.",
             "format": "int32"
           },
           "sample": {
@@ -38852,9 +39002,11 @@
             "items": {
               "type": "string",
               "format": "uuid"
-            }
+            },
+            "description": "Ölçüte uyan kayıtlardan ilk yüzünün anahtarları."
           }
-        }
+        },
+        "description": "Ölçüte uyan kayıtların topluca silinmesinin sonucu (`POST /purge`). `force` verilmediyse hiçbir şey\r\nsilinmez; yanıt yalnızca neyin silineceğini gösterir."
       },
       "PutCountryRequest": {
         "required": [
@@ -39024,7 +39176,8 @@
             ]
           }
         },
-        "additionalProperties": false
+        "additionalProperties": false,
+        "description": "Sıralanabilir alanların (sayı, tarih) koşulu."
       },
       "RangeConditionOfdecimal": {
         "type": "object",
@@ -39088,7 +39241,8 @@
             ]
           }
         },
-        "additionalProperties": false
+        "additionalProperties": false,
+        "description": "Sıralanabilir alanların (sayı, tarih) koşulu."
       },
       "RangeConditionOfint": {
         "type": "object",
@@ -39152,7 +39306,8 @@
             ]
           }
         },
-        "additionalProperties": false
+        "additionalProperties": false,
+        "description": "Sıralanabilir alanların (sayı, tarih) koşulu."
       },
       "ReadAllResult": {
         "required": [
@@ -39162,9 +39317,11 @@
         "properties": {
           "updated": {
             "type": "integer",
+            "description": "Okundu olarak işaretlenen kayıt sayısı.",
             "format": "int32"
           }
-        }
+        },
+        "description": "\"Hepsini okundu işaretle\" çağrısının sonucu."
       },
       "ReadState": {
         "required": [
@@ -39181,9 +39338,11 @@
               "null",
               "string"
             ],
+            "description": "Kaydın okunduğu an; okunmadıysa boştur.",
             "format": "date-time"
           }
-        }
+        },
+        "description": "Geçerli kullanıcının bir kaydı okuyup okumadığı (`GET /{id}/read-state`)."
       },
       "ReceiptResponse": {
         "required": [
@@ -39217,7 +39376,8 @@
           "Weekly",
           "Monthly",
           "Yearly"
-        ]
+        ],
+        "description": "Bir kaydın hangi aralıkla yinelendiği."
       },
       "RefreshRequest": {
         "required": [
@@ -39567,6 +39727,7 @@
         "properties": {
           "id": {
             "type": "integer",
+            "description": "Sürümün kimliği; kaydın sürümleri arasında artan sıradadır.",
             "format": "int64"
           },
           "createdAt": {
@@ -39577,9 +39738,11 @@
             "type": [
               "null",
               "string"
-            ]
+            ],
+            "description": "Sürümü oluşturan yazmayı yapan kullanıcı."
           }
-        }
+        },
+        "description": "Bir kaydın saklanmış bir sürümü."
       },
       "ShippingQuote": {
         "required": [
@@ -39856,10 +40019,12 @@
             ]
           },
           "ignoreCase": {
-            "type": "boolean"
+            "type": "boolean",
+            "description": "Karşılaştırmalar büyük/küçük harf ayrımı yapmadan yapılsın mı."
           }
         },
-        "additionalProperties": false
+        "additionalProperties": false,
+        "description": "Metin alanı koşulu."
       },
       "SupersedeQuoteRequest": {
         "type": "object",
@@ -40282,7 +40447,8 @@
             "type": "integer",
             "format": "int64"
           }
-        }
+        },
+        "description": "Okunmamış kayıtların sayısı."
       },
       "UpdateAddressNoteRequest": {
         "required": [

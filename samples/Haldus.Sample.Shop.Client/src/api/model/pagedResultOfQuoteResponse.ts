@@ -6,6 +6,9 @@
  */
 import type { QuoteResponse } from './quoteResponse';
 
+/**
+ * Liste endpoint'lerinin döndürdüğü sayfalanmış sonuç.
+ */
 export interface PagedResultOfQuoteResponse {
   items: QuoteResponse[];
   page: number;

@@ -6,6 +6,9 @@
  */
 import type { BrandResponse } from './brandResponse';
 
+/**
+ * Liste endpoint'lerinin döndürdüğü sayfalanmış sonuç.
+ */
 export interface PagedResultOfBrandResponse {
   items: BrandResponse[];
   page: number;

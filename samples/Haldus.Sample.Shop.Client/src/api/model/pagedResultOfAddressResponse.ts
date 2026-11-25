@@ -6,6 +6,9 @@
  */
 import type { AddressResponse } from './addressResponse';
 
+/**
+ * Liste endpoint'lerinin döndürdüğü sayfalanmış sonuç.
+ */
 export interface PagedResultOfAddressResponse {
   items: AddressResponse[];
   page: number;

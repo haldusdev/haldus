@@ -6,6 +6,9 @@
  */
 import type { ReportExportResponse } from './reportExportResponse';
 
+/**
+ * Liste endpoint'lerinin döndürdüğü sayfalanmış sonuç.
+ */
 export interface PagedResultOfReportExportResponse {
   items: ReportExportResponse[];
   page: number;

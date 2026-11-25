@@ -6,6 +6,9 @@
  */
 import type { DiscussionResponse } from './discussionResponse';
 
+/**
+ * Liste endpoint'lerinin döndürdüğü sayfalanmış sonuç.
+ */
 export interface PagedResultOfDiscussionResponse {
   items: DiscussionResponse[];
   page: number;

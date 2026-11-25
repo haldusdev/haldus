@@ -6,6 +6,9 @@
  */
 import type { ContactResponse } from './contactResponse';
 
+/**
+ * Liste endpoint'lerinin döndürdüğü sayfalanmış sonuç.
+ */
 export interface PagedResultOfContactResponse {
   items: ContactResponse[];
   page: number;

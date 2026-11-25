@@ -6,6 +6,9 @@
  */
 import type { CarResponse } from './carResponse';
 
+/**
+ * Liste endpoint'lerinin döndürdüğü sayfalanmış sonuç.
+ */
 export interface PagedResultOfCarResponse {
   items: CarResponse[];
   page: number;

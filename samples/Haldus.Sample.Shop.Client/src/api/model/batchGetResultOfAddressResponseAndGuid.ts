@@ -6,6 +6,9 @@
  */
 import type { AddressResponse } from './addressResponse';
 
+/**
+ * Toplu okumanın sonucu: bulunan kayıtlar ve bulunamayan (veya isteği yapanın göremediği) kimlikler.
+ */
 export interface BatchGetResultOfAddressResponseAndGuid {
   items: AddressResponse[];
   notFound: string[];

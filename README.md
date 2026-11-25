@@ -26,6 +26,30 @@ Bu iki parçadan Haldus şunları üretir:
   `DELETE /products/{id}`,
 - EF Core model kaydı.
 
+## Kurulum
+
+```xml
+<PackageReference Include="Haldus.AspNetCore" Version="0.1.0-preview.1" />
+```
+
+Kaynak üreticisi (generator) bu paketin içinde gelir; ayrıca eklenmez. Veritabanı bağlamı `partial` yazılır, Haldus
+eşlenen entity'lerin `DbSet` özelliklerini öteki yarısına ekler:
+
+```csharp
+public partial class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(options);
+```
+
+Paketler henüz bir NuGet kaynağında yayınlanmadı: depodan üretilir ve yerel bir klasörden tüketilir (aşağıda,
+[Geliştirme](#geliştirme)). Sürüm bir ön sürümdür; API değişebilir.
+
+| Paket | İçeriği |
+|---|---|
+| `Haldus.AspNetCore` | `AddHaldus`, `Map*` giriş noktaları ve generator. Çoğu uygulamanın eklediği tek paket. |
+| `Haldus.EntityFrameworkCore`, `Haldus.Abstractions` | Model katmanı ve sözleşmeler; `Haldus.AspNetCore` ile birlikte gelir. |
+| `Haldus.Jobs.InMemory`, `Haldus.Jobs.PostgreSql`, `Haldus.Jobs.Hangfire` | `MapJob` işlerinin altyapısı; biri seçilir. |
+| `Haldus.Storage.S3` | `MapFile` içerikleri için S3 uyumlu nesne deposu. |
+| `Haldus.Events.Sqs`, `Haldus.Events.RabbitMq`, `Haldus.Events.Kafka` | Olayları kuyruğa taşıyan yayıncılar. |
+
 ## Archetype'lar
 
 Her archetype bir kaynağın hangi işlemlere sahip olduğunu seçer:
@@ -947,6 +971,26 @@ dotnet test
 
 Entegrasyon testleri Docker gerektirir. Örnek arayüzlerin komutları (`pnpm dev`, `pnpm generate:api`, `pnpm typecheck`)
 kendi README dosyalarındadır.
+
+Paketler `artifacts/packages` klasörüne üretilir:
+
+```bash
+dotnet pack -c Release -o artifacts/packages
+```
+
+Başka bir depodaki proje bu klasörü `nuget.config` dosyasında bir paket kaynağı olarak tanıtır:
+
+```xml
+<configuration>
+  <packageSources>
+    <add key="haldus-local" value="..\haldus\artifacts\packages" />
+  </packageSources>
+</configuration>
+```
+
+NuGet bir paketi sürümüyle önbelleğe alır: aynı sürüm numarasıyla yeniden üretilen paket, tüketen projeye kendiliğinden
+ulaşmaz. Ya sürüm ilerletilir (`dotnet pack -c Release -o artifacts/packages --version-suffix preview.2`) ya da
+önbellekteki `haldus.*` klasörleri silinir (`%USERPROFILE%\.nuget\packages`).
 
 Kilide dayanan özelliklerin (boşluksuz numara, sıra, bakiye, toplanan alan, türetme, dönem) yük altındaki davranışı
 [Haldus.LoadTest](tools/Haldus.LoadTest) ile ölçülür; araç çalışan bir örnek mağazaya HTTP üzerinden yüklenir. Bir

@@ -5,6 +5,9 @@
  * OpenAPI spec version: 1.0.0
  */
 
+/**
+ * Sıralanabilir alanların (sayı, tarih) koşulu.
+ */
 export interface RangeConditionOfint {
   /** @nullable */
   eq?: number | null;

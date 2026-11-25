@@ -7,9 +7,14 @@
 import type { ChangeSetStatus } from './changeSetStatus';
 import type { JsonElement } from './jsonElement';
 
+/**
+ * Bir kayda uygulanmak üzere biriktirilen değişiklikler (`.ChangeSets()`): verilmiş bir siparişin düzenlenmesi
+ * gibi, adım adım hazırlanan, önizlenen ve sonunda tek seferde uygulanan bir düzenleme oturumu.
+ */
 export interface ChangeSetInfo {
   id: string;
   status: ChangeSetStatus;
+  /** Biriken değişiklikler: kaydın kısmi güncelleme (`PATCH`) gövdesiyle aynı biçimde. */
   changes: JsonElement;
   createdAt: string;
   /** @nullable */

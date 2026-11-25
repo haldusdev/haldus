@@ -6,6 +6,9 @@
  */
 import type { StockLevelResponse } from './stockLevelResponse';
 
+/**
+ * Liste endpoint'lerinin döndürdüğü sayfalanmış sonuç.
+ */
 export interface PagedResultOfStockLevelResponse {
   items: StockLevelResponse[];
   page: number;

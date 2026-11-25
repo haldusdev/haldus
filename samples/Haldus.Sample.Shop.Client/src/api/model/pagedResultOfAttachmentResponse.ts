@@ -6,6 +6,9 @@
  */
 import type { AttachmentResponse } from './attachmentResponse';
 
+/**
+ * Liste endpoint'lerinin döndürdüğü sayfalanmış sonuç.
+ */
 export interface PagedResultOfAttachmentResponse {
   items: AttachmentResponse[];
   page: number;

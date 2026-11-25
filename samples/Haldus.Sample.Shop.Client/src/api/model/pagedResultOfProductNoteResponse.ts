@@ -6,6 +6,9 @@
  */
 import type { ProductNoteResponse } from './productNoteResponse';
 
+/**
+ * Liste endpoint'lerinin döndürdüğü sayfalanmış sonuç.
+ */
 export interface PagedResultOfProductNoteResponse {
   items: ProductNoteResponse[];
   page: number;

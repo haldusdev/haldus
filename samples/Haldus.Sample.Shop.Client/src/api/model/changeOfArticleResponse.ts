@@ -6,9 +6,15 @@
  */
 import type { ArticleResponse } from './articleResponse';
 
+/**
+ * Değişiklik akışındaki tek bir kayıt.
+ */
 export interface ChangeOfArticleResponse {
+  /** Kaydın anahtarı, metin olarak. */
   id: string;
+  /** Kayıt artık yok (silindi ya da isteği yapana görünmez oldu); Record boştur. */
   deleted: boolean;
   record: null | ArticleResponse;
+  /** Kaydın bu sayfadaki son değişikliğinin zamanı. */
   changedAt: string;
 }

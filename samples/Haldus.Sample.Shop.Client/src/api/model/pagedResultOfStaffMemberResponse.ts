@@ -6,6 +6,9 @@
  */
 import type { StaffMemberResponse } from './staffMemberResponse';
 
+/**
+ * Liste endpoint'lerinin döndürdüğü sayfalanmış sonuç.
+ */
 export interface PagedResultOfStaffMemberResponse {
   items: StaffMemberResponse[];
   page: number;

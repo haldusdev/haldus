@@ -5,8 +5,12 @@
  * OpenAPI spec version: 1.0.0
  */
 
+/**
+ * Onay ve ret uçlarının isteğe bağlı gövdesi.
+ */
 export interface ApprovalDecisionRequest {
   /**
+     * Kararın gerekçesi; karar kaydında saklanır.
      * @maxLength 1000
      * @nullable
      */

@@ -6,6 +6,9 @@
  */
 import type { SupplierProductResponse } from './supplierProductResponse';
 
+/**
+ * Liste endpoint'lerinin döndürdüğü sayfalanmış sonuç.
+ */
 export interface PagedResultOfSupplierProductResponse {
   items: SupplierProductResponse[];
   page: number;

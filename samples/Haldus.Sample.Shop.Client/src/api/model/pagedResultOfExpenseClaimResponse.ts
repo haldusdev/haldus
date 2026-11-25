@@ -6,6 +6,9 @@
  */
 import type { ExpenseClaimResponse } from './expenseClaimResponse';
 
+/**
+ * Liste endpoint'lerinin döndürdüğü sayfalanmış sonuç.
+ */
 export interface PagedResultOfExpenseClaimResponse {
   items: ExpenseClaimResponse[];
   page: number;

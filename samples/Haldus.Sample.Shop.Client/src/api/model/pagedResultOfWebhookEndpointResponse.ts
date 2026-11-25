@@ -6,6 +6,9 @@
  */
 import type { WebhookEndpointResponse } from './webhookEndpointResponse';
 
+/**
+ * Liste endpoint'lerinin döndürdüğü sayfalanmış sonuç.
+ */
 export interface PagedResultOfWebhookEndpointResponse {
   items: WebhookEndpointResponse[];
   page: number;

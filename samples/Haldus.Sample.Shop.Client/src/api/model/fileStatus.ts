@@ -5,6 +5,9 @@
  * OpenAPI spec version: 1.0.0
  */
 
+/**
+ * Bir dosya kaydının (`MapFile`) içeriğinin durumu.
+ */
 export type FileStatus = typeof FileStatus[keyof typeof FileStatus];
 
 

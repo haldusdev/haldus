@@ -5,8 +5,13 @@
  * OpenAPI spec version: 1.0.0
  */
 
+/**
+ * Bir kayıt için verilmiş tek bir karar.
+ */
 export interface ApprovalDecision {
+  /** Kararın verildiği düzey (1'den başlar). */
   level: number;
+  /** Onay mı, ret mi. */
   approved: boolean;
   userId: string;
   /** @nullable */

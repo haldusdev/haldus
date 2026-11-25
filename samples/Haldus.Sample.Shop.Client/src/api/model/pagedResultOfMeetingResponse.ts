@@ -6,6 +6,9 @@
  */
 import type { MeetingResponse } from './meetingResponse';
 
+/**
+ * Liste endpoint'lerinin döndürdüğü sayfalanmış sonuç.
+ */
 export interface PagedResultOfMeetingResponse {
   items: MeetingResponse[];
   page: number;

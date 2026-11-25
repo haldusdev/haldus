@@ -5,8 +5,14 @@
  * OpenAPI spec version: 1.0.0
  */
 
+/**
+ * Geçerli kullanıcının bir kaydı okuyup okumadığı (`GET /{id}/read-state`).
+ */
 export interface ReadState {
   read: boolean;
-  /** @nullable */
+  /**
+     * Kaydın okunduğu an; okunmadıysa boştur.
+     * @nullable
+     */
   readAt: string | null;
 }

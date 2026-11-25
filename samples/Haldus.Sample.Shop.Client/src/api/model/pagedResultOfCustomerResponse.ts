@@ -6,6 +6,9 @@
  */
 import type { CustomerResponse } from './customerResponse';
 
+/**
+ * Liste endpoint'lerinin döndürdüğü sayfalanmış sonuç.
+ */
 export interface PagedResultOfCustomerResponse {
   items: CustomerResponse[];
   page: number;

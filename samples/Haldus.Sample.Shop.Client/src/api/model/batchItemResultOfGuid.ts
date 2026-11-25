@@ -6,8 +6,13 @@
  */
 import type { ProblemDetails } from './problemDetails';
 
+/**
+ * Toplu işlemdeki tek bir öğenin sonucu.
+ */
 export interface BatchItemResultOfGuid {
+  /** Öğenin istekteki sırası. */
   index: number;
+  /** Öğe tek başına gönderilseydi dönecek HTTP durum kodu. */
   status: number;
   item: string;
   problem: null | ProblemDetails;

@@ -5,9 +5,16 @@
  * OpenAPI spec version: 1.0.0
  */
 
+/**
+ * Bakiyeyi mutlak bir değere çeker (`POST /{key}/set`); sayım sonucu gibi. decimal? BalanceSetting.Expected verilirse
+ * yalnızca bakiye hâlâ o değerdeyse yazılır.
+ */
 export interface BalanceSetting {
   quantity?: number;
-  /** @nullable */
+  /**
+     * İstemcinin gördüğü bakiye; verilmişse ve bakiye bu sırada değiştiyse istek 409 ile reddedilir.
+     * @nullable
+     */
   expected?: number | null;
   /**
      * @maxLength 64

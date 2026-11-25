@@ -5,6 +5,9 @@
  * OpenAPI spec version: 1.0.0
  */
 
+/**
+ * Onay bekleyen bir kaydın (`.Approvable()`) onay durumu.
+ */
 export type ApprovalStatus = typeof ApprovalStatus[keyof typeof ApprovalStatus];
 
 

@@ -5,6 +5,9 @@
  * OpenAPI spec version: 1.0.0
  */
 
+/**
+ * Okunmamış kayıtların sayısı.
+ */
 export interface UnreadCount {
   count: number;
 }

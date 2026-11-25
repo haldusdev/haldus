@@ -5,10 +5,16 @@
  * OpenAPI spec version: 1.0.0
  */
 
+/**
+ * Bakiyenin defterindeki bir kayıt: bakiyeyi değiştiren her yazma bir tane üretir.
+ */
 export interface BalanceEntry {
+  /** Kaydın sırası; aynı bakiyenin kayıtları arasında artar. */
   id: number;
   bucket: string;
+  /** Kovadaki değişim. */
   delta: number;
+  /** Kovanın bu kayıttan sonraki bakiyesi. */
   balance: number;
   /** @nullable */
   reason: string | null;

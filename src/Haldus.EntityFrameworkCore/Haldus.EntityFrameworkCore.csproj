@@ -2,6 +2,7 @@
 
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
+    <Description>Haldus'un EF Core katmanı: model kayıt defteri, interceptor'lar ve sorgu filtreleri.</Description>
   </PropertyGroup>
 
   <ItemGroup>

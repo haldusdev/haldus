@@ -6,6 +6,9 @@
  */
 import type { PersonResponse } from './personResponse';
 
+/**
+ * Liste endpoint'lerinin döndürdüğü sayfalanmış sonuç.
+ */
 export interface PagedResultOfPersonResponse {
   items: PersonResponse[];
   page: number;

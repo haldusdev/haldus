@@ -6,6 +6,9 @@
  */
 import type { SupplyContractResponse } from './supplyContractResponse';
 
+/**
+ * Liste endpoint'lerinin döndürdüğü sayfalanmış sonuç.
+ */
 export interface PagedResultOfSupplyContractResponse {
   items: SupplyContractResponse[];
   page: number;

@@ -6,6 +6,9 @@
  */
 import type { ProductResponse } from './productResponse';
 
+/**
+ * Atomik bir toplu yazmanın sonucu: öğeler, istekteki sırayla.
+ */
 export interface BatchResultOfProductResponse {
   items: ProductResponse[];
 }

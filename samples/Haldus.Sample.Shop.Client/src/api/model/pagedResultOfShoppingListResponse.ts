@@ -6,6 +6,9 @@
  */
 import type { ShoppingListResponse } from './shoppingListResponse';
 
+/**
+ * Liste endpoint'lerinin döndürdüğü sayfalanmış sonuç.
+ */
 export interface PagedResultOfShoppingListResponse {
   items: ShoppingListResponse[];
   page: number;

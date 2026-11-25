@@ -6,6 +6,9 @@
  */
 import type { PaymentResponse } from './paymentResponse';
 
+/**
+ * Liste endpoint'lerinin döndürdüğü sayfalanmış sonuç.
+ */
 export interface PagedResultOfPaymentResponse {
   items: PaymentResponse[];
   page: number;

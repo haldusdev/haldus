@@ -6,6 +6,9 @@
  */
 import type { PlanResponse } from './planResponse';
 
+/**
+ * Liste endpoint'lerinin döndürdüğü sayfalanmış sonuç.
+ */
 export interface PagedResultOfPlanResponse {
   items: PlanResponse[];
   page: number;

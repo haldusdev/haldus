@@ -12,6 +12,8 @@ EF Core yapılandırması üretilir.
 - Snapshot'ları onaylamak: `HALDUS_ACCEPT_SNAPSHOTS=1` ortam değişkeniyle generator testlerini çalıştır.
   Fark olduğunda test, `Snapshots/` altına `.received.cs` yazar; önce onu incele.
 - Test çalıştırıcısı Microsoft.Testing.Platform'dur (`global.json`); xUnit v3, .NET 10 SDK'da VSTest ile çalışmaz.
+- Paketleme: `dotnet pack -c Release -o artifacts/packages` (`src` altındaki on kütüphane; klasör `.gitignore`'dadır).
+  Ayrıntısı aşağıda, "Paketleme".
 - Örnek uygulamanın `openapi.json` dosyası build sırasında yeniden üretilir.
 - Örnek mağazanın istemcisi (`samples/Haldus.Sample.Shop.Client`): `pnpm install`, `pnpm generate:api`,
   `pnpm typecheck`. **Örnek mağazada bir uç veya DTO değiştiğinde (üretilen kod değiştiğinde de) backend derlendikten
@@ -380,6 +382,54 @@ Bunlar kullanıcıyla kararlaştırıldı; yeniden sorma.
 - Veritabanı: PostgreSQL. ORM: EF Core.
 - Test: xUnit v3, entegrasyon testlerinde Testcontainers. Snapshot karşılaştırması repo içindeki
   `Snapshot` yardımcısıyla yapılır; Verify kullanılmaz (33.x sürümü sponsorluk lisansı istiyor).
+
+## Paketleme
+
+Kullanıcı kararları (2026-11-25; soruldu ve yanıtlandı), yeniden sorma:
+
+- Paket kimlikleri proje adlarıdır (`Haldus.*`); nuget.org'daki `Haldus` kuruluşu kullanıcınındır.
+- İlk sürüm `0.1.0-preview.1`. Sürüm bütün paketlerde aynıdır ve tek yerde durur (`src/Directory.Build.props`:
+  `VersionPrefix` + `VersionSuffix`).
+- Generator ayrı bir paket değildir: `Haldus.AspNetCore` paketinin `analyzers/dotnet/cs` klasöründe gelir. Üretilen kod
+  çalışma zamanı API'lerini çağırdığı için ikisinin sürümü ayrışmamalıdır.
+
+Nasıl kurulu:
+
+- Paket ayarları `src/Directory.Build.props` içindedir; kökteki dosya her şeyi paketlenmez yapar (`IsPackable=false`),
+  `src` altı geri açar. Her kütüphanenin kendi proje dosyasında yalnızca `Description` vardır. **`src` altına eklenen
+  yeni bir kütüphane `Description` taşımalıdır;** paket olmayacaksa (`Haldus.Generators` gibi) `IsPackable=false` yazar.
+- `Haldus.AspNetCore`, generator projesine yalnızca derleme sırası için başvurur (`ReferenceOutputAssembly="false"`,
+  `PrivateAssets="all"`: generator'ı kendisi çalıştırmaz, pakete bağımlılık olarak yazılmaz) ve derlenen dosyayı pakete
+  koyar. Örnekler ve testler generator'a eskisi gibi proje başvurusuyla, analyzer olarak başvurur.
+- **`Haldus.AspNetCore`'a başvuran her paket bunu `PrivateAssets="none"` ile yapar** (`Haldus.Jobs.*`,
+  `Haldus.Storage.S3`). Varsayılan başvuru pakete `exclude="Build,Analyzers"` yazar; o zaman yalnızca
+  `Haldus.Jobs.PostgreSql` ekleyen bir uygulama `MapCrud` çağrısını derler ama generator çalışmaz ve hata ancak çalışma
+  anında görülür.
+- Belge yorumları pakete girer (`GenerateDocumentationFile`). Eksik yorum hata değildir (`CS1591`, `CS1573` kapalı);
+  yanlış yorum (bozuk XML, var olmayan parametre veya tip parametresi, çözülemeyen `cref`) derlemeyi durdurur.
+  **Belge yorumları API şemasına da girer:** ASP.NET Core'un OpenAPI üreticisi başvurulan derlemelerin belge
+  dosyalarını okur, bu yüzden Haldus'un istek ve yanıtlarda görünen tiplerinin (`ApprovalDecision`, `BalanceEntry`...)
+  ve alanlarının yorumları tüketen uygulamanın `openapi.json` dosyasında `description` olur (örnek mağazada ve
+  istemcilerinde öyle oldu). Böyle bir tipin yorumunu değiştirmek şemayı değiştirir; istemciler yeniden üretilir.
+- Semboller derlemenin içindedir (`DebugType=embedded`); ayrı sembol paketi üretilmez.
+- Paketin README'si kökteki `README.md`'dir (bütün paketlerde aynı).
+
+Denenen (elle, depo dışında bir klasörde; otomatik testi yoktur): yalnızca `Haldus.AspNetCore` paketine başvuran bir
+uygulama derlendi, generator çalıştı ve uygulama geçici bir PostgreSQL kapsayıcısına karşı çalıştırıldı (oluşturma,
+alan düzeyinde 400, Türkçe mesaj: uydu kaynak derlemesi de paketten geliyor). Sonra uygulama yalnızca
+`Haldus.Jobs.InMemory` paketine ve paketi kullanan bir sınıf kütüphanesine (modül) başvuracak biçimde değiştirildi:
+generator ikisinde de çalıştı ve modülün ucu yanıt verdi.
+
+Bilinenler:
+
+- Paketler hiçbir NuGet kaynağında yayınlanmadı; yayınlamak kullanıcının kararıdır. Lisans dosyası ve paketlerde lisans
+  bilgisi yoktur (kullanıcı bir lisans seçmedi; uydurulmaz).
+- NuGet paketi sürümüyle önbelleğe alır: aynı sürümle yeniden üretilen paket tüketene ulaşmaz. Denerken ya sürüm
+  ilerletilir (`--version-suffix preview.2`) ya da tüketen tarafta ayrı bir paket klasörü kullanılır
+  (`nuget.config`: `globalPackagesFolder`).
+- Pakete yazılan commit kimliği paketlemenin yapıldığı andaki `HEAD`'dir; commit'lenmemiş değişiklikle üretilen paket
+  yanlış commit'i gösterir.
+- Çözüm paketlenirken iki web projesi için "paketleme devre dışı" uyarısı yazılır; zararsızdır.
 
 ## Aşamalar
 

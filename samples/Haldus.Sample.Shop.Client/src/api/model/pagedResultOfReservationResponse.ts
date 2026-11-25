@@ -6,6 +6,9 @@
  */
 import type { ReservationResponse } from './reservationResponse';
 
+/**
+ * Liste endpoint'lerinin döndürdüğü sayfalanmış sonuç.
+ */
 export interface PagedResultOfReservationResponse {
   items: ReservationResponse[];
   page: number;

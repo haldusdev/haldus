@@ -6,6 +6,9 @@
  */
 import type { InvitationResponse } from './invitationResponse';
 
+/**
+ * Liste endpoint'lerinin döndürdüğü sayfalanmış sonuç.
+ */
 export interface PagedResultOfInvitationResponse {
   items: InvitationResponse[];
   page: number;

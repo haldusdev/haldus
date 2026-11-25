@@ -6,6 +6,9 @@
  */
 import type { ContactResponse } from './contactResponse';
 
+/**
+ * Atomik bir toplu yazmanın sonucu: öğeler, istekteki sırayla.
+ */
 export interface BatchResultOfContactResponse {
   items: ContactResponse[];
 }

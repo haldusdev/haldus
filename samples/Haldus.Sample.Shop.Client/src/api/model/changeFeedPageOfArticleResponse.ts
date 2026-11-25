@@ -6,8 +6,13 @@
  */
 import type { ChangeOfArticleResponse } from './changeOfArticleResponse';
 
+/**
+ * Değişiklik akışının bir sayfası.
+ */
 export interface ChangeFeedPageOfArticleResponse {
   items: ChangeOfArticleResponse[];
+  /** Bir sonraki istekte `since` olarak gönderilecek imleç. */
   next: number;
+  /** Bu imleçten sonra okunmayı bekleyen değişiklik var mı. */
   hasMore: boolean;
 }

@@ -6,6 +6,9 @@
  */
 import type { ProductResponse } from './productResponse';
 
+/**
+ * Toplu okumanın sonucu: bulunan kayıtlar ve bulunamayan (veya isteği yapanın göremediği) kimlikler.
+ */
 export interface BatchGetResultOfProductResponseAndGuid {
   items: ProductResponse[];
   notFound: string[];

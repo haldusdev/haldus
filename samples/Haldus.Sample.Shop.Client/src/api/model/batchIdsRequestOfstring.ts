@@ -5,6 +5,9 @@
  * OpenAPI spec version: 1.0.0
  */
 
+/**
+ * Kimlikleriyle verilen kayıtlar üzerinde toplu okuma ve silme isteği.
+ */
 export interface BatchIdsRequestOfstring {
   ids: string[];
 }

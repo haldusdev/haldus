@@ -6,6 +6,9 @@
  */
 import type { CouponResponse } from './couponResponse';
 
+/**
+ * Liste endpoint'lerinin döndürdüğü sayfalanmış sonuç.
+ */
 export interface PagedResultOfCouponResponse {
   items: CouponResponse[];
   page: number;

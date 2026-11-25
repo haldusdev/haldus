@@ -6,6 +6,9 @@
  */
 import type { LabelResponse } from './labelResponse';
 
+/**
+ * Liste endpoint'lerinin döndürdüğü sayfalanmış sonuç.
+ */
 export interface PagedResultOfLabelResponse {
   items: LabelResponse[];
   page: number;

@@ -34,12 +34,6 @@ public static class HaldusServiceCollectionExtensions
     }
 
     /// <summary>
-    /// Bir modüle kendi bağlamını verir: <typeparamref name="TContext"/> ile aynı assembly'de üretilen
-    /// entity'ler yalnızca bu bağlamın modeline eklenir. Modül böylece kendi şemasına ve migration'larına
-    /// sahip olur. Ayrı bağlamlardaki entity'ler arasında yabancı anahtar kısıtı ve ortak transaction olmaz;
-    /// <c>References&lt;T&gt;()</c> başka modüldeki kayda yalnızca kimliğiyle bağlanır.
-    /// </summary>
-    /// <summary>
     /// Dosya içeriklerini (<c>MapFile</c>) veritabanı yerine verilen klasörde saklar. Birden çok sunucu aynı klasörü
     /// görmelidir.
     /// </summary>
@@ -52,6 +46,12 @@ public static class HaldusServiceCollectionExtensions
         return services;
     }
 
+    /// <summary>
+    /// Bir modüle kendi bağlamını verir: <typeparamref name="TContext"/> ile aynı assembly'de üretilen
+    /// entity'ler yalnızca bu bağlamın modeline eklenir. Modül böylece kendi şemasına ve migration'larına
+    /// sahip olur. Ayrı bağlamlardaki entity'ler arasında yabancı anahtar kısıtı ve ortak transaction olmaz;
+    /// <c>References&lt;T&gt;()</c> başka modüldeki kayda yalnızca kimliğiyle bağlanır.
+    /// </summary>
     public static IServiceCollection AddHaldusModule<TContext>(
         this IServiceCollection services,
         Action<HaldusOptions>? configure = null)

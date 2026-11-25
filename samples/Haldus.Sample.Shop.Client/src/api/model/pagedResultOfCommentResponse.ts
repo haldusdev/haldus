@@ -6,6 +6,9 @@
  */
 import type { CommentResponse } from './commentResponse';
 
+/**
+ * Liste endpoint'lerinin döndürdüğü sayfalanmış sonuç.
+ */
 export interface PagedResultOfCommentResponse {
   items: CommentResponse[];
   page: number;

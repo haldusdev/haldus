@@ -6,6 +6,9 @@
  */
 import type { FeatureFlagResponse } from './featureFlagResponse';
 
+/**
+ * Liste endpoint'lerinin döndürdüğü sayfalanmış sonuç.
+ */
 export interface PagedResultOfFeatureFlagResponse {
   items: FeatureFlagResponse[];
   page: number;

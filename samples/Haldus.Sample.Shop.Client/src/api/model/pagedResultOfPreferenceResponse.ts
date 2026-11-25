@@ -6,6 +6,9 @@
  */
 import type { PreferenceResponse } from './preferenceResponse';
 
+/**
+ * Liste endpoint'lerinin döndürdüğü sayfalanmış sonuç.
+ */
 export interface PagedResultOfPreferenceResponse {
   items: PreferenceResponse[];
   page: number;

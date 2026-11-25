@@ -6,6 +6,9 @@
  */
 import type { StockMovementResponse } from './stockMovementResponse';
 
+/**
+ * Liste endpoint'lerinin döndürdüğü sayfalanmış sonuç.
+ */
 export interface PagedResultOfStockMovementResponse {
   items: StockMovementResponse[];
   page: number;

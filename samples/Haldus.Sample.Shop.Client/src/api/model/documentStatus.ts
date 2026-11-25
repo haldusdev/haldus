@@ -5,6 +5,10 @@
  * OpenAPI spec version: 1.0.0
  */
 
+/**
+ * Belgenin (`.Document()`) sabit durumları: taslak düzenlenir ve silinir, gönderilen belge kilitlidir, iptal
+ * edilen belge yalnızca düzeltilebilir (yeni bir taslak doğar).
+ */
 export type DocumentStatus = typeof DocumentStatus[keyof typeof DocumentStatus];
 
 

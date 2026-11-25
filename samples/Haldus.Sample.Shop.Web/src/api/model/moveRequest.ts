@@ -5,8 +5,12 @@
  * OpenAPI spec version: 1.0.0
  */
 
+/**
+ * Sıralı bir kaydı taşıma isteği: `POST /{id}/move`.
+ */
 export interface MoveRequest {
   /**
+     * Kaydın gideceği yer; listenin dışındaysa kayıt sona gider.
      * @minimum 0
      * @maximum 2147483647
      * @nullable

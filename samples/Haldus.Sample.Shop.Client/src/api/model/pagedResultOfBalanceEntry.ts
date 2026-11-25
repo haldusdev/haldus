@@ -6,6 +6,9 @@
  */
 import type { BalanceEntry } from './balanceEntry';
 
+/**
+ * Liste endpoint'lerinin döndürdüğü sayfalanmış sonuç.
+ */
 export interface PagedResultOfBalanceEntry {
   items: BalanceEntry[];
   page: number;

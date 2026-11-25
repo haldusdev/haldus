@@ -6,6 +6,9 @@
  */
 import type { NotificationResponse } from './notificationResponse';
 
+/**
+ * Liste endpoint'lerinin döndürdüğü sayfalanmış sonuç.
+ */
 export interface PagedResultOfNotificationResponse {
   items: NotificationResponse[];
   page: number;

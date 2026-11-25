@@ -5,9 +5,13 @@
  * OpenAPI spec version: 1.0.0
  */
 
+/**
+ * Bakiyeye karşı bir tutma.
+ */
 export interface BalanceHold {
   id: string;
   quantity: number;
+  /** `Active`, `Captured`, `Released` veya `Expired`. */
   status: string;
   createdAt: string;
   /** @nullable */

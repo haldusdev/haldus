@@ -6,6 +6,9 @@
  */
 import type { ParcelResponse } from './parcelResponse';
 
+/**
+ * Liste endpoint'lerinin döndürdüğü sayfalanmış sonuç.
+ */
 export interface PagedResultOfParcelResponse {
   items: ParcelResponse[];
   page: number;

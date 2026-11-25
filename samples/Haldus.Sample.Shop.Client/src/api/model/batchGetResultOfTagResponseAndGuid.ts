@@ -6,6 +6,9 @@
  */
 import type { TagResponse } from './tagResponse';
 
+/**
+ * Toplu okumanın sonucu: bulunan kayıtlar ve bulunamayan (veya isteği yapanın göremediği) kimlikler.
+ */
 export interface BatchGetResultOfTagResponseAndGuid {
   items: TagResponse[];
   notFound: string[];

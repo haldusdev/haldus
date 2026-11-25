@@ -6,6 +6,9 @@
  */
 import type { LeaveAllowanceResponse } from './leaveAllowanceResponse';
 
+/**
+ * Liste endpoint'lerinin döndürdüğü sayfalanmış sonuç.
+ */
 export interface PagedResultOfLeaveAllowanceResponse {
   items: LeaveAllowanceResponse[];
   page: number;

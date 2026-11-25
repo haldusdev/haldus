@@ -6,6 +6,9 @@
  */
 import type { TicketResponse } from './ticketResponse';
 
+/**
+ * Liste endpoint'lerinin döndürdüğü sayfalanmış sonuç.
+ */
 export interface PagedResultOfTicketResponse {
   items: TicketResponse[];
   page: number;

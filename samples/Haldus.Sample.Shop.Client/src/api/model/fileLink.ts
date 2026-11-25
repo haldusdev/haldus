@@ -5,7 +5,11 @@
  * OpenAPI spec version: 1.0.0
  */
 
+/**
+ * Bir dosyanın içeriğine, oturumu olmayan birinin de açabildiği süreli bağlantı.
+ */
 export interface FileLink {
+  /** Bağlantının adresi; sunucunun köküne görelidir. */
   url: string;
   expiresAt: string;
 }

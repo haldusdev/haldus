@@ -6,6 +6,9 @@
  */
 import type { ReplyResponse } from './replyResponse';
 
+/**
+ * Liste endpoint'lerinin döndürdüğü sayfalanmış sonuç.
+ */
 export interface PagedResultOfReplyResponse {
   items: ReplyResponse[];
   page: number;

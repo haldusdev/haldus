@@ -5,5 +5,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <AnalysisLevel>latest</AnalysisLevel>
+    <!-- Paketlenenler src altındadır (src/Directory.Build.props); testler, örnekler ve araçlar paketlenmez. -->
+    <IsPackable>false</IsPackable>
   </PropertyGroup>
 </Project>

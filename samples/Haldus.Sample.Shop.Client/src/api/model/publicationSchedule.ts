@@ -5,6 +5,9 @@
  * OpenAPI spec version: 1.0.0
  */
 
+/**
+ * Taslağın yayına alınacağı an (`POST /{id}/schedule`).
+ */
 export interface PublicationSchedule {
   publishAt: string;
 }

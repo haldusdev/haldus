@@ -5,6 +5,9 @@
  * OpenAPI spec version: 1.0.0
  */
 
+/**
+ * Özel bir alanın değerinin türü.
+ */
 export type CustomFieldType = typeof CustomFieldType[keyof typeof CustomFieldType];
 
 

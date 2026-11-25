@@ -6,6 +6,9 @@
  */
 import type { TagResponse } from './tagResponse';
 
+/**
+ * Liste endpoint'lerinin döndürdüğü sayfalanmış sonuç.
+ */
 export interface PagedResultOfTagResponse {
   items: TagResponse[];
   page: number;

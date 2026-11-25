@@ -6,6 +6,9 @@
  */
 import type { BudgetRequestResponse } from './budgetRequestResponse';
 
+/**
+ * Liste endpoint'lerinin döndürdüğü sayfalanmış sonuç.
+ */
 export interface PagedResultOfBudgetRequestResponse {
   items: BudgetRequestResponse[];
   page: number;

@@ -6,6 +6,9 @@
  */
 import type { BasketResponse } from './basketResponse';
 
+/**
+ * Liste endpoint'lerinin döndürdüğü sayfalanmış sonuç.
+ */
 export interface PagedResultOfBasketResponse {
   items: BasketResponse[];
   page: number;

@@ -6,6 +6,9 @@
  */
 import type { TruckResponse } from './truckResponse';
 
+/**
+ * Liste endpoint'lerinin döndürdüğü sayfalanmış sonuç.
+ */
 export interface PagedResultOfTruckResponse {
   items: TruckResponse[];
   page: number;

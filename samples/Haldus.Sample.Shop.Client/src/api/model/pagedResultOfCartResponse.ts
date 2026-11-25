@@ -6,6 +6,9 @@
  */
 import type { CartResponse } from './cartResponse';
 
+/**
+ * Liste endpoint'lerinin döndürdüğü sayfalanmış sonuç.
+ */
 export interface PagedResultOfCartResponse {
   items: CartResponse[];
   page: number;

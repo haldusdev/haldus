@@ -5,9 +5,16 @@
  * OpenAPI spec version: 1.0.0
  */
 
+/**
+ * Bakiyeye karşı bir tutma başlatır (`POST /{key}/holds`): miktar eldeki kovadan ayrılan kovaya geçer ve
+ * tutma kapanana kadar orada bekler. Tutma tahsil edilir (miktar bakiyeden düşer), bırakılır (geri döner) veya
+ * süresi dolunca kendiliğinden bırakılır.
+ */
 export interface BalanceHoldRequest {
+  /** Tutulan miktar; sıfırdan büyük olmalıdır. */
   quantity?: number;
   /**
+     * Tutmanın ömrü, saniye olarak; verilmezse tutma kendiliğinden bırakılmaz.
      * @minimum 1
      * @maximum 31536000
      * @nullable

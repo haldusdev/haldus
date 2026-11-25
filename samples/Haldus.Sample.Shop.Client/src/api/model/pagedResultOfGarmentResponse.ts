@@ -6,6 +6,9 @@
  */
 import type { GarmentResponse } from './garmentResponse';
 
+/**
+ * Liste endpoint'lerinin döndürdüğü sayfalanmış sonuç.
+ */
 export interface PagedResultOfGarmentResponse {
   items: GarmentResponse[];
   page: number;

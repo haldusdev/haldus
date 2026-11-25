@@ -5,6 +5,9 @@
  * OpenAPI spec version: 1.0.0
  */
 
+/**
+ * Metin alanı koşulu.
+ */
 export interface StringCondition {
   /** @nullable */
   eq?: string | null;
@@ -20,5 +23,6 @@ export interface StringCondition {
   in?: string[] | null;
   /** @nullable */
   isNull?: boolean | null;
+  /** Karşılaştırmalar büyük/küçük harf ayrımı yapmadan yapılsın mı. */
   ignoreCase?: boolean;
 }

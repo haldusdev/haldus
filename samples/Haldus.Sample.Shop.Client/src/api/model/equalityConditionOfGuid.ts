@@ -5,6 +5,9 @@
  * OpenAPI spec version: 1.0.0
  */
 
+/**
+ * Yalnızca eşitlikle karşılaştırılabilen alanların (Guid, bool, enum) koşulu.
+ */
 export interface EqualityConditionOfGuid {
   /** @nullable */
   eq?: string | null;

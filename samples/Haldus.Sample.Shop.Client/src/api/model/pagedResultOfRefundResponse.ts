@@ -6,6 +6,9 @@
  */
 import type { RefundResponse } from './refundResponse';
 
+/**
+ * Liste endpoint'lerinin döndürdüğü sayfalanmış sonuç.
+ */
 export interface PagedResultOfRefundResponse {
   items: RefundResponse[];
   page: number;

@@ -6,6 +6,9 @@
  */
 import type { ArticleResponse } from './articleResponse';
 
+/**
+ * Liste endpoint'lerinin döndürdüğü sayfalanmış sonuç.
+ */
 export interface PagedResultOfArticleResponse {
   items: ArticleResponse[];
   page: number;

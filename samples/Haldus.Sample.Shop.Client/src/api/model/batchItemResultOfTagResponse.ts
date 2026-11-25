@@ -7,8 +7,13 @@
 import type { ProblemDetails } from './problemDetails';
 import type { TagResponse } from './tagResponse';
 
+/**
+ * Toplu işlemdeki tek bir öğenin sonucu.
+ */
 export interface BatchItemResultOfTagResponse {
+  /** Öğenin istekteki sırası. */
   index: number;
+  /** Öğe tek başına gönderilseydi dönecek HTTP durum kodu. */
   status: number;
   item: null | TagResponse;
   problem: null | ProblemDetails;

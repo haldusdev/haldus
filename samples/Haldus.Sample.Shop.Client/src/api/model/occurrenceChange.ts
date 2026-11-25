@@ -5,8 +5,15 @@
  * OpenAPI spec version: 1.0.0
  */
 
+/**
+ * Tek bir oluşun kuraldan sapması (`PUT /{id}/occurrences/{start}`).
+ */
 export interface OccurrenceChange {
-  /** @nullable */
+  /**
+     * Oluşun yeni zamanı; boşsa zamanı değişmez.
+     * @nullable
+     */
   start?: string | null;
+  /** Oluş iptal mi edildi. */
   cancelled?: boolean;
 }

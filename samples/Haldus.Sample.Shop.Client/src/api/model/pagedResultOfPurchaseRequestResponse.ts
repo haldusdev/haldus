@@ -6,6 +6,9 @@
  */
 import type { PurchaseRequestResponse } from './purchaseRequestResponse';
 
+/**
+ * Liste endpoint'lerinin döndürdüğü sayfalanmış sonuç.
+ */
 export interface PagedResultOfPurchaseRequestResponse {
   items: PurchaseRequestResponse[];
   page: number;

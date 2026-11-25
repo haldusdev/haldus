@@ -6,6 +6,9 @@
  */
 import type { AnnouncementResponse } from './announcementResponse';
 
+/**
+ * Liste endpoint'lerinin döndürdüğü sayfalanmış sonuç.
+ */
 export interface PagedResultOfAnnouncementResponse {
   items: AnnouncementResponse[];
   page: number;

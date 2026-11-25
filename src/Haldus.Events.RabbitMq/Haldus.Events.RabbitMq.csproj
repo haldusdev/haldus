@@ -2,6 +2,7 @@
 
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
+    <Description>Haldus olaylarını (PublishesEvents) RabbitMQ'ya taşıyan yayıncı.</Description>
   </PropertyGroup>
 
   <ItemGroup>

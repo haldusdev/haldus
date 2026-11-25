@@ -6,6 +6,9 @@
  */
 import type { DeliveryResponse } from './deliveryResponse';
 
+/**
+ * Liste endpoint'lerinin döndürdüğü sayfalanmış sonuç.
+ */
 export interface PagedResultOfDeliveryResponse {
   items: DeliveryResponse[];
   page: number;

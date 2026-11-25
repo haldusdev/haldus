@@ -5,8 +5,14 @@
  * OpenAPI spec version: 1.0.0
  */
 
+/**
+ * Serinin tek bir oluşu.
+ */
 export interface Occurrence {
+  /** Kuralın verdiği zaman; oluşun adresteki kimliğidir. */
   originalStart: string;
+  /** Oluşun gerçek zamanı; ertelendiyse OriginalStart değerinden farklıdır. */
   start: string;
+  /** Bu oluş iptal edildi mi. */
   cancelled: boolean;
 }

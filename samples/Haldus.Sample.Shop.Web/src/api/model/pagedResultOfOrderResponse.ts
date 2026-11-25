@@ -6,6 +6,9 @@
  */
 import type { OrderResponse } from './orderResponse';
 
+/**
+ * Liste endpoint'lerinin döndürdüğü sayfalanmış sonuç.
+ */
 export interface PagedResultOfOrderResponse {
   items: OrderResponse[];
   page: number;

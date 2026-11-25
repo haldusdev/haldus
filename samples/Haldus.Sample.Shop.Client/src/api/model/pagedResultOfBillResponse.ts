@@ -6,6 +6,9 @@
  */
 import type { BillResponse } from './billResponse';
 
+/**
+ * Liste endpoint'lerinin döndürdüğü sayfalanmış sonuç.
+ */
 export interface PagedResultOfBillResponse {
   items: BillResponse[];
   page: number;

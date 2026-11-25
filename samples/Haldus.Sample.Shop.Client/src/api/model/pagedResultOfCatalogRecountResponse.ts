@@ -6,6 +6,9 @@
  */
 import type { CatalogRecountResponse } from './catalogRecountResponse';
 
+/**
+ * Liste endpoint'lerinin döndürdüğü sayfalanmış sonuç.
+ */
 export interface PagedResultOfCatalogRecountResponse {
   items: CatalogRecountResponse[];
   page: number;

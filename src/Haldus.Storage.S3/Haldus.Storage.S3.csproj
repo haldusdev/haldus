@@ -2,6 +2,7 @@
 
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
+    <Description>Haldus dosyaları (MapFile) için S3 uyumlu nesne deposu.</Description>
   </PropertyGroup>
 
   <ItemGroup>
@@ -9,7 +10,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\Haldus.AspNetCore\Haldus.AspNetCore.csproj" />
+    <ProjectReference Include="..\Haldus.AspNetCore\Haldus.AspNetCore.csproj" PrivateAssets="none" />
   </ItemGroup>
 
   <ItemGroup>

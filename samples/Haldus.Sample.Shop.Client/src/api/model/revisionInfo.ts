@@ -5,9 +5,16 @@
  * OpenAPI spec version: 1.0.0
  */
 
+/**
+ * Bir kaydın saklanmış bir sürümü.
+ */
 export interface RevisionInfo {
+  /** Sürümün kimliği; kaydın sürümleri arasında artan sıradadır. */
   id: number;
   createdAt: string;
-  /** @nullable */
+  /**
+     * Sürümü oluşturan yazmayı yapan kullanıcı.
+     * @nullable
+     */
   createdBy: string | null;
 }

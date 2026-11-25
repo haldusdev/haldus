@@ -6,10 +6,17 @@
  */
 import type { CustomFieldType } from './customFieldType';
 
+/**
+ * Bir kaynağın özel alanlarından birinin tanımı.
+ */
 export interface CustomFieldDefinition {
+  /** Değer çantasındaki anahtar. */
   key: string;
+  /** Alanın kullanıcıya gösterilen adı. */
   label: string;
   type: CustomFieldType;
+  /** Kayıt bu alan olmadan yazılamaz mı. */
   required: boolean;
+  /** Tür CustomFieldType.Choice ise kabul edilen değerler. */
   options: string[];
 }

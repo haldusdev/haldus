@@ -6,11 +6,17 @@
  */
 import type { CustomFieldType } from './customFieldType';
 
+/**
+ * Özel bir alanı tanımlayan veya değiştiren isteğin gövdesi; anahtar adrestedir.
+ */
 export interface CustomFieldDefinitionRequest {
   /** @maxLength 200 */
   label: string;
   type?: CustomFieldType;
   required?: boolean;
-  /** @nullable */
+  /**
+     * Tür CustomFieldType.Choice ise zorunludur: en çok 100 seçenek, her biri en çok 200 karakter.
+     * @nullable
+     */
   options?: string[] | null;
 }

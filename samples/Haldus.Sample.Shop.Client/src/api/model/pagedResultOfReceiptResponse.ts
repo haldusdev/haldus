@@ -6,6 +6,9 @@
  */
 import type { ReceiptResponse } from './receiptResponse';
 
+/**
+ * Liste endpoint'lerinin döndürdüğü sayfalanmış sonuç.
+ */
 export interface PagedResultOfReceiptResponse {
   items: ReceiptResponse[];
   page: number;

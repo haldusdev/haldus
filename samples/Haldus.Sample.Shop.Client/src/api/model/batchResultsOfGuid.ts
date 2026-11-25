@@ -6,6 +6,9 @@
  */
 import type { BatchItemResultOfGuid } from './batchItemResultOfGuid';
 
+/**
+ * Kısmi başarılı bir toplu işlemin sonucu: her öğe için ayrı sonuç, istekteki sırayla.
+ */
 export interface BatchResultsOfGuid {
   results: BatchItemResultOfGuid[];
 }

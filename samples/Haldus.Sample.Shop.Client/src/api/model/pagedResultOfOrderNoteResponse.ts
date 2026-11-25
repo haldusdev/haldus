@@ -6,6 +6,9 @@
  */
 import type { OrderNoteResponse } from './orderNoteResponse';
 
+/**
+ * Liste endpoint'lerinin döndürdüğü sayfalanmış sonuç.
+ */
 export interface PagedResultOfOrderNoteResponse {
   items: OrderNoteResponse[];
   page: number;

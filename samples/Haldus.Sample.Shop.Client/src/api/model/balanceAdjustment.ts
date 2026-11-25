@@ -5,14 +5,21 @@
  * OpenAPI spec version: 1.0.0
  */
 
+/**
+ * Bakiyeyi bir miktar artırır veya azaltır (`POST /{key}/adjust`). Bakiyenin yeni değeri değil, değişimi
+ * gönderilir; böylece aynı anda gelen iki düzeltme birbirini ezmez.
+ */
 export interface BalanceAdjustment {
+  /** Eklenecek (pozitif) veya düşülecek (negatif) miktar; sıfır olamaz. */
   delta?: number;
   /**
+     * Düzeltilen kova; verilmezse ilk kova.
      * @maxLength 64
      * @nullable
      */
   bucket?: string | null;
   /**
+     * Deftere yazılan açıklama: "sayım farkı", "sipariş 1042".
      * @maxLength 500
      * @nullable
      */

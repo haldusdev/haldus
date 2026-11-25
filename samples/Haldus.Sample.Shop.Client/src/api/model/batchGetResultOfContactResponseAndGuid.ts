@@ -6,6 +6,9 @@
  */
 import type { ContactResponse } from './contactResponse';
 
+/**
+ * Toplu okumanın sonucu: bulunan kayıtlar ve bulunamayan (veya isteği yapanın göremediği) kimlikler.
+ */
 export interface BatchGetResultOfContactResponseAndGuid {
   items: ContactResponse[];
   notFound: string[];

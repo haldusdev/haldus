@@ -6,6 +6,9 @@
  */
 import type { AddressResponse } from './addressResponse';
 
+/**
+ * Atomik bir toplu yazmanın sonucu: öğeler, istekteki sırayla.
+ */
 export interface BatchResultOfAddressResponse {
   items: AddressResponse[];
 }

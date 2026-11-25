@@ -6,6 +6,9 @@
  */
 import type { MachineResponse } from './machineResponse';
 
+/**
+ * Liste endpoint'lerinin döndürdüğü sayfalanmış sonuç.
+ */
 export interface PagedResultOfMachineResponse {
   items: MachineResponse[];
   page: number;

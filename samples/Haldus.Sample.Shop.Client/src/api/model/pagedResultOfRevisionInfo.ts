@@ -6,6 +6,9 @@
  */
 import type { RevisionInfo } from './revisionInfo';
 
+/**
+ * Liste endpoint'lerinin döndürdüğü sayfalanmış sonuç.
+ */
 export interface PagedResultOfRevisionInfo {
   items: RevisionInfo[];
   page: number;

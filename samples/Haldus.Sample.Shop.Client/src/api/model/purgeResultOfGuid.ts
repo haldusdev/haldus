@@ -5,8 +5,15 @@
  * OpenAPI spec version: 1.0.0
  */
 
+/**
+ * Ölçüte uyan kayıtların topluca silinmesinin sonucu (`POST /purge`). `force` verilmediyse hiçbir şey
+ * silinmez; yanıt yalnızca neyin silineceğini gösterir.
+ */
 export interface PurgeResultOfGuid {
+  /** Ölçüte uyan kayıtların sayısı. */
   matched: number;
+  /** Bu istekte silinen kayıtların sayısı; Matched değerinden azsa istek yinelenir. */
   purged: number;
+  /** Ölçüte uyan kayıtlardan ilk yüzünün anahtarları. */
   sample: string[];
 }

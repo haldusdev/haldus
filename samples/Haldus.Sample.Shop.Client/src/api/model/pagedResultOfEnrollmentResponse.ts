@@ -6,6 +6,9 @@
  */
 import type { EnrollmentResponse } from './enrollmentResponse';
 
+/**
+ * Liste endpoint'lerinin döndürdüğü sayfalanmış sonuç.
+ */
 export interface PagedResultOfEnrollmentResponse {
   items: EnrollmentResponse[];
   page: number;

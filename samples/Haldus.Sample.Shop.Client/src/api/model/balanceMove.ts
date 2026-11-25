@@ -5,11 +5,15 @@
  * OpenAPI spec version: 1.0.0
  */
 
+/**
+ * Bir miktarı bir kovadan ötekine taşır (`POST /{key}/move`): eldeki stoktan ayrılmış stoğa gibi.
+ */
 export interface BalanceMove {
   /** @maxLength 64 */
   from: string;
   /** @maxLength 64 */
   to: string;
+  /** Taşınan miktar; sıfırdan büyük olmalıdır. */
   quantity?: number;
   /**
      * @maxLength 500

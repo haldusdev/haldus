@@ -6,6 +6,9 @@
  */
 import type { ApiKeyResponse } from './apiKeyResponse';
 
+/**
+ * Liste endpoint'lerinin döndürdüğü sayfalanmış sonuç.
+ */
 export interface PagedResultOfApiKeyResponse {
   items: ApiKeyResponse[];
   page: number;

@@ -5,6 +5,10 @@
  * OpenAPI spec version: 1.0.0
  */
 
+/**
+ * "Hepsini okundu işaretle" çağrısının sonucu.
+ */
 export interface ReadAllResult {
+  /** Okundu olarak işaretlenen kayıt sayısı. */
   updated: number;
 }

@@ -6,6 +6,9 @@
  */
 import type { MediaFileResponse } from './mediaFileResponse';
 
+/**
+ * Liste endpoint'lerinin döndürdüğü sayfalanmış sonuç.
+ */
 export interface PagedResultOfMediaFileResponse {
   items: MediaFileResponse[];
   page: number;

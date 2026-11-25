@@ -6,6 +6,9 @@
  */
 import type { DeviceResponse } from './deviceResponse';
 
+/**
+ * Liste endpoint'lerinin döndürdüğü sayfalanmış sonuç.
+ */
 export interface PagedResultOfDeviceResponse {
   items: DeviceResponse[];
   page: number;
