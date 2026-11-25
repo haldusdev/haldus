@@ -34,6 +34,9 @@ public sealed class ShopJwtOptions
     /// <summary>Keşif belgesi yalnızca HTTPS'ten okunur; yalnızca geliştirme ortamında kapatılabilir.</summary>
     public bool RequireHttpsMetadata { get; set; } = true;
 
+    /// <inheritdoc cref="ShopOidcOptions.TrustEmailVerified"/>
+    public bool TrustEmailVerified { get; set; }
+
     public bool Enabled => !string.IsNullOrWhiteSpace(Authority);
 }
 
@@ -54,6 +57,15 @@ public sealed class ShopOidcOptions
 
     public bool RequireHttpsMetadata { get; set; } = true;
 
+    /// <summary>
+    /// Sağlayıcının "bu adres doğrulandı" beyanına (<c>email_verified</c>) güvenilir: adres hesaba doğrulanmış olarak
+    /// yazılır ve personel listesindeyse rol getirir. Varsayılan olarak kapalıdır: herkesin hesap açabildiği veya adresi
+    /// doğrulamadan beyan eden bir sağlayıcıda bu, personel adresini yazan herkese rol verirdi. Yalnızca kuruluşun
+    /// kendi sağlayıcısı gibi, adresleri gerçekten doğrulayan bir sağlayıcı için açılmalıdır. Kapalıyken dış kimliğin
+    /// hesabı adressiz (yer tutucu bir adresle) ve doğrulanmamış olarak açılır.
+    /// </summary>
+    public bool TrustEmailVerified { get; set; }
+
     public bool Enabled => !string.IsNullOrWhiteSpace(Authority);
 }
 
@@ -67,6 +79,8 @@ public static class ExternalSignIn
     public const string CookieScheme = "ShopCookie";
     public const string OidcScheme = "ShopOidc";
     public const string CookieName = "shop.session";
+
+    private static readonly TimeSpan CookieLifetime = TimeSpan.FromHours(8);
 
     /// <summary>
     /// Çerezle kimliği doğrulanan ve yazan (güvenli olmayan) her istek bu başlığı taşımalıdır. Başka bir siteden
@@ -93,7 +107,7 @@ public static class ExternalSignIn
                 {
                     OnTokenValidated = async context =>
                     {
-                        if (await ResolveAsync(context.HttpContext, context.Principal, JwtScheme) is { } principal)
+                        if (await ResolveAsync(context.HttpContext, context.Principal, JwtScheme, jwt.TrustEmailVerified) is { } principal)
                         {
                             context.Principal = principal;
                         }
@@ -119,8 +133,23 @@ public static class ExternalSignIn
                 options.Cookie.HttpOnly = true;
                 options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
                 options.Cookie.SameSite = SameSiteMode.Lax;
-                options.ExpireTimeSpan = TimeSpan.FromHours(8);
+                options.ExpireTimeSpan = CookieLifetime;
                 options.SlidingExpiration = false;
+
+                // Çerez kendi başına geçerli değildir: sunucudaki oturumuna bağlıdır (çıkış ve "her yerden çık" onu
+                // hemen geçersiz kılar) ve kimliği her istekte hesaptan yeniden kurulur (rol ve doğrulama bilgisi
+                // çerezin ömrü boyunca donmaz).
+                options.Events.OnValidatePrincipal = async context =>
+                {
+                    if (await RestoreAsync(context.HttpContext, context.Principal) is { } principal)
+                    {
+                        context.ReplacePrincipal(principal);
+                    }
+                    else
+                    {
+                        context.RejectPrincipal();
+                    }
+                };
 
                 // Bu bir API'dir: girişi olmayan istek giriş sayfasına yönlendirilmez, 401 / 403 alır.
                 options.Events.OnRedirectToLogin = context =>
@@ -158,7 +187,7 @@ public static class ExternalSignIn
                 {
                     OnTokenValidated = async context =>
                     {
-                        if (await ResolveAsync(context.HttpContext, context.Principal, CookieScheme) is { } principal)
+                        if (await ResolveAsync(context.HttpContext, context.Principal, CookieScheme, oidc.TrustEmailVerified, openSession: true) is { } principal)
                         {
                             context.Principal = principal;
                         }
@@ -192,7 +221,7 @@ public static class ExternalSignIn
     /// Sağlayıcının tanıttığı kişiyi (<c>iss</c> + <c>sub</c>) yerel hesaba çevirir; ilk gelişinde hesap ve kiracısı
     /// oluşturulur. Haldus kullanıcıyı ve kiracıyı buradan çıkan claim'lerden okur; parola girişindekilerle aynıdır.
     /// </summary>
-    internal static async Task<ClaimsPrincipal?> ResolveAsync(HttpContext http, ClaimsPrincipal? external, string scheme)
+    internal static async Task<ClaimsPrincipal?> ResolveAsync(HttpContext http, ClaimsPrincipal? external, string scheme, bool trustEmail, bool openSession = false)
     {
         if (external is null)
         {
@@ -217,7 +246,8 @@ public static class ExternalSignIn
         {
             var now = HaldusTime.UtcNow(http.RequestServices.GetRequiredService<TimeProvider>());
             var email = external.FindFirstValue("email")?.Trim().ToLowerInvariant();
-            var verified = string.Equals(external.FindFirstValue("email_verified"), "true", StringComparison.OrdinalIgnoreCase);
+            // Adresin doğrulandığını söyleyen sağlayıcıdır; ona ancak açıkça güvenildiyse inanılır (TrustEmailVerified).
+            var verified = trustEmail && string.Equals(external.FindFirstValue("email_verified"), "true", StringComparison.OrdinalIgnoreCase);
 
             // Adres yalnızca sağlayıcı onu doğruladıysa ve başka bir hesapta değilse alınır. Var olan bir hesaba adres
             // üzerinden bağlanılmaz: aynı adresi taşıdığını söyleyen bir dış kimlik, parolayla açılmış hesabı ele
@@ -256,6 +286,45 @@ public static class ExternalSignIn
             }
         }
 
+        Guid? sessionId = null;
+
+        if (openSession)
+        {
+            // Çerezle açılan oturum sunucuda da bir kayıttır; çıkış onu iptal eder.
+            var now = HaldusTime.UtcNow(http.RequestServices.GetRequiredService<TimeProvider>());
+            var session = new ShopSession { Id = Guid.CreateVersion7(), AccountId = account.Id, CreatedAt = now, ExpiresAt = now + CookieLifetime };
+            db.Add(session);
+            await db.SaveChangesAsync(cancellationToken);
+            sessionId = session.Id;
+        }
+
+        return Principal(account, options, scheme, sessionId);
+    }
+
+    /// <summary>Çerezdeki kimliği oturumuyla sınar ve hesaptan yeniden kurar; oturum kapandıysa veya hesap yoksa null.</summary>
+    private static async Task<ClaimsPrincipal?> RestoreAsync(HttpContext http, ClaimsPrincipal? stored)
+    {
+        if (!Guid.TryParse(stored?.FindFirstValue(AuthEndpoints.SessionClaim), out var sessionId))
+        {
+            return null;
+        }
+
+        var db = http.RequestServices.GetRequiredService<AppDbContext>();
+        var now = HaldusTime.UtcNow(http.RequestServices.GetRequiredService<TimeProvider>());
+
+        var accountId = await AuthEndpoints.Live(db.Set<ShopSession>(), now)
+            .Where(session => session.Id == sessionId)
+            .Select(session => (Guid?)session.AccountId)
+            .FirstOrDefaultAsync(http.RequestAborted);
+
+        return accountId is not null
+            && await db.Set<ShopAccount>().AsNoTracking().FirstOrDefaultAsync(candidate => candidate.Id == accountId, http.RequestAborted) is { } account
+                ? Principal(account, http.RequestServices.GetRequiredService<IOptions<ShopAuthOptions>>().Value, CookieScheme, sessionId)
+                : null;
+    }
+
+    private static ClaimsPrincipal Principal(ShopAccount account, ShopAuthOptions options, string scheme, Guid? sessionId)
+    {
         var identity = new ClaimsIdentity(
             [
                 new Claim(ClaimTypes.NameIdentifier, account.Id.ToString()),
@@ -264,6 +333,11 @@ public static class ExternalSignIn
                 new Claim(AuthEndpoints.VerifiedClaim, account.EmailVerifiedAt is null ? "false" : "true"),
             ],
             scheme);
+
+        if (sessionId is { } id)
+        {
+            identity.AddClaim(new Claim(AuthEndpoints.SessionClaim, id.ToString()));
+        }
 
         if (options.IsStaff(account))
         {

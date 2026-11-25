@@ -260,7 +260,16 @@ public static partial class AuthEndpoints
                 .AllowAnonymous()
                 .ExcludeFromDescription();
 
-            auth.MapPost("/oidc/sign-out", () => Results.SignOut(authenticationSchemes: [ExternalSignIn.CookieScheme]))
+            // Çerez silinir ve oturumu sunucuda da kapanır: kopyalanmış bir çerez de artık geçmez.
+            auth.MapPost("/oidc/sign-out", async (ClaimsPrincipal user, AppDbContext db, TimeProvider time, CancellationToken cancellationToken) =>
+                {
+                    if (Guid.TryParse(user.FindFirstValue(SessionClaim), out var sessionId))
+                    {
+                        await RevokeAsync(db.Set<ShopSession>().Where(session => session.Id == sessionId), HaldusTime.UtcNow(time), cancellationToken);
+                    }
+
+                    return Results.SignOut(authenticationSchemes: [ExternalSignIn.CookieScheme]);
+                })
                 .AllowAnonymous()
                 .ExcludeFromDescription();
         }
@@ -931,10 +940,10 @@ public static partial class AuthEndpoints
             cancellationToken) == 1;
 
     /// <summary>İptal edilmemiş ve süresi dolmamış oturumlar.</summary>
-    private static IQueryable<ShopSession> Live(IQueryable<ShopSession> sessions, DateTimeOffset now) =>
+    internal static IQueryable<ShopSession> Live(IQueryable<ShopSession> sessions, DateTimeOffset now) =>
         sessions.Where(session => session.RevokedAt == null && session.ExpiresAt > now);
 
-    private static Task<int> RevokeAsync(IQueryable<ShopSession> sessions, DateTimeOffset now, CancellationToken cancellationToken) =>
+    internal static Task<int> RevokeAsync(IQueryable<ShopSession> sessions, DateTimeOffset now, CancellationToken cancellationToken) =>
         sessions
             .Where(session => session.RevokedAt == null)
             .ExecuteUpdateAsync(setters => setters.SetProperty(session => session.RevokedAt, now), cancellationToken);

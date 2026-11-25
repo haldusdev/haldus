@@ -554,6 +554,10 @@ Yapılmayanlar ve nedenleri:
         (`Microsoft.AspNetCore.Authentication.OpenIdConnect`). Çerez kendiliğinden gönderildiği için, çerezle kimliği
         doğrulanan ve yazan her istek `X-Shop-Request` başlığını taşımalıdır (CSRF); dönüş adresi yalnızca
         uygulamanın içindeki bir yol olabilir. Bu uçlar yalnızca ayar verildiyse eşlenir ve şemaya girmez.
+        Çerez kendi başına geçerli değildir: girişte sunucuda bir oturum (`ShopSession`) açılır ve çerez ona bağlanır
+        (`sid`); her istekte oturumun açık olduğu sorulur ve kimlik hesaptan yeniden kurulur (rol ve doğrulama
+        bilgisi çerezin sekiz saatlik ömrü boyunca donmaz). `POST /auth/oidc/sign-out` ve `/auth/logout-all` oturumu
+        kapatır. İlk yazımda çerez sekiz saat boyunca iptal edilemiyordu (otomatik incelemede çıktı).
       - Biri açıksa varsayılan şema, isteğe bakıp seçen bir şemadır (`ExternalSignIn.Select`): nokta ile ayrılmış üç
         parçalı taşıyıcı token sağlayıcının JWT'sidir, öteki taşıyıcı token bizim token'ımızdır, başlık yoksa çerez.
         İkisi de kapalıyken kimlik doğrulama eskisi gibi, yalnızca kendi şemamızla kurulur.
@@ -562,14 +566,22 @@ Yapılmayanlar ve nedenleri:
         aynıdır. Her istekte bir sorgudur. **Var olan bir hesaba adres üzerinden bağlanılmaz** (aynı adresi taşıyan bir
         dış kimlik, parolayla açılmış hesabı ele geçirmemelidir): adres yalnızca sağlayıcı onu doğruladıysa
         (`email_verified`) ve başka hesapta değilse alınır; değilse hesap, kimseye ait olamayacak bir adresle
-        (`…@external.invalid`) ve doğrulanmamış olarak açılır. Personel rolü bu yüzden sağlayıcının doğruladığı adrese
-        bağlıdır; sağlayıcıya bu konuda güvenilir.
+        (`…@external.invalid`) ve doğrulanmamış olarak açılır.
+      - **Sağlayıcının `email_verified` beyanına varsayılan olarak güvenilmez** (`TrustEmailVerified`, iki bölümde
+        ayrı ayrı; varsayılan kapalı). Kapalıyken dış kimliğin hesabı her zaman adressiz ve doğrulanmamış açılır;
+        personel rolü alamaz. Herkesin hesap açabildiği veya adresi doğrulamadan beyan eden bir sağlayıcıda bu beyan,
+        personel adresini yazan herkese rol verirdi (ilk yazımda beyana her zaman güveniliyordu; otomatik incelemede
+        çıktı). Ayar yalnızca adresleri gerçekten doğrulayan, kuruluşun kendi sağlayıcısı için açılır.
       - İstemciler neyin sunulduğunu `GET /auth/config` ucundan okur (gizli bir şey taşımaz).
       - Oturum denetimi (`sid`) yalnızca kendi token'larımız içindir; sağlayıcının token'ının ömrünü ve iptalini
         sağlayıcı yönetir. `RequireVerifiedEmail` her yoldan giriş için geçerlidir.
-      - Testler sağlayıcıyı testin içinde kurar (keşif belgesi, imza anahtarı, token ucu; `BackchannelHttpHandler`);
-        token'lar gerçekten imzalanır ve Microsoft'un doğrulayıcılarından geçer. **Gerçek bir sağlayıcıya (Keycloak,
-        Entra ID...) karşı sınanmadı.** Sınırlar: tek sağlayıcı; sağlayıcıdaki adres sonradan değişirse hesaba
+      - Testler iki katmandır. Kurallar, sağlayıcıyı testin içinde kuran testlerle sınanır (`ExternalSignInTests`:
+        keşif belgesi, imza anahtarı, token ucu; `BackchannelHttpHandler`); token'lar gerçekten imzalanır ve
+        Microsoft'un doğrulayıcılarından geçer. Gerçek bir sağlayıcıyla birlikte çalışma, kapsayıcıda çalışan
+        Keycloak'a karşı sınanır (`KeycloakSignInTests`; imaj özetiyle sabit, `HALDUS_TEST_KEYCLOAK_IMAGE`):
+        sağlayıcının verdiği ve yenilediği erişim token'ının kabulü, başka bir API için verilmiş token'ın reddi ve
+        Keycloak'ın kendi giriş sayfasından geçen yönlendirmeli giriş (ASP.NET Core burada PAR da kullanır). Başka
+        sağlayıcılara (Entra ID, Auth0...) karşı sınanmadı. Sınırlar: tek sağlayıcı; sağlayıcıdaki adres sonradan değişirse hesaba
         yansımaz; sağlayıcıdan çıkış (tek oturum kapatma) yoktur; dış hesabın parolası yoktur ve parola uçları onu
         kabul etmez; erişim token'ında `email` / `email_verified` yoksa hesap adressiz açılır.
     - `Shop:DemoIdentity` açıksa kimlik, doğrulanmadan, başlıklardan okunur (`X-User-Id`, `X-Tenant-Id`,

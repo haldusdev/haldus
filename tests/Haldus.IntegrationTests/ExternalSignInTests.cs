@@ -111,6 +111,29 @@ public sealed class ExternalSignInTests(ShopFixture fixture)
     }
 
     [Fact]
+    public async Task EmailClaim_IsNotBelievedUnlessTheProviderIsTrustedForIt()
+    {
+        using var provider = new FakeProvider();
+        var staff = NewEmail();
+
+        // Varsayılan: sağlayıcının "doğrulandı" beyanına güvenilmez. Herkesin hesap açabildiği bir sağlayıcıda bu
+        // beyan, personel adresini yazan herkese rol verirdi.
+        await using var factory = CreateFactory(provider, ("Shop:Auth:Staff:0", staff), ("Shop:Auth:Jwt:TrustEmailVerified", "false"));
+        using var client = factory.CreateClient();
+        var token = provider.AccessToken(NewSubject(), staff, emailVerified: true);
+
+        var account = await ReadAsync<AccountInfo>(await SendAsync(client, HttpMethod.Get, "/auth/me", token: token));
+        Assert.Equal((false, false), (account.EmailVerified, account.IsStaff));
+        Assert.NotEqual(staff, account.Email);
+        Assert.Equal(
+            HttpStatusCode.Forbidden,
+            (await SendAsync(client, HttpMethod.Post, "/products", new { name = $"Kettle {Guid.NewGuid():N}", price = 10 }, token)).StatusCode);
+
+        // Adres hesaba yazılmadığı için asıl sahibi onunla kayıt olabilir.
+        Assert.Equal(HttpStatusCode.OK, (await SendAsync(client, HttpMethod.Post, "/auth/register", new { email = staff, password = Password })).StatusCode);
+    }
+
+    [Fact]
     public async Task AddressOfAPasswordAccount_IsNotTakenOverByAnExternalIdentity()
     {
         using var provider = new FakeProvider();
@@ -225,7 +248,12 @@ public sealed class ExternalSignInTests(ShopFixture fixture)
         var written = await SendAsync(browser, HttpMethod.Post, "/orders", new { customerName = "Ada" }, idempotencyKey: Guid.NewGuid().ToString(), ownRequest: true);
         Assert.Equal(HttpStatusCode.Created, written.StatusCode);
 
-        // 4. Çıkış çerezi siler.
+        // 4. Çerez sunucudaki bir oturuma bağlıdır: oturum kapatılınca (burada "her yerden çık" ile) tarayıcıda
+        // duran çerez de artık kimlik değildir. Kopyalanmış bir çerez sekiz saat boyunca geçerli kalmaz.
+        Assert.Equal(HttpStatusCode.NoContent, (await SendAsync(browser, HttpMethod.Post, "/auth/logout-all", ownRequest: true)).StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await SendAsync(browser, HttpMethod.Get, "/auth/me")).StatusCode);
+
+        // 5. Çıkış ucu çerezi siler ve oturumu kapatır; yeniden giriş yeni bir oturum açar.
         Assert.True((await SendAsync(browser, HttpMethod.Post, "/auth/oidc/sign-out")).IsSuccessStatusCode);
         Assert.Equal(HttpStatusCode.Unauthorized, (await SendAsync(browser, HttpMethod.Get, "/auth/me")).StatusCode);
     }
@@ -268,6 +296,10 @@ public sealed class ExternalSignInTests(ShopFixture fixture)
                 ("Shop:Auth:Jwt:Authority", FakeProvider.Issuer),
                 ("Shop:Auth:Jwt:Audience", FakeProvider.ApiAudience),
                 ("Shop:Auth:Jwt:ClientId", "shop-panel"),
+
+                // Testlerin çoğu, adresleri gerçekten doğrulayan (kuruluşun kendi) sağlayıcısını varsayar.
+                ("Shop:Auth:Jwt:TrustEmailVerified", "true"),
+                ("Shop:Auth:Oidc:TrustEmailVerified", "true"),
                 .. settings,
             ])
             .WithWebHostBuilder(builder => builder.ConfigureTestServices(services =>

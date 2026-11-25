@@ -862,14 +862,17 @@ vardır ve ikisi de varsayılan olarak kapalıdır:
 ```jsonc
 "Shop": { "Auth": {
   // API, sağlayıcının JWT erişim token'ını kabul eder; panel ve mobil uygulama sağlayıcıyla girişi kendileri yapar.
-  "Jwt":  { "Authority": "https://idp.example", "Audience": "shop-api", "ClientId": "shop-app" },
+  "Jwt":  { "Authority": "https://idp.example", "Audience": "shop-api", "ClientId": "shop-app", "TrustEmailVerified": true },
   // Backend tarayıcıyı sağlayıcıya yönlendirir (/auth/oidc/sign-in) ve çerezle oturum açar.
   "Oidc": { "Authority": "https://idp.example", "ClientId": "shop-server", "ClientSecret": "…" }
 } }
 ```
 
 Sağlayıcının tanıttığı kişi ilk gelişinde yerel bir hesaba (ve kendi kiracısına) çevrilir; var olan bir hesaba adres
-üzerinden bağlanılmaz. Sağlayıcı testlerde testin içinde kurulur; gerçek bir sağlayıcıya karşı sınanmadı. Giriş yapılmadan hiçbir kaynağa ulaşılmaz; açık kalması gereken uçlar (misafir sepeti, token ile
+üzerinden bağlanılmaz. Sağlayıcının "adres doğrulandı" beyanına varsayılan olarak güvenilmez (`TrustEmailVerified`):
+açılmadıkça dış kimlik adressiz açılır ve personel rolü alamaz. Çerezle açılan oturum sunucudaki bir oturuma bağlıdır
+ve iptal edilebilir. Kurallar testin içinde kurulan bir sağlayıcıyla, gerçek bir sağlayıcıyla birlikte çalışma ise
+kapsayıcıda çalışan Keycloak'a karşı sınanır. Giriş yapılmadan hiçbir kaynağa ulaşılmaz; açık kalması gereken uçlar (misafir sepeti, token ile
 erişilen kayıtlar) bunu `AllowAnonymous` ile kendileri söyler. Kimseye ait olmayan, ortak kaynakları (ürünler,
 kategoriler) herkes okur ama yalnızca personel yazar (`Shop:Auth:Staff`); kural, kaynakları tek tek saymak yerine
 Haldus'un uçlara yazdığı kapsam metadatasını okur (aşağıda). Yenileme token'ı bir kez kullanılır; eskisi yeniden
