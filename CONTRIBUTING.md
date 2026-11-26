@@ -12,6 +12,7 @@ değişikliği hazırlamayı ve belgeleri yazmayı anlatır.
 - [Yeni bir trait veya archetype eklemek](#yeni-bir-trait-veya-archetype-eklemek)
 - [Belgeler](#belgeler)
 - [Commit ve pull request](#commit-ve-pull-request)
+- [Sürüm yayınlamak](#sürüm-yayınlamak)
 
 ## Ortam
 
@@ -207,3 +208,37 @@ gerçek olmalıdır.
 Gönderdiğiniz katkılar projenin lisansı olan [MIT](LICENSE) ile lisanslanır.
 
 Güvenlik açığı bildirmek için bkz. [SECURITY.md](SECURITY.md).
+
+## Sürüm yayınlamak
+
+Paketleri `.github/workflows/release.yml` yayınlar: `v` ile başlayan bir etiket itildiğinde etiketin `main` dalında ve
+paket sürümüyle aynı olduğunu denetler, testleri çalıştırır, on paketi üretir, nuget.org'a iter ve paketleri ekleyen
+bir GitHub sürümü açar. Sürüm notları `CHANGELOG.md` içindeki aynı adlı bölümdür; adında `-` olan sürüm (`preview`)
+GitHub'da ön sürüm olarak işaretlenir.
+
+NuGet'e giriş [trusted publishing](https://learn.microsoft.com/nuget/nuget-org/trusted-publishing) iledir; depoda
+kalıcı bir API anahtarı yoktur. Bir kez yapılacak kurulum:
+
+1. nuget.org'da kullanıcı adınız → **Trusted Publishing** → yeni politika. Sahip: paketlerin sahibi olan `Haldus`
+   kuruluşu. Repository Owner `haldusdev`, Repository `haldus`, Workflow File `release.yml`, Environment `nuget`.
+2. GitHub'da depo ayarları → Secrets and variables → Actions: `NUGET_USER` sırrına nuget.org kullanıcı adınız
+   (e-posta değil).
+3. İsteğe bağlı: Settings → Environments → `nuget` ortamına onaylayıcı ekleyin; yayın, onaylanana kadar bekler.
+
+Her sürümde:
+
+1. `src/Directory.Build.props` içindeki `VersionPrefix` / `VersionSuffix`'i ayarlayın.
+2. `CHANGELOG.md` içinde "Yayınlanmadı" bölümünün maddelerini `## <sürüm>` başlığının altına taşıyın.
+3. Commit'leyip `main`'e itin ve CI'ın geçmesini bekleyin.
+4. Etiketi oluşturup itin:
+
+```bash
+git tag v0.1.0-preview.1
+```
+
+```bash
+git push origin v0.1.0-preview.1
+```
+
+NuGet aynı sürümü ikinci kez kabul etmez ve yayınlanmış bir sürüm silinemez (yalnızca listeden kaldırılır). Hatalı bir
+sürüm yeni bir sürümle düzeltilir. Yarıda kalan bir yayın yeniden çalıştırılabilir; zaten yüklenmiş paketler atlanır.

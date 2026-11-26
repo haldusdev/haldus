@@ -1,0 +1,107 @@
+# Bir sürüm etiketi (v0.1.0-preview.1 gibi) itildiğinde paketleri NuGet'e yayınlar ve bir GitHub sürümü açar.
+# NuGet'e giriş "trusted publishing" iledir: kalıcı bir API anahtarı saklanmaz; nuget.org'daki politika bu dosyanın adını
+# (release.yml) ve `nuget` ortamını tanır. Kurulum ve yayın adımları CONTRIBUTING.md içinde, "Sürüm yayınlamak" altında.
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+
+jobs:
+  release:
+    name: Yayın
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    environment: nuget
+    permissions:
+      contents: write # GitHub sürümü
+      id-token: write # NuGet trusted publishing
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 10.0.x
+
+      # Yalnızca main'e girmiş bir commit yayınlanır.
+      - name: Etiket main dalında mı
+        run: |
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+            echo "::error::$GITHUB_REF_NAME etiketi main dalında olmayan bir commit'i gösteriyor."
+            exit 1
+          fi
+
+      # Sürüm tek yerde durur (src/Directory.Build.props); etiket onunla aynı olmalıdır.
+      - name: Etiket paket sürümüyle aynı mı
+        run: |
+          version=$(dotnet msbuild src/Haldus.Abstractions/Haldus.Abstractions.csproj -getProperty:Version)
+          if [ "v$version" != "$GITHUB_REF_NAME" ]; then
+            echo "::error::Etiket $GITHUB_REF_NAME, paket sürümü $version (src/Directory.Build.props)."
+            exit 1
+          fi
+          echo "VERSION=$version" >> "$GITHUB_ENV"
+
+      # Sürüm notları CHANGELOG.md'deki "## <sürüm>" bölümüdür; bölüm yoksa yayın yapılmaz.
+      - name: Sürüm notları
+        run: |
+          awk -v heading="## $VERSION" '
+            $0 == heading { found = 1; next }
+            found && /^## / { exit }
+            found { print }
+          ' CHANGELOG.md > "$RUNNER_TEMP/notes.md"
+          if [ ! -s "$RUNNER_TEMP/notes.md" ]; then
+            echo "::error::CHANGELOG.md içinde '## $VERSION' bölümü yok veya boş."
+            exit 1
+          fi
+
+      - name: Derleme
+        run: dotnet build
+
+      - name: Testler
+        run: dotnet test --no-build
+
+      - name: Paketleme
+        run: dotnet pack -c Release -o artifacts/packages
+
+      - name: Paketleri sakla
+        uses: actions/upload-artifact@v7
+        with:
+          name: packages
+          path: artifacts/packages/*.nupkg
+
+      # Kısa ömürlü (bir saatlik) anahtar, kullanılmadan hemen önce alınır.
+      - name: NuGet girişi
+        id: nuget
+        uses: NuGet/login@v1
+        with:
+          user: ${{ secrets.NUGET_USER }}
+
+      # Yarıda kalan bir yayın yeniden çalıştırılırsa zaten yüklenmiş paketler atlanır.
+      - name: NuGet'e yayın
+        run: >
+          dotnet nuget push "artifacts/packages/*.nupkg"
+          --api-key "${{ steps.nuget.outputs.NUGET_API_KEY }}"
+          --source https://api.nuget.org/v3/index.json
+          --skip-duplicate
+
+      - name: GitHub sürümü
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          prerelease=""
+          case "$VERSION" in *-*) prerelease="--prerelease" ;; esac
+          gh release create "$GITHUB_REF_NAME" artifacts/packages/*.nupkg \
+            --title "$VERSION" --notes-file "$RUNNER_TEMP/notes.md" --verify-tag $prerelease

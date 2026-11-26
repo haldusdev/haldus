@@ -437,7 +437,14 @@ generator ikisinde de çalıştı ve modülün ucu yanıt verdi.
 
 Bilinenler:
 
-- Paketler hiçbir NuGet kaynağında yayınlanmadı; yayınlamak kullanıcının kararıdır.
+- Paketler hiçbir NuGet kaynağında yayınlanmadı; yayınlamak kullanıcının kararıdır. Yayın iş akışı hazırdır
+  (`.github/workflows/release.yml`, 2026-11-27): `v*` etiketiyle tetiklenir; etiketin `main`'de ve
+  `src/Directory.Build.props`'taki sürümle aynı olduğunu ve `CHANGELOG.md`'de `## <sürüm>` bölümü bulunduğunu denetler,
+  testleri çalıştırır, paketler, nuget.org'a iter ve notları o bölümden alan bir GitHub sürümü açar. NuGet'e giriş
+  trusted publishing iledir (`NuGet/login@v1`, `nuget` ortamı, `NUGET_USER` sırrı); kalıcı API anahtarı yoktur. Kurulum
+  ve sürüm adımları `CONTRIBUTING.md` içinde, "Sürüm yayınlamak" altında. **Etiketi itmek bir yayındır ve geri
+  alınamaz; kullanıcı istemeden etiket oluşturulmaz.** İş akışı henüz hiç çalışmadı; nuget.org politikasını ve sırrı
+  kullanıcı kurar.
 - Lisans MIT'tir (kullanıcı kararı, 2026-11-27; telif hakkı sahibi kullanıcının kendisidir, "Haldus contributors" değil).
   Metin kökteki `LICENSE` dosyasındadır; paketler `PackageLicenseExpression` ve `Copyright` taşır
   (`src/Directory.Build.props`).
