@@ -190,7 +190,7 @@ public partial class ReportExport
   derleyicisiyle yüklenir.
 - **Semboller ve belgeler:** semboller derlemenin içindedir (ayrı sembol paketi yoktur); XML belge yorumları pakete
   girer. Her paketin README'si deponun kökündeki `README.md`'dir.
-- **Lisans:** henüz bir lisans seçilmedi; paketler lisans bilgisi taşımaz.
+- **Lisans:** MIT ([LICENSE](../../LICENSE)); her paket lisansı `PackageLicenseExpression` ile taşır.
 
 ## Ayrıca bakın
 

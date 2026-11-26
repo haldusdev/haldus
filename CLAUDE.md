@@ -437,8 +437,10 @@ generator ikisinde de çalıştı ve modülün ucu yanıt verdi.
 
 Bilinenler:
 
-- Paketler hiçbir NuGet kaynağında yayınlanmadı; yayınlamak kullanıcının kararıdır. Lisans dosyası ve paketlerde lisans
-  bilgisi yoktur (kullanıcı bir lisans seçmedi; uydurulmaz).
+- Paketler hiçbir NuGet kaynağında yayınlanmadı; yayınlamak kullanıcının kararıdır.
+- Lisans MIT'tir (kullanıcı kararı, 2026-11-27; telif hakkı sahibi kullanıcının kendisidir, "Haldus contributors" değil).
+  Metin kökteki `LICENSE` dosyasındadır; paketler `PackageLicenseExpression` ve `Copyright` taşır
+  (`src/Directory.Build.props`).
 - NuGet paketi sürümüyle önbelleğe alır: aynı sürümle yeniden üretilen paket tüketene ulaşmaz. Denerken ya sürüm
   ilerletilir (`--version-suffix preview.2`) ya da tüketen tarafta ayrı bir paket klasörü kullanılır
   (`nuget.config`: `globalPackagesFolder`).
@@ -467,7 +469,7 @@ Kullanıcının isteği (2026-11-25): projenin tamamı, açık kaynak bir projed
   güncellenir. Testler adların ve örneklerin derlendiğini denetler, anlatımın doğruluğunu denetlemez.
 - `http` / `json` blokları derlenmez; gerçek çıktılardan (eğitim) veya üretilen koddan ve entegrasyon testlerinden
   yazılır.
-- Lisans dosyası yoktur ve belgelerde "henüz seçilmedi" diye geçer; kullanıcı seçene kadar uydurulmaz.
+- Lisans MIT'tir (`LICENSE`); belgeler (README, `docs/faq.md`, `docs/reference/packages.md`) ona bağlanır.
 ## Kılavuz (AI bilinebilirliği)
 
 Haldus hiçbir modelin eğitim verisinde yoktur; onu kullanan bir projede çalışan ajan ne okursa onu bilir. Bunun için

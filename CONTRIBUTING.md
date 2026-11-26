@@ -204,4 +204,6 @@ gerçek olmalıdır.
 - Pull request açıklaması neyin neden değiştiğini, nasıl sınandığını ve bilinen sınırları söyler.
 - Herkese açık API'yi kıran değişiklikler [CHANGELOG.md](CHANGELOG.md) içinde "Kıran değişiklikler" altında yazılır.
 
+Gönderdiğiniz katkılar projenin lisansı olan [MIT](LICENSE) ile lisanslanır.
+
 Güvenlik açığı bildirmek için bkz. [SECURITY.md](SECURITY.md).

@@ -158,5 +158,4 @@ Değişiklikler: [CHANGELOG.md](CHANGELOG.md). Güvenlik açıkları: [SECURITY.
 
 ## Lisans
 
-Henüz bir lisans seçilmedi. Lisans dosyası eklenene kadar kodu kullanma, değiştirme ve dağıtma hakları açıkça
-verilmiş değildir.
+[MIT](LICENSE).

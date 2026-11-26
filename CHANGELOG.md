@@ -8,6 +8,7 @@ kıran değişiklik içerebilir; her biri "Kıran değişiklikler" altında yaz�
 
 ### Eklenenler
 
+- Lisans: MIT (`LICENSE`); paketler lisansı `PackageLicenseExpression` ile taşır.
 - Kullanıcı belgeleri (`docs/`): kurulum, adım adım eğitim, kavramlar, her özellik alanı için rehberler, başvuru
   sayfaları (bildirim dizini, yapılandırma, HTTP sözleşmesi, tanılar, paketler) ve sık sorulan sorular. Belgelerdeki
   C# örnekleri testle derlenir (`tests/Haldus.Docs.Tests`).

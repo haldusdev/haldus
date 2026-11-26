@@ -31,8 +31,8 @@ tanınması PostgreSQL'e özgüdür. Uygulama `Npgsql.EntityFrameworkCore.Postgr
 
 ### Lisansı nedir?
 
-Henüz bir lisans seçilmedi; depoda lisans dosyası yoktur ve paketler lisans bilgisi taşımaz. Lisans seçilene kadar
-kodun nasıl kullanılabileceği belirsizdir.
+MIT. Lisans metni deponun kökündeki [LICENSE](../LICENSE) dosyasındadır; paketler de lisansı taşır
+(`PackageLicenseExpression`).
 
 ### Paketler NuGet'te mi?
 
