@@ -45,6 +45,11 @@ EF Core yapılandırması üretilir.
   veya derleme yoksa testler atlanır. Mobilde sürülen, uygulamanın web dışa aktarımıdır (`dist-e2e`): ekranlar,
   gezinme ve istekler cihazdakiyle aynı koddur; cihaza özgü olanlar (güvenli depo, klavye, güvenli alanlar) sınanmaz.
   **Görünür sayılan öğe `aria-hidden` bir bölgenin içinde olamaz** (açık pencerenin arkası, etkin olmayan sekme).
+- CI: `.github/workflows/ci.yml` (GitHub Actions, Ubuntu). Yukarıdaki komutların hepsini çalıştırır; ayrıca
+  `openapi.json` dosyaları ve istemcilerin orval çıktısı commit'lenmiş halinden farklıysa başarısız olur (şemayı
+  veya istemciyi yeniden üretmeyi unutmak CI'da yakalanır). Etkileşim testleri runner'daki Chrome ile koşar; iş önce
+  tarayıcının var olduğunu denetler, çünkü testler tarayıcı bulamazsa atlanır. Yeni bir örnek arayüz veya test
+  komutu eklenirse iş akışına da eklenir.
 - Örnek uygulamada üretilen kod `samples/Haldus.Sample.Shop/obj/Generated` altında incelenebilir.
 - Yük ölçümü: `dotnet run -c Release --project tools/Haldus.LoadTest` (çalışan bir örnek mağaza ister; backend
   `Shop:DemoIdentity=true` ile ve Release kipinde başlatılır; ayrıntısı aracın README'sinde). Sonuçlar makineye bağlıdır;

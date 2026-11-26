@@ -90,6 +90,20 @@ cd samples/Haldus.Sample.Shop.Client && pnpm generate:api && pnpm typecheck
 
 Panel ve mobil uygulamanın kendi komutları kendi README dosyalarındadır.
 
+### Sürekli tümleştirme
+
+Her push ve pull request'te GitHub Actions şunları çalıştırır (`.github/workflows/ci.yml`, Ubuntu):
+
+- `dotnet build`, `dotnet test` (entegrasyon testleri dahil; kapsayıcıları runner'ın Docker'ı çalıştırır) ve
+  `dotnet pack`.
+- Örneklerin `openapi.json` dosyalarının ve istemcilerin orval çıktısının güncel olduğu: derleme ve
+  `pnpm generate:api` çalışma kopyasında bir fark bırakırsa iş başarısız olur. Şemayı veya istemciyi yeniden üretip
+  commit'leyin.
+- Örnek istemcinin tip denetimi; panelin tip denetimi, lint'i, testleri, derlemesi ve etkileşim testleri; mobil
+  uygulamanın tip denetimleri, testleri, etkileşim testleri ve iOS / Android üretim paketleri. Etkileşim testleri
+  runner'daki Chrome ile çalışır (`HALDUS_TEST_BROWSER`). Testler tarayıcı bulamazsa atlandığı için iş
+  önce tarayıcının var olduğunu denetler.
+
 ## Bir değişikliği hazırlamak
 
 1. Davranışı değiştiren her iş testle gelir: generator'ın çıktısı için `Haldus.Generators.Tests`, çalışma zamanı

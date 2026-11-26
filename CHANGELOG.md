@@ -14,6 +14,8 @@ kıran değişiklik içerebilir; her biri "Kıran değişiklikler" altında yaz�
 - Eğitimin örnek uygulaması: `samples/Haldus.Sample.Tracker` (EF Core migration'larıyla). Entegrasyon testi
   (`TrackerTests`) migration'ları boş bir veritabanına uygular ve eğitimdeki akışı baştan sona yürütür.
 - `CONTRIBUTING.md`, `SECURITY.md`, issue ve pull request şablonları.
+- GitHub Actions ile sürekli tümleştirme: derleme, bütün testler, paketleme, üretilen şema ve istemcilerin güncelliği,
+  örnek arayüzlerin denetimleri.
 
 ### Düzeltilenler
 
@@ -25,6 +27,8 @@ kıran değişiklik içerebilir; her biri "Kıran değişiklikler" altında yaz�
   sayılmak yerine alan düzeyinde 400 alır. API şemasında iki alan da artık zorunlu görünür.
 - Serbest `MapAction` ve `MapQuery` uçlarında mantığın fırlattığı `TransitionRejectedException` 422 olur (önceden
   500'dü); uçların şemasına 422 yanıtı eklendi.
+- Dışa aktarılan CSV'nin satırları her işletim sisteminde CRLF ile ayrılır (RFC 4180); Linux'ta LF yazılıyordu. CI
+  kurulurken, testler Linux'ta denenirken çıktı.
 - Onayda "kendi yazdığını onaylayamaz" mesajı (`Approval.OwnRequest`) kuralı doğru anlatır: içeriği yazmış herkesi
   kapsar, yalnızca son yazanı değil.
 - Yanlış yere düşmüş belge yorumları (`HaldusProblems.KeyRequired` / `Duplicate`, `AddHaldusModule`) ve `RoleOf`'un

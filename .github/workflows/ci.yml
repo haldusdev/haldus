@@ -1,0 +1,141 @@
+# Her push ve pull request'te: .NET derlemesi ve testleri, paketleme, örnek arayüzlerin denetimleri.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+
+jobs:
+  dotnet:
+    name: .NET
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Derleme
+        run: dotnet build
+
+      # Örneklerin openapi.json dosyaları derlemede yeniden üretilir; commit'lenmiş halleri güncel olmalıdır.
+      - name: Üretilen şemalar güncel mi
+        run: git diff --exit-code -- '*openapi.json'
+
+      # Entegrasyon testleri Testcontainers ile kapsayıcı başlatır; runner'da Docker vardır.
+      - name: Testler
+        run: dotnet test --no-build
+
+      - name: Test sonuçları
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-results
+          path: |
+            **/TestResults/**
+            **/Snapshots/*.received.cs
+          if-no-files-found: ignore
+
+      - name: Paketleme
+        run: dotnet pack -c Release -o artifacts/packages
+
+  client:
+    name: Örnek istemci
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: samples/Haldus.Sample.Shop.Client
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 12
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 26
+          cache: pnpm
+          cache-dependency-path: samples/Haldus.Sample.Shop.Client/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - name: Üretilen istemci güncel mi
+        run: pnpm generate:api && git diff --exit-code -- src/api
+      - run: pnpm typecheck
+
+  web:
+    name: Yönetim paneli
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: samples/Haldus.Sample.Shop.Web
+    env:
+      HALDUS_TEST_BROWSER: /usr/bin/google-chrome
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 12
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 26
+          cache: pnpm
+          cache-dependency-path: samples/Haldus.Sample.Shop.Web/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - name: Üretilen istemci güncel mi
+        run: pnpm generate:api && git diff --exit-code -- src/api
+      - run: pnpm typecheck
+      - run: pnpm lint
+      - run: pnpm test
+      # Etkileşim testleri tarayıcı bulamazsa başarısız olmaz, atlanır; eksikliği burada yakalarız.
+      - name: Chrome var mı
+        run: '"$HALDUS_TEST_BROWSER" --version'
+      # Paneli derler ve derlenmiş paneli başsız Chrome ile sürer.
+      - run: pnpm test:e2e
+
+  mobile:
+    name: Mobil uygulama
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: samples/Haldus.Sample.Shop.Mobile
+    env:
+      HALDUS_TEST_BROWSER: /usr/bin/google-chrome
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 12
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 26
+          cache: pnpm
+          cache-dependency-path: samples/Haldus.Sample.Shop.Mobile/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - name: Üretilen istemci güncel mi
+        run: pnpm generate:api && git diff --exit-code -- api
+      - run: pnpm typecheck
+      - run: pnpm typecheck:tests
+      - run: pnpm test
+      # Etkileşim testleri tarayıcı bulamazsa başarısız olmaz, atlanır; eksikliği burada yakalarız.
+      - name: Chrome var mı
+        run: '"$HALDUS_TEST_BROWSER" --version'
+      # Uygulamanın web dışa aktarımını başsız Chrome ile sürer.
+      - run: pnpm test:e2e
+      # iOS ve Android üretim paketlerini derler; iOS için tek denetim budur.
+      - run: pnpm bundle:native
