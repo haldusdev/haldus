@@ -70,7 +70,11 @@ public static class HaldusTransfers
         else
         {
             // Excel dosyayı UTF-8 olarak açsın diye BOM yazılır.
-            await using var writer = new StreamWriter(content, new UTF8Encoding(encoderShouldEmitUTF8Identifier: true), leaveOpen: true);
+            // RFC 4180 satırları CRLF ile ayırır; varsayılan satır sonu işletim sistemine göre değişirdi (Linux'ta LF).
+            await using var writer = new StreamWriter(content, new UTF8Encoding(encoderShouldEmitUTF8Identifier: true), leaveOpen: true)
+            {
+                NewLine = "\r\n",
+            };
             string[]? columns = null;
 
             await foreach (var record in records.WithCancellation(cancellationToken))
