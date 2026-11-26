@@ -491,7 +491,7 @@ Haldus hiçbir modelin eğitim verisinde yoktur; onu kullanan bir projede çalı
 - **Context7** (kullanıcı 2026-11-26'da kütüphaneyi ekledi: `/haldusdev/haldus`). Neyin indekslendiğini kökteki
   `context7.json` söyler: `research_notes/`, `reports/`, `tests/`, `tools/` ve depoda çalışanlara yönelik dosyalar
   (`CLAUDE.md`, `CONTRIBUTING.md`, `SECURITY.md`) dışarıdadır, çünkü ilk indekslemede araştırma raporu sorgu
-  sonuçlarına giriyordu ve yazılmamış önerileri (`MapChangeSet<T>()` gibi) gerçek API sanırdı. `rules` kılavuzun "Rules"
+  sonuçlarına giriyordu ve yazılmamış önerileri (`MapChangeSet<T>()` gibi) gerçek API sanırdı. `rules` (her kural en çok 255 karakter; Context7 uzununu reddeder) kılavuzun "Rules"
   bölümünden alındı; kılavuzun kuralları değişirse orası da güncellenir. Türkçe sayfalar da indekslenir. Ayar
   Context7'nin bir sonraki yenilemesinde geçerli olur. Sahiplik alanları (`url` + `public_key`) kullanıcının
   Context7 hesabında üretildi ve aynı dosyadadır; `public_key` gizli değildir, Context7 onu depoda bulunmak üzere verir. İndekslemede görülen "Source API indexing failed; continuing with

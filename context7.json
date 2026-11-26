@@ -10,7 +10,7 @@
     "The complete reference is docs/guide.md; read it before declaring or changing a resource.",
     "Every entity is a top-level partial class containing only the application's own fields. Never write Id, Status, TenantId, foreign keys, CreatedAt or other fields a declaration generates.",
     "Declare each entity with exactly one Map* call (MapCrud, MapReadOnly, MapAppendOnly, MapStore, MapSingleton, MapLookup, MapFile, MapBalance, MapJob...). There is no generic MapArchetype entry point.",
-    "Chain traits and relationships directly onto the Map* call; the chain is read at compile time. A trait called later on a variable, inside an if or in a loop is not seen (HALDUS004). Only MapDetail, MapTransition and MapAction are called on the stored builder.",
+    "Chain traits and relationships directly onto the Map* call; the chain is read at compile time, so a trait called later on a variable, in an if or a loop is not seen (HALDUS004). Only MapDetail, MapTransition and MapAction go on the stored builder.",
     "Arguments of declarations must be compile-time constants: enum members, string literals, TimeSpan.FromMinutes(15) with constant arguments, lambdas of the form x => x.Property (HALDUS010).",
     "Never hand-write DTOs, endpoints or EF Core configuration for a mapped entity and never edit generated code; change the chain or the partial class and rebuild.",
     "Business logic goes into ITransition<T>, ITransitionHandler<TEntity, TRequest>, IEntityAction<T>, IComputed, IFilter<T> and the job, action and query handlers.",
