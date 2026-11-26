@@ -49,7 +49,18 @@ builder.Services.AddHaldusPostgreSqlJobs<AppDbContext>();
 
 // Uygulamanın kendi son kullanıcı metinleri (ör. bir geçişin reddedilme nedeni) Resources altından okunur.
 builder.Services.AddLocalization(options => options.ResourcesPath = "Resources");
-builder.Services.AddOpenApi();
+// Açıklamalar belge yorumlarından gelir ve derleyici çok satırlı yorumu işletim sisteminin satır sonuyla yazar
+// (Windows'ta CRLF). Şema her makinede aynı üretilsin diye (CI commit'lenmiş şemayla karşılaştırır) satır sonları
+// LF'ye çevrilir. XML açıklamalarını ekleyen dönüştürücü bundan önce çalışır.
+builder.Services.AddOpenApi(options => options.AddSchemaTransformer((schema, _, _) =>
+{
+    if (schema.Description is { } description)
+    {
+        schema.Description = description.ReplaceLineEndings("\n");
+    }
+
+    return Task.CompletedTask;
+}));
 
 // Sayılar yalnızca sayı olarak okunur. Varsayılan ayar metin içindeki sayıyı da ("5") kabul eder ve bu, şemaya
 // "integer | string" olarak yansır; istemci tipleri (orval) o zaman her sayıyı `number | string` görürdü.

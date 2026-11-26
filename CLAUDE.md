@@ -423,6 +423,9 @@ Nasıl kurulu:
   dosyalarını okur, bu yüzden Haldus'un istek ve yanıtlarda görünen tiplerinin (`ApprovalDecision`, `BalanceEntry`...)
   ve alanlarının yorumları tüketen uygulamanın `openapi.json` dosyasında `description` olur (örnek mağazada ve
   istemcilerinde öyle oldu). Böyle bir tipin yorumunu değiştirmek şemayı değiştirir; istemciler yeniden üretilir.
+  Derleyici çok satırlı yorumu işletim sisteminin satır sonuyla yazar; örnek mağaza açıklamaları bu yüzden LF'ye
+  çevirir (`Program.cs`, `AddOpenApi` içindeki şema dönüştürücüsü), yoksa Windows'ta üretilen şema CI'daki (Linux)
+  şemadan farklı çıkar. CI'ın ilk çalıştırmasında çıktı.
 - Semboller derlemenin içindedir (`DebugType=embedded`); ayrı sembol paketi üretilmez.
 - Paketin README'si kökteki `README.md`'dir (bütün paketlerde aynı).
 

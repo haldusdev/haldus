@@ -30738,7 +30738,7 @@
             "description": "Deftere yazılan açıklama: \"sayım farkı\", \"sipariş 1042\"."
           }
         },
-        "description": "Bakiyeyi bir miktar artırır veya azaltır (`POST /{key}/adjust`). Bakiyenin yeni değeri değil, değişimi\r\ngönderilir; böylece aynı anda gelen iki düzeltme birbirini ezmez."
+        "description": "Bakiyeyi bir miktar artırır veya azaltır (`POST /{key}/adjust`). Bakiyenin yeni değeri değil, değişimi\ngönderilir; böylece aynı anda gelen iki düzeltme birbirini ezmez."
       },
       "BalanceEntry": {
         "required": [
@@ -30858,7 +30858,7 @@
             ]
           }
         },
-        "description": "Bakiyeye karşı bir tutma başlatır (`POST /{key}/holds`): miktar eldeki kovadan ayrılan kovaya geçer ve\r\ntutma kapanana kadar orada bekler. Tutma tahsil edilir (miktar bakiyeden düşer), bırakılır (geri döner) veya\r\nsüresi dolunca kendiliğinden bırakılır."
+        "description": "Bakiyeye karşı bir tutma başlatır (`POST /{key}/holds`): miktar eldeki kovadan ayrılan kovaya geçer ve\ntutma kapanana kadar orada bekler. Tutma tahsil edilir (miktar bakiyeden düşer), bırakılır (geri döner) veya\nsüresi dolunca kendiliğinden bırakılır."
       },
       "BalanceMove": {
         "required": [
@@ -30920,7 +30920,7 @@
             ]
           }
         },
-        "description": "Bakiyeyi mutlak bir değere çeker (`POST /{key}/set`); sayım sonucu gibi. decimal? BalanceSetting.Expected verilirse\r\nyalnızca bakiye hâlâ o değerdeyse yazılır."
+        "description": "Bakiyeyi mutlak bir değere çeker (`POST /{key}/set`); sayım sonucu gibi. decimal? BalanceSetting.Expected verilirse\nyalnızca bakiye hâlâ o değerdeyse yazılır."
       },
       "BasketItemResponse": {
         "required": [
@@ -31985,7 +31985,7 @@
             ]
           }
         },
-        "description": "Bir kayda uygulanmak üzere biriktirilen değişiklikler (`.ChangeSets()`): verilmiş bir siparişin düzenlenmesi\r\ngibi, adım adım hazırlanan, önizlenen ve sonunda tek seferde uygulanan bir düzenleme oturumu."
+        "description": "Bir kayda uygulanmak üzere biriktirilen değişiklikler (`.ChangeSets()`): verilmiş bir siparişin düzenlenmesi\ngibi, adım adım hazırlanan, önizlenen ve sonunda tek seferde uygulanan bir düzenleme oturumu."
       },
       "ChangeSetStatus": {
         "type": "integer"
@@ -34005,7 +34005,7 @@
           "Submitted",
           "Cancelled"
         ],
-        "description": "Belgenin (`.Document()`) sabit durumları: taslak düzenlenir ve silinir, gönderilen belge kilitlidir, iptal\r\nedilen belge yalnızca düzeltilebilir (yeni bir taslak doğar)."
+        "description": "Belgenin (`.Document()`) sabit durumları: taslak düzenlenir ve silinir, gönderilen belge kilitlidir, iptal\nedilen belge yalnızca düzeltilebilir (yeni bir taslak doğar)."
       },
       "EchoResponse": {
         "required": [
@@ -39048,7 +39048,7 @@
             "description": "Ölçüte uyan kayıtlardan ilk yüzünün anahtarları."
           }
         },
-        "description": "Ölçüte uyan kayıtların topluca silinmesinin sonucu (`POST /purge`). `force` verilmediyse hiçbir şey\r\nsilinmez; yanıt yalnızca neyin silineceğini gösterir."
+        "description": "Ölçüte uyan kayıtların topluca silinmesinin sonucu (`POST /purge`). `force` verilmediyse hiçbir şey\nsilinmez; yanıt yalnızca neyin silineceğini gösterir."
       },
       "PutCountryRequest": {
         "required": [
