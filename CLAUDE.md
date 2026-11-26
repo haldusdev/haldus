@@ -496,6 +496,13 @@ Haldus hiçbir modelin eğitim verisinde yoktur; onu kullanan bir projede çalı
   Context7'nin bir sonraki yenilemesinde geçerli olur. Sahiplik alanları (`url` + `public_key`) kullanıcının
   Context7 hesabında üretildi ve aynı dosyadadır; `public_key` gizli değildir, Context7 onu depoda bulunmak üzere verir. İndekslemede görülen "Source API indexing failed; continuing with
   documentation parsing" uyarısı belgeleri etkilemez.
+- **Docs7** (Context7'nin belge sitesi; `docs.json` ister). 2026-11-27'de yerelde denendi (`@upstash/docs7` CLI,
+  `docs/`'un bir kopyasında) ve kullanıcı şimdilik vazgeçti. Bulgular: 38 sayfanın hepsi açılıyor (`.md` ve
+  `<!-- example -->` yorumları sorun değil); ama `.md` bağlantıları sitede ham Markdown'a gider (Docs7 o adreste
+  ajanlar için Markdown sunar; belgelerde 535 böyle bağlantı var), sayfa adları dosya adından gelir (`title` eklenince
+  düzelir ama `# Başlık` ile iki kez görünür) ve `docs/` dışına giden bağlantılar 404'tür. Uzantısız bağlantı sitede
+  çalışır ama GitHub'da ve belge testlerinde kırılır. Yeniden ele alınırsa yol, `docs/`'u olduğu gibi bırakıp CI'da
+  dönüştürülmüş bir kopya üretmek ve `docs7 deploy` ile yayınlamaktır (CI'da oturum açmanın yolu doğrulanmadı).
 
 Yapılmayanlar: paketlerin yayınlanması, belge sitesi, `dotnet new` şablonu, İngilizce README. Bunlar kullanıcının
 kararıdır.
