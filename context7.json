@@ -1,0 +1,19 @@
+{
+  "$schema": "https://context7.com/schema/context7.json",
+  "url": "https://context7.com/haldusdev/haldus",
+  "public_key": "pk_HfLiwm14E2t7fv4oJsu3V",
+  "projectTitle": "Haldus",
+  "description": "A .NET 10 framework that generates backend code at compile time for ASP.NET Core and EF Core: entities, DTOs, Minimal API endpoints, validation, state rules and EF Core configuration from declarative Map* calls with chained relationships and traits.",
+  "excludeFolders": ["research_notes", "reports", "tests", "tools"],
+  "excludeFiles": ["CLAUDE.md", "CONTRIBUTING.md", "SECURITY.md"],
+  "rules": [
+    "The complete reference is docs/guide.md; read it before declaring or changing a resource.",
+    "Every entity is a top-level partial class containing only the application's own fields. Never write Id, Status, TenantId, foreign keys, CreatedAt or other fields a declaration generates.",
+    "Declare each entity with exactly one Map* call (MapCrud, MapReadOnly, MapAppendOnly, MapStore, MapSingleton, MapLookup, MapFile, MapBalance, MapJob...). There is no generic MapArchetype entry point.",
+    "Chain traits and relationships directly onto the Map* call; the chain is read at compile time. A trait called later on a variable, inside an if or in a loop is not seen (HALDUS004). Only MapDetail, MapTransition and MapAction are called on the stored builder.",
+    "Arguments of declarations must be compile-time constants: enum members, string literals, TimeSpan.FromMinutes(15) with constant arguments, lambdas of the form x => x.Property (HALDUS010).",
+    "Never hand-write DTOs, endpoints or EF Core configuration for a mapped entity and never edit generated code; change the chain or the partial class and rebuild.",
+    "Business logic goes into ITransition<T>, ITransitionHandler<TEntity, TRequest>, IEntityAction<T>, IComputed, IFilter<T> and the job, action and query handlers.",
+    "Pages under docs/ other than docs/guide.md are written in Turkish; the API names and code samples in them are the same."
+  ]
+}

@@ -16,6 +16,8 @@ kıran değişiklik içerebilir; her biri "Kıran değişiklikler" altında yaz�
 - `CONTRIBUTING.md`, `SECURITY.md`, issue ve pull request şablonları.
 - GitHub Actions ile sürekli tümleştirme: derleme, bütün testler, paketleme, üretilen şema ve istemcilerin güncelliği,
   örnek arayüzlerin denetimleri.
+- Context7 yapılandırması (`context7.json`): araştırma notları, raporlar, testler ve katkıcı belgeleri indeksin
+  dışında; kodlama ajanlarına kılavuzun kuralları verilir.
 
 ### Düzeltilenler
 
