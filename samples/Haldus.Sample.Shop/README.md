@@ -63,7 +63,7 @@ yalnızca personel yazar; bkz. `Shop:Auth:Staff`.
 | `Shop:Smtp:Host` | yok | Doğrulama ve sıfırlama kodlarının gönderildiği SMTP sunucusu. Yoksa e-posta gönderilmez; geliştirme ortamında kod günlüğe yazılır. |
 | `Shop:KnownProxies` | boş | Önündeki vekillerin adresleri (`X-Forwarded-*` başlıkları ve hız sınırı için). |
 
-Kimlik doğrulamanın tasarımı ve sınırları depo kökündeki `CLAUDE.md` dosyasında, "Açık kararlar" altında ayrıntılıdır.
+Kimlik doğrulamanın tasarımı ve sınırları depo kökündeki `.claude/rules/sample-shop-auth.md` dosyasında ayrıntılıdır.
 
 ## Bu uygulamayı tüketenler
 

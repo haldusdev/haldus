@@ -232,7 +232,7 @@ uygulamaya kendisinin vermesidir. Başka sağlayıcılarla (Entra ID, Auth0…),
 
 ## Bu örnek için verilen kararlar
 
-Bu seçimler kullanıcıya sorulmadan, önerilen seçenekle verildi (deponun `CLAUDE.md` dosyasında da yazılıdır):
+Bu seçimler kullanıcıya sorulmadan, önerilen seçenekle verildi (deponun `.claude/rules/sample-shop.md` dosyasında da yazılıdır):
 
 - **i18n:** i18next + react-i18next; cihazın dili `expo-localization` ile okunur. Diller en (varsayılan) ve tr.
 - **Kalıcı depo:** `expo-secure-store`.

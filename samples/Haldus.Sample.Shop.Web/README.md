@@ -197,7 +197,7 @@ const ship = useShipOrder({ request: { headers: { "If-Match": etag } } })
 
 ## Bu örnek için verilen kararlar
 
-Bu seçimler kullanıcıya sorulmadan, önerilen seçenekle verildi (deponun `CLAUDE.md` dosyasında da yazılıdır):
+Bu seçimler kullanıcıya sorulmadan, önerilen seçenekle verildi (deponun `.claude/rules/sample-shop.md` dosyasında da yazılıdır):
 
 - **Yönlendirme:** React Router.
 - **i18n:** i18next + react-i18next; diller en (varsayılan) ve tr.

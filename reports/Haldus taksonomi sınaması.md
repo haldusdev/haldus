@@ -267,7 +267,7 @@ durum modeli" kuralı da açılmadı: ek durum eksenleri asıl durumun yanında,
 ## Bilinen sınırlar
 
 Tabloda eksik satır kalmadı. Aşağıdakiler bir satırı kısmi yapmıyor, ama bilerek yazılmadı; her özelliğin kendi
-sınırları ayrıca [README](../README.md) ve `CLAUDE.md` dosyalarında, özelliğin anlatıldığı yerdedir.
+sınırları ayrıca [README](../README.md) ve `.claude/rules/` dosyalarında, özelliğin anlatıldığı yerdedir.
 
 | Yazılmayan | İlgili satırlar | Neden |
 |---|---|---|
@@ -345,7 +345,7 @@ backend örneği.
 - Her satırın kendi birleşiminin uçlarının doğru davrandığı; özellikler tek tek sınandı, satırların çoğu yalnızca
   derleniyor.
 - Tasarım kararlarının doğru olduğu. 15. aşamadan sonraki kararlar sorulmadan, önerilen seçenekle verildi ve
-  kullanıcı tarafından ayrıca onaylanmadı; hepsi `CLAUDE.md` dosyasının "Tasarım kararları" bölümünde, bu notla
+  kullanıcı tarafından ayrıca onaylanmadı; hepsi `.claude/rules/design-decisions.md` dosyasında, bu notla
   birlikte yazılıdır.
 - Üretim yükündeki davranış. Kilide dayanan özellikler tek makinede, küçük tablolarla ölçüldü
   ([Yük altında ölçüm](#yük-altında-ölçüm)); olay dağıtımı, büyük dosyalar, büyük tablolar ve birden çok sunucu

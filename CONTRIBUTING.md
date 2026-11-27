@@ -46,8 +46,8 @@ dotnet build
 | `docs/` | Kullanıcı belgeleri. |
 | `reports/`, `research_notes/` | Tasarımın dayandığı taksonomi araştırması. |
 
-Tasarım kararlarının ve generator'ın iç işleyişinin ayrıntılı kaydı [CLAUDE.md](CLAUDE.md) dosyasındadır; bir
-özelliğe dokunmadan önce ilgili bölümünü okuyun.
+Tasarım kararlarının ve generator'ın iç işleyişinin ayrıntılı kaydı [CLAUDE.md](CLAUDE.md) ve onun işaret ettiği
+`.claude/rules/` dosyalarındadır; bir özelliğe dokunmadan önce ilgili dosyayı okuyun.
 
 ## Derlemek ve test etmek
 
@@ -117,7 +117,7 @@ Her push ve pull request'te GitHub Actions şunları çalıştırır (`.github/w
 
 ## Yeni bir trait veya archetype eklemek
 
-Kısa yol haritası (ayrıntısı [CLAUDE.md](CLAUDE.md) içinde, "Generator'ın işleyişi"):
+Kısa yol haritası (ayrıntısı `.claude/rules/generator-*.md` dosyalarında):
 
 - **Trait:** `Model/TraitCatalog` (arayüz ve alanlar), `Parsing/ChainReader` (zincirdeki adı),
   `ResourceBuilderTraitExtensions` (çalışma zamanında boş zincir metodu), gerekiyorsa `Emit/EndpointEmitter` ve
