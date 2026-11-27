@@ -30,17 +30,17 @@ public sealed class ScopeEndpointTests(ShopFixture fixture)
         var url = $"/products/{product.Id}/tags";
 
         Assert.Equal(HttpStatusCode.NoContent, (await SendAsync(HttpMethod.Put, url, new { ids = new[] { first.Id, second.Id } })).StatusCode);
-        Assert.Equal([first.Id, second.Id], await TagIdsAsync(product.Id));
+        Assert.Equal(Ids(first.Id, second.Id), await TagIdsAsync(product.Id));
 
         // Listede olmayan bağ kaldırılır, eksik olan kurulur, ortak olan kalır.
         Assert.Equal(HttpStatusCode.NoContent, (await SendAsync(HttpMethod.Put, url, new { ids = new[] { second.Id, third.Id, third.Id } })).StatusCode);
-        Assert.Equal([second.Id, third.Id], await TagIdsAsync(product.Id));
+        Assert.Equal(Ids(second.Id, third.Id), await TagIdsAsync(product.Id));
 
         // Öteki yönden de çalışır.
         Assert.Equal(
             HttpStatusCode.NoContent,
             (await SendAsync(HttpMethod.Put, $"/tags/{first.Id}/products", new { ids = new[] { product.Id } })).StatusCode);
-        Assert.Equal([first.Id, second.Id, third.Id], await TagIdsAsync(product.Id));
+        Assert.Equal(Ids(first.Id, second.Id, third.Id), await TagIdsAsync(product.Id));
 
         Assert.Equal(HttpStatusCode.NoContent, (await SendAsync(HttpMethod.Put, url, new { ids = Array.Empty<Guid>() })).StatusCode);
         Assert.Empty(await TagIdsAsync(product.Id));
@@ -268,8 +268,12 @@ public sealed class ScopeEndpointTests(ShopFixture fixture)
     private async Task<Guid[]> TagIdsAsync(Guid productId)
     {
         var page = await ReadAsync<PagedResult<TagResponse>>(await SendAsync(HttpMethod.Get, $"/products/{productId}/tags"));
-        return [.. page.Items.Select(item => item.Id)];
+        return Ids([.. page.Items.Select(item => item.Id)]);
     }
+
+    // Liste anahtara göre sıralıdır; aynı milisaniyede üretilen v7 kimliklerin sırası üretim sırası değildir, bu yüzden
+    // yalnızca hangi kayıtların döndüğü karşılaştırılır.
+    private static Guid[] Ids(params Guid[] ids) => [.. ids.Order()];
 
     private async Task<ProductResponse> CreateProductAsync() =>
         await ReadAsync<ProductResponse>(await SendAsync(HttpMethod.Post, "/products", new { name = $"Scoped {Guid.NewGuid():N}", price = 10 }));
