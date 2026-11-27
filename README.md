@@ -6,8 +6,8 @@ Bir `partial class` ve tek satırlık bir bildirim yazarsınız; Haldus entity'n
 Minimal API uçlarını, doğrulamayı, durum kurallarını ve EF Core yapılandırmasını üretir.
 
 > [!NOTE]
-> Haldus bir ön sürümdür (`0.1.0-preview.1`). API değişebilir ve paketler henüz bir NuGet kaynağında yayınlanmadı;
-> depodan üretilir. Bkz. [kurulum](docs/getting-started/installation.md).
+> Haldus bir ön sürümdür (`0.1.0-preview.1`); API değişebilir. Paketler nuget.org'dadır
+> (`dotnet add package Haldus.AspNetCore --prerelease`). Bkz. [kurulum](docs/getting-started/installation.md).
 
 <!-- example: readme -->
 ```csharp

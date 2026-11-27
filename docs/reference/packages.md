@@ -182,10 +182,10 @@ public partial class ReportExport
 
 - **Sürüm:** `0.1.0-preview.1`. Bütün paketler aynı sürümü taşır ve birlikte ilerler; paketleri karıştırmayın.
 - **Önizleme:** sürüm bir ön sürümdür; API değişebilir.
-- **Yayın:** paketler henüz hiçbir NuGet kaynağında yayınlanmadı. Depodan üretilir ve yerel bir klasörden tüketilir:
-  `dotnet pack -c Release -o artifacts/packages`; bkz. [kurulum](../getting-started/installation.md).
-- **Önbellek:** NuGet bir paketi sürümüyle önbelleğe alır. Aynı sürümle yeniden üretilen paket projenize ulaşmaz;
-  sürümü ilerletin (`--version-suffix preview.2`) veya önbellekteki `haldus.*` klasörlerini silin.
+- **Yayın:** paketler nuget.org'dadır (`dotnet add package Haldus.AspNetCore --prerelease`). Yayınlanmamış bir
+  değişiklik depodan üretilip yerel bir klasörden de kullanılabilir; bkz. [kurulum](../getting-started/installation.md).
+- **Önbellek:** NuGet bir paketi sürümüyle önbelleğe alır. Depodan aynı sürümle yeniden üretilen paket projenize
+  ulaşmaz; sürümü ilerletin (`--version-suffix local.2`) veya önbellekteki `haldus.*` klasörlerini silin.
 - **Hedef çatı:** `net10.0`. Generator `netstandard2.0`'dır ve Roslyn 5.0.0'a karşı derlenir; .NET 10 SDK'nın
   derleyicisiyle yüklenir.
 - **Semboller ve belgeler:** semboller derlemenin içindedir (ayrı sembol paketi yoktur); XML belge yorumları pakete

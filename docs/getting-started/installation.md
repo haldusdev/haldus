@@ -14,12 +14,29 @@ isterseniz doğrudan [eğitime](tutorial.md) geçin.
 
 ## Paketi eklemek
 
-Haldus henüz bir NuGet kaynağında yayınlanmadı. Paketleri depodan üretip yerel bir klasörden kullanırsınız:
+Paketler nuget.org'dadır. Projenize iki paket eklenir:
+
+```bash
+dotnet add package Haldus.AspNetCore --prerelease
+dotnet add package Npgsql.EntityFrameworkCore.PostgreSQL
+```
+
+`Haldus.AspNetCore` kaynak üreticisini (generator) de içerir; ayrıca bir generator paketi eklenmez. İhtiyaç
+duyduğunuz özelliklere göre başka paketler de eklenir; bkz. [paketler](../reference/packages.md). Bütün `Haldus.*`
+paketleri aynı sürümü taşır; paketleri karıştırmayın.
+
+> [!NOTE]
+> Sürüm bir ön sürümdür (`preview`); API değişebilir. `--prerelease` olmadan `dotnet add package` ön sürümü bulmaz.
+
+### Depodan üretmek
+
+Henüz yayınlanmamış bir değişikliği denemek için paketleri depodan üretip yerel bir klasörden kullanırsınız. Yerel
+paketler, nuget.org'dakilerle karışmasın diye ayrı bir ön sürüm adıyla üretilir:
 
 ```bash
 git clone https://github.com/haldusdev/haldus.git
 cd haldus
-dotnet pack -c Release -o artifacts/packages
+dotnet pack -c Release -o artifacts/packages --version-suffix local.1
 ```
 
 Uygulamanızın kökünde bir `nuget.config` dosyası bu klasörü paket kaynağı olarak tanıtır:
@@ -34,21 +51,12 @@ Uygulamanızın kökünde bir `nuget.config` dosyası bu klasörü paket kaynağ
 </configuration>
 ```
 
-Sonra projenize iki paket eklenir:
-
-```bash
-dotnet add package Haldus.AspNetCore --version 0.1.0-preview.1
-dotnet add package Npgsql.EntityFrameworkCore.PostgreSQL
-```
-
-`Haldus.AspNetCore` kaynak üreticisini (generator) de içerir; ayrıca bir generator paketi eklenmez. İhtiyaç
-duyduğunuz özelliklere göre başka paketler de eklenir; bkz. [paketler](../reference/packages.md).
+Paket o sürümle eklenir: `dotnet add package Haldus.AspNetCore --version 0.1.0-local.1`.
 
 > [!NOTE]
-> Sürüm bir ön sürümdür (`preview`); API değişebilir. Aynı sürüm numarasıyla yeniden üretilen paket, NuGet'in
-> önbelleği yüzünden projenize ulaşmaz. Paketi yeniden ürettiğinizde sürümü ilerletin
-> (`dotnet pack -c Release -o artifacts/packages --version-suffix preview.2`) ya da önbellekteki `haldus.*`
-> klasörlerini silin (`~/.nuget/packages`).
+> Aynı sürüm numarasıyla yeniden üretilen paket, NuGet'in önbelleği yüzünden projenize ulaşmaz. Paketi yeniden
+> ürettiğinizde sürümü ilerletin (`--version-suffix local.2`) ya da önbellekteki `haldus.*` klasörlerini silin
+> (`~/.nuget/packages`).
 
 ## Uygulamaya bağlamak
 

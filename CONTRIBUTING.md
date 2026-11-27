@@ -221,9 +221,12 @@ kalıcı bir API anahtarı yoktur. Bir kez yapılacak kurulum:
 
 1. nuget.org'da kullanıcı adınız → **Trusted Publishing** → yeni politika. Sahip: paketlerin sahibi olan `Haldus`
    kuruluşu. Repository Owner `haldusdev`, Repository `haldus`, Workflow File `release.yml`, Environment `nuget`.
-2. GitHub'da depo ayarları → Secrets and variables → Actions: `NUGET_USER` sırrına nuget.org kullanıcı adınız
-   (e-posta değil).
-3. İsteğe bağlı: Settings → Environments → `nuget` ortamına onaylayıcı ekleyin; yayın, onaylanana kadar bekler.
+   Kapsam: **Push** → "Push new packages and package versions" (yeni bir kütüphanenin ilk yayını da geçsin diye),
+   paket deseni `Haldus.*`.
+2. GitHub'da Settings → Environments → `nuget` ortamını oluşturun ve ortamın sırlarına `NUGET_USER` adıyla nuget.org
+   kullanıcı adınızı (e-posta değil) ekleyin. Ortam önceden oluşturulmazsa ilk yayın onu boş olarak açar ve giriş
+   adımı sır bulamaz.
+3. İsteğe bağlı: aynı ortama onaylayıcı ekleyin; yayın, onaylanana kadar bekler.
 
 Her sürümde:
 

@@ -36,8 +36,8 @@ MIT. Lisans metni deponun kökündeki [LICENSE](../LICENSE) dosyasındadır; pak
 
 ### Paketler NuGet'te mi?
 
-Henüz değil. Paketler depodan üretilir ve yerel bir klasörden tüketilir. Bkz. [kurulum](getting-started/installation.md)
-ve [paketler](reference/packages.md).
+Evet, nuget.org'da: `dotnet add package Haldus.AspNetCore --prerelease`. Yayınlanmamış bir değişikliği denemek
+için paketler depodan da üretilebilir. Bkz. [kurulum](getting-started/installation.md) ve [paketler](reference/packages.md).
 
 ## Model ve zincir
 
@@ -280,5 +280,5 @@ yardım bağlantısı aynı tanının İngilizce başvurusuna gider.
 
 ### Paketi yeniden ürettim ama değişiklik projeme gelmiyor
 
-NuGet bir paketi sürümüyle önbelleğe alır. Sürümü ilerletin (`--version-suffix preview.2`) ya da önbellekteki
+NuGet bir paketi sürümüyle önbelleğe alır. Sürümü ilerletin (`--version-suffix local.2`) ya da önbellekteki
 `haldus.*` klasörlerini silin. Bkz. [paketler](reference/packages.md#sürüm-ve-önizleme-durumu).

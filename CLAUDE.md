@@ -443,8 +443,10 @@ Bilinenler:
   testleri çalıştırır, paketler, nuget.org'a iter ve notları o bölümden alan bir GitHub sürümü açar. NuGet'e giriş
   trusted publishing iledir (`NuGet/login@v1`, `nuget` ortamı, `NUGET_USER` sırrı); kalıcı API anahtarı yoktur. Kurulum
   ve sürüm adımları `CONTRIBUTING.md` içinde, "Sürüm yayınlamak" altında. **Etiketi itmek bir yayındır ve geri
-  alınamaz; kullanıcı istemeden etiket oluşturulmaz.** İş akışı henüz hiç çalışmadı; nuget.org politikasını ve sırrı
-  kullanıcı kurar.
+  alınamaz; kullanıcı istemeden etiket oluşturulmaz.** İş akışı henüz hiç çalışmadı. Kullanıcı 2026-11-27'de
+  nuget.org politikasını (kapsam: yeni paket ve sürüm, desen `Haldus.*`) ve `nuget` ortamının `NUGET_USER` sırrını
+  kurdu. Belgeler (README, kurulum, eğitim, SSS, paketler) `0.1.0-preview.1` için paketlerin nuget.org'da olduğunu
+  söyler; yerel üretim ayrı bir ön sürüm adıyla (`--version-suffix local.1`) anlatılır.
 - Lisans MIT'tir (kullanıcı kararı, 2026-11-27; telif hakkı sahibi kullanıcının kendisidir, "Haldus contributors" değil).
   Metin kökteki `LICENSE` dosyasındadır; paketler `PackageLicenseExpression` ve `Copyright` taşır
   (`src/Directory.Build.props`).

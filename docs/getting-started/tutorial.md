@@ -29,7 +29,6 @@ bütün istek ve yanıtlar o uygulamadan alınmıştır.
 | .NET 10 SDK | `dotnet --version` 10 ile başlamalı. |
 | Docker | `docker --version`. PostgreSQL'i kapsayıcıda çalıştıracağız. |
 | EF Core aracı | `dotnet ef --version`. Yoksa: `dotnet tool install --global dotnet-ef` |
-| Haldus paketleri | [Kurulum](installation.md#paketi-eklemek) sayfasındaki gibi yerel bir klasöre üretilmiş olmalı. |
 
 Örneklerdeki istekleri `curl` ile, bir HTTP istemcisiyle ya da IDE'nizin `.http` dosyalarıyla gönderebilirsiniz.
 
@@ -40,7 +39,7 @@ Boş bir web projesi oluşturun ve paketleri ekleyin:
 ```bash
 dotnet new web -n Tracker
 cd Tracker
-dotnet add package Haldus.AspNetCore --version 0.1.0-preview.1
+dotnet add package Haldus.AspNetCore --prerelease
 dotnet add package Npgsql.EntityFrameworkCore.PostgreSQL
 dotnet add package Microsoft.EntityFrameworkCore.Design
 ```
