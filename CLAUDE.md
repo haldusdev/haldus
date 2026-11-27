@@ -437,13 +437,14 @@ generator ikisinde de çalıştı ve modülün ucu yanıt verdi.
 
 Bilinenler:
 
-- Paketler hiçbir NuGet kaynağında yayınlanmadı; yayınlamak kullanıcının kararıdır. Yayın iş akışı hazırdır
-  (`.github/workflows/release.yml`, 2026-11-27): `v*` etiketiyle tetiklenir; etiketin `main`'de ve
+- **`0.1.0-preview.1` nuget.org'da yayınlandı** (2026-11-27, kullanıcının isteğiyle; etiket `v0.1.0-preview.1` →
+  `64b81ff`, on paketin hepsi). Sonraki sürümler de kullanıcının kararıdır. Yayın iş akışı
+  (`.github/workflows/release.yml`): `v*` etiketiyle tetiklenir; etiketin `main`'de ve
   `src/Directory.Build.props`'taki sürümle aynı olduğunu ve `CHANGELOG.md`'de `## <sürüm>` bölümü bulunduğunu denetler,
   testleri çalıştırır, paketler, nuget.org'a iter ve notları o bölümden alan bir GitHub sürümü açar. NuGet'e giriş
   trusted publishing iledir (`NuGet/login@v1`, `nuget` ortamı, `NUGET_USER` sırrı); kalıcı API anahtarı yoktur. Kurulum
   ve sürüm adımları `CONTRIBUTING.md` içinde, "Sürüm yayınlamak" altında. **Etiketi itmek bir yayındır ve geri
-  alınamaz; kullanıcı istemeden etiket oluşturulmaz.** İş akışı henüz hiç çalışmadı. Kullanıcı 2026-11-27'de
+  alınamaz; kullanıcı istemeden etiket oluşturulmaz.** İş akışı ilk yayında bütün adımlarıyla çalıştı. Kullanıcı 2026-11-27'de
   nuget.org politikasını (kapsam: yeni paket ve sürüm, desen `Haldus.*`) ve `nuget` ortamının `NUGET_USER` sırrını
   kurdu. Belgeler (README, kurulum, eğitim, SSS, paketler) `0.1.0-preview.1` için paketlerin nuget.org'da olduğunu
   söyler; yerel üretim ayrı bir ön sürüm adıyla (`--version-suffix local.1`) anlatılır.
@@ -515,7 +516,7 @@ Haldus hiçbir modelin eğitim verisinde yoktur; onu kullanan bir projede çalı
   çalışır ama GitHub'da ve belge testlerinde kırılır. Yeniden ele alınırsa yol, `docs/`'u olduğu gibi bırakıp CI'da
   dönüştürülmüş bir kopya üretmek ve `docs7 deploy` ile yayınlamaktır (CI'da oturum açmanın yolu doğrulanmadı).
 
-Yapılmayanlar: paketlerin yayınlanması, belge sitesi, `dotnet new` şablonu, İngilizce README. Bunlar kullanıcının
+Yapılmayanlar: belge sitesi, `dotnet new` şablonu, İngilizce README. Bunlar kullanıcının
 kararıdır.
 
 ## Aşamalar
